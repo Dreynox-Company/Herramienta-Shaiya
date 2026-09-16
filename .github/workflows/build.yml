@@ -20,27 +20,27 @@ jobs:
           flutter-version: '3.47.4'
           channel: stable
           cache: true
-      - run: flutter --version
       - run: flutter pub get
-      - name: Compilar auditor nativo de archivos
-        run: dart compile exe tool/audit_assets.dart -o audit_assets_linux
+      - name: Validar sintaxis y formatear fuentes de entrega
+        run: dart format lib test tool
+      - name: Analisis estatico
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Pruebas de movimiento, selectores, paneles y formatos
+        run: flutter test --reporter expanded
+      - name: Auditor nativo de clips originales
+        run: dart compile exe tool/audit_locomotion.dart -o auditor_movimiento
       - uses: actions/upload-artifact@v4
         with:
-          name: Auditor-Linux
-          path: audit_assets_linux
+          name: Auditor-movimiento
+          path: auditor_movimiento
           if-no-files-found: error
-      - name: Fuentes verificables de esta revision
-        run: git archive --format=zip -o Herramienta-Shaiya-Fuentes.zip HEAD
+      - name: Fuentes de la revision
+        run: zip -r Shaiya-Studio-Fuentes.zip lib test tool platform docs pubspec.yaml pubspec.lock analysis_options.yaml README.md LEEME_WINDOWS.txt INICIAR_WINDOWS.ps1 .github .gitignore
       - uses: actions/upload-artifact@v4
         with:
           name: Fuentes-y-dependencias
-          path: |
-            Herramienta-Shaiya-Fuentes.zip
-            pubspec.lock
-      - name: Analisis estatico
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Pruebas de formatos, texturas, conjuntos y combate
-        run: flutter test --reporter expanded
+          path: Shaiya-Studio-Fuentes.zip
+          if-no-files-found: error
   windows:
     needs: tests
     runs-on: windows-latest
@@ -93,11 +93,9 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/cmake-shaiya"
           "$RUNNER_TEMP/cmake-shaiya/bin/pip" install --disable-pip-version-check cmake==3.31.4
           echo "$RUNNER_TEMP/cmake-shaiya/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/cmake-shaiya/bin/cmake" --version
       - run: python3 tool/prepare.py
       - run: flutter pub get
-      - name: APK de prueba firmado con clave de depuracion
-        run: flutter build apk --debug
+      - run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
         with:
           name: Shaiya-Studio-Android-Pruebas
@@ -107,7 +105,6 @@ jobs:
   linux-qa:
     needs: tests
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -116,17 +113,17 @@ jobs:
           flutter-version: '3.47.4'
           channel: stable
           cache: true
-      - name: Dependencias del entorno grafico de validacion
-        run: |
+      - run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ninja-build libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libegl1-mesa-dev libepoxy-dev libgl1-mesa-dev libglx-dev libopengl-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libegl1-mesa-dev libepoxy-dev libgl1-mesa-dev libglx-dev libopengl-dev libgles2
       - run: flutter create --no-pub --platforms=linux --org com.dreynox --project-name herramienta_shaiya .
       - run: flutter pub get
-      - name: Compatibilidad del backend de validacion Linux
-        run: python3 tool/qa_linux_compat.py
+      - run: python3 tool/qa_linux_compat.py
       - run: flutter build linux --release
-      - name: Conservar permisos del ejecutable
-        run: tar -czf Shaiya-Linux-QA.tar.gz -C build/linux/x64/release/bundle .
+      - name: Empaquetar entorno de prueba nativo
+        run: |
+          cp -L /lib/x86_64-linux-gnu/libGLESv2.so.2 build/linux/x64/release/bundle/lib/
+          tar -czf Shaiya-Linux-QA.tar.gz -C build/linux/x64/release/bundle .
       - uses: actions/upload-artifact@v4
         with:
           name: Linux-validacion-interna
