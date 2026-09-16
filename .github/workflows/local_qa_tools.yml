@@ -8,30 +8,13 @@ permissions:
 jobs:
   tools:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - name: Preparar herramientas sin recursos del juego
+      - name: Empaquetar lector de archivos multipartes
         run: |
-          mkdir -p local-tools/flutter/bin/cache/artifacts/engine
-          cp -a "$FLUTTER_ROOT/bin/cache/dart-sdk" local-tools/
-          cp -a "$FLUTTER_ROOT/packages" local-tools/flutter/
-          cp -a "$FLUTTER_ROOT/bin/cache/pkg" local-tools/flutter/bin/cache/
-          cp -a "$FLUTTER_ROOT/bin/cache/artifacts/engine/linux-x64" local-tools/flutter/bin/cache/artifacts/engine/
-          cp -a "$PUB_CACHE/hosted" local-tools/
-          cp .dart_tool/package_config.json local-tools/package_config.json
-          command -v 7z && cp "$(command -v 7z)" local-tools/7z || true
-          test ! -d /usr/lib/p7zip || cp -a /usr/lib/p7zip local-tools/
-          curl -fLs https://codeload.github.com/matigramirez/Parsec/tar.gz/refs/heads/main -o local-tools/Parsec-reference.tar.gz
-          tar --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff*' --exclude='test' --exclude='example' --exclude='.cache' -czf local-tools.tar.gz local-tools
+          tar -czf archive-reader.tar.gz -C /usr/lib 7zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Herramientas-auditoria-temporal
-          path: local-tools.tar.gz
+          name: Lector-RAR-temporal
+          path: archive-reader.tar.gz
           retention-days: 1
