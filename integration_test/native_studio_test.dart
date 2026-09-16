@@ -51,6 +51,11 @@ void main(){
   await waitFor(()=>scene.character!.clip==scene.character!.idle,'Releasing W returns to idle');
   await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftRight);await tester.pump(const Duration(milliseconds:160));
   expect(scene.character!.clip,scene.character!.idle);await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftRight);passed.add('Shift alone leaves the character at rest');
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
+  await waitFor(()=>scene.character!.clip==scene.character!.walk,'Walking before focus loss');
+  (state.focus as FocusNode).unfocus();
+  await waitFor(()=>scene.walkX==0&&scene.walkZ==0&&scene.character!.clip==scene.character!.idle,'Focus loss cancels held movement and restores idle');
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
   final c=scene.catalog!;
   await scene.selectCreature(c.mounts.first,'mount');await scene.selectCreature(c.wings.first,'wing');
   (state.focus as FocusNode).requestFocus();await tester.pump();
@@ -65,8 +70,13 @@ void main(){
   scene.riderHeight=3.75;scene.updateAttachments();expect(scene.wing!.root.matrix.storage[13]-wingY,closeTo(2.5,.001));passed.add('Wing inherits seat height once');
   await scene.selectCreature(c.mounts[1],'mount');await scene.selectCreature(c.mounts.first,'mount');
   expect(scene.riderHeight,closeTo(3.75,.001));passed.add('Mount-specific seat calibration is restored');
+  // Restore a reasonable visual seat after the intentionally exaggerated delta test.
+  scene.riderHeight=.7;scene.updateAttachments();
   await scene.setWorld(c.worlds.first);
   expect(scene.sky,isNotNull);expect(scene.environmentParts,isNotEmpty);passed.add('Exterior terrain and sky are rendered through original format readers');
+  await waitFor(()=>(scene.character!.root.position.y-scene.groundY-scene.riderHeight).abs()<.001,'Map transition restores mounted actor height on the rendering loop');
+  expect(scene.wing!.root.matrix.storage[13],closeTo(scene.character!.root.position.y+scene.wingHeight,.001));
+  passed.add('Wing and rider remain in the same coordinate frame after loading a map');
   await screenshot('native_mount_wings_sky');
   await scene.selectCreature(null,'mount');
   await scene.selectCreature(c.creatures.first,'enemy');
