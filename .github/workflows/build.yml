@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   tests:
@@ -17,14 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.4'
           channel: stable
           cache: true
       - run: flutter --version
       - run: flutter pub get
-      - name: Analisis estatico
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Pruebas de formatos, texturas, conjuntos y combate
-        run: flutter test --reporter expanded
       - name: Compilar auditor nativo de archivos
         run: dart compile exe tool/audit_assets.dart -o audit_assets_linux
       - uses: actions/upload-artifact@v4
@@ -32,10 +29,18 @@ jobs:
           name: Auditor-Linux
           path: audit_assets_linux
           if-no-files-found: error
+      - name: Fuentes verificables de esta revision
+        run: git archive --format=zip -o Herramienta-Shaiya-Fuentes.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
-          name: Dependencias-resueltas
-          path: pubspec.lock
+          name: Fuentes-y-dependencias
+          path: |
+            Herramienta-Shaiya-Fuentes.zip
+            pubspec.lock
+      - name: Analisis estatico
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Pruebas de formatos, texturas, conjuntos y combate
+        run: flutter test --reporter expanded
   windows:
     needs: tests
     runs-on: windows-latest
@@ -44,6 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.4'
           channel: stable
           cache: true
       - run: python tool/prepare.py
@@ -70,6 +76,7 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.4'
           channel: stable
           cache: true
       - run: python3 tool/prepare.py
