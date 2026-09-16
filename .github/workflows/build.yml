@@ -119,9 +119,11 @@ jobs:
       - name: Dependencias del entorno grafico de validacion
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ninja-build libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libegl1-mesa-dev libepoxy-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libegl1-mesa-dev libepoxy-dev libgl1-mesa-dev libglx-dev libopengl-dev
       - run: flutter create --no-pub --platforms=linux --org com.dreynox --project-name herramienta_shaiya .
       - run: flutter pub get
+      - name: Compatibilidad del backend de validacion Linux
+        run: python3 tool/qa_linux_compat.py
       - run: flutter build linux --release
       - name: Conservar permisos del ejecutable
         run: tar -czf Shaiya-Linux-QA.tar.gz -C build/linux/x64/release/bundle .
