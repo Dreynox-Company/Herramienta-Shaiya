@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'formats.dart';
 
+/// Texturas de color original. El modo Glow de MLT no usa alfa como opacidad.
 class Pixels {
   final int width,height;
   final Uint8List rgba;
@@ -24,6 +25,23 @@ class Pixels {
     if(w==0||h==0||w*h>16777216)r.fail('Tamaño DDS fuera de límite.');
     var code=String.fromCharCodes(bytes.sublist(84,88)),offset=128;
     var bits=d.getUint32(88,Endian.little),masks=List.generate(4,(i)=>d.getUint32(92+i*4,Endian.little));
+    final pixelFlags=d.getUint32(80,Endian.little);
+    final out=Uint8List(w*h*4);
+    // DDPF_PALETTEINDEXED8: tabla RGBA de 256 entradas seguida de índices.
+    // Utilizada por varias alas originales; no es una imagen RGB de 8 bits.
+    if((pixelFlags&0x20)!=0){
+      if(bits!=8)r.fail('La paleta DDS requiere índices de 8 bits.');
+      r.offset=128;r.need(1024);final palette=bytes.sublist(128,1152);
+      final flags=d.getUint32(8,Endian.little),pitch=d.getUint32(20,Endian.little);
+      final stride=(flags&8)!=0&&pitch>=w?pitch:w;r.offset=1152;r.need(stride*h);
+      for(var y=0;y<h;y++){for(var x=0;x<w;x++){final index=bytes[1152+y*stride+x]*4,k=(y*w+x)*4;for(var c=0;c<4;c++){out[k+c]=palette[index+c];}}}
+      return Pixels(w,h,out);
+    }
+    if((pixelFlags&0x20000)!=0&&[8,16].contains(bits)){
+      final step=bits~/8;r.offset=128;r.need(w*h*step);
+      for(var i=0;i<w*h;i++){final luminance=bytes[128+i*step];out[i*4]=out[i*4+1]=out[i*4+2]=luminance;out[i*4+3]=step==2?bytes[128+i*step+1]:255;}
+      return Pixels(w,h,out);
+    }
     if(code=='DX10') {
       r.offset=128;r.need(20);final format=r.u32();r.skip(16);offset=148;
       if([71,72].contains(format)){code='DXT1';}
@@ -35,7 +53,6 @@ class Pixels {
     }
     final premultiplied=code=='DXT2'||code=='DXT4';
     if(code=='DXT2')code='DXT3';if(code=='DXT4')code='DXT5';
-    final out=Uint8List(w*h*4);
     void put(int x,int y,List<int> c,int a){if(x>=w||y>=h)return;final k=(y*w+x)*4;for(var j=0;j<3;j++){out[k+j]=premultiplied&&a>0?(c[j]*255~/a).clamp(0,255):c[j];}out[k+3]=a;}
     List<int> rgb(int x)=>[((x>>11)&31)*255~/31,((x>>5)&63)*255~/63,(x&31)*255~/31];
     if(['DXT1','DXT3','DXT5'].contains(code)) {
