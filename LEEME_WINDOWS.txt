@@ -1,0 +1,16 @@
+SHAIYA STUDIO — APLICACION NATIVA FLUTTER
+
+Extrae TODO el ZIP de Windows, no solamente el archivo EXE.
+Ejecuta herramienta_shaiya.exe y pulsa DATA para seleccionar tu biblioteca.
+
+IMPORTANTE: la subcarpeta data junto al EXE pertenece a Flutter. NO la reemplaces
+por la carpeta DATA del juego: conserva tu biblioteca en otra ubicacion y
+seleccionala desde el programa.
+
+La biblioteca original NO esta incluida y no se envia por internet.
+El programa solo lee los recursos. Los diagnosticos y apariencias se guardan
+por separado en Documentos/HerramientaShaiya.
+
+El renderizador necesita una GPU/controlador compatible con ANGLE/OpenGL ES.
+Esta compilacion de desarrollo no esta firmada con un certificado comercial.
+Revisa README.md y los resultados de CI para conocer el alcance comprobado.
