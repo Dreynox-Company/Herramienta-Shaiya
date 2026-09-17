@@ -1,3 +1,4 @@
+import 'legacy_text.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -9,12 +10,14 @@ class Bin {
   late final ByteData data = ByteData.sublistView(bytes);
   final String source;
   int offset = 0;
+  String Function(List<int>) decoder = LegacyText.decode;
   Bin(this.bytes, [this.source = 'recurso']);
   Never fail(String message) =>
       throw FormatException('$source · byte $offset: $message');
   void need(int n) {
-    if (n < 0 || offset + n > bytes.length)
+    if (n < 0 || offset + n > bytes.length) {
       fail('Archivo truncado ($n bytes).');
+    }
   }
 
   void skip(int n) {
@@ -73,10 +76,7 @@ class Bin {
     final raw = bytes.sublist(offset, offset + n);
     offset += n;
     final end = raw.indexOf(0);
-    return utf8.decode(
-      end < 0 ? raw : raw.sublist(0, end),
-      allowMalformed: true,
-    );
+    return decoder(end < 0 ? raw : raw.sublist(0, end));
   }
 
   List<double> floats(int n) => List.generate(n, (_) => f32());
@@ -91,9 +91,31 @@ class Bin {
   v.Matrix4 matrix() => v.Matrix4.fromList(floats(16));
   v.Matrix4 rawMatrix() =>
       v.Matrix4.fromList(List.generate(16, (_) => rawFloat()));
+  int get remaining => bytes.length - offset;
+  int i64() {
+    need(8);
+    final n = data.getInt64(offset, Endian.little);
+    offset += 8;
+    return n;
+  }
+
+  String ustr() {
+    final n = count(1000000);
+    need(n * 2);
+    final text = LegacyText.unicode(bytes.sublist(offset, offset + n * 2));
+    offset += n * 2;
+    return text;
+  }
+
+  void meshEnd() {
+    if (remaining == 8 && bytes.sublist(offset).every((b) => b == 0)) skip(8);
+    end();
+  }
+
   void end() {
-    if (offset != bytes.length)
+    if (offset != bytes.length) {
       fail('Quedan ${bytes.length - offset} bytes sin interpretar.');
+    }
   }
 }
 
@@ -140,6 +162,14 @@ class MeshData {
     return n;
   }
 
+  static MeshData object(Uint8List bytes, String source) {
+    final r = Bin(bytes, source);
+    r.str();
+    final result = rigid(r);
+    r.meshEnd();
+    return result;
+  }
+
   static MeshData skinned(Uint8List bytes, String source) {
     final r = Bin(bytes, source);
     r.need(4);
@@ -148,8 +178,9 @@ class MeshData {
     // Algunas piezas MON con extensión 3DC contienen realmente una malla 3DO.
     if (version != 0 && version != 444) {
       final texture = r.str();
-      if (!RegExp(r'\.(tga|dds)$', caseSensitive: false).hasMatch(texture))
+      if (!RegExp(r'\.(tga|dds)$', caseSensitive: false).hasMatch(texture)) {
         r.fail('Versión de malla desconocida.');
+      }
       final out = rigid(r);
       r.end();
       return out;
@@ -167,12 +198,14 @@ class MeshData {
   }
 
   MeshData join(MeshData b, Bin r) {
-    if (inverses.length != b.inverses.length || vertices + b.vertices > 65536)
+    if (inverses.length != b.inverses.length || vertices + b.vertices > 65536) {
       r.fail('Bloques 3DC incompatibles.');
+    }
     for (var i = 0; i < inverses.length; i++) {
       for (var k = 0; k < 16; k++) {
-        if ((inverses[i].storage[k] - b.inverses[i].storage[k]).abs() > 1e-4)
+        if ((inverses[i].storage[k] - b.inverses[i].storage[k]).abs() > 1e-4) {
           r.fail('Los bloques 3DC no comparten matrices de enlace.');
+        }
       }
     }
     return MeshData(
@@ -189,8 +222,9 @@ class MeshData {
 
   static MeshData _skinnedOne(Bin r) {
     final version = r.u32();
-    if (version != 0 && version != 444)
+    if (version != 0 && version != 444) {
       r.fail('Versión 3DC no soportada: $version.');
+    }
     final nb = r.count(256);
     if (nb == 0) r.fail('Esqueleto vacío.');
     final inv = List.generate(nb, (_) => r.rawMatrix());
@@ -222,8 +256,9 @@ class MeshData {
       var sum = 0.0;
       for (var k = 0; k < 4; k++) {
         w[k] = w[k].clamp(0.0, 1.0);
-        if (w[k] > 1e-6 && js[k] >= nb)
+        if (w[k] > 1e-6 && js[k] >= nb) {
           r.fail('Peso enlazado a un hueso inexistente.');
+        }
         sum += w[k];
       }
       if (sum < 1e-9) {
@@ -255,8 +290,9 @@ class MeshData {
       final valid =
           inv[i].storage.every((x) => x.isFinite) &&
           inv[i].determinant().abs() > 1e-12;
-      if (!valid && used.contains(i))
+      if (!valid && used.contains(i)) {
         r.fail('Matriz de enlace inválida en el hueso utilizado $i.');
+      }
       if (!valid) {
         inv[i] = v.Matrix4.identity();
         model.repairs.add('Matriz auxiliar no utilizada $i omitida.');
@@ -324,26 +360,48 @@ class MeshData {
         uv = Float32List(n * 2);
     for (var i = 0; i < n; i++) {
       for (var k = 0; k < 3; k++) {
-        p[3 * i + k] = r.f32();
+        p[3 * i + k] = r.rawFloat();
       }
       for (var k = 0; k < 3; k++) {
         no[3 * i + k] = r.rawFloat();
       }
       if (boneField) r.i32();
-      uv[i * 2] = r.f32();
-      uv[i * 2 + 1] = r.f32();
+      uv[i * 2] = r.rawFloat();
+      uv[i * 2 + 1] = r.rawFloat();
       if (lightUv) r.skip(8);
     }
-    return MeshData(
+    final indices = readIndices(r, n), used = indices.toSet();
+    var omitted = 0;
+    for (var i = 0; i < n; i++) {
+      final invalid =
+          p.sublist(i * 3, i * 3 + 3).any((x) => !x.isFinite) ||
+          uv.sublist(i * 2, i * 2 + 2).any((x) => !x.isFinite);
+      if (!invalid) continue;
+      if (used.contains(i)) {
+        r.fail('Posición o UV inválida en el vértice utilizado $i.');
+      }
+      // Exporters retain dead vertices with NaN UVs. They have no faces and
+      // must not invalidate all the roofs/buildings that use the same mesh.
+      p.fillRange(i * 3, i * 3 + 3, 0);
+      uv.fillRange(i * 2, i * 2 + 2, 0);
+      omitted++;
+    }
+    final out = MeshData(
       p,
       no,
       uv,
-      readIndices(r, n),
+      indices,
       Uint8List(0),
       Float32List(0),
       [],
       r.source,
     )..repairNormals();
+    if (omitted > 0) {
+      out.repairs.add(
+        '$omitted vértices no referenciados con valores no finitos neutralizados; todos los triángulos originales conservados.',
+      );
+    }
+    return out;
   }
 }
 
@@ -428,18 +486,21 @@ class ClipData {
   static ClipData parse(Uint8List bytes, String source) {
     final r = Bin(bytes, source);
     if (bytes.length >= 6 &&
-        ascii.decode(bytes.sublist(0, 6), allowInvalid: true) == 'ANI_V2')
+        ascii.decode(bytes.sublist(0, 6), allowInvalid: true) == 'ANI_V2') {
       r.skip(6);
+    }
     // Hay clips originales que comienzan en -1 o -40; leer como uint crea
     // una duración de miles de millones de fotogramas.
     final start = r.i32(), end = r.i32(), count = r.u16();
-    if (end < start || end - start > 1000000 || count == 0 || count > 256)
+    if (end < start || end - start > 1000000 || count == 0 || count > 256) {
       r.fail('Cabecera ANI inválida.');
+    }
     final tracks = <BoneTrack>[];
     for (var i = 0; i < count; i++) {
       final parent = r.i32();
-      if (parent < -1 || parent >= i)
+      if (parent < -1 || parent >= i) {
         r.fail('Jerarquía cíclica o no ordenada.');
+      }
       final world = r.rawMatrix();
       final p = v.Vector3.zero(), s = v.Vector3.zero();
       final q = v.Quaternion.identity();
@@ -452,34 +513,39 @@ class ClipData {
       for (var k = 0; k < nr; k++) {
         rt.add((r.i32() - start) / 30);
         rq.add(r.quat());
-        if (k > 0 && rt[k] < rt[k - 1])
+        if (k > 0 && rt[k] < rt[k - 1]) {
           r.fail('Claves de rotación desordenadas.');
+        }
       }
       final nt = r.count(100000);
       r.need(nt * 16);
       for (var k = 0; k < nt; k++) {
         pt.add((r.i32() - start) / 30);
         pv.add(r.vec());
-        if (k > 0 && pt[k] < pt[k - 1])
+        if (k > 0 && pt[k] < pt[k - 1]) {
           r.fail('Claves de traslación desordenadas.');
+        }
       }
       // Solo se usa el enlace como respaldo cuando falta un canal.
       if (rt.isEmpty || pt.isEmpty) {
         if (!world.storage.every((x) => x.isFinite) ||
-            world.determinant().abs() < 1e-12)
+            world.determinant().abs() < 1e-12) {
           r.fail('Matriz inválida para un canal de animación sin claves.');
+        }
         v.Matrix4 local = world;
         if (parent >= 0) {
           final bind = tracks[parent].bind;
           if (!bind.storage.every((x) => x.isFinite) ||
-              bind.determinant().abs() < 1e-12)
+              bind.determinant().abs() < 1e-12) {
             r.fail('Respaldo de animación singular.');
+          }
           local = v.Matrix4.inverted(bind) * world;
         }
         local.decompose(p, q, s);
         if (!p.storage.every((x) => x.isFinite) ||
-            !q.storage.every((x) => x.isFinite))
+            !q.storage.every((x) => x.isFinite)) {
           r.fail('No se pudo recuperar el canal de animación.');
+        }
       }
       tracks.add(
         BoneTrack(
@@ -525,8 +591,9 @@ List<MaterialRecord> readMlt(Uint8List bytes, String path) {
   final n = r.count(30000), rows = <MaterialRecord>[];
   for (var i = 0; i < n; i++) {
     final m = r.u32(), t = r.u32(), a = r.u32();
-    if (m >= meshes.length || t >= textures.length)
+    if (m >= meshes.length || t >= textures.length) {
       r.fail('Índice MLT inexistente.');
+    }
     rows.add(MaterialRecord(i, meshes[m], textures[t], a));
   }
   r.end();
@@ -579,8 +646,9 @@ List<WeaponRecord> readItm(Uint8List bytes, String path) {
     r.i32();
     if (extended != 0 && extended != 1) r.fail('Registro ITM desconocido.');
     if (extended == 1) r.skip(16);
-    if (m >= meshes.length || t >= textures.length)
+    if (m >= meshes.length || t >= textures.length) {
       r.fail('Referencia ITM inválida.');
+    }
     final transforms = <List<Attachment>>[];
     if (sig == 'IT2') {
       for (var a = 0; a < (panda ? 24 : 16); a++) {

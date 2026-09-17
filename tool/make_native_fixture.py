@@ -30,7 +30,7 @@ def animation(bob):
  return i(0)+i(30)+struct.pack('<H',1)+i(-1)+f(*identity)+u(1)+i(0)+f(0,0,0,1)+u(3)+i(0)+f(0,0,0)+i(15)+f(0,bob,0)+i(30)+f(0,0,0)
 write('Character/Human/3dc/humf_upper000.3dc',mesh(verts,inds));write('Character/Human/dds/humf_upper000.dds',texture((95,168,222)))
 write('Character/Human/humf_upper.mlt',b'MLT'+u(1)+s('humf_upper000.3dc')+u(1)+s('humf_upper000.dds')+u(1)+u(0)+u(0)+u(1))
-for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnormal',.3),('007_swim',.5),('020_veh_run',.05),('021_veh_br',0),('034_onready',0),('035_onattack01',.15)]:write('Character/Human/ani/humf_'+name+'.ani',animation(bob))
+for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnormal',.3),('007_swim',.5),('008_jump',.09),('020_veh_run',.05),('021_veh_br',0),('034_onready',0),('035_onattack01',.15)]:write('Character/Human/ani/humf_'+name+'.ani',animation(bob))
 def creature_record(name):
  anim=[name+'_walk.ani',name+'_run.ani',name+'_attack.ani','','',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani']
  return s(name)+bytes(1)+b''.join(s(a) for a in anim)+b''.join(s('') for _ in range(8))+u(1)+s(name+'.3dc')+s(name+'.dds')+f(2)+u(0)
@@ -49,5 +49,36 @@ write('world/fixture.wld',world)
 pts=[(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),(-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1)]
 tri=[0,1,2,0,2,3,4,7,6,4,6,5,0,4,5,0,5,1,3,2,6,3,6,7,0,3,7,0,7,4,1,5,6,1,6,2]
 sky=s('fixture.dds')+u(8)+b''.join(f(*p)+f(0,1,0)+f(k%2,(k//2)%2) for k,p in enumerate(pts))+u(len(tri)//3)+struct.pack('<'+'H'*len(tri),*tri)
-write('Sky/sky.3do',sky);write('Sky/fixture.dds',texture((100,157,219)))
+write('Sky/sky.3do',sky+bytes(8));write('Sky/fixture.dds',texture((100,157,219)))
+# Test the exact 3DO zero footer and an opaque IT2 material, without game assets.
+sword=s('fixture_sword.dds')+u(8)+b''.join(f(x*.065,(y+1)*.45,z*.035)+f(0,1,0)+f(k%2,(k//2)%2) for k,(x,y,z) in enumerate(pts))+u(len(tri)//3)+struct.pack('<'+'H'*len(tri),*tri)+bytes(8)
+write('Item/3do/fixture_sword.3do',sword)
+write('Item/dds/fixture_sword.dds',texture((225,215,160)))
+attachment=i(0)+f(.5,1.15,0)+f(0,0,0,1)
+empty=i(0)+f(0,0,0)+f(0,0,0,1)
+itm=b'IT2'+u(1)+s('fixture_sword.3do')+u(1)+s('fixture_sword.dds')+u(1)
+itm+=u(0)+u(0)+i(-1)+i(0)+i(0)+i(0)+(attachment+empty)*16
+write('Item/01.itm',itm)
 print('Synthetic fixture prepared:',root)
+
+# Regression fixture: a modular archetype using the original Panda slot names.
+# Each slot owns its geometry. Missing Trousers must never imply a full costume.
+for slot,token,low,high in [('upper','Body',1.05,2.2),('lower','Trousers',.16,1.12),('hand','Arm',.8,1.7),('foot','Foot',-.01,.2)]:
+ selected=[];selected_indices=[]
+ for face in range(0,len(inds),3):
+  triangle=[verts[inds[face+k]] for k in range(3)]
+  cy=sum(p[0][1] for p in triangle)/3
+  cx=sum(abs(p[0][0]) for p in triangle)/3
+  match=low<=cy<=high
+  if slot=='hand':match=match and cx>.37
+  elif slot in ('upper','lower'):match=match and cx<=.37
+  if match:
+   n=len(selected);selected.extend(triangle);selected_indices.extend([n,n+1,n+2])
+ # Geometry remains deliberately simple and self-authored, not a game asset.
+ if not selected: selected,selected_indices=geometry(.35,.15,.4)
+ name='pdbmf_00_'+token
+ write('Character/PandaB/3dc/'+name+'.3dc',mesh(selected,selected_indices))
+ write('Character/PandaB/dds/'+name+'.dds',texture((120,174,213)))
+ write('Character/PandaB/pdbmf_'+slot+'.mlt',b'MLT'+u(1)+s(name+'.3dc')+u(1)+s(name+'.dds')+u(1)+u(0)+u(0)+u(1))
+for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08)]:
+ write('Character/PandaB/ani/pdbmf_'+name+'.ani',animation(bob))

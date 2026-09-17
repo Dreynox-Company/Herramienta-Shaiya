@@ -39,7 +39,8 @@ Archetype archetype() {
   final slots = {for (final s in Slot.values) s: <PartRecord>[]};
   slots[Slot.upper]!.addAll([
     part(Slot.upper, 0, 'humf_upper016.dds'),
-    part(Slot.upper, 1, 'humf_wedding_upper.dds'),
+    part(Slot.upper, 1, 'humf_wedding_upper.dds')
+      ..coveredSlots.addAll([Slot.lower, Slot.hand, Slot.foot]),
   ]);
   slots[Slot.lower]!.add(part(Slot.lower, 0, 'humf_lower016.dds'));
   slots[Slot.hand]!.add(part(Slot.hand, 0, 'humf_hand016.dds'));
