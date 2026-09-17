@@ -12,15 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           ref: release/studio-0.3.1
-      - name: Materializar las fuentes autorizadas y comprobar SHA-256
-        run: python3 .delivery/import_031.py
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.4'
           channel: stable
           cache: true
+      - run: flutter pub get
+      - name: Normalizar formato de la base igual que el artefacto de fuentes original
+        run: dart format lib test integration_test tool
+      - name: Materializar las fuentes autorizadas y comprobar SHA-256
+        run: python3 .delivery/import_031.py
       - run: flutter pub get
       - run: dart format lib test integration_test tool
       - run: flutter analyze

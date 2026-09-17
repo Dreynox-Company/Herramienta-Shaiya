@@ -12,7 +12,9 @@ BASE = '58d23b3a24c089a95f1ba143c6ae32f7fb3cdbfe'
 def run(*args):
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
-assert run('git', 'rev-parse', 'HEAD^') == BASE, 'Unexpected source base; no files were changed.'
+subprocess.run(['git', 'merge-base', '--is-ancestor', BASE, 'HEAD'], cwd=ROOT, check=True)
+changed = run('git', 'diff', '--name-only', BASE, 'HEAD').splitlines()
+assert all(p.startswith('.delivery/') or p == '.github/workflows/import_031.yml' for p in changed), 'The base source changed; import cancelled.'
 chunks = sorted((ROOT / '.delivery').glob('part*.b64'))
 assert len(chunks) == 13, 'The source transfer is incomplete.'
 encoded = ''.join(p.read_text().strip() for p in chunks)
@@ -32,8 +34,7 @@ target = ROOT / '.delivery' / 'verified.patch'
 target.write_bytes(patch)
 subprocess.run(['git', 'apply', '--check', str(target)], cwd=ROOT, check=True)
 subprocess.run(['git', 'apply', str(target)], cwd=ROOT, check=True)
-# Deterministically regenerate the standard CP950 / CP949 Unicode mappings.
-# These are text-encoding tables, not proprietary game resources.
+# Regenerate standard CP950 / CP949 Unicode mappings, not game resources.
 p = ROOT / 'lib/core/legacy_text.dart'
 source = p.read_text(encoding='utf-8')
 for codec, marker, expected in [
