@@ -42,10 +42,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     child: Row(
       children: [
         Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
+          child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ),
         IconButton(
           tooltip: 'Plegar panel',
@@ -56,21 +53,20 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
       ],
     ),
   );
-  Widget _scroll(Widget body) =>
-      SingleChildScrollView(padding: const EdgeInsets.all(14), child: body);
-  Widget _panel(
-    String title,
-    Widget child,
-    VoidCallback close, {
-    double? width,
-  }) => Container(
+  Widget _scroll(Widget body) => SingleChildScrollView(padding: const EdgeInsets.all(14), child: body);
+
+  // Each dock owns its Material surface. An opaque ColoredBox between a
+  // ListTile and its Material hides ink/selection and asserts in native debug.
+  Widget _panel(String title, Widget child, VoidCallback close, {double? width}) => SizedBox(
     width: width,
-    color: const Color(0xff171e29),
-    child: Column(
-      children: [
-        _title(title, close),
-        Expanded(child: _scroll(child)),
-      ],
+    child: Material(
+      color: const Color(0xff171e29),
+      child: Column(
+        children: [
+          _title(title, close),
+          Expanded(child: _scroll(child)),
+        ],
+      ),
     ),
   );
   Widget _splitter(bool left) => MouseRegion(
@@ -87,13 +83,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
       child: Container(
         width: 5,
         color: const Color(0xff222b39),
-        child: Center(
-          child: Container(
-            width: 1,
-            height: 36,
-            color: const Color(0xff536078),
-          ),
-        ),
+        child: Center(child: Container(width: 1, height: 36, color: const Color(0xff536078))),
       ),
     ),
   );
@@ -113,29 +103,21 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                 setState(() => leftOpen = true);
               },
               isSelected: widget.selectedTab == i,
-              selectedIcon: Icon(
-                widget.icons[i],
-                color: const Color(0xffb3c6ff),
-              ),
+              selectedIcon: Icon(widget.icons[i], color: const Color(0xffb3c6ff)),
               icon: Icon(widget.icons[i], color: const Color(0xff8998af)),
               iconSize: 20,
               style: IconButton.styleFrom(
-                backgroundColor: widget.selectedTab == i
-                    ? const Color(0xff2b3850)
-                    : Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
+                backgroundColor: widget.selectedTab == i ? const Color(0xff2b3850) : Colors.transparent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
               ),
             ),
           ),
         ),
       );
     }
-    return Container(
+    return SizedBox(
       width: 46,
-      color: const Color(0xff131a24),
-      child: Column(children: buttons),
+      child: Material(color: const Color(0xff131a24), child: Column(children: buttons)),
     );
   }
 
@@ -163,94 +145,61 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     ),
   );
 
-  Widget _header(double width, bool mobile, bool showLeft, bool showRight) =>
-      Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: const BoxDecoration(
-          color: Color(0xff121a26),
-          border: Border(bottom: BorderSide(color: Color(0xff30394a))),
+  Widget _header(double width, bool mobile, bool showLeft, bool showRight) => Container(
+    height: 48,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    decoration: const BoxDecoration(
+      color: Color(0xff121a26),
+      border: Border(bottom: BorderSide(color: Color(0xff30394a))),
+    ),
+    child: Row(
+      children: [
+        IconButton(
+          key: const ValueKey('toggle-left'),
+          tooltip: 'Biblioteca · mostrar / plegar',
+          onPressed: () {
+            if (mobile) {
+              scaffoldKey.currentState?.openDrawer();
+            } else {
+              setState(() => leftOpen = !leftOpen);
+            }
+          },
+          icon: Icon(showLeft ? Icons.view_sidebar_outlined : Icons.menu, size: 20),
         ),
-        child: Row(
-          children: [
-            IconButton(
-              key: const ValueKey('toggle-left'),
-              tooltip: 'Biblioteca · mostrar / plegar',
-              onPressed: () {
-                if (mobile) {
-                  scaffoldKey.currentState?.openDrawer();
-                } else {
-                  setState(() => leftOpen = !leftOpen);
-                }
-              },
-              icon: Icon(
-                showLeft ? Icons.view_sidebar_outlined : Icons.menu,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 5),
-            const Icon(
-              Icons.view_in_ar_outlined,
-              size: 21,
-              color: Color(0xffb2c5ff),
-            ),
-            const SizedBox(width: 9),
-            const Text(
-              'SHAIYA',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.7,
-              ),
-            ),
-            if (width > 420)
-              const Text(
-                '  STUDIO',
-                style: TextStyle(
-                  fontSize: 12,
-                  letterSpacing: 1.5,
-                  color: Color(0xff9aaac4),
-                ),
-              ),
-            const Spacer(),
-            if (width > 600)
-              const Text(
-                '0.2 · Laboratorio 3D',
-                style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
-              ),
-            const SizedBox(width: 10),
-            TextButton.icon(
-              onPressed: widget.onOpenData,
-              icon: const Icon(Icons.folder_open, size: 17),
-              label: const Text('DATA', style: TextStyle(fontSize: 12)),
-            ),
-            IconButton(
-              key: const ValueKey('toggle-right'),
-              tooltip: 'Inspector · mostrar / plegar',
-              onPressed: () {
-                if (mobile ||
-                    (!showRight &&
-                        width - (leftOpen ? leftWidth + 51 : 46) - rightWidth <=
-                            380)) {
-                  scaffoldKey.currentState?.openEndDrawer();
-                } else {
-                  setState(() => rightOpen = !rightOpen);
-                }
-              },
-              icon: Icon(showRight ? Icons.last_page : Icons.tune, size: 19),
-            ),
-          ],
+        const SizedBox(width: 5),
+        const Icon(Icons.view_in_ar_outlined, size: 21, color: Color(0xffb2c5ff)),
+        const SizedBox(width: 9),
+        const Text('SHAIYA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.7)),
+        if (width > 420)
+          const Text('  STUDIO', style: TextStyle(fontSize: 12, letterSpacing: 1.5, color: Color(0xff9aaac4))),
+        const Spacer(),
+        if (width > 600)
+          const Text('0.3.1 · Laboratorio 3D', style: TextStyle(fontSize: 10, color: Color(0xff8091ab))),
+        const SizedBox(width: 10),
+        TextButton.icon(
+          onPressed: widget.onOpenData,
+          icon: const Icon(Icons.folder_open, size: 17),
+          label: const Text('DATA', style: TextStyle(fontSize: 12)),
         ),
-      );
+        IconButton(
+          key: const ValueKey('toggle-right'),
+          tooltip: 'Inspector · mostrar / plegar',
+          onPressed: () {
+            if (mobile || (!showRight && width - (leftOpen ? leftWidth + 51 : 46) - rightWidth <= 380)) {
+              scaffoldKey.currentState?.openEndDrawer();
+            } else {
+              setState(() => rightOpen = !rightOpen);
+            }
+          },
+          icon: Icon(showRight ? Icons.last_page : Icons.tune, size: 19),
+        ),
+      ],
+    ),
+  );
 
   Widget _center() => Column(
     children: [
-      Expanded(
-        child: ClipRect(
-          key: const ValueKey('viewport-region'),
-          child: widget.viewport,
-        ),
-      ),
+      Expanded(child: ClipRect(key: const ValueKey('viewport-region'), child: widget.viewport)),
       if (widget.hasLibrary) ...[
         Container(
           key: const ValueKey('action-region'),
@@ -269,16 +218,9 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             children: [
               IconButton(
                 key: const ValueKey('toggle-timeline'),
-                tooltip: timelineOpen
-                    ? 'Plegar animación'
-                    : 'Expandir animación',
+                tooltip: timelineOpen ? 'Plegar animación' : 'Expandir animación',
                 onPressed: () => setState(() => timelineOpen = !timelineOpen),
-                icon: Icon(
-                  timelineOpen
-                      ? Icons.keyboard_arrow_down
-                      : Icons.keyboard_arrow_up,
-                  size: 17,
-                ),
+                icon: Icon(timelineOpen ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, size: 17),
                 visualDensity: VisualDensity.compact,
               ),
               if (timelineOpen)
@@ -290,12 +232,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                   ),
                 )
               else
-                const Expanded(
-                  child: Text(
-                    'Animación',
-                    style: TextStyle(fontSize: 10, color: Color(0xff92a3be)),
-                  ),
-                ),
+                const Expanded(child: Text('Animación', style: TextStyle(fontSize: 10, color: Color(0xff92a3be)))),
             ],
           ),
         ),
@@ -307,10 +244,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       final mobile = box.maxWidth < 840;
-      final showRight =
-          !mobile &&
-          rightOpen &&
-          box.maxWidth - (leftOpen ? leftWidth + 51 : 46) - rightWidth > 380;
+      final showRight = !mobile && rightOpen && box.maxWidth - (leftOpen ? leftWidth + 51 : 46) - rightWidth > 380;
       final showLeft = !mobile && leftOpen;
       final drawerWidth = (box.maxWidth - 28).clamp(240, 330).toDouble();
       return Scaffold(
@@ -321,23 +255,14 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                 width: drawerWidth,
                 child: SafeArea(
                   child: Column(
-                    children: [
-                      _mobileTabs(),
-                      Expanded(child: _scroll(widget.left)),
-                    ],
+                    children: [_mobileTabs(), Expanded(child: _scroll(widget.left))],
                   ),
                 ),
               )
             : null,
         endDrawer: Drawer(
           width: drawerWidth,
-          child: SafeArea(
-            child: _panel(
-              'Inspector',
-              widget.right,
-              () => scaffoldKey.currentState?.closeEndDrawer(),
-            ),
-          ),
+          child: SafeArea(child: _panel('Inspector', widget.right, () => scaffoldKey.currentState?.closeEndDrawer())),
         ),
         body: SafeArea(
           child: Column(
@@ -348,23 +273,13 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                   children: [
                     if (!mobile) _rail(),
                     if (showLeft) ...[
-                      _panel(
-                        widget.tabs[widget.selectedTab],
-                        widget.left,
-                        () => setState(() => leftOpen = false),
-                        width: leftWidth,
-                      ),
+                      _panel(widget.tabs[widget.selectedTab], widget.left, () => setState(() => leftOpen = false), width: leftWidth),
                       _splitter(true),
                     ],
                     Expanded(child: _center()),
                     if (showRight) ...[
                       _splitter(false),
-                      _panel(
-                        'Inspector',
-                        widget.right,
-                        () => setState(() => rightOpen = false),
-                        width: rightWidth,
-                      ),
+                      _panel('Inspector', widget.right, () => setState(() => rightOpen = false), width: rightWidth),
                     ],
                   ],
                 ),
@@ -374,10 +289,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 color: const Color(0xff111823),
                 child: DefaultTextStyle(
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xff92a1b8),
-                  ),
+                  style: const TextStyle(fontSize: 10, color: Color(0xff92a1b8)),
                   child: widget.status,
                 ),
               ),
