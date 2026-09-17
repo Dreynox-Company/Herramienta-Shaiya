@@ -1,7 +1,7 @@
 name: Flutter nativo - validar y compilar
 on:
   push:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main, 'feat/**', 'fix/**', 'release/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -24,9 +24,11 @@ jobs:
       - name: Validar sintaxis y formatear fuentes de entrega
         run: dart format lib test integration_test tool
       - name: Analisis estatico
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Pruebas de movimiento, selectores, paneles y formatos
+        run: flutter analyze
+      - name: Pruebas de cuerpo, movimiento, selectores y formatos
         run: flutter test --reporter expanded
+      - name: Pruebas de integridad y scripts de entrega
+        run: python3 -m unittest discover -s tool/tests -v
       - name: Auditor nativo de clips originales
         run: dart compile exe tool/audit_locomotion.dart -o auditor_movimiento
       - uses: actions/upload-artifact@v4
@@ -35,7 +37,7 @@ jobs:
           path: auditor_movimiento
           if-no-files-found: error
       - name: Fuentes de la revision
-        run: zip -r Shaiya-Studio-Fuentes.zip lib test integration_test tool platform docs pubspec.yaml pubspec.lock analysis_options.yaml README.md LEEME_WINDOWS.txt INICIAR_WINDOWS.ps1 .github .gitignore
+        run: python3 tool/package_sources.py Shaiya-Studio-Fuentes.zip
       - uses: actions/upload-artifact@v4
         with:
           name: Fuentes-y-dependencias
@@ -63,7 +65,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Error generando los recursos sinteticos.' }
           "SHAIYA_FIXTURE_PATH=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append
           "SHAIYA_QA_PATH=$qa" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Integracion nativa - movimiento, monturas, alas y cielo
+      - name: Integracion nativa - cuerpo completo, arma, salto, monturas y objetivos
         run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
       - run: flutter build windows --release
       - name: Comprobar arranque nativo de release
