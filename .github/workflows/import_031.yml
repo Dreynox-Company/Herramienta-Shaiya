@@ -1,0 +1,39 @@
+name: Integrar fuentes 0.3.1 verificadas
+on:
+  push:
+    branches: [release/studio-0.3.1]
+    paths: ['.delivery/**', '.github/workflows/import_031.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: release/studio-0.3.1
+      - name: Materializar las fuentes autorizadas y comprobar SHA-256
+        run: python3 .delivery/import_031.py
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format lib test integration_test tool
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+      - run: python3 -m unittest discover -s tool/tests -v
+      - name: Publicar fuentes legibles solo tras pasar las pruebas
+        run: |
+          git fetch origin release/studio-0.3.1
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git rm -r .delivery .github/workflows/import_031.yml
+          git rm --ignore-unmatch .github/workflows/local_qa_tools.yml .github/workflows/extractor_tools.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: integrate native studio 0.3.1 and prevent incomplete character bodies'
+          git push origin HEAD:refs/heads/release/studio-0.3.1
