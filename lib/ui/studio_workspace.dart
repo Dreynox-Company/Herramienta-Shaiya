@@ -63,14 +63,20 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     Widget child,
     VoidCallback close, {
     double? width,
-  }) => Container(
+  }) => SizedBox(
     width: width,
-    color: const Color(0xff171e29),
-    child: Column(
-      children: [
-        _title(title, close),
-        Expanded(child: _scroll(child)),
-      ],
+    // ListTile, SwitchListTile and CheckboxListTile paint their feedback on
+    // Material. An opaque Container between them and Scaffold's Material
+    // hides that feedback and triggers a framework assertion in debug.
+    // Keep this surface local so docked and drawer panels behave identically.
+    child: Material(
+      color: const Color(0xff171e29),
+      child: Column(
+        children: [
+          _title(title, close),
+          Expanded(child: _scroll(child)),
+        ],
+      ),
     ),
   );
   Widget _splitter(bool left) => MouseRegion(
