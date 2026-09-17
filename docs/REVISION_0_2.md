@@ -1,3 +1,5 @@
+> Histórico de una revisión anterior. El estado actual está en REVISION_0_3.md y README.md.
+
 # Revisión 0.2 — objetivos de regresión
 
 Estado: en desarrollo; no describe funciones ya comprobadas.

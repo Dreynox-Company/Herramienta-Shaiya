@@ -116,16 +116,19 @@ const motionNames = {
 String translatedMotion(String path) {
   final index = motionIndex(path), name = path.toLowerCase();
   if (motionNames.containsKey(index)) return motionNames[index]!;
-  if (index != null && index >= 100 && index <= 115)
+  if (index != null && index >= 100 && index <= 115) {
     return 'Habilidad · $index';
+  }
   for (final type in [1, 2, 5, 6, 9, 10, 11, 12, 13, 15]) {
-    if (attackMotions(type).contains(index))
+    if (attackMotions(type).contains(index)) {
       return 'Ataque ${attackMotions(type).indexOf(index!) + 1} · ${weaponNames[type]}';
+    }
     if (damageMotion(type) == index) return 'Daño · ${weaponNames[type]}';
   }
   if (name.contains('run')) return 'Correr con equipo';
   if (name.contains('attack')) return 'Acción de ataque';
-  if (name.contains('ready') || name.contains('roop'))
+  if (name.contains('ready') || name.contains('roop')) {
     return 'Canalización de habilidad';
+  }
   return 'Animación ${index ?? ''}';
 }

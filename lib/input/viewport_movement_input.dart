@@ -8,8 +8,13 @@ class ViewportMovementInput extends StatefulWidget {
   final MovementChanged onChanged;
   final Widget child;
   final void Function(LogicalKeyboardKey)? onAction;
-  const ViewportMovementInput({super.key, required this.focusNode,
-    required this.onChanged, required this.child, this.onAction});
+  const ViewportMovementInput({
+    super.key,
+    required this.focusNode,
+    required this.onChanged,
+    required this.child,
+    this.onAction,
+  });
   @override
   State<ViewportMovementInput> createState() => _ViewportMovementInputState();
 }
@@ -17,13 +22,22 @@ class ViewportMovementInput extends StatefulWidget {
 class _ViewportMovementInputState extends State<ViewportMovementInput>
     with WidgetsBindingObserver {
   static final _movementKeys = <LogicalKeyboardKey>{
-    LogicalKeyboardKey.keyW, LogicalKeyboardKey.keyA,
-    LogicalKeyboardKey.keyS, LogicalKeyboardKey.keyD,
-    LogicalKeyboardKey.shiftLeft, LogicalKeyboardKey.shiftRight,
+    LogicalKeyboardKey.keyW,
+    LogicalKeyboardKey.keyA,
+    LogicalKeyboardKey.keyS,
+    LogicalKeyboardKey.keyD,
+    LogicalKeyboardKey.shiftLeft,
+    LogicalKeyboardKey.shiftRight,
   };
   static final _actionKeys = <LogicalKeyboardKey>{
-    LogicalKeyboardKey.digit1, LogicalKeyboardKey.digit2,
-    LogicalKeyboardKey.digit3, LogicalKeyboardKey.digit4, LogicalKeyboardKey.keyR,
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.keyR,
+    LogicalKeyboardKey.space,
+    LogicalKeyboardKey.escape,
+    LogicalKeyboardKey.tab,
   };
   bool _active = true;
 
@@ -32,6 +46,7 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
   }
+
   void _clear() => widget.onChanged(0, 0, false);
 
   @override
@@ -42,7 +57,9 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (!_movementKeys.contains(event.logicalKey)) {
-      if (event is KeyDownEvent && !event.synthesized && _active &&
+      if (event is KeyDownEvent &&
+          !event.synthesized &&
+          _active &&
           _actionKeys.contains(event.logicalKey)) {
         widget.onAction?.call(event.logicalKey);
         return KeyEventResult.handled;
@@ -55,9 +72,11 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
     }
     final keyboard = HardwareKeyboard.instance;
     final pressed = keyboard.logicalKeysPressed;
-    final x = (pressed.contains(LogicalKeyboardKey.keyD) ? 1.0 : 0.0) -
+    final x =
+        (pressed.contains(LogicalKeyboardKey.keyD) ? 1.0 : 0.0) -
         (pressed.contains(LogicalKeyboardKey.keyA) ? 1.0 : 0.0);
-    final z = (pressed.contains(LogicalKeyboardKey.keyS) ? 1.0 : 0.0) -
+    final z =
+        (pressed.contains(LogicalKeyboardKey.keyS) ? 1.0 : 0.0) -
         (pressed.contains(LogicalKeyboardKey.keyW) ? 1.0 : 0.0);
     widget.onChanged(x, z, keyboard.isShiftPressed);
     return KeyEventResult.handled;
@@ -71,8 +90,12 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
 
   @override
   Widget build(BuildContext context) => Focus(
-    autofocus: true, focusNode: widget.focusNode,
-    onFocusChange: (hasFocus) { if (!hasFocus) _clear(); },
-    onKeyEvent: _key, child: widget.child,
+    autofocus: true,
+    focusNode: widget.focusNode,
+    onFocusChange: (hasFocus) {
+      if (!hasFocus) _clear();
+    },
+    onKeyEvent: _key,
+    child: widget.child,
   );
 }

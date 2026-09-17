@@ -28,9 +28,18 @@ def texture(rgb):
  return h+bytes([*rgb,255])*16
 def animation(bob):
  return i(0)+i(30)+struct.pack('<H',1)+i(-1)+f(*identity)+u(1)+i(0)+f(0,0,0,1)+u(3)+i(0)+f(0,0,0)+i(15)+f(0,bob,0)+i(30)+f(0,0,0)
-write('Character/Human/3dc/humf_upper000.3dc',mesh(verts,inds));write('Character/Human/dds/humf_upper000.dds',texture((95,168,222)))
+def selected_boxes(boxes):
+ v=[]; idx=[]
+ for box in boxes:
+  base=len(v); v.extend(verts[box*8:box*8+8]);idx.extend(base+j-box*8 for j in inds[box*36:box*36+36])
+ return v,idx
+upper_v,upper_i=selected_boxes([0,1,3,5]);lower_v,lower_i=selected_boxes([2,4])
+write('Character/Human/3dc/humf_lower000.3dc',mesh(lower_v,lower_i))
+write('Character/Human/dds/humf_lower000.dds',texture((95,168,222)))
+write('Character/Human/humf_lower.mlt',b'MLT'+u(1)+s('humf_lower000.3dc')+u(1)+s('humf_lower000.dds')+u(1)+u(0)+u(0)+u(1))
+write('Character/Human/3dc/humf_upper000.3dc',mesh(upper_v,upper_i));write('Character/Human/dds/humf_upper000.dds',texture((95,168,222)))
 write('Character/Human/humf_upper.mlt',b'MLT'+u(1)+s('humf_upper000.3dc')+u(1)+s('humf_upper000.dds')+u(1)+u(0)+u(0)+u(1))
-for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnormal',.3),('007_swim',.5),('020_veh_run',.05),('021_veh_br',0),('034_onready',0),('035_onattack01',.15)]:write('Character/Human/ani/humf_'+name+'.ani',animation(bob))
+for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnormal',.3),('007_swim',.5),('008_jump',.09),('020_veh_run',.05),('021_veh_br',0),('034_onready',0),('035_onattack01',.15)]:write('Character/Human/ani/humf_'+name+'.ani',animation(bob))
 def creature_record(name):
  anim=[name+'_walk.ani',name+'_run.ani',name+'_attack.ani','','',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani']
  return s(name)+bytes(1)+b''.join(s(a) for a in anim)+b''.join(s('') for _ in range(8))+u(1)+s(name+'.3dc')+s(name+'.dds')+f(2)+u(0)
@@ -49,5 +58,14 @@ write('world/fixture.wld',world)
 pts=[(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),(-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1)]
 tri=[0,1,2,0,2,3,4,7,6,4,6,5,0,4,5,0,5,1,3,2,6,3,6,7,0,3,7,0,7,4,1,5,6,1,6,2]
 sky=s('fixture.dds')+u(8)+b''.join(f(*p)+f(0,1,0)+f(k%2,(k//2)%2) for k,p in enumerate(pts))+u(len(tri)//3)+struct.pack('<'+'H'*len(tri),*tri)
-write('Sky/sky.3do',sky);write('Sky/fixture.dds',texture((100,157,219)))
+write('Sky/sky.3do',sky+bytes(8));write('Sky/fixture.dds',texture((100,157,219)))
+# Test the exact 3DO zero footer and an opaque IT2 material, without game assets.
+sword=s('fixture_sword.dds')+u(8)+b''.join(f(x*.065,(y+1)*.45,z*.035)+f(0,1,0)+f(k%2,(k//2)%2) for k,(x,y,z) in enumerate(pts))+u(len(tri)//3)+struct.pack('<'+'H'*len(tri),*tri)+bytes(8)
+write('Item/3do/fixture_sword.3do',sword)
+write('Item/dds/fixture_sword.dds',texture((225,215,160)))
+attachment=i(0)+f(.5,1.15,0)+f(0,0,0,1)
+empty=i(0)+f(0,0,0)+f(0,0,0,1)
+itm=b'IT2'+u(1)+s('fixture_sword.3do')+u(1)+s('fixture_sword.dds')+u(1)
+itm+=u(0)+u(0)+i(-1)+i(0)+i(0)+i(0)+(attachment+empty)*16
+write('Item/01.itm',itm)
 print('Synthetic fixture prepared:',root)

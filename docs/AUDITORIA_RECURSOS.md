@@ -1,3 +1,5 @@
+> Histórico de una revisión anterior. El estado actual está en REVISION_0_3.md y README.md.
+
 # Auditoría de recursos originales
 
 La biblioteca se procesó localmente. No se suben mallas, texturas, sonidos ni el archivo RAR a GitHub.

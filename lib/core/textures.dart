@@ -29,11 +29,13 @@ class Pixels {
 
   static Pixels decode(Uint8List bytes, String source) {
     if (bytes.length >= 4 &&
-        ByteData.sublistView(bytes).getUint32(0, Endian.little) == 0x20534444)
+        ByteData.sublistView(bytes).getUint32(0, Endian.little) == 0x20534444) {
       return dds(bytes, source);
+    }
     final im = img.decodeImage(bytes);
-    if (im == null)
+    if (im == null) {
       throw FormatException('No se pudo decodificar la textura: $source');
+    }
     return Pixels(
       im.width,
       im.height,
@@ -46,12 +48,14 @@ class Pixels {
     r.need(128);
     final d = r.data;
     if (d.getUint32(0, Endian.little) != 0x20534444 ||
-        d.getUint32(4, Endian.little) != 124)
+        d.getUint32(4, Endian.little) != 124) {
       r.fail('Cabecera DDS inválida.');
+    }
     final h = d.getUint32(12, Endian.little),
         w = d.getUint32(16, Endian.little);
-    if (w == 0 || h == 0 || w * h > 16777216)
+    if (w == 0 || h == 0 || w * h > 16777216) {
       r.fail('Tamaño DDS fuera de límite.');
+    }
     var code = String.fromCharCodes(bytes.sublist(84, 88)), offset = 128;
     var bits = d.getUint32(88, Endian.little),
         masks = List.generate(4, (i) => d.getUint32(92 + i * 4, Endian.little));
@@ -202,10 +206,12 @@ class Pixels {
         }
       }
     } else {
-      if (code.replaceAll('\u0000', '').isNotEmpty)
+      if (code.replaceAll('\u0000', '').isNotEmpty) {
         r.fail('Compresión DDS desconocida: $code.');
-      if (![16, 24, 32].contains(bits))
+      }
+      if (![16, 24, 32].contains(bits)) {
         r.fail('DDS RGB de $bits bits no soportado.');
+      }
       final step = bits ~/ 8,
           pitch = d.getUint32(20, Endian.little),
           flags = d.getUint32(8, Endian.little);

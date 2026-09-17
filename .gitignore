@@ -6,8 +6,8 @@ build/
 **/key.properties
 *.jks
 *.keystore
-DATA/
-data/
+/DATA/
+/data/
 *.rar
 *.saf
 *.sah
@@ -18,3 +18,15 @@ android/gradle/wrapper/gradle-wrapper.jar
 windows/flutter/ephemeral/
 .idea/
 *.iml
+
+/dist/
+/qa-native/
+/qa-windows/
+/.publication-backup/
+/.build-logs/
+/manifest-entrega.json
+
+# Local build orchestration, never publish generated downloads or requests.
+/.build-cloud/
+/release-out/
+/cloud-artifacts/

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
@@ -15,12 +14,22 @@ String canon(String path) {
   final value = path.replaceAll('\\', '/').replaceAll(RegExp(r'/+'), '/');
   if (value.startsWith('/') ||
       value.contains(':') ||
-      value.split('/').contains('..'))
+      value.split('/').contains('..')) {
     throw FormatException('Ruta no relativa: $path');
+  }
   return value.replaceFirst(RegExp(r'^\./'), '').toLowerCase();
 }
 
 const supportedExtensions = {
+  '.sdata',
+  '.env',
+  '.seff',
+  '.wtr',
+  '.vani',
+  '.3de',
+  '.ini',
+  '.xml',
+  '.cfg',
   '.3dc',
   '.3do',
   '.ani',
@@ -64,8 +73,9 @@ class Library {
       if (uri == null) return null;
       progress('Indexando DATA con acceso de solo lectura…');
       final rows = await channel.invokeMethod<Map>('index', {'tree': uri});
-      if (rows == null)
+      if (rows == null) {
         throw const FormatException('No se pudo leer la carpeta seleccionada.');
+      }
       return _normalise(
         uri,
         true,
@@ -82,8 +92,9 @@ class Library {
     void Function(String) progress,
   ) async {
     var root = Directory(dir);
-    if (!await root.exists())
+    if (!await root.exists()) {
       throw const FormatException('La carpeta DATA no existe.');
+    }
     final child = await root
         .list(followLinks: false)
         .where(
@@ -98,16 +109,18 @@ class Library {
       final rel = entry.path
           .substring(root.path.length + 1)
           .replaceAll('\\', '/');
-      if (map.containsKey(canon(rel)))
+      if (map.containsKey(canon(rel))) {
         throw FormatException(
           'Hay dos archivos que solo difieren en mayúsculas: $rel',
         );
+      }
       map[canon(rel)] = entry.path;
       if (++n % 1000 == 0) progress('Indexando… $n recursos');
-      if (n > 200000)
+      if (n > 200000) {
         throw const FormatException(
           'La carpeta supera el límite de 200.000 recursos.',
         );
+      }
     }
     return _normalise(root.path, false, map);
   }
@@ -124,21 +137,24 @@ class Library {
     final hasCharacter = map.keys.any((p) => p.startsWith('character/'));
     if (!hasCharacter) {
       final nested = map.keys.where((p) => p.contains('/character/')).toList();
-      if (nested.isEmpty)
+      if (nested.isEmpty) {
         throw const FormatException(
           'Selecciona DATA: no se encuentra Character.',
         );
+      }
       final prefixes = nested
           .map((p) => p.substring(0, p.indexOf('/character/') + 1))
           .toSet();
-      if (prefixes.length != 1)
+      if (prefixes.length != 1) {
         throw const FormatException(
           'Hay varias bibliotecas DATA. Selecciona una sola.',
         );
+      }
       final prefix = prefixes.single, trimmed = <String, String>{};
       for (final e in map.entries) {
-        if (e.key.startsWith(prefix))
+        if (e.key.startsWith(prefix)) {
           trimmed[e.key.substring(prefix.length)] = e.value;
+        }
       }
       return Library(location, saf, trimmed);
     }
@@ -150,8 +166,9 @@ class Library {
     List<String> directories, {
     bool uniqueFallback = false,
   }) {
-    if (name.isEmpty || baseName(name).toLowerCase().startsWith('null.'))
+    if (name.isEmpty || baseName(name).toLowerCase().startsWith('null.')) {
       return null;
+    }
     final n = canon(name);
     final variants = {n};
     if (n.endsWith('.tga')) variants.add('${n.substring(0, n.length - 4)}.dds');
@@ -168,10 +185,11 @@ class Library {
       for (final v in variants) {
         final hits = _names[baseName(v)] ?? [];
         if (hits.length == 1) return hits.single;
-        if (hits.length > 1)
+        if (hits.length > 1) {
           throw FormatException(
             'Nombre ambiguo: $name (${hits.length} rutas).',
           );
+        }
       }
     }
     return null;
@@ -190,8 +208,9 @@ class Library {
       return b;
     }
     final f = File(id);
-    if (await f.length() > limit)
+    if (await f.length() > limit) {
       throw FormatException('$path supera el límite de lectura.');
+    }
     return f.readAsBytes();
   }
 }

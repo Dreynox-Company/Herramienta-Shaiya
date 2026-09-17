@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import '../lib/core/formats.dart';
-import '../lib/core/textures.dart';
+import 'package:herramienta_shaiya/core/formats.dart';
+import 'package:herramienta_shaiya/core/textures.dart';
 
 /// Auditor de solo lectura. No requiere Flutter ni acceso a internet al ejecutarse.
 void main(List<String> args) async {
@@ -22,8 +22,9 @@ void main(List<String> args) async {
     if (e is! File) continue;
     final path = e.path.substring(root.path.length + 1).replaceAll('\\', '/'),
         ext = path.split('.').last.toLowerCase();
-    if (!['3dc', 'ani', 'mlt', 'itm', 'mon', 'dds', 'wld'].contains(ext))
+    if (!['3dc', 'ani', 'mlt', 'itm', 'mon', 'dds', 'wld'].contains(ext)) {
       continue;
+    }
     try {
       final b = await e.readAsBytes();
       switch (ext) {
