@@ -796,16 +796,17 @@ class _DataEditorPageState extends State<DataEditorPage> {
               p.toLowerCase().contains(q) &&
               (fileCategory == 'Todos' ||
                   (fileCategory == 'Monstruos'
-                      ? p.contains('monster')
+                      ? p.toLowerCase().contains('monster')
                       : fileCategory == 'Habilidades'
-                      ? p.contains('skill')
+                      ? p.toLowerCase().contains('skill')
                       : fileCategory == 'Mapas'
-                      ? p.endsWith('.svmap')
+                      ? p.toLowerCase().endsWith('.svmap')
                       : fileCategory == 'NPC'
-                      ? p.contains('npc')
+                      ? p.toLowerCase().contains('npc')
                       : fileCategory == 'Tiendas'
-                      ? p.contains('sell') || p.contains('cash')
-                      : p.contains('item'))),
+                      ? p.toLowerCase().contains('sell') ||
+                            p.toLowerCase().contains('cash')
+                      : p.toLowerCase().contains('item'))),
         )
         .toList();
     return Material(

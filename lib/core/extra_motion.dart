@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'formats.dart';
+import 'mounted_motion.dart';
 
 /// Supplemental library; original ANI lookups are never modified.
 class ExtraMotionProfile {
@@ -115,14 +116,7 @@ class ExtraMotionLibrary {
         clip('flight'),
         h is int ? h : null,
         mounted: {
-          for (final key in [
-            'mounted_sword',
-            'mounted_twohand',
-            'mounted_spear',
-            'mounted_bow',
-            'mounted_crossbow',
-            'mounted_staff',
-          ])
+          for (final key in mountedMotionKeys)
             if ((row['clips'] as Map).containsKey(key)) key: clip(key),
         },
       );

@@ -13,6 +13,7 @@ import '../core/locomotion.dart';
 import '../core/pose_layers.dart';
 import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
+import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
 import '../data/library.dart';
@@ -241,15 +242,7 @@ class StudioScene extends ChangeNotifier {
       character?.flight != null;
   List<ClipData> get combatClips {
     if (mount == null) return attackClips;
-    final key = switch (weaponFamily(weaponRecord)) {
-      1 || 3 || 7 || 9 || 10 || 15 => 'mounted_sword',
-      2 || 4 || 8 => 'mounted_twohand',
-      6 => 'mounted_spear',
-      12 => 'mounted_staff',
-      13 => 'mounted_bow',
-      14 => 'mounted_crossbow',
-      _ => '',
-    };
+    final key = mountedMotionKey(weaponFamily(weaponRecord));
     final clip = character?.mountedAttacks[key];
     return clip == null ? const [] : [clip];
   }
