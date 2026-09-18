@@ -14,7 +14,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Verificar parche de texto revisable y aplicar fuentes
+      - name: Verificar parches y aplicar fuentes
         shell: bash
         run: |
           test "$GITHUB_REF_NAME" = 'work/studio-05-review-source'
@@ -25,8 +25,6 @@ jobs:
           chunks=[]
           for i in range(19):
               b=Path(f'.stage05/revision{i:02d}.patch').read_bytes()
-              # Match the actual transferred fingerprints, then remove only
-              # the extra final space. The original whole-patch hash is mandatory.
               known={7:'eaee318629ce595adca8551e9452ac897f3ed499c4985c861fc86d817cbfd948',9:'9d8fb174502549f8818fb58bd19328774ff2a67bb62a9f3497b764b8f0aa8327'}
               if i in known and hashlib.sha256(b).hexdigest()==known[i]:
                   assert b.endswith(b' ')
@@ -34,17 +32,18 @@ jobs:
               chunks.append(b)
           raw=b''.join(chunks)
           print('Source patch:',len(raw),hashlib.sha256(raw).hexdigest())
-          assert len(raw)==259184 and hashlib.sha256(raw).hexdigest()=='b4331800d4dc3ef905b91a66c95b7f3af5a50da2424256bacb80060cbcf759e8', 'Source transfer integrity failed'
+          assert len(raw)==259184 and hashlib.sha256(raw).hexdigest()=='b4331800d4dc3ef905b91a66c95b7f3af5a50da2424256bacb80060cbcf759e8'
           patch=Path(os.environ['RUNNER_TEMP'])/'revision05.patch'
           patch.write_bytes(raw)
           subprocess.run(['git','apply','--unidiff-zero','--exclude=.github/workflows/build.yml','--check',str(patch)],check=True)
           subprocess.run(['git','apply','--unidiff-zero','--exclude=.github/workflows/build.yml','--index',str(patch)],check=True)
-          p=Path('.stage05/polish.patch')
-          print('Polish patch:',len(p.read_bytes()),hashlib.sha256(p.read_bytes()).hexdigest())
-          assert hashlib.sha256(p.read_bytes()).hexdigest()=='def0520ecc266660f8c44f9c58c9900d7f2fff45365e3c3bb2a823921656b471', 'Polish transfer integrity failed'
-          subprocess.run(['git','apply','--check',str(p)],check=True)
-          subprocess.run(['git','apply','--index',str(p)],check=True)
-          print('Fuentes verificadas. No se incluyen los archivos DATA del usuario.')
+          for name,expected in [('polish.patch','def0520ecc266660f8c44f9c58c9900d7f2fff45365e3c3bb2a823921656b471'),('final.patch','463ab8b8a278e796466a67dba02bee185485ebdd277b88f5e2b59fa852f65ca4')]:
+              p=Path('.stage05')/name
+              actual=hashlib.sha256(p.read_bytes()).hexdigest()
+              print(name,len(p.read_bytes()),actual)
+              assert actual==expected, 'Source transfer integrity failed'
+              subprocess.run(['git','apply','--check',str(p)],check=True)
+              subprocess.run(['git','apply','--index',str(p)],check=True)
           PY
       - name: Conservar fuentes para inspeccion independiente
         if: always()
@@ -74,10 +73,10 @@ jobs:
           python3 - <<'PY'
           import subprocess
           files=subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()
-          assert not any(p.startswith('.github/workflows/') for p in files), 'Workflow changes need separate review'
+          assert not any(p.startswith('.github/workflows/') for p in files)
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat: audited data editor, safe archive extraction, signed economy fields and animated rider anchors'
+          git commit -m 'feat: verified 0.5 data editor, responsive controls, safe imports and animated mounts'
           git push origin HEAD:refs/heads/work/studio-05-review-source
           git rev-parse HEAD
