@@ -147,7 +147,7 @@ jobs:
           retention-days: 7
 
   publish-preview:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feat/studio-031-')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feat/studio-04-')
     needs: [tests, windows, android, linux-qa]
     runs-on: ubuntu-latest
     timeout-minutes: 15
