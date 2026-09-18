@@ -30,3 +30,8 @@ windows/flutter/ephemeral/
 /.build-cloud/
 /release-out/
 /cloud-artifacts/
+
+# Developer caches / supplemental user motion libraries
+__pycache__/
+*.py[cod]
+/assets/motions/*.gz

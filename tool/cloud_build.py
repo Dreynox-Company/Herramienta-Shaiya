@@ -27,8 +27,8 @@ import publish_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = publish_sources.REPOSITORY
-VERSION = '0.3.1+5'
-PREFIX = 'Shaiya_Studio_0_3_1'
+VERSION = '0.4.0+6'
+PREFIX = 'Shaiya_Studio_0_4_0'
 EXPECTED_OUTPUTS = {f'{PREFIX}_Windows.zip', f'{PREFIX}_Android_PRUEBAS.apk'}
 API = f'https://api.github.com/repos/{REPOSITORY}'
 POLL_SECONDS = 90  # Keep public API use below its unauthenticated rate limit.
@@ -41,7 +41,7 @@ def check_sha(sha: str) -> str:
 
 
 def release_tag(sha: str) -> str:
-    return f'studio-0.3.1-{check_sha(sha)[:12]}'
+    return f'studio-0.4.0-{check_sha(sha)[:12]}'
 
 
 def safe_url(url: str) -> str:
@@ -54,7 +54,7 @@ def safe_url(url: str) -> str:
 
 def get_json(url: str, *, not_found_ok: bool = False) -> dict | None:
     request = Request(safe_url(url), headers={
-        'Accept': 'application/vnd.github+json', 'User-Agent': 'Dreynox-Shaiya-Build/0.3.1',
+        'Accept': 'application/vnd.github+json', 'User-Agent': 'Dreynox-Shaiya-Build/0.4.0',
         'X-GitHub-Api-Version': '2022-11-28',
     })
     try:
@@ -90,7 +90,7 @@ def validate_receipt(receipt: dict) -> None:
     if receipt.get('repository') != REPOSITORY or receipt.get('version') != VERSION:
         raise RuntimeError('La solicitud guardada no pertenece a esta entrega y repositorio.')
     check_sha(receipt.get('commit', ''))
-    if not re.fullmatch(r'feat/studio-031-[a-zA-Z0-9-]{8,80}', receipt.get('branch', '')):
+    if not re.fullmatch(r'feat/studio-04-[a-zA-Z0-9-]{8,80}', receipt.get('branch', '')):
         raise RuntimeError('La rama de la solicitud no tiene el nombre autorizado.')
 
 
@@ -123,7 +123,7 @@ def download(asset: dict, target: Path, expected_hash: str | None = None) -> str
     digest = hashlib.sha256()
     total = 0
     try:
-        request = Request(url, headers={'User-Agent': 'Dreynox-Shaiya-Build/0.3.1'})
+        request = Request(url, headers={'User-Agent': 'Dreynox-Shaiya-Build/0.4.0'})
         with urlopen(request, timeout=90) as response, temporary.open('wb') as output:
             final = urlparse(response.geturl())
             if final.scheme != 'https' or not (
@@ -246,7 +246,7 @@ def publish_new(*, yes: bool = False) -> tuple[dict, Path]:
     work = Path(os.environ.get('LOCALAPPDATA') or str(Path.home() / '.local/share')) / 'Dreynox/ShaiyaStudio/compilaciones' / stamp
     work.mkdir(parents=True, exist_ok=False)
     repo = work / 'repositorio'
-    branch = f'feat/studio-031-{stamp}'
+    branch = f'feat/studio-04-{stamp}'
     subprocess.run([git, 'clone', '--single-branch', '--branch', publish_sources.BASE_BRANCH,
                     f'https://github.com/{REPOSITORY}.git', str(repo)], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tool/publish_sources.py'), str(repo),

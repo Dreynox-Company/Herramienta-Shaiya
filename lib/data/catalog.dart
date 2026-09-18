@@ -1,9 +1,11 @@
+import '../core/textures.dart';
 import '../core/body_coverage.dart';
 import 'game_names.dart';
 export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
 import 'library.dart';
+part 'texture_discovery.dart';
 
 enum Slot { upper, lower, hand, foot, helmet, face, hair }
 
@@ -94,13 +96,17 @@ class PartRecord {
   final Slot slot;
   final MaterialRecord raw;
   final String meshPath, texturePath, tablePath;
+  final String? variantBaseKey;
+  final String association;
   PartRecord(
     this.slot,
     this.raw,
     this.meshPath,
     this.texturePath,
-    this.tablePath,
-  );
+    this.tablePath, {
+    this.variantBaseKey,
+    this.association = 'Relación MLT original',
+  });
   String get key => setIdentity(raw.texture);
   String get label =>
       '${slot == Slot.face
@@ -136,6 +142,14 @@ class Archetype {
         out.putIfAbsent(p.key, () => {})[e.key] = p;
       }
     }
+    // A recolor inherits only pieces from its specific source outfit, not from
+    // whatever the player equipped before it. Its own variant pieces override.
+    for (final set in out.entries.toList()) {
+      final origin = set.value[Slot.upper]?.variantBaseKey;
+      if (origin != null && origin != set.key && out.containsKey(origin)) {
+        out[set.key] = {...out[origin]!, ...set.value};
+      }
+    }
     out.removeWhere((key, value) => !value.containsKey(Slot.upper));
     return out;
   }
@@ -163,6 +177,7 @@ class Archetype {
 
 class Catalog {
   final Library library;
+  final Map<String, TextureEntry> textureInventory = {};
   final GameNames names = GameNames();
   final List<Archetype> archetypes = [];
   final List<WeaponRecord> weapons = [];
@@ -193,7 +208,7 @@ class Catalog {
     if (top == null) {
       throw const FormatException('El arquetipo no tiene torso base.');
     }
-    final mesh = await appearanceMesh(top.meshPath);
+    await appearanceMesh(top.meshPath);
     final referenceTop = a.base(Slot.upper);
     final topMesh = referenceTop == null
         ? null
@@ -203,7 +218,21 @@ class Catalog {
       final reference = a.base(slot);
       if (reference == null) continue;
       final baseMesh = await appearanceMesh(reference.meshPath);
-      if (bodyRegionCovered(mesh, baseMesh, upperReference: topMesh)) {
+      final covering = <MeshData>[];
+      for (final e in requested.selected.entries) {
+        if (e.key == slot ||
+            [Slot.face, Slot.hair, Slot.helmet].contains(e.key) ||
+            e.value == null) {
+          continue;
+        }
+        final item = e.value!;
+        // Only selected garment regions count; implicit fallback is not proof.
+        covering.add(await appearanceMesh(item.meshPath));
+      }
+      if (requested.selected[Slot.upper] == null) {
+        covering.add(await appearanceMesh(top.meshPath));
+      }
+      if (bodyRegionCoveredBy(covering, baseMesh, upperReference: topMesh)) {
         embedded.add(slot);
       }
     }
@@ -332,6 +361,7 @@ class Catalog {
             p.startsWith('effect/') && RegExp(r'\.(dds|tga|png)$').hasMatch(p),
       ),
     );
+    await discoverTextures(progress);
     await names.load(library, progress);
     warnings.addAll(names.warnings);
     if (archetypes.isEmpty) {
@@ -407,7 +437,7 @@ class Appearance {
     }
     final slots = <Slot, PartRecord?>{for (final s in Slot.values) s: null};
     slots.addAll(set);
-    slots[Slot.helmet] = null;
+
     for (final s in [Slot.face, Slot.hair]) {
       slots[s] =
           previous?.archetype.id == a.id && previous?.archetype.race == a.race
@@ -458,6 +488,7 @@ class Appearance {
   List<PartRecord> get effective {
     final out = <PartRecord>[];
     for (final slot in Slot.values) {
+      if (slot == Slot.hair && selected[Slot.helmet] != null) continue;
       final part = selected[slot];
       if (part != null) {
         out.add(part);

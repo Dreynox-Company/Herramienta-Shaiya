@@ -39,7 +39,7 @@ write('Character/Human/dds/humf_lower000.dds',texture((95,168,222)))
 write('Character/Human/humf_lower.mlt',b'MLT'+u(1)+s('humf_lower000.3dc')+u(1)+s('humf_lower000.dds')+u(1)+u(0)+u(0)+u(1))
 write('Character/Human/3dc/humf_upper000.3dc',mesh(upper_v,upper_i));write('Character/Human/dds/humf_upper000.dds',texture((95,168,222)))
 write('Character/Human/humf_upper.mlt',b'MLT'+u(1)+s('humf_upper000.3dc')+u(1)+s('humf_upper000.dds')+u(1)+u(0)+u(0)+u(1))
-for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnormal',.3),('007_swim',.5),('008_jump',.09),('020_veh_run',.05),('021_veh_br',0),('034_onready',0),('035_onattack01',.15)]:write('Character/Human/ani/humf_'+name+'.ani',animation(bob))
+for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnormal',.3),('007_swim',.5),('008_jump',.09),('020_veh_run',.05),('021_veh_br',0),('034_onready',0),('035_onattack01',.15),('040_onrun',.11),('048_spready',0),('049_spattack01',.2),('054_sprun',.14),('039_ondamage',.04),('009_die',.03)]:write('Character/Human/ani/humf_'+name+'.ani',animation(bob))
 def creature_record(name):
  anim=[name+'_walk.ani',name+'_run.ani',name+'_attack.ani','','',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani']
  return s(name)+bytes(1)+b''.join(s(a) for a in anim)+b''.join(s('') for _ in range(8))+u(1)+s(name+'.3dc')+s(name+'.dds')+f(2)+u(0)
@@ -69,3 +69,36 @@ itm=b'IT2'+u(1)+s('fixture_sword.3do')+u(1)+s('fixture_sword.dds')+u(1)
 itm+=u(0)+u(0)+i(-1)+i(0)+i(0)+i(0)+(attachment+empty)*16
 write('Item/01.itm',itm)
 print('Synthetic fixture prepared:',root)
+
+# Shield + spear exercise independent offhand, class restrictions and run family.
+for typ,name,sx,sy,attach in [(19,'fixture_shield',.28,.32,i(0)+f(-.5,1.15,0)+f(0,0,0,1)),(6,'fixture_spear',.025,1.0,attachment)]:
+ data=s(name+'.dds')+u(8)+b''.join(f(x*sx,(y+1)*sy,z*.04)+f(0,1,0)+f(k%2,(k//2)%2) for k,(x,y,z) in enumerate(pts))+u(len(tri)//3)+struct.pack('<'+'H'*len(tri),*tri)+bytes(8)
+ write('Item/3do/'+name+'.3do',data);write('Item/dds/'+name+'.dds',texture((185,201,225)))
+ write('Item/'+str(typ).zfill(2)+'.itm',b'IT2'+u(1)+s(name+'.3do')+u(1)+s(name+'.dds')+u(1)+u(0)+u(0)+i(-1)+i(0)+i(0)+i(0)+(attach+empty)*16)
+# A large terrain stresses resident sector eviction without proprietary content.
+size=2048;n=(size//2+1)**2
+write('world/stream.wld',b'FLD\0'+u(size)+struct.pack('<H',10000)*n+bytes(n)+u(1)+fixed('fixture.dds')+f(4)+fixed('')+fixed('')+bytes(7*8))
+# Supplemental fixture matches this test's one-bone male rig. Never replaces original files.
+import gzip,hashlib,json,base64
+clips={}
+for name,bob in [('hover',.08),('flight',.12)]:
+ data=animation(bob);clips[name]={'data':base64.b64encode(data).decode(),'sha256':hashlib.sha256(data).hexdigest()}
+pack={'schema':1,'profiles':[{'archetype':'humf','sex':'Masculino','parents':[-1],'clips':clips}]}
+write('Extras/flight.json.gz',gzip.compress(json.dumps(pack).encode(),mtime=0))
+# Build real SAH/SAF wire format from the same synthetic tree, including subdirectories.
+payload=bytearray()
+all_files=sorted(p for p in root.rglob('*') if p.is_file())
+offsets={}
+for path in all_files:
+ data=path.read_bytes();offsets[path]=(len(payload),len(data));payload.extend(data)
+def directory(path):
+ files=sorted(p for p in path.iterdir() if p.is_file());dirs=sorted(p for p in path.iterdir() if p.is_dir())
+ data=s(path.name)+u(len(files))
+ for file in files:
+  offset,length=offsets[file];data+=s(file.name)+struct.pack('<Q',offset)+i(length)+i(0)
+ data+=u(len(dirs))
+ for child in dirs:data+=directory(child)
+ return data
+# Stored beside DATA, not inside it; snapshot must not include its own archive.
+(root.parent/(root.name+'.sah')).write_bytes(b'SAH'+i(0)+u(len(all_files))+bytes(40)+directory(root))
+(root.parent/(root.name+'.saf')).write_bytes(payload)

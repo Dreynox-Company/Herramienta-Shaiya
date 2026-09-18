@@ -6,6 +6,9 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
+import android.os.ParcelFileDescriptor
+import java.nio.ByteBuffer
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,6 +21,7 @@ class MainActivity : FlutterActivity() {
     private val workers = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var pendingPicker: MethodChannel.Result? = null
+    private val archiveUris = ConcurrentHashMap<String, Long>()
     private val indexed = ConcurrentHashMap<String, Set<String>>()
     private val extensions = setOf("sdata", "env", "seff", "wtr", "vani", "3de", "ini", "xml", "cfg", "3dc", "3do", "ani", "mlt", "alt", "itm", "mon", "dds", "png", "jpg", "jpeg", "tga", "bmp", "wav", "mp3", "ogg", "wld", "smod", "dg", "eft")
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -32,6 +36,43 @@ class MainActivity : FlutterActivity() {
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
                         try { startActivityForResult(intent, 7201) }
                         catch (e: Exception) { pendingPicker = null; result.error("picker", e.message, null) }
+                    }
+                }
+                "chooseArchive" -> {
+                    if (pendingPicker != null) { result.error("busy", "Ya hay un selector abierto.", null) }
+                    else {
+                        pendingPicker = result
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            type = "*/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                        }
+                        try { startActivityForResult(intent, 7202) }
+                        catch (e: Exception) { pendingPicker = null; result.error("picker", e.message, null) }
+                    }
+                }
+                "archiveRead" -> {
+                    val target = call.argument<String>("uri") ?: ""
+                    val offset = call.argument<Number>("offset")?.toLong() ?: -1L
+                    val length = call.argument<Number>("length")?.toInt() ?: -1
+                    async(result) {
+                        val originalSize = archiveUris[target] ?: error("Archivo no autorizado por el selector.")
+                        require(offset >= 0 && length in 0..67108864 && offset <= originalSize && length.toLong() <= originalSize - offset) { "Rango de archivo fuera de límite." }
+                        val pfd = contentResolver.openFileDescriptor(Uri.parse(target), "r") ?: error("No se pudo abrir el archivo en modo lectura.")
+                        ParcelFileDescriptor.AutoCloseInputStream(pfd).use { stream ->
+                                val channel = stream.channel
+                                require(channel.size() == originalSize) { "El archivo cambió después de seleccionarlo." }
+                                val output = ByteArray(length)
+                                val buffer = ByteBuffer.wrap(output)
+                                var position = offset
+                                while (buffer.hasRemaining()) {
+                                    val n = channel.read(buffer, position)
+                                    check(n > 0) { "Lectura incompleta. El proveedor puede no admitir acceso aleatorio; utiliza almacenamiento local." }
+                                    position += n
+                                }
+                                output
+                        }
                     }
                 }
                 "index" -> {
@@ -63,7 +104,7 @@ class MainActivity : FlutterActivity() {
                                 }
                             } ?: error("El proveedor no permitió listar $prefix.")
                         }
-                        indexed.clear()
+                        // Preserve the prior connection until Dart commits a new scene.
                         indexed[tree] = entries.values.toHashSet()
                         entries
                     }
@@ -100,9 +141,36 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Activity result bridge for the platform folder picker")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != 7201) return
+        if (requestCode != 7201 && requestCode != 7202) return
         val callback = pendingPicker ?: return
         pendingPicker = null
+        if (requestCode == 7202) {
+            if (resultCode != Activity.RESULT_OK || data == null) { callback.success(null); return }
+            val uris = mutableListOf<Uri>()
+            val clip = data.clipData
+            if (clip != null) { for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri) }
+            else data.data?.let { uris.add(it) }
+            async(callback) {
+                require(uris.size == 2) { "Selecciona simultáneamente el SAH y el SAF (mantén pulsado para selección múltiple)." }
+                val pair = HashMap<String, Any>()
+                for (uri in uris) {
+                    var name = ""
+                    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if(c.moveToFirst()) name=c.getString(0) ?: "" }
+                    val ext = name.substringAfterLast('.', "").lowercase()
+                    require(ext in setOf("sah", "saf") && !pair.containsKey(ext)) { "Se necesita exactamente un índice .sah y un archivo .saf." }
+                    val size = contentResolver.openFileDescriptor(uri,"r")?.use { pfd ->
+                        ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.channel.size() }
+                    } ?: error("El proveedor no permite leer el tamaño del archivo.")
+                    require(size >= 0 && (ext != "sah" || size <= 67108864L)) { "Índice demasiado grande o tamaño no disponible." }
+                    // Session grant is sufficient if the provider cannot persist it.
+                    try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: SecurityException) { }
+                    archiveUris[uri.toString()] = size
+                    pair[ext] = mapOf("uri" to uri.toString(), "name" to name, "size" to size)
+                }
+                pair
+            }
+            return
+        }
         val uri = data?.data
         if (resultCode != Activity.RESULT_OK || uri == null) { callback.success(null); return }
         try {

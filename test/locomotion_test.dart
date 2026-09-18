@@ -138,8 +138,12 @@ void main() {
       s.tick(.1);
       expect(s.character!.clip, same(s.character!.walk));
       expect(s.character!.root.position.z, closeTo(-.2, 1e-6));
-      expect(s.character!.world.first.storage[13], closeTo(.1, 1e-6));
+      expect(
+        s.character!.world.first.storage[13],
+        closeTo(.1 * (.1 / .18), 1e-6),
+      );
       s.tick(.1);
+      expect(s.character!.world.first.storage[13], closeTo(.2, 1e-6));
       expect(s.character!.time, closeTo(.2, 1e-6));
     });
     test('Shift runs twice as fast and release walks', () {

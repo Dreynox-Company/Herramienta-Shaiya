@@ -8,6 +8,7 @@ Matrix4 backAttachmentPose({
   required Matrix4 referenceInverse,
   required Vector3 offset,
   required double scale,
+  double localYaw = 0,
 }) {
   final root = Matrix4.compose(
     position,
@@ -17,5 +18,9 @@ Matrix4 backAttachmentPose({
   return root *
       bone *
       referenceInverse *
-      Matrix4.compose(offset, Quaternion.identity(), Vector3.all(scale));
+      Matrix4.compose(
+        offset,
+        Quaternion.axisAngle(Vector3(0, 1, 0), localYaw),
+        Vector3.all(scale),
+      );
 }

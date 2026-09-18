@@ -15,8 +15,8 @@ from urllib.request import Request, urlopen
 import zipfile
 
 REPOSITORY = 'Dreynox-Company/Herramienta-Shaiya'
-VERSION = '0.3.1+5'
-PREFIX = 'Shaiya_Studio_0_3_1'
+VERSION = '0.4.0+6'
+PREFIX = 'Shaiya_Studio_0_4_0'
 API = f'https://api.github.com/repos/{REPOSITORY}'
 
 
@@ -24,11 +24,11 @@ def validate_environment(env: dict) -> tuple[str, int, str]:
     sha = env.get('GITHUB_SHA', '')
     if (env.get('GITHUB_ACTIONS') != 'true' or env.get('GITHUB_EVENT_NAME') != 'push'
             or env.get('GITHUB_REPOSITORY') != REPOSITORY
-            or not re.fullmatch(r'refs/heads/feat/studio-031-[a-zA-Z0-9-]{8,80}', env.get('GITHUB_REF', ''))
+            or not re.fullmatch(r'refs/heads/feat/studio-04-[a-zA-Z0-9-]{8,80}', env.get('GITHUB_REF', ''))
             or not re.fullmatch(r'[0-9a-f]{40}', sha)
             or not re.fullmatch(r'\d+', env.get('GITHUB_RUN_ID', ''))):
         raise RuntimeError('La publicación solo se permite en la ejecución autorizada de entrega.')
-    return sha, int(env['GITHUB_RUN_ID']), f'studio-0.3.1-{sha[:12]}'
+    return sha, int(env['GITHUB_RUN_ID']), f'studio-0.4.0-{sha[:12]}'
 
 
 def main() -> None:
@@ -70,7 +70,7 @@ def main() -> None:
 
     def api(method: str, url: str, data: bytes, mime: str = 'application/json') -> dict:
         req = Request(url, method=method, data=data, headers={
-            'Authorization': f'Bearer {token}', 'User-Agent': 'Dreynox-Shaiya-Release/0.3.1',
+            'Authorization': f'Bearer {token}', 'User-Agent': 'Dreynox-Shaiya-Release/0.4.0',
             'Accept': 'application/vnd.github+json', 'Content-Type': mime,
             'X-GitHub-Api-Version': '2022-11-28',
         })
@@ -81,7 +81,7 @@ def main() -> None:
     # succeed. Never replace/delete an existing published release on a rerun.
     release = api('POST', f'{API}/releases', json.dumps({
         'tag_name': tag, 'target_commitish': sha,
-        'name': f'Shaiya Studio 0.3.1 · {sha[:12]}', 'draft': True, 'prerelease': True, 'make_latest': 'false',
+        'name': f'Shaiya Studio 0.4.0 · {sha[:12]}', 'draft': True, 'prerelease': True, 'make_latest': 'false',
         'body': f'Revisión {sha}.\n\nCompilación y pruebas: https://github.com/{REPOSITORY}/actions/runs/{run_id}\n\nWindows: extraer todo el ZIP. Android: APK de depuración; puede requerir una instalación separada si la firma anterior es distinta. DATA no está incluido y no se modifica. Cuerpo base original disponible; no se añaden texturas nude inexistentes. Efectos de encantamiento son una previsualización, no una homologación de cada nivel del juego.',
     }).encode('utf-8'))
     upload = release['upload_url'].split('{', 1)[0]

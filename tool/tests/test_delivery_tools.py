@@ -26,7 +26,7 @@ class DeliveryToolsTest(unittest.TestCase):
             root = Path(folder)
             (root / 'lib').mkdir()
             (root / 'lib/main.dart').write_text('REAL APP')
-            (root / 'pubspec.yaml').write_text('version: 0.3.1+5')
+            (root / 'pubspec.yaml').write_text('version: 0.4.0+6')
             def destructive_template(*args, **kwargs):
                 (root / 'lib/main.dart').write_text('COUNTER APP')
                 (root / 'pubspec.yaml').write_text('new template')
@@ -35,7 +35,7 @@ class DeliveryToolsTest(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     prepare.prepare('windows')
             self.assertEqual((root / 'lib/main.dart').read_text(), 'REAL APP')
-            self.assertEqual((root / 'pubspec.yaml').read_text(), 'version: 0.3.1+5')
+            self.assertEqual((root / 'pubspec.yaml').read_text(), 'version: 0.4.0+6')
 
     def test_cmake_version_uses_successful_version_command(self):
         result = subprocess.CompletedProcess([], 0, 'cmake version 3.31.4\n', '')
@@ -54,7 +54,7 @@ class DeliveryToolsTest(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text('source ' + name)
             files[name] = hashlib.sha256(p.read_bytes()).hexdigest()
-        manifest = {'version': '0.3.1+5', 'base_commit': publish_sources.BASE, 'files': files}
+        manifest = {'version': '0.4.0+6', 'base_commit': publish_sources.BASE, 'files': files}
         (root / 'manifest-entrega.json').write_text(json.dumps(manifest))
         return manifest
 

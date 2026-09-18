@@ -291,9 +291,9 @@ extension StudioGameplay on StudioScene {
     if (character == null || busy || game.loadingWorld || sceneCombatLocked) {
       return;
     }
-    if (mount != null) {
+    if (mount != null || flying) {
       throw const FormatException(
-        'Desmonta para utilizar el salto del personaje.',
+        'Desmonta o desactiva el vuelo para saltar a pie.',
       );
     }
     if (game.jumpClip == null) {
@@ -316,6 +316,12 @@ extension StudioGameplay on StudioScene {
     final delta = _frameAccumulator.clamp(0.0, .10);
     _frameAccumulator = 0;
     final actor = character;
+    if (actor != null && !game.loadingWorld) {
+      game.loaded?.focus(
+        originX + actor.root.position.x,
+        originZ - actor.root.position.z,
+      );
+    }
     var direction = cameraRelative(walkX, walkZ, yaw);
     var moving = direction.length2 > 1e-8;
     if (!moving && game.destination != null && actor != null) {
@@ -353,6 +359,16 @@ extension StudioGameplay on StudioScene {
         actor != null &&
         (actor.clip != desired || !actor.playing || !actor.loop)) {
       applyLocomotion(movementTransitions.requested);
+    }
+    if (actor?.headLook != null) {
+      actor!.headTracking = headTracking && combat.playerHealth > 0;
+      actor.headLook!.step(
+        delta,
+        cameraYaw: yaw,
+        cameraPitch: pitch,
+        bodyYaw: actor.root.rotation.y,
+        enabled: actor.headTracking,
+      );
     }
     for (final a in [
       character,
@@ -435,12 +451,26 @@ extension StudioGameplay on StudioScene {
     updateAttachments();
     updateSelectionRing();
     combat.step(delta, enemyDistance);
+    if (_lastGuard != combat.inGuard) {
+      _lastGuard = combat.inGuard;
+      refreshIdle();
+      movementTransitions.invalidate();
+      if (!moving &&
+          !game.jump.airborne &&
+          !sceneCombatLocked &&
+          actor?.idle != null) {
+        actor!.play(actor.idle!);
+      }
+    }
     tickWeaponEffect(delta);
+    tickImpacts(delta);
     if (hitLife > 0) {
       hitLife -= delta;
       if (hitSprite != null) {
-        hitSprite!.scale.setValues(1.5 - hitLife, 1.5 - hitLife, 1);
-        hitSprite!.visible = hitLife > 0;
+        final size = .065 + .11 * (hitLife / .28).clamp(0.0, 1.0);
+        hitSprite!.scale.setValues(size, size, 1);
+        hitSprite!.material?.opacity = (hitLife / .28).clamp(0.0, 1.0);
+        hitSprite!.visible = false;
       }
     }
     updateCamera();
@@ -451,6 +481,15 @@ extension StudioGameplay on StudioScene {
   }
 
   Future<void> loadWorldScene(String? path, {double? x, double? z}) async {
+    // A same-map teleport must not invalidate the live streaming controller.
+    if (path != null &&
+        path == worldPath &&
+        game.loaded != null &&
+        x != null &&
+        z != null) {
+      await teleport(x, z);
+      return;
+    }
     final revision = ++_worldRevision;
     clearMovement();
     game.jump.reset();
@@ -460,7 +499,6 @@ extension StudioGameplay on StudioScene {
       game.loaded = null;
       game.environments.clear();
       view!.scene.fog = null;
-      environmentParts.clear();
       environment.removeFromParent();
       environment = t.Group();
       view!.scene.add(environment);
@@ -476,10 +514,6 @@ extension StudioGameplay on StudioScene {
       changed();
       return;
     }
-    if (path == worldPath && game.loaded != null && x != null && z != null) {
-      teleport(x, z);
-      return;
-    }
     game.loadingWorld = true;
     changed();
     LoadedWorld? staged;
@@ -488,9 +522,11 @@ extension StudioGameplay on StudioScene {
         _parseWorldResource,
         {'bytes': await catalog!.library.read(path), 'path': path},
       );
+      final sourceLibrary = catalog!.library;
       staged = await WorldBuilder(
-        catalog!.library,
-        makePart,
+        sourceLibrary,
+        (mesh, texture, {opaque = false}) =>
+            makePartFromLibrary(sourceLibrary, mesh, texture, opaque: opaque),
         (text) {
           game.loadStatus = text;
           status = text;
@@ -505,6 +541,7 @@ extension StudioGameplay on StudioScene {
       final spawn = staged.spawn;
       originX = x ?? spawn.x;
       originZ = z ?? spawn.z;
+      await staged.ensureAt(originX, originZ);
       staged.origin(originX, originZ);
       final floor = staged.floorAt(originX, originZ, spawn.y) ?? spawn.y;
       final old = game.loaded;
@@ -513,9 +550,6 @@ extension StudioGameplay on StudioScene {
       environment = staged.root;
       view!.scene.add(environment);
       old?.dispose();
-      environmentParts
-        ..clear()
-        ..addAll(staged.parts);
       world = data.terrain;
       worldPath = path;
       groundY = floor;
@@ -605,9 +639,35 @@ extension StudioGameplay on StudioScene {
     updateSelectionRing();
   }
 
-  void teleport(double x, double z, {double? expectedY}) {
+  Future<void> teleport(double x, double z, {double? expectedY}) async {
     final actor = character, loaded = game.loaded;
     if (actor == null || loaded == null) return;
+    clearMovement();
+    if (!x.isFinite || !z.isFinite) {
+      throw const FormatException('Coordenadas no finitas.');
+    }
+    final oldX = originX + actor.root.position.x,
+        oldZ = originZ - actor.root.position.z;
+    game.loadingWorld = true;
+    changed();
+    try {
+      await loaded.ensureAt(x, z);
+      if (disposed || loaded != game.loaded || actor != character) return;
+      if (loaded.floorAt(x, z, expectedY ?? groundY) == null) {
+        await loaded.ensureAt(oldX, oldZ);
+        throw const FormatException(
+          'No existe suelo transitable en el destino. Se conserva la posición anterior.',
+        );
+      }
+    } catch (_) {
+      if (!disposed && loaded == game.loaded) await loaded.ensureAt(oldX, oldZ);
+      rethrow;
+    } finally {
+      if (loaded == game.loaded) {
+        game.loadingWorld = false;
+        if (!disposed) changed();
+      }
+    }
     final floor = loaded.floorAt(x, z, expectedY ?? groundY);
     if (floor == null) {
       throw const FormatException(
@@ -627,9 +687,9 @@ extension StudioGameplay on StudioScene {
     changed();
   }
 
-  void visitArea(WorldArea area) {
+  Future<void> visitArea(WorldArea area) async {
     final p = area.center;
-    teleport(p.x, p.z, expectedY: p.y);
+    await teleport(p.x, p.z, expectedY: p.y);
   }
 
   Future<void> setEnvironment(int index) async {
@@ -653,6 +713,7 @@ extension StudioGameplay on StudioScene {
   }
 
   Future<void> combatEventFor(String id, String who, String event) async {
+    refreshIdle();
     final entry = game.opponents[id];
     if (who == 'player') {
       await _combatEvent(who, event);
@@ -681,12 +742,13 @@ extension StudioGameplay on StudioScene {
       ], uniqueFallback: true);
       if (path != null) unawaited(playSound(path));
       if (event == 'hit' || event == 'death') {
-        hitLife = .65;
+        hitLife = .28;
+        unawaited(emitImpact(a));
         lastImpact =
             '${catalog!.creatureLabel(entry.record)} −${combat.damage.round()}';
         unawaited(weaponSound('hit'));
         if (hitSprite != null) {
-          hitSprite!.visible = true;
+          hitSprite!.visible = false;
           hitSprite!.position.setValues(
             a.root.position.x,
             a.root.position.y + a.height * .6,

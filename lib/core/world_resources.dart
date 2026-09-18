@@ -281,9 +281,25 @@ List<EnvironmentFrame> readEnvironment(Uint8List bytes, String source) {
 class SurfaceIndex {
   final double cellSize;
   final Map<String, List<List<v.Vector3>>> _cells = {};
+  final Map<Object, List<(String, List<v.Vector3>)>> _owners = {};
+  int get residentCells => _cells.length;
+  int get ownedGroups => _owners.length;
+  void removeOwner(Object owner) {
+    for (final pair in _owners.remove(owner) ?? <(String, List<v.Vector3>)>[]) {
+      final entries = _cells[pair.$1];
+      entries?.remove(pair.$2);
+      if (entries?.isEmpty ?? false) _cells.remove(pair.$1);
+    }
+  }
+
+  void clear() {
+    _cells.clear();
+    _owners.clear();
+  }
+
   SurfaceIndex({this.cellSize = 16});
   String key(int x, int z) => '$x:$z';
-  void add(MeshData mesh, {v.Matrix4? transform}) {
+  void add(MeshData mesh, {v.Matrix4? transform, Object? owner}) {
     final p = mesh.positions;
     for (var i = 0; i < mesh.indices.length; i += 3) {
       final tri = List.generate(3, (k) {
@@ -308,7 +324,11 @@ class SurfaceIndex {
           z <= (maxZ / cellSize).floor();
           z++
         ) {
-          _cells.putIfAbsent(key(x, z), () => []).add(tri);
+          final cell = key(x, z);
+          _cells.putIfAbsent(cell, () => []).add(tri);
+          if (owner != null) {
+            _owners.putIfAbsent(owner, () => []).add((cell, tri));
+          }
         }
       }
     }

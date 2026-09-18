@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+import '../core/archive_index.dart';
+import 'archive_source.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
@@ -60,9 +63,23 @@ class Library {
   static const channel = MethodChannel('dreynox.shaiya/data');
   final String location;
   final bool saf;
+  final ArchiveSource? archive;
+  static Map<String, Object?>? lastArchiveReport;
+  Map<String, Object?> get sourceDiagnostics =>
+      archive?.diagnostics() ??
+      {
+        'sourceMode': saf ? 'carpeta Android' : 'carpeta local',
+        'files': files.length,
+      };
+  String get sourceLabel =>
+      archive == null ? 'Carpeta DATA' : 'Par SAH + SAF · lectura por rangos';
+  void dispose() {
+    archive?.close();
+  }
+
   final Map<String, String> files;
   final Map<String, List<String>> _names = {};
-  Library(this.location, this.saf, this.files) {
+  Library(this.location, this.saf, this.files, {this.archive}) {
     for (final p in files.keys) {
       _names.putIfAbsent(baseName(p), () => []).add(p);
     }
@@ -85,6 +102,142 @@ class Library {
     final dir = await getDirectoryPath(confirmButtonText: 'Usar carpeta DATA');
     if (dir == null) return null;
     return fromDirectory(dir, progress);
+  }
+
+  static Future<Library?> chooseArchive(void Function(String) progress) async {
+    lastArchiveReport = null;
+    try {
+      ArchiveSource source;
+      if (Platform.isAndroid) {
+        final pair = await channel.invokeMethod<Map>('chooseArchive');
+        if (pair == null) return null;
+        final sah = Map<String, dynamic>.from(pair['sah'] as Map),
+            saf = Map<String, dynamic>.from(pair['saf'] as Map);
+        progress(
+          'Leyendo índice SAH… El SAF no se copia ni se carga completo.',
+        );
+        final size = (sah['size'] as num).toInt();
+        if (size < 0 || size > ArchiveIndex.maxIndexBytes) {
+          throw const ArchiveFailure(
+            'INDEX_SIZE',
+            'No se puede leer el tamaño del índice o supera 64 MiB',
+            {'schema': 1},
+          );
+        }
+        final bytes = await channel.invokeMethod<Uint8List>('archiveRead', {
+          'uri': sah['uri'],
+          'offset': 0,
+          'length': size,
+        });
+        if (bytes == null) {
+          throw const FormatException('El proveedor no entregó el índice.');
+        }
+        final index = await compute(parseArchiveIndex, {
+          'bytes': bytes,
+          'length': (saf['size'] as num).toInt(),
+        });
+        source = ArchiveSource(index, (offset, length) async {
+          final b = await channel.invokeMethod<Uint8List>('archiveRead', {
+            'uri': saf['uri'],
+            'offset': offset,
+            'length': length,
+          });
+          if (b == null) {
+            throw const FormatException('No se pudo leer el rango SAF.');
+          }
+          return b;
+        });
+      } else {
+        final selected = await openFiles(
+          acceptedTypeGroups: [
+            const XTypeGroup(
+              label: 'Archivo Shaiya SAH/SAF',
+              extensions: ['sah', 'saf'],
+            ),
+          ],
+          confirmButtonText: 'Abrir par SAH + SAF',
+        );
+        if (selected.isEmpty) return null;
+        final paths = <String, String>{};
+        for (final f in selected) {
+          final ext = f.path.split('.').last.toLowerCase();
+          if (!['sah', 'saf'].contains(ext) || paths.containsKey(ext)) {
+            throw const FormatException(
+              'Selecciona un solo SAH y un solo SAF del mismo cliente.',
+            );
+          }
+          paths[ext] = f.path;
+        }
+        if (paths.length == 1) {
+          final first = paths.values.single,
+              ext = paths.containsKey('sah') ? 'saf' : 'sah';
+          final wanted =
+              '${baseName(first).substring(0, baseName(first).length - 4)}.$ext'
+                  .toLowerCase();
+          await for (final f in Directory(
+            directoryName(first),
+          ).list(followLinks: false)) {
+            if (f is File && baseName(f.path).toLowerCase() == wanted) {
+              paths[ext] = f.path;
+            }
+          }
+          if (!paths.containsKey(ext)) {
+            final companion = await openFile(
+              acceptedTypeGroups: [
+                XTypeGroup(label: 'Archivo compañero .$ext', extensions: [ext]),
+              ],
+              confirmButtonText: 'Seleccionar .$ext',
+            );
+            if (companion == null) return null;
+            paths[ext] = companion.path;
+          }
+        }
+        if (paths.length != 2) {
+          throw const FormatException(
+            'Se necesitan los dos archivos, SAH y SAF.',
+          );
+        }
+        progress('Validando índice, rutas y offsets SAH/SAF…');
+        source = await ArchiveSource.fromFiles(paths['sah']!, paths['saf']!);
+      }
+      lastArchiveReport = source.diagnostics();
+      try {
+        final lib = _normalise('SAH+SAF', false, {
+          for (final path in source.index.entries.keys) path: path,
+        }, archive: source);
+        progress(
+          'Archivo indexado: ${lib.files.length} recursos compatibles · solo lectura',
+        );
+        return lib;
+      } catch (_) {
+        source.close();
+        rethrow;
+      }
+    } on ArchiveFailure catch (e) {
+      lastArchiveReport = e.report;
+      rethrow;
+    } catch (e) {
+      lastArchiveReport = {
+        ...?lastArchiveReport,
+        'status': 'connection_failed',
+        'error': e is FileSystemException
+            ? e.osError?.message ?? 'No se pudo acceder al archivo'
+            : e.toString(),
+      };
+      rethrow;
+    }
+  }
+
+  static Future<Library> fromArchive(String sah, String saf) async {
+    final source = await ArchiveSource.fromFiles(sah, saf);
+    try {
+      return _normalise('SAH+SAF', false, {
+        for (final p in source.index.entries.keys) p: p,
+      }, archive: source);
+    } catch (_) {
+      source.close();
+      rethrow;
+    }
   }
 
   static Future<Library> fromDirectory(
@@ -128,8 +281,9 @@ class Library {
   static Library _normalise(
     String location,
     bool saf,
-    Map<String, String> source,
-  ) {
+    Map<String, String> source, {
+    ArchiveSource? archive,
+  }) {
     final map = <String, String>{};
     for (final entry in source.entries) {
       if (supportedPath(entry.key)) map[canon(entry.key)] = entry.value;
@@ -156,9 +310,9 @@ class Library {
           trimmed[e.key.substring(prefix.length)] = e.value;
         }
       }
-      return Library(location, saf, trimmed);
+      return Library(location, saf, trimmed, archive: archive);
     }
-    return Library(location, saf, map);
+    return Library(location, saf, map, archive: archive);
   }
 
   String? resolve(
@@ -198,6 +352,7 @@ class Library {
   Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
     final id = files[canon(path)];
     if (id == null) throw FormatException('Recurso ausente: $path');
+    if (archive != null) return archive!.read(id, limit: limit);
     if (saf) {
       final b = await channel.invokeMethod<Uint8List>('read', {
         'tree': location,

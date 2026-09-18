@@ -132,3 +132,17 @@ String translatedMotion(String path) {
   }
   return 'Animación ${index ?? ''}';
 }
+
+int? runningMotion(int family) => switch (family) {
+  1 || 3 || 7 => 40,
+  2 || 4 || 8 => 29,
+  5 => 47,
+  6 => 54,
+  9 => 70,
+  10 => 84,
+  11 => 58,
+  12 => 63,
+  13 || 14 => 33,
+  15 => 77,
+  _ => null,
+};

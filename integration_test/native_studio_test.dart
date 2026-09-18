@@ -8,6 +8,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:herramienta_shaiya/main.dart';
+import 'package:herramienta_shaiya/data/library.dart';
+import 'package:herramienta_shaiya/data/catalog.dart';
+import 'package:herramienta_shaiya/core/extra_motion.dart';
+
 import 'package:herramienta_shaiya/render/studio_scene.dart';
 
 void main() {
@@ -122,6 +126,33 @@ void main() {
     passed.add(
       'Rigid weapon with eight-byte zero footer equips through the native renderer',
     );
+    expect(scene.character!.idle, scene.character!.normal);
+    expect(scene.combat.inGuard, false);
+    passed.add('Equipping does not activate combat guard');
+    await scene.equipShield(scene.availableShields.first);
+    expect(scene.shield, isNotNull);
+    expect(scene.shield!.mesh.parent, scene.character!.root);
+    expect(scene.weapon, isNotNull);
+    passed.add('One-handed weapon and independent shield render together');
+    await screenshot('native_weapon_shield');
+    await scene.equip(
+      scene.availableWeapons.firstWhere((w) => weaponFamily(w) == 6),
+    );
+    expect(scene.shield, isNull);
+    expect(scene.character!.weaponRun!.source, endsWith('_054_sprun.ani'));
+    (state.focus as FocusNode).requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await waitFor(
+      () => scene.character!.clip == scene.character!.weaponRun,
+      'Spear Shift movement uses its own run clip',
+    );
+    await screenshot('native_spear_running');
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    passed.add('Two-handed spear removes the conflicting offhand');
+    await scene.equip(c.weapons.firstWhere((w) => weaponFamily(w) == 1));
     scene.yaw = math.pi / 2;
     (state.focus as FocusNode).requestFocus();
     await tester.pump();
@@ -221,7 +252,93 @@ void main() {
     expect(scene.combat.health[newlySelected], scene.combat.maxHealth);
     passed.add('Multiple opponents keep independent health');
     scene.resetCombat();
+    scene.combat.counterattack = false;
+    await scene.attack();
+    await waitFor(
+      () => scene.combat.inGuard,
+      'Attack enters guard activity window',
+    );
+    // Allow the actual monotonic scene update to expire the eight-second window.
+    await waitFor(
+      () => !scene.combat.inGuard,
+      'Guard ends eight seconds after the last given/received hit',
+    );
+    await waitFor(
+      () => scene.character!.idle == scene.character!.normal,
+      'Out-of-combat idle restored',
+    );
+    scene.resetCombat();
     scene.clearMovement();
+    scene.clearOpponents();
+    await scene.setWorld(c.worlds.firstWhere((p) => p.endsWith('/stream.wld')));
+    await scene.game.loaded!.settle();
+    final resident = scene.game.loaded!.residentChunks;
+    expect(resident, lessThan(80));
+    await scene.teleport(1850, 1850);
+    await scene.game.loaded!.settle();
+    expect(scene.game.loaded!.releasedChunks, greaterThan(0));
+    expect(scene.game.loaded!.residentChunks, lessThan(100));
+    expect(scene.game.loaded!.floorAt(1850, 1850, 0), 0);
+    passed.add('Large map streams proximity and frees departed native sectors');
+    await screenshot('native_streaming');
+    await scene.setWorld(null);
+    await scene.installExtras(
+      ExtraMotionLibrary.decode(
+        await File('$input/Extras/flight.json.gz').readAsBytes(),
+      ),
+    );
+    await scene.selectCreature(c.wings.first, 'wing');
+    await waitFor(
+      () => scene.flying && scene.character!.clip == scene.character!.hover,
+      'Compatible supplemental hover when wings equipped',
+    );
+    scene.wingYaw = .65;
+    scene.updateAttachments();
+    final rotated = scene.wing!.root.matrix.storage.toList();
+    scene.wingYaw = 0;
+    scene.updateAttachments();
+    expect(scene.wing!.root.matrix.storage.toList(), isNot(equals(rotated)));
+    scene.wingYaw = .65;
+    scene.setMovement(0, -1);
+    await waitFor(
+      () => scene.character!.clip == scene.character!.flight,
+      'Supplemental flight only during wing movement',
+    );
+    scene.clearMovement();
+    await scene.selectCreature(null, 'wing');
+    await scene.selectCreature(c.wings.first, 'wing');
+    expect(scene.wingYaw, closeTo(.65, .0001));
+    passed.add('Wing horizontal rotation is local and restored per resource');
+    await screenshot('native_supplemental_flight');
+    await scene.selectCreature(null, 'wing');
+    await waitFor(
+      () => scene.character!.idle == scene.character!.normal,
+      'Removing wings restores original ground animations',
+    );
+    final archive = await Library.fromArchive('$input.sah', '$input.saf');
+    final archiveCatalog = Catalog(archive);
+    await archiveCatalog.load((_) {});
+    expect(archiveCatalog.archetypes.length, c.archetypes.length);
+    final model = archiveCatalog.archetypes.first.base(Slot.upper)!.meshPath;
+    expect(await archive.read(model), await c.library.read(model));
+    scene.catalog = archiveCatalog;
+    state.catalog = archiveCatalog;
+    await scene.setAppearance(
+      Appearance.initial(archiveCatalog.archetypes.first),
+    );
+    expect(scene.character, isNotNull);
+    await scene.equip(scene.availableWeapons.first);
+    await scene.equipShield(scene.availableShields.first);
+    expect(scene.weapon, isNotNull);
+    expect(scene.shield, isNotNull);
+    passed.add(
+      'SAH index + SAF random access feeds the same native actor/weapon renderer',
+    );
+    await screenshot('native_archive_source');
+    await state.exportArchiveReport();
+    passed.add(
+      'Archive diagnostics can be exported after successful native loading',
+    );
     expect(tester.takeException(), isNull);
     await File('${output.path}/result.json').writeAsString(
       const JsonEncoder.withIndent('  ').convert({

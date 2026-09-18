@@ -14,7 +14,11 @@ class Combat {
   final Map<String, double> health = {'default': 1000};
   final Map<String, double> _enemyCooldown = {};
   final Set<String> _engaged = {};
-  double _clock = 0, _nextPlayer = 0;
+  double _clock = 0, _nextPlayer = 0, _lastActivity = double.negativeInfinity;
+  static const guardTimeout = 8.0;
+  bool get inGuard => playerHealth > 0 && _clock - _lastActivity < guardTimeout;
+  double get guardRemaining =>
+      inGuard ? guardTimeout - (_clock - _lastActivity) : 0;
   final List<_Hit> _pending = [];
   void Function(String actor, String event)? onEvent;
   void Function(String id, String actor, String event)? onTargetEvent;
@@ -52,6 +56,7 @@ class Combat {
     active = false;
     automatic = false;
     _clock = 0;
+    _lastActivity = double.negativeInfinity;
     _nextPlayer = 0;
     _enemyCooldown.clear();
     _engaged.clear();
@@ -60,6 +65,7 @@ class Combat {
   }
 
   void cancelActions() {
+    _lastActivity = double.negativeInfinity;
     automatic = false;
     active = false;
     _pending.clear();
@@ -67,6 +73,11 @@ class Combat {
   }
 
   void _event(String id, String actor, String event) {
+    if ((actor == 'player' && event == 'attack') ||
+        event == 'hit' ||
+        event == 'death') {
+      _lastActivity = _clock;
+    }
     onTargetEvent?.call(id, actor, event);
     onEvent?.call(actor, event);
   }
@@ -93,7 +104,12 @@ class Combat {
     double separation(String id) =>
         distanceToTarget?.call(id) ??
         (id == target ? distance : double.infinity);
-    if (automatic && alive) attack(separation(target));
+    if (automatic &&
+        alive &&
+        separation(target) <= range &&
+        cooldownRemaining <= 0) {
+      attack(separation(target));
+    }
     if (counterattack) {
       for (final id in _engaged.toList()) {
         if ((health[id] ?? 0) <= 0 ||
@@ -135,6 +151,7 @@ class Combat {
         break;
       }
     }
+    if (!inGuard && _pending.isEmpty) _engaged.clear();
     if (_engaged.isEmpty && _pending.isEmpty) {
       active = false;
       automatic = false;

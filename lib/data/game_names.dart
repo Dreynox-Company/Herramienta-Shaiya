@@ -1,12 +1,14 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../core/game_metadata.dart';
+import '../core/equipment_rules.dart';
 import '../core/formats.dart';
 import '../core/world_resources.dart';
 import '../core/motion_catalog.dart';
 import 'library.dart';
 
 class GameNames {
+  final Map<String, List<ItemRule>> itemRules = {};
   final Map<String, List<ItemName>> itemByModel = {};
   final Map<int, List<String>> monsters = {};
   final Map<String, WorldResource> maps = {};
@@ -18,6 +20,7 @@ class GameNames {
         library.files.containsKey(path) ? library.read(path) : null;
     try {
       final data = await read('binarysdata/dbitemdata.sdata');
+      if (data != null) itemRules.addAll(await compute(_rules, data));
       final titlePath =
           library.files.keys
               .where(
@@ -223,4 +226,13 @@ WorldResource _world(Map<String, Object> value) {
   slim.fogNear = all.fogNear;
   slim.fogFar = all.fogFar;
   return slim;
+}
+
+Map<String, List<ItemRule>> _rules(Uint8List data) {
+  final out = <String, List<ItemRule>>{};
+  for (final row in DataTable.open(data, 'DBItemData').integers()) {
+    final rule = ItemRule.fromRow(row);
+    out.putIfAbsent('${rule.type}:${rule.model}', () => []).add(rule);
+  }
+  return out;
 }

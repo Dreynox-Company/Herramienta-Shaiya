@@ -221,7 +221,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             const Spacer(),
             if (width > 600)
               const Text(
-                '0.3.1 · Laboratorio 3D',
+                '0.4.0 · Laboratorio 3D',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),

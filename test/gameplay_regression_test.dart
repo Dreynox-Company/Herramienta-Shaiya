@@ -271,7 +271,7 @@ void main() {
   });
   group('Equipment identity isolation', () {
     test(
-      'whole suits restore neither foreign gloves nor a previous helmet',
+      'whole suits use matching helmet and do not restore foreign base gloves',
       () {
         final a = fixture.archetype();
         a.parts[Slot.foot]!.add(fixture.part(Slot.foot, 0, 'humf_foot016.dds'));
@@ -282,7 +282,8 @@ void main() {
           a,
           'wedding',
         ).withResolvedCoverage({Slot.lower, Slot.hand, Slot.foot});
-        expect(next.effective.map((p) => p.slot), [Slot.upper]);
+        expect(next.effective.map((p) => p.slot), [Slot.upper, Slot.helmet]);
+        expect(next.selected[Slot.helmet]!.raw.id, 9);
       },
     );
     test(

@@ -11,6 +11,9 @@ import '../core/textures.dart';
 import '../core/combat.dart';
 import '../core/locomotion.dart';
 import '../core/attachment_pose.dart';
+import '../core/pose_layers.dart';
+import '../core/equipment_rules.dart';
+import '../core/extra_motion.dart';
 import '../data/library.dart';
 import '../data/catalog.dart';
 import '../core/navigation.dart';
@@ -74,10 +77,31 @@ class RenderPart {
   }
 }
 
+class ImpactParticle {
+  final t.Sprite sprite;
+  double life = 0, duration = .2, size = .03, vx = 0, vy = 0, vz = 0;
+  ImpactParticle(this.sprite);
+}
+
 class Actor {
   final t.Group root = t.Group();
   final List<RenderPart> parts = [];
-  ClipData? clip, idle, normal, walk, run, riderIdle, riderMoving;
+  ClipData? clip,
+      idle,
+      normal,
+      walk,
+      run,
+      weaponRun,
+      guard,
+      hover,
+      flight,
+      riderIdle,
+      riderMoving;
+  HeadLookController? headLook;
+  List<v.Matrix4>? _blendFrom;
+  List<v.Matrix4> _rawPose = [];
+  double _blendTime = .18;
+  bool headTracking = false;
   int? wingBone;
   v.Matrix4? wingReference;
   double time = 0, speed = 1;
@@ -86,13 +110,20 @@ class Actor {
   final Map<String, ClipData> clips = {};
   void pose() {
     if (clip == null) return;
-    world = clip!.pose(time, loop: loop);
+    final pose = clip!.pose(time, loop: loop);
+    _rawPose = _blendFrom != null && _blendTime < .18
+        ? blendSkeleton(_blendFrom!, pose, clip!.bones, _blendTime / .18)
+        : pose;
+    world = _rawPose.map((m) => m.clone()).toList();
+    if (headTracking) headLook?.apply(world);
     for (final p in parts) {
       p.skin(world);
     }
   }
 
   void tick(double dt) {
+    _blendTime += dt;
+    if (_blendTime >= .18) _blendFrom = null;
     if (playing) time += dt * speed;
     if (!loop && clip != null && time > clip!.duration && idle != null) {
       play(idle!);
@@ -101,6 +132,10 @@ class Actor {
   }
 
   void play(ClipData c, {bool repeat = true}) {
+    if (clip != c && _rawPose.length == c.bones.length) {
+      _blendFrom = _rawPose.map((m) => m.clone()).toList();
+      _blendTime = 0;
+    }
     clip = c;
     time = 0;
     loop = repeat;
@@ -123,8 +158,8 @@ class Actor {
 
 class _WeaponMotionSet {
   final List<ClipData> attacks;
-  final ClipData? idle;
-  const _WeaponMotionSet(this.attacks, this.idle);
+  final ClipData? idle, run;
+  const _WeaponMotionSet(this.attacks, this.idle, this.run);
 }
 
 class StudioScene extends ChangeNotifier {
@@ -137,8 +172,61 @@ class StudioScene extends ChangeNotifier {
   Actor? character, enemy, mount, wing;
   Appearance? appearance;
   CreatureRecord? enemyRecord, mountRecord, wingRecord;
-  RenderPart? weapon, secondWeapon, sky;
-  WeaponRecord? weaponRecord;
+  RenderPart? weapon, secondWeapon, shield, sky;
+  WeaponRecord? weaponRecord, shieldRecord;
+  Attachment? shieldAttachment;
+  CharacterClass? selectedClass;
+  ExtraMotionLibrary? extraMotions;
+  bool flightEnabled = true, headTracking = true, inspectAnyEquipment = false;
+  double hoverOffset = .38, wingYaw = 0;
+  final Map<String, ({double height, double depth, double size, double yaw})>
+  _wingSettings = {};
+  bool _lastGuard = false;
+  CharacterClass get characterClass =>
+      selectedClass ?? classesFor(appearance?.archetype.id ?? 'humf').first;
+  List<CharacterClass> get availableClasses =>
+      classesFor(appearance?.archetype.id ?? 'humf');
+  EquipmentCompatibility compatibilityFor(
+    WeaponRecord item, {
+    Archetype? archetype,
+    CharacterClass? cls,
+  }) {
+    final a = archetype ?? appearance?.archetype;
+    if (a == null) {
+      return const EquipmentCompatibility(
+        false,
+        false,
+        'Selecciona un personaje',
+      );
+    }
+    return equipmentCompatibility(
+      weapon: item,
+      race: a.race,
+      characterClass: cls ?? characterClass,
+      rules: catalog?.names.itemRules['${weaponFamily(item)}:${item.id}'] ?? [],
+      archetypeIndex: archetypeCodes.indexOf(a.id),
+    );
+  }
+
+  List<WeaponRecord> get availableWeapons => (catalog?.weapons ?? [])
+      .where(
+        (w) =>
+            !isShield(w) &&
+            (inspectAnyEquipment || compatibilityFor(w).allowed),
+      )
+      .toList();
+  List<WeaponRecord> get availableShields => (catalog?.weapons ?? [])
+      .where(
+        (w) =>
+            isShield(w) && (inspectAnyEquipment || compatibilityFor(w).allowed),
+      )
+      .toList();
+  bool get flying =>
+      flightEnabled &&
+      wing != null &&
+      mount == null &&
+      character?.hover != null &&
+      character?.flight != null;
   Attachment? weaponAttachment, secondAttachment;
   List<ClipData> attackClips = [];
   int attackCounter = 0;
@@ -146,7 +234,8 @@ class StudioScene extends ChangeNotifier {
   final movementTransitions = LocomotionTransitions();
   final Set<String> _missingMovementWarnings = {};
   t.Group environment = t.Group();
-  final List<RenderPart> environmentParts = [];
+  List<RenderPart> get environmentParts =>
+      game.loaded?.parts ?? const <RenderPart>[];
   WorldData? world;
   String? worldPath, effectPath, skyPath;
   final Map<String, ({double height, double forward})> _seats = {};
@@ -154,6 +243,118 @@ class StudioScene extends ChangeNotifier {
   t.Sprite? hitSprite;
   t.Texture? effectTexture;
   double hitLife = 0;
+  final List<ImpactParticle> impactParticles = [];
+  int _impactCursor = 0;
+  double _impactSequence = 0;
+  Future<void>? _impactPreparing;
+  Future<void> prepareImpactParticles() {
+    if (impactParticles.isNotEmpty || disposed || view == null) {
+      return Future<void>.value();
+    }
+    return _impactPreparing ??= _createImpactParticles().whenComplete(
+      () => _impactPreparing = null,
+    );
+  }
+
+  Future<void> _createImpactParticles() async {
+    if (impactParticles.isNotEmpty || disposed) return;
+    final rev = _effectRevision;
+    t.Texture? texture = effectTexture;
+    if (texture == null) {
+      final rgba = Uint8List(16 * 16 * 4);
+      for (var y = 0; y < 16; y++) {
+        for (var x = 0; x < 16; x++) {
+          final i = (y * 16 + x) * 4,
+              d = math.sqrt(
+                math.pow((x - 7.5) / 7.5, 2) + math.pow((y - 7.5) / 7.5, 2),
+              );
+          rgba[i] = 255;
+          rgba[i + 1] = 229;
+          rgba[i + 2] = 184;
+          rgba[i + 3] = ((1 - d).clamp(0.0, 1.0) * 230).round();
+        }
+      }
+      texture = await t.TextureLoader(
+        flipY: false,
+      ).fromBytes(Pixels(16, 16, rgba).png());
+      if (texture == null) return;
+      if (disposed || rev != _effectRevision) {
+        texture.dispose();
+        return;
+      }
+      effectTexture = texture;
+    }
+    if (impactParticles.isNotEmpty || disposed || rev != _effectRevision) {
+      return;
+    }
+    for (var i = 0; i < 32; i++) {
+      final sprite = t.Sprite(
+        t.SpriteMaterial.fromMap({
+          'map': texture,
+          'transparent': true,
+          'depthWrite': false,
+          'blending': t.AdditiveBlending,
+          'color': 0xffffff,
+          'opacity': 0.0,
+        }),
+      );
+      sprite.visible = false;
+      view!.scene.add(sprite);
+      impactParticles.add(ImpactParticle(sprite));
+    }
+  }
+
+  void clearImpactParticles() {
+    for (final p in impactParticles) {
+      p.sprite.removeFromParent();
+      p.sprite.material?.dispose();
+    }
+    impactParticles.clear();
+  }
+
+  Future<void> emitImpact(Actor actor) async {
+    await prepareImpactParticles();
+    if (disposed || impactParticles.isEmpty) return;
+    _impactSequence++;
+    for (var i = 0; i < 7; i++) {
+      final p = impactParticles[_impactCursor++ % impactParticles.length],
+          angle = i * 2.399 + _impactSequence * .37;
+      p.life = p.duration = .16 + i * .012;
+      p.size = .024 + (i % 3) * .009;
+      p.vx = math.cos(angle) * .34;
+      p.vz = math.sin(angle) * .34;
+      p.vy = .12 + (i % 4) * .11;
+      p.sprite.position.setValues(
+        actor.root.position.x,
+        actor.root.position.y + (actor.height * .57).clamp(.3, 2.5),
+        actor.root.position.z,
+      );
+      p.sprite.visible = true;
+      p.sprite.scale.setValues(p.size, p.size, 1);
+      p.sprite.material?.opacity = 1;
+    }
+  }
+
+  void tickImpacts(double dt) {
+    for (final p in impactParticles) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      p.sprite.visible = p.life > 0;
+      if (!p.sprite.visible) continue;
+      p.sprite.position.x += p.vx * dt;
+      p.sprite.position.z += p.vz * dt;
+      p.sprite.position.y += p.vy * dt;
+      p.vy -= 1.2 * dt;
+      final ratio = p.life / p.duration;
+      p.sprite.material?.opacity = ratio;
+      p.sprite.scale.setValues(
+        p.size * (.4 + .6 * ratio),
+        p.size * (.4 + .6 * ratio),
+        1,
+      );
+    }
+  }
+
   final Combat combat = Combat();
   AudioPlayer? _audio;
   AudioPlayer get audio => _audio ??= AudioPlayer();
@@ -169,6 +370,7 @@ class StudioScene extends ChangeNotifier {
       _wingRevision = 0,
       _worldRevision = 0,
       _weaponRevision = 0,
+      _shieldRevision = 0,
       _clipRevision = 0,
       _effectRevision = 0,
       _skyRevision = 0;
@@ -265,10 +467,17 @@ class StudioScene extends ChangeNotifier {
     MeshData data,
     String texturePath, {
     bool opaque = false,
+  }) =>
+      makePartFromLibrary(catalog!.library, data, texturePath, opaque: opaque);
+  Future<RenderPart> makePartFromLibrary(
+    Library library,
+    MeshData data,
+    String texturePath, {
+    bool opaque = false,
   }) async {
-    final key = '${catalog!.library.location}|$texturePath|$opaque';
+    final key = '${identityHashCode(library)}|$texturePath|$opaque';
     final future = _textures.putIfAbsent(key, () async {
-      final bytes = await catalog!.library.read(texturePath);
+      final bytes = await library.read(texturePath);
       final png = await compute(_decodeTexture, {
         'bytes': bytes,
         'path': texturePath,
@@ -432,18 +641,40 @@ class StudioScene extends ChangeNotifier {
       );
       staged.riderIdle = await firstCompatible(
         staged,
-        next.archetype.animations
-            .where((p) => p.toLowerCase().endsWith('_021_veh_br.ani'))
-            .toList(),
+        next.archetype.animations.where((p) => motionIndex(p) == 21).toList(),
       );
       staged.riderMoving = await firstCompatible(
         staged,
-        next.archetype.animations
-            .where((p) => p.toLowerCase().endsWith('_020_veh_run.ani'))
-            .toList(),
+        next.archetype.animations.where((p) => motionIndex(p) == 20).toList(),
       );
       staged.idle = c;
       staged.normal = c;
+      final profile = extraMotions?.profiles[next.archetype.id];
+      final compatibleProfile =
+          profile != null &&
+          profile.matches(next.archetype.id, next.archetype.female, c);
+      if (compatibleProfile) {
+        staged.hover = profile.hover;
+        staged.flight = profile.flight;
+      }
+      if (face != null) {
+        final scores = <int, double>{};
+        for (var i = 0; i < face.weights.length; i++) {
+          scores.update(
+            face.joints[i],
+            (n) => n + face.weights[i],
+            ifAbsent: () => face.weights[i],
+          );
+        }
+        final candidates =
+            scores.keys.where((b) => b > 0 && b < c.bones.length).toList()
+              ..sort((a, b) => scores[b]!.compareTo(scores[a]!));
+        final h =
+            (compatibleProfile ? profile.head : null) ?? candidates.firstOrNull;
+        if (h != null && h > 0 && h < c.bones.length) {
+          staged.headLook = HeadLookController(h, c.bones);
+        }
+      }
       staged.play(c);
       var score = double.infinity;
       for (var i = 1; i < math.min(staged.world.length, 12); i++) {
@@ -468,7 +699,9 @@ class StudioScene extends ChangeNotifier {
         next.archetype.animations,
         keep ? weaponRecord : null,
       );
-      staged.idle = motions.idle ?? staged.normal;
+      staged.guard = motions.idle;
+      staged.weaponRun = motions.run;
+      staged.idle = staged.normal;
       if (mount != null && staged.riderIdle != null) {
         staged.play(staged.riderIdle!);
       } else if (staged.idle != null) {
@@ -489,7 +722,7 @@ class StudioScene extends ChangeNotifier {
         staged.root.rotation.y = old.root.rotation.y;
       }
       if (keep) {
-        for (final part in [weapon, secondWeapon]) {
+        for (final part in [weapon, secondWeapon, shield]) {
           if (part != null) {
             part.mesh.removeFromParent();
             staged.root.add(part.mesh);
@@ -498,6 +731,12 @@ class StudioScene extends ChangeNotifier {
       } else {
         weapon?.dispose();
         secondWeapon?.dispose();
+        shield?.dispose();
+        shield = null;
+        shieldRecord = null;
+        shieldAttachment = null;
+        ++_shieldRevision;
+        selectedClass = classesFor(next.archetype.id).first;
         weapon = null;
         secondWeapon = null;
         weaponRecord = null;
@@ -520,6 +759,9 @@ class StudioScene extends ChangeNotifier {
       view!.scene.add(staged.root);
       committed = true;
       combat.reset();
+      _lastGuard = false;
+      refreshIdle();
+      applyLocomotion(GroundMotion.idle);
       if (attackClips.isNotEmpty) {
         combat.attackDuration = attackClips.first.duration;
       }
@@ -613,6 +855,14 @@ class StudioScene extends ChangeNotifier {
         : kind == 'mount'
         ? ++_mountRevision
         : ++_wingRevision;
+    if (kind == 'wing' && wingRecord != null) {
+      _wingSettings['${wingRecord!.source}#${wingRecord!.id}'] = (
+        height: wingHeight,
+        depth: wingDepth,
+        size: wingSize,
+        yaw: wingYaw,
+      );
+    }
     if (kind == 'mount' && mountRecord != null) {
       _seats['${mountRecord!.source}#${mountRecord!.id}'] = (
         height: riderHeight,
@@ -655,10 +905,24 @@ class StudioScene extends ChangeNotifier {
       wing?.dispose();
       wing = staged;
       wingRecord = c;
+      final cfg = _wingSettings['${c?.source}#${c?.id}'];
+      wingHeight = cfg?.height ?? 1.3;
+      wingDepth = cfg?.depth ?? .25;
+      wingSize = cfg?.size ?? 1;
+      wingYaw = cfg?.yaw ?? 0;
     }
     if (staged != null) view!.scene.add(staged.root);
     if (kind == 'wing' && staged != null) staged.root.matrixAutoUpdate = false;
-    if (kind == 'mount') movementTransitions.invalidate();
+    if (kind == 'mount' || kind == 'wing') {
+      refreshIdle();
+      movementTransitions.invalidate();
+      game.jump.reset();
+      applyLocomotion(
+        walkX == 0 && walkZ == 0
+            ? GroundMotion.idle
+            : (running || touchRun ? GroundMotion.run : GroundMotion.walk),
+      );
+    }
     updateAttachments();
     distance = mount != null ? math.max(7, mount!.height * 2.5) : 5.2;
     updateCamera();
@@ -692,6 +956,13 @@ class StudioScene extends ChangeNotifier {
       await rebuildWeaponEffect();
       notifyListeners();
       return;
+    }
+    if (isShield(w)) {
+      await equipShield(w);
+      return;
+    }
+    if (!inspectAnyEquipment && !compatibilityFor(w).allowed) {
+      throw FormatException(compatibilityFor(w).reason);
     }
     final lib = catalog!.library,
         root = directoryName(w.source),
@@ -743,6 +1014,13 @@ class StudioScene extends ChangeNotifier {
     }
     weapon?.dispose();
     secondWeapon?.dispose();
+    if (!permitsShield(w)) {
+      shield?.dispose();
+      shield = null;
+      shieldRecord = null;
+      shieldAttachment = null;
+      ++_shieldRevision;
+    }
     weapon = part;
     secondWeapon = other;
     weaponRecord = w;
@@ -787,7 +1065,14 @@ class StudioScene extends ChangeNotifier {
         ? <String>[]
         : available.where((p) => motionIndex(p) == ready).toList();
     final idle = paths.isEmpty ? a.normal : await firstCompatible(a, paths);
-    return _WeaponMotionSet(loaded, idle ?? a.normal);
+    final runId = runningMotion(family);
+    final run = runId == null
+        ? a.run
+        : await firstCompatible(
+            a,
+            available.where((p) => motionIndex(p) == runId).toList(),
+          );
+    return _WeaponMotionSet(loaded, idle ?? a.normal, run ?? a.run);
   }
 
   Future<void> prepareWeaponMotions() async {
@@ -805,14 +1090,132 @@ class StudioScene extends ChangeNotifier {
       ..clear()
       ..addAll(prepared.attacks);
     attackCounter = 0;
-    if (prepared.idle != null) {
-      a.idle = prepared.idle;
-      if (mount == null && walkX == 0 && walkZ == 0) a.play(prepared.idle!);
+    a.guard = prepared.idle;
+    a.weaponRun = prepared.run;
+    refreshIdle();
+    if (mount == null && walkX == 0 && walkZ == 0 && a.loop && a.idle != null) {
+      a.play(a.idle!);
     }
     movementTransitions.invalidate();
     if (attackClips.isNotEmpty) {
       combat.attackDuration = attackClips.first.duration;
     }
+  }
+
+  Future<void> selectClass(CharacterClass cls) async {
+    if (!availableClasses.contains(cls)) {
+      throw const FormatException('Clase ajena al arquetipo');
+    }
+    selectedClass = cls;
+    if (weaponRecord != null && !compatibilityFor(weaponRecord!).allowed) {
+      await equip(null);
+    }
+    if (shieldRecord != null && !compatibilityFor(shieldRecord!).allowed) {
+      await equipShield(null);
+    }
+    combat.reset();
+    refreshIdle();
+    movementTransitions.invalidate();
+    changed();
+  }
+
+  Future<void> equipShield(WeaponRecord? item) async {
+    final actor = character;
+    if (actor == null) return;
+    final revision = ++_shieldRevision;
+    if (item == null) {
+      shield?.dispose();
+      shield = null;
+      shieldRecord = null;
+      shieldAttachment = null;
+      changed();
+      return;
+    }
+    if (!isShield(item) || !permitsShield(weaponRecord)) {
+      throw const FormatException(
+        'El escudo requiere la mano secundaria libre y un arma de una mano.',
+      );
+    }
+    if (!inspectAnyEquipment && !compatibilityFor(item).allowed) {
+      throw FormatException(compatibilityFor(item).reason);
+    }
+    final code = archetypeCodes.indexOf(appearance!.archetype.id);
+    if (code < 0 || code >= item.transforms.length) {
+      throw const FormatException('Escudo sin anclaje para el arquetipo.');
+    }
+    final available = item.transforms[code];
+    // A shield IT2 stores its own left-hand bone, even in transform slot 0.
+    final socket = available
+        .where((a) => a.defined && a.bone < actor.world.length)
+        .firstOrNull;
+    if (socket == null) {
+      throw const FormatException('El escudo no contiene un anclaje válido.');
+    }
+    final lib = catalog!.library,
+        root = directoryName(item.source),
+        model = lib.resolve(item.mesh, ['$root/3do', root]),
+        texture = lib.resolve(item.texture, ['$root/dds', root]);
+    if (model == null || texture == null) {
+      throw const FormatException('Falta la malla o textura del escudo.');
+    }
+    final staged = await makePart(
+      MeshData.object(await lib.read(model), model),
+      texture,
+      opaque: item.alpha != 0,
+    );
+    if (disposed || revision != _shieldRevision || actor != character) {
+      staged.dispose();
+      return;
+    }
+    shield?.dispose();
+    shield = staged;
+    shieldRecord = item;
+    shieldAttachment = socket;
+    actor.root.add(staged.mesh);
+    staged.mesh.matrixAutoUpdate = false;
+    updateAttachments();
+    say('Escudo equipado en la mano secundaria.');
+  }
+
+  void refreshIdle() {
+    final a = character;
+    if (a == null || combat.playerHealth <= 0) return;
+    a.idle = mount != null
+        ? (a.riderIdle ?? a.normal)
+        : flying
+        ? a.hover
+        : combat.inGuard
+        ? (a.guard ?? a.normal)
+        : a.normal;
+  }
+
+  Future<void> installExtras(ExtraMotionLibrary extras) async {
+    extraMotions = extras;
+    final a = character, look = appearance;
+    if (a != null && look != null && a.normal != null) {
+      final p = extras.profiles[look.archetype.id];
+      if (p != null &&
+          p.matches(look.archetype.id, look.archetype.female, a.normal!)) {
+        a.hover = p.hover;
+        a.flight = p.flight;
+      } else {
+        a.hover = null;
+        a.flight = null;
+        report(
+          'Suplemento sin vuelo compatible para ${look.archetype.id}; se conservan sus ANI originales.',
+        );
+      }
+    }
+    refreshIdle();
+    movementTransitions.invalidate();
+    changed();
+  }
+
+  void setFlightEnabled(bool enabled) {
+    flightEnabled = enabled;
+    refreshIdle();
+    movementTransitions.invalidate();
+    changed();
   }
 
   void setMovement(double x, double z, {bool run = false}) {
@@ -856,10 +1259,11 @@ class StudioScene extends ChangeNotifier {
       }
       return mode == GroundMotion.idle ? a.riderIdle : a.riderMoving;
     }
+    if (flying) return mode == GroundMotion.idle ? a.hover : a.flight;
     return switch (mode) {
       GroundMotion.idle => a.idle ?? a.normal,
       GroundMotion.walk => a.walk,
-      GroundMotion.run => a.run,
+      GroundMotion.run => a.weaponRun ?? a.run,
     };
   }
 
@@ -912,7 +1316,10 @@ class StudioScene extends ChangeNotifier {
         z = a.root.position.z,
         rotation = a.root.rotation.y;
     a.root.position.y =
-        groundY + (mount == null ? game.jump.height : riderHeight);
+        groundY +
+        (mount == null
+            ? game.jump.height + (flying ? hoverOffset : 0)
+            : riderHeight);
     if (weapon != null &&
         weaponAttachment != null &&
         weaponAttachment!.bone < a.world.length) {
@@ -928,6 +1335,14 @@ class StudioScene extends ChangeNotifier {
         (a.world[secondAttachment!.bone] * secondAttachment!.matrix).storage,
       );
       secondWeapon!.mesh.matrixWorldNeedsUpdate = true;
+    }
+    if (shield != null &&
+        shieldAttachment != null &&
+        shieldAttachment!.bone < a.world.length) {
+      shield!.mesh.matrix.copyFromArray(
+        (a.world[shieldAttachment!.bone] * shieldAttachment!.matrix).storage,
+      );
+      shield!.mesh.matrixWorldNeedsUpdate = true;
     }
     if (mount != null) {
       mount!.root.position.setValues(
@@ -948,6 +1363,7 @@ class StudioScene extends ChangeNotifier {
         referenceInverse: valid ? a.wingReference! : v.Matrix4.identity(),
         offset: v.Vector3(0, wingHeight, wingDepth),
         scale: wingSize,
+        localYaw: wingYaw,
       );
       wing!.root.matrix.copyFromArray(matrix.storage);
       wing!.root.matrixWorldNeedsUpdate = true;
@@ -982,6 +1398,7 @@ class StudioScene extends ChangeNotifier {
     }
     hitSprite?.removeFromParent();
     hitSprite?.material?.dispose();
+    clearImpactParticles();
     effectTexture?.dispose();
     effectTexture = texture;
     hitSprite = t.Sprite(
@@ -996,6 +1413,7 @@ class StudioScene extends ChangeNotifier {
     hitSprite!.visible = false;
     view!.scene.add(hitSprite!);
     effectPath = path;
+    await prepareImpactParticles();
     say(
       'Textura de efecto seleccionada. La secuencia del laboratorio es una simulación.',
     );
@@ -1042,12 +1460,13 @@ class StudioScene extends ChangeNotifier {
       }
       if (event == 'death') a.idle = null;
       if (event == 'hit') {
-        hitLife = .65;
+        hitLife = .28;
+        unawaited(emitImpact(a));
         lastImpact = who == 'enemy'
             ? 'Impacto −${combat.damage.round()}'
             : 'Recibido −${combat.enemyDamage.round()}';
         if (hitSprite != null) {
-          hitSprite!.visible = true;
+          hitSprite!.visible = false;
           hitSprite!.position.setValues(
             a.root.position.x,
             a.root.position.y + 1,
@@ -1118,6 +1537,7 @@ class StudioScene extends ChangeNotifier {
     }
     weapon?.mesh.material?.wireframe = value;
     secondWeapon?.mesh.material?.wireframe = value;
+    shield?.mesh.material?.wireframe = value;
     notifyListeners();
   }
 
@@ -1130,7 +1550,7 @@ class StudioScene extends ChangeNotifier {
   }
 
   void zoom(double amount) {
-    distance = (distance * amount).clamp(.4, 250);
+    distance = (distance * amount).clamp(.4, game.loaded == null ? 250 : 60);
     updateCamera();
   }
 
@@ -1139,7 +1559,10 @@ class StudioScene extends ChangeNotifier {
     final a = character;
     final x = (a?.root.position.x ?? 0) + panX,
         z = (a?.root.position.z ?? 0) + panZ,
-        y = groundY + targetY + (mount == null ? 0 : riderHeight * .6);
+        y =
+            groundY +
+            targetY +
+            (mount == null ? (flying ? hoverOffset : 0) : riderHeight * .6);
     view!.camera.position.setValues(
       x + math.sin(yaw) * math.cos(pitch) * distance,
       y + math.sin(pitch) * distance,
@@ -1147,6 +1570,17 @@ class StudioScene extends ChangeNotifier {
     );
     view!.camera.lookAt(t.Vector3(x, y, z));
     game.loaded?.updateVisibility(view!.camera);
+    final loaded = game.loaded;
+    if (loaded != null) {
+      final far = (loaded.drawRadius - distance - 20).clamp(48.0, 280.0),
+          fog = view!.scene.fog;
+      if (fog is t.Fog) {
+        fog.near = far * .55;
+        fog.far = far;
+      } else {
+        view!.scene.fog = t.Fog(loaded.data.fogColor, far * .55, far);
+      }
+    }
     if (sky != null) {
       sky!.mesh.position.setValues(
         view!.camera.position.x,
@@ -1219,7 +1653,8 @@ class StudioScene extends ChangeNotifier {
     }
     weapon?.dispose();
     secondWeapon?.dispose();
-    environmentParts.clear();
+    shield?.dispose();
+    clearImpactParticles();
     effectTexture?.dispose();
     _audio?.dispose();
     super.dispose();

@@ -3,6 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute;
+import 'package:file_selector/file_selector.dart';
+import 'core/extra_motion.dart';
+import 'core/equipment_rules.dart';
+import 'core/textures.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -153,20 +158,151 @@ class _StudioState extends State<StudioPage> {
     }
   }
 
-  Future<void> connect({String? path}) async {
+  Future<void> sourceMenu() async {
+    scene.clearMovement();
+    final mode = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Abrir biblioteca de recursos'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.folder_open),
+                title: const Text('Carpeta DATA'),
+                subtitle: const Text(
+                  'Conservar el método habitual, con subcarpetas',
+                ),
+                onTap: () => Navigator.pop(ctx, 'folder'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.inventory_2_outlined),
+                title: const Text('Archivos DATA.SAH + DATA.SAF'),
+                subtitle: Text(
+                  Platform.isAndroid
+                      ? 'Selecciona los dos archivos simultáneamente. No se copian.'
+                      : 'Índice SAH y contenido SAF. Detección del compañero en la misma carpeta.',
+                ),
+                onTap: () => Navigator.pop(ctx, 'archive'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('Exportar diagnóstico de archivo'),
+                subtitle: const Text(
+                  'Disponible incluso si un archivo no se pudo abrir',
+                ),
+                onTap: () => Navigator.pop(ctx, 'report'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (mode == 'report') {
+      await act(exportArchiveReport);
+    } else if (mode != null) {
+      await connect(archive: mode == 'archive');
+    }
+  }
+
+  Future<void> loadBundledExtras() async {
+    if (scene.extraMotions != null) return;
+    final docs = await getApplicationDocumentsDirectory();
+    final choices = [
+      File('${docs.path}/HerramientaShaiya/flight.json.gz'),
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/flight.json.gz',
+      ),
+    ];
+    for (final f in choices) {
+      if (!await f.exists()) continue;
+      try {
+        if (await f.length() > 8 * 1024 * 1024) {
+          throw const FormatException('Paquete de movimientos fuera de límite');
+        }
+        await scene.installExtras(
+          await compute(ExtraMotionLibrary.decode, await f.readAsBytes()),
+        );
+        return;
+      } catch (e) {
+        log('Movimientos suplementarios: $e');
+      }
+    }
+  }
+
+  Future<void> importExtras() async {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        const XTypeGroup(label: 'Vuelo suplementario', extensions: ['gz']),
+      ],
+    );
+    if (file == null) return;
+    if (await file.length() > 8 * 1024 * 1024) {
+      throw const FormatException('Paquete de movimientos fuera de límite');
+    }
+    final bytes = await file.readAsBytes();
+    final extras = await compute(ExtraMotionLibrary.decode, bytes);
+    final d = await getApplicationDocumentsDirectory();
+    final folder = Directory('${d.path}/HerramientaShaiya');
+    await folder.create(recursive: true);
+    await File(
+      '${folder.path}/flight.json.gz',
+    ).writeAsBytes(bytes, flush: true);
+    await scene.installExtras(extras);
+    scene.say(
+      '${extras.profiles.length} perfiles suplementarios de vuelo verificados; los ANI originales se conservan.',
+    );
+  }
+
+  Future<void> exportArchiveReport() async {
+    final report =
+        Library.lastArchiveReport ?? catalog?.library.sourceDiagnostics;
+    if (report == null) {
+      throw const FormatException(
+        'Todavía no se ha intentado abrir un archivo SAH/SAF.',
+      );
+    }
+    await saveFile(
+      'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
+      const JsonEncoder.withIndent('  ').convert({
+        'app': 'Shaiya Studio',
+        'version': '0.4.0',
+        'platform': Platform.operatingSystem,
+        'time': DateTime.now().toIso8601String(),
+        'archive': report,
+        'activeSource': catalog?.library.sourceDiagnostics,
+      }),
+    );
+  }
+
+  Future<void> connect({String? path, bool archive = false}) async {
     if (importing || working) return;
     scene.clearMovement();
     setState(() => importing = true);
     final old = scene.catalog;
+    Library? candidate;
     try {
       void report(String s) {
         if (mounted) setState(() => progress = s);
       }
 
       final lib = path == null
-          ? await Library.choose(report)
+          ? (archive
+                ? await Library.chooseArchive(report)
+                : await Library.choose(report))
           : await Library.fromDirectory(path, report);
       if (lib == null) return;
+      candidate = lib;
+      await loadBundledExtras();
       final next = Catalog(lib);
       await next.load(report);
       if (!mounted) return;
@@ -184,9 +320,21 @@ class _StudioState extends State<StudioPage> {
       await scene.selectCreature(null, 'wing');
       await scene.setWorld(null);
       await scene.setSky(null);
-      progress = '${lib.files.length} recursos · solo lectura';
+      progress =
+          '${lib.files.length} recursos · ${lib.sourceLabel} · solo lectura';
+      if (old?.library != lib) old?.library.dispose();
     } catch (e) {
       if (catalog != scene.catalog) scene.catalog = old;
+      if (candidate != null && candidate != catalog?.library) {
+        if (archive) {
+          Library.lastArchiveReport = {
+            ...candidate.sourceDiagnostics,
+            'mountError': e.toString(),
+            'stage': 'catalogue/appearance',
+          };
+        }
+        candidate.dispose();
+      }
       progress = 'No se pudo conectar DATA: $e';
       showError(e);
     } finally {
@@ -201,6 +349,7 @@ class _StudioState extends State<StudioPage> {
   void dispose() {
     scene.removeListener(refresh);
     scene.dispose();
+    catalog?.library.dispose();
     renderer.dispose();
     focus.dispose();
     xController.dispose();
@@ -409,6 +558,17 @@ class _StudioState extends State<StudioPage> {
           icon: const Icon(Icons.folder_open, size: 17),
           label: const Text('Seleccionar DATA'),
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: disabled ? null : () => connect(archive: true),
+          icon: const Icon(Icons.inventory_2_outlined, size: 17),
+          label: const Text('Abrir DATA.SAH + DATA.SAF'),
+        ),
+        TextButton.icon(
+          onPressed: () => act(exportArchiveReport),
+          icon: const Icon(Icons.receipt_long, size: 16),
+          label: const Text('Exportar diagnóstico de archivo'),
+        ),
         note(progress),
       ]);
     }
@@ -440,6 +600,15 @@ class _StudioState extends State<StudioPage> {
                 (x) => x.label,
                 (v) => scene.setAppearance(Appearance.initial(v)),
               ),
+              field<CharacterClass>(
+                'class/${a.id}',
+                'Clase',
+                scene.availableClasses,
+                scene.characterClass,
+                (c) => c.id,
+                (c) => c.label,
+                scene.selectClass,
+              ),
               partField(Slot.face),
               partField(Slot.hair),
               SwitchListTile(
@@ -460,6 +629,21 @@ class _StudioState extends State<StudioPage> {
                         scene.separateCostumeHead = value;
                         await scene.setAppearance(scene.appearance!);
                       }),
+              ),
+            ]),
+            section('Mirada natural', [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text(
+                  'Seguir dirección de la cámara',
+                  style: TextStyle(fontSize: 11),
+                ),
+                value: scene.headTracking,
+                onChanged: (v) => setState(() => scene.headTracking = v),
+              ),
+              note(
+                'Capa aditiva limitada y suavizada; no modifica las animaciones. Se relaja al mirar detrás del cuerpo y se desactiva al morir.',
               ),
             ]),
             section('Apariencia guardada', [
@@ -541,7 +725,7 @@ class _StudioState extends State<StudioPage> {
                   'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
             ),
             note(
-              'El conjunto no cambia la cara ni el cabello. El casco se equipa únicamente desde su selector.',
+              'El conjunto conserva cara y cabello y equipa su casco correspondiente. El cabello se oculta al llevar casco y reaparece al retirarlo.',
             ),
             section('Piezas', [
               for (final s in [
@@ -557,14 +741,15 @@ class _StudioState extends State<StudioPage> {
               'Armas',
               [
                 field<WeaponRecord>(
-                  'weapons',
+                  'weapons/${a.id}/${scene.characterClass.id}',
                   'Equipo de combate',
-                  c.weapons,
+                  scene.availableWeapons,
                   scene.weaponRecord,
                   (w) => '${w.source}#${w.id}',
                   c.names.weaponTitle,
                   scene.equip,
-                  detail: c.names.weaponDetail,
+                  detail: (w) =>
+                      '${c.names.weaponDetail(w)}\n${scene.compatibilityFor(w).reason}',
                   empty: 'Sin arma',
                 ),
                 TextButton(
@@ -580,6 +765,45 @@ class _StudioState extends State<StudioPage> {
               help:
                   'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
             ),
+            section('Mano secundaria', [
+              if (permitsShield(scene.weaponRecord))
+                field<WeaponRecord>(
+                  'shields/${a.id}/${scene.characterClass.id}',
+                  'Escudo',
+                  scene.availableShields,
+                  scene.shieldRecord,
+                  (w) => '${w.source}#${w.id}',
+                  c.names.weaponTitle,
+                  scene.equipShield,
+                  detail: (w) =>
+                      '${c.names.weaponDetail(w)}\n${scene.compatibilityFor(w).reason}',
+                  empty: 'Sin escudo',
+                )
+              else
+                note(
+                  'El arma actual ocupa ambas manos. Equipa un arma de una mano para añadir un escudo.',
+                ),
+              TextButton(
+                onPressed: disabled
+                    ? null
+                    : () => act(() => scene.equipShield(null)),
+                child: const Text('Quitar escudo'),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text(
+                  'Inspeccionar equipo de otras clases',
+                  style: TextStyle(fontSize: 11),
+                ),
+                subtitle: const Text(
+                  'No cambia las reglas del juego; los anclajes siguen comprobándose',
+                  style: TextStyle(fontSize: 10),
+                ),
+                value: scene.inspectAnyEquipment,
+                onChanged: (v) => setState(() => scene.inspectAnyEquipment = v),
+              ),
+            ]),
             weaponEffectsPanel(),
           ],
         );
@@ -591,6 +815,15 @@ class _StudioState extends State<StudioPage> {
               creatureField('wing'),
               if (scene.wing != null) ...[
                 actorAnimation(scene.wing!, 'wing'),
+                slider(
+                  'Rotación horizontal',
+                  scene.wingYaw * 180 / 3.141592653589793,
+                  -180,
+                  180,
+                  (v) => setState(
+                    () => scene.wingYaw = v * 3.141592653589793 / 180,
+                  ),
+                ),
                 slider(
                   'Altura del anclaje',
                   scene.wingHeight,
@@ -624,6 +857,29 @@ class _StudioState extends State<StudioPage> {
               ],
               note(
                 'El anclaje sigue el torso y la transformación del jinete, también al montar.',
+              ),
+            ]),
+            section('Vuelo suplementario', [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text(
+                  'Flotar / volar al equipar alas',
+                  style: TextStyle(fontSize: 11),
+                ),
+                value: scene.flightEnabled,
+                onChanged: scene.setFlightEnabled,
+              ),
+              if (scene.extraMotions == null)
+                OutlinedButton.icon(
+                  onPressed: disabled ? null : () => act(importExtras),
+                  icon: const Icon(Icons.upload_file, size: 16),
+                  label: const Text('Importar flight.json.gz'),
+                ),
+              note(
+                scene.extraMotions == null
+                    ? 'Paquete suplementario no instalado. La marcha original permanece activa.'
+                    : '${scene.extraMotions!.profiles.length} perfiles aislados de los ANI originales. ${scene.character?.hover != null ? 'Este cuerpo tiene vuelo compatible.' : 'No se aplica un movimiento incompatible a este cuerpo.'}',
               ),
             ]),
             section('Montura', [
@@ -918,6 +1174,19 @@ class _StudioState extends State<StudioPage> {
               note(
                 'Las listas contienen recursos encontrados, no combinaciones exhaustivamente homologadas.',
               ),
+            ]),
+            section('Recursos y archivos', [
+              OutlinedButton.icon(
+                onPressed: disabled ? null : () => act(textureBrowser),
+                icon: const Icon(Icons.texture, size: 16),
+                label: const Text('Explorador de todas las DDS'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => act(exportArchiveReport),
+                icon: const Icon(Icons.receipt_long, size: 16),
+                label: const Text('Informe SAH / SAF'),
+              ),
+              note(c.library.sourceLabel),
             ]),
             SelectableText(
               diagnostics.take(45).join('\n\n'),
@@ -1349,7 +1618,7 @@ class _StudioState extends State<StudioPage> {
           (a) => '${a.name}/${a.center}',
           (a) => catalog!.names.areaTitle(a, loaded.data.areas.indexOf(a)),
           (a) async {
-            scene.visitArea(a);
+            await scene.visitArea(a);
           },
           detail: (a) =>
               '${a.comment} · ${a.center.x.round()}, ${a.center.z.round()}',
@@ -1361,9 +1630,9 @@ class _StudioState extends State<StudioPage> {
         scene.game.quality,
         (i) => '$i',
         (i) => [
-          'Ligero · mapa completo',
-          'Equilibrado · mapa completo',
-          'Máximo · geometría completa',
+          'Ligero · streaming cercano',
+          'Equilibrado · streaming cercano',
+          'Alto · más distancia de dibujado',
         ][i],
         (i) async {
           scene.game.quality = i;
@@ -1373,6 +1642,16 @@ class _StudioState extends State<StudioPage> {
           }
         },
       ),
+      if (loaded != null) ...[
+        slider('Radio de carga (m)', loaded.drawRadius, 96, 320, (r) {
+          loaded.setDrawRadius(r);
+          scene.updateCamera();
+          setState(() {});
+        }),
+        note(
+          '${loaded.residentChunks} sectores residentes · ${loaded.pendingChunks} pendientes\n${loaded.objectCount} objetos próximos · ${loaded.releasedChunks} sectores liberados. Las colisiones lejanas también se retiran.',
+        ),
+      ],
       if (scene.game.environments.isNotEmpty)
         field<int>(
           'environment/${scene.worldPath}',
@@ -1762,14 +2041,249 @@ class _StudioState extends State<StudioPage> {
     );
   }
 
+  Future<void> textureBrowser() async {
+    final c = catalog!;
+    String search = '';
+    TextureEntry? selected;
+    Uint8List? preview;
+    String status = '';
+    int revision = 0;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          final entries = c.textureInventory.values
+              .where(
+                (e) => '${e.path} ${e.role} ${e.state}'.toLowerCase().contains(
+                  search.toLowerCase(),
+                ),
+              )
+              .toList();
+          Future<void> show(TextureEntry e) async {
+            final token = ++revision;
+            setDialog(() {
+              selected = e;
+              preview = null;
+              status = 'Leyendo textura…';
+            });
+            try {
+              final bytes = await c.library.read(
+                e.path,
+                limit: 32 * 1024 * 1024,
+              );
+              final png = await compute(_texturePreview, {
+                'bytes': bytes,
+                'path': e.path,
+              });
+              if (ctx.mounted && token == revision) {
+                setDialog(() {
+                  preview = png;
+                  status = '${e.role} · ${e.state}';
+                });
+              }
+            } catch (err) {
+              if (ctx.mounted && token == revision) {
+                setDialog(() => status = err.toString());
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: Text(
+              'Inventario DDS · ${c.textureInventory.length} archivos',
+            ),
+            content: SizedBox(
+              width: 850,
+              height: 540,
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Buscar nombre, función o estado',
+                    ),
+                    onChanged: (q) => setDialog(() => search = q),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: entries.length,
+                            itemBuilder: (ctx, i) {
+                              final e = entries[i];
+                              return ListTile(
+                                dense: true,
+                                selected: identical(e, selected),
+                                title: Text(
+                                  baseName(e.path),
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                subtitle: Text(
+                                  '${e.role} · ${e.state}',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                onTap: () => show(e),
+                              );
+                            },
+                          ),
+                        ),
+                        const VerticalDivider(),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (preview != null)
+                                  Image.memory(
+                                    preview!,
+                                    height: 230,
+                                    fit: BoxFit.contain,
+                                  ),
+                                const SizedBox(height: 8),
+                                SelectableText(
+                                  selected?.path ?? 'Selecciona una textura',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                note(status),
+                                if (selected != null) ...[
+                                  note(selected!.notes.join('\n')),
+                                  note(selected!.owners.take(12).join('\n')),
+                                  if (selected!.role ==
+                                      'apariencia de personaje')
+                                    OutlinedButton(
+                                      onPressed: () async {
+                                        final a = scene.appearance!.archetype;
+                                        final prototype =
+                                            await showDialog<PartRecord>(
+                                              context: ctx,
+                                              builder: (sub) => AlertDialog(
+                                                title: const Text(
+                                                  'Prototipo del cuerpo actual',
+                                                ),
+                                                content: SizedBox(
+                                                  width: 480,
+                                                  height: 380,
+                                                  child: ListView(
+                                                    children: a.parts.values
+                                                        .expand((v) => v)
+                                                        .where(
+                                                          (p) => p.raw.id >= 0,
+                                                        )
+                                                        .map(
+                                                          (p) => ListTile(
+                                                            title: Text(
+                                                              '${slotLabels[p.slot]} · ${p.label}',
+                                                              style:
+                                                                  const TextStyle(
+                                                                    fontSize:
+                                                                        11,
+                                                                  ),
+                                                            ),
+                                                            subtitle: Text(
+                                                              p.raw.mesh,
+                                                            ),
+                                                            onTap: () =>
+                                                                Navigator.pop(
+                                                                  sub,
+                                                                  p,
+                                                                ),
+                                                          ),
+                                                        )
+                                                        .toList(),
+                                                  ),
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(sub),
+                                                    child: const Text(
+                                                      'Cancelar',
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                        if (prototype == null || !ctx.mounted) {
+                                          return;
+                                        }
+                                        try {
+                                          final part = await c.bindTexture(
+                                            a,
+                                            prototype.slot,
+                                            selected!.path,
+                                            prototype,
+                                          );
+                                          await scene.setAppearance(
+                                            scene.appearance!.withPart(
+                                              prototype.slot,
+                                              part,
+                                            ),
+                                          );
+                                          if (ctx.mounted) {
+                                            setDialog(
+                                              () => status =
+                                                  'Asociación manual aplicada. Comprueba la distribución UV en el visor.',
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (ctx.mounted) {
+                                            setDialog(
+                                              () => status = e.toString(),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: const Text(
+                                        'Asociar a un prototipo y previsualizar',
+                                      ),
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await saveFile(
+                    'inventario_dds.json',
+                    const JsonEncoder.withIndent('  ').convert(
+                      c.textureInventory.values.map((e) => e.toJson()).toList(),
+                    ),
+                  );
+                },
+                child: const Text('Exportar inventario'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> exportDiagnostics() async {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.3.1',
+        'version': '0.4.0',
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,
+        'source': catalog?.library.sourceDiagnostics,
+        'archiveAttempt': Library.lastArchiveReport,
+        'streaming': scene.game.loaded?.streamingStats,
         'messages': diagnostics,
       }),
     );
@@ -1801,7 +2315,7 @@ class _StudioState extends State<StudioPage> {
     timeline: timeline(),
     actions: actionBar(),
     hasLibrary: scene.character != null,
-    onOpenData: disabled ? null : () => connect(),
+    onOpenData: disabled ? null : sourceMenu,
     tabs: const [
       'Personaje',
       'Equipamiento',
@@ -1840,3 +2354,6 @@ class _StudioState extends State<StudioPage> {
     ),
   );
 }
+
+Uint8List _texturePreview(Map<String, Object> args) =>
+    Pixels.decode(args['bytes'] as Uint8List, args['path'] as String).png();
