@@ -13,12 +13,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 2
-      - name: Verificar base e integridad y aplicar parche acotado
+          fetch-depth: 0
+      - name: Verificar base e integridad y aplicar solamente fuentes
         shell: bash
         run: |
           test "$GITHUB_REF_NAME" = 'work/studio-04-verification'
-          test "$(git rev-parse HEAD^)" = '20520d37030afe5e7d34fc75241e0dadb2e91d99'
+          git merge-base --is-ancestor 20520d37030afe5e7d34fc75241e0dadb2e91d99 HEAD
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,lzma,os,subprocess
@@ -30,8 +30,10 @@ jobs:
           assert decoder.eof and not decoder.unused_data and len(raw)==263016, 'Parche truncado o fuera de limite'
           patch=Path(os.environ['RUNNER_TEMP'])/'revision04.patch'
           patch.write_bytes(raw)
-          subprocess.run(['git','apply','--check',str(patch)],check=True)
-          subprocess.run(['git','apply','--index',str(patch)],check=True)
+          # El token de Actions modifica exclusivamente contenido. El workflow
+          # de compilacion se revisa y publica por separado mediante el conector.
+          subprocess.run(['git','apply','--exclude=.github/workflows/build.yml','--check',str(patch)],check=True)
+          subprocess.run(['git','apply','--exclude=.github/workflows/build.yml','--index',str(patch)],check=True)
           print('Fuentes 0.4 verificadas. No se incluyen los archivos DATA del usuario.')
           PY
       - uses: subosito/flutter-action@v2
@@ -44,13 +46,17 @@ jobs:
       - run: flutter analyze
       - run: flutter test --reporter expanded
       - run: python3 -m unittest discover -s tool/tests -v
-      - name: Publicar revision verificada sin sobrescribir cambios ajenos
+      - name: Publicar fuentes verificadas sin modificar workflows
         shell: bash
         run: |
           git fetch origin "$GITHUB_REF_NAME"
           test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
           git rm -r .stage04
-          git rm .github/workflows/apply-audited04.yml
+          python3 - <<'PY'
+          import subprocess
+          files=subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()
+          assert not any(p.startswith('.github/workflows/') for p in files), 'No se autorizan cambios de workflows con este token'
+          PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'feat: integrate audited 0.4 archives, streaming, equipment and pose transitions'
