@@ -1,0 +1,39 @@
+name: Editor 06 - entorno reproducible de pruebas
+on:
+  push:
+    branches: [work/studio-06-editor-development]
+    paths: [.github/workflows/editor-dev-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter precache --linux
+      - run: flutter pub get --enforce-lockfile
+      - name: Empaquetar solo SDK y dependencias publicas para pruebas aisladas
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+          mkdir -p "$RUNNER_TEMP/editor-tooling"
+          tar -czf "$RUNNER_TEMP/editor-tooling/flutter-linux.tar.gz" --exclude='bin/cache/artifacts/engine/android*' --exclude='bin/cache/artifacts/engine/windows*' --exclude='bin/cache/artifacts/engine/darwin*' -C "$sdk" bin packages .git LICENSE
+          tar -czf "$RUNNER_TEMP/editor-tooling/pub-packages.tar.gz" -C "$HOME/.pub-cache" hosted/pub.dev hosted-hashes/pub.dev
+          sha256sum "$RUNNER_TEMP/editor-tooling/"*.tar.gz > "$RUNNER_TEMP/editor-tooling/SHA256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Editor06-SDK-Linux
+          path: ${{ runner.temp }}/editor-tooling/flutter-linux.tar.gz
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Editor06-Dependencias
+          path: ${{ runner.temp }}/editor-tooling/pub-packages.tar.gz
+          retention-days: 3
