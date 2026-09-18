@@ -1,0 +1,58 @@
+name: Integrar fuentes auditadas 0.4
+on:
+  push:
+    branches: [work/studio-04-verification]
+    paths: [.stage04/**, .github/workflows/apply-audited04.yml]
+permissions:
+  contents: write
+jobs:
+  verify-and-integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Verificar base e integridad y aplicar parche acotado
+        shell: bash
+        run: |
+          test "$GITHUB_REF_NAME" = 'work/studio-04-verification'
+          test "$(git rev-parse HEAD^)" = '20520d37030afe5e7d34fc75241e0dadb2e91d99'
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,lzma,os,subprocess
+          packed=b''.join(Path(f'.stage04/part{i:02d}.bin').read_bytes() for i in range(8))
+          assert len(packed)==64184, 'Longitud del parche incorrecta'
+          assert hashlib.sha256(packed).hexdigest()=='57f1cf3430c5e0aeda2f76737d59bfdceb743db25d251001460bb1292f35a107', 'SHA-256 incorrecto'
+          decoder=lzma.LZMADecompressor(memlimit=512*1024*1024)
+          raw=decoder.decompress(packed,max_length=1048576)
+          assert decoder.eof and not decoder.unused_data and len(raw)==263016, 'Parche truncado o fuera de limite'
+          patch=Path(os.environ['RUNNER_TEMP'])/'revision04.patch'
+          patch.write_bytes(raw)
+          subprocess.run(['git','apply','--check',str(patch)],check=True)
+          subprocess.run(['git','apply','--index',str(patch)],check=True)
+          print('Fuentes 0.4 verificadas. No se incluyen los archivos DATA del usuario.')
+          PY
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test tool
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+      - run: python3 -m unittest discover -s tool/tests -v
+      - name: Publicar revision verificada sin sobrescribir cambios ajenos
+        shell: bash
+        run: |
+          git fetch origin "$GITHUB_REF_NAME"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git rm -r .stage04
+          git rm .github/workflows/apply-audited04.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: integrate audited 0.4 archives, streaming, equipment and pose transitions'
+          git push origin HEAD:refs/heads/work/studio-04-verification
+          git rev-parse HEAD
