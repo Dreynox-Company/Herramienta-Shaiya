@@ -18,7 +18,7 @@ En **Exportar / herramientas**:
 Los campos con signo admiten negativos; los campos sin signo los rechazan sin desbordarse. Los valores negativos de monedas/precios requieren comprobar las reglas del cliente/servidor. La edición de SAH/SAF no cambia automáticamente la economía autoritativa del servidor.
 
 ## Alas y monturas
-El suplemento `Extras/flight.json.gz` se carga al iniciar cuando está junto al programa; también puede importarse en Alas y monturas. No reemplaza ANI originales. La revisión del suplemento 0.5 contiene hover/vuelo y seis ataques montados para cada uno de los 16 perfiles compatibles.
+El suplemento `Extras/flight.json.gz` se carga al iniciar cuando está junto al programa; también puede importarse en Alas y monturas. No reemplaza ANI originales. La revisión del suplemento 0.5 conserva hover/vuelo para 16 perfiles y añade únicamente ataques montados derivados de ANI originales compatibles. Una familia ausente no se sustituye por un ataque de espada; el informe del suplemento enumera su cobertura real.
 El asiento se ajusta sobre una superficie animada; altura y avance son correcciones relativas. Las monturas sin superficie segura muestran diagnóstico y siguen admitiendo calibración. No se afirma un ajuste visual perfecto de todas las variantes.
 Un ataque desde vuelo baja gradualmente al suelo antes de iniciarse. Al terminar la guardia vuelve al vuelo, si corresponde.
 
@@ -30,4 +30,4 @@ Android: `COMPILAR.ps1 -Plataforma Android`. APK de depuración: no es firma com
 El método de compilación remota solicita PUBLICAR y usa la sesión Git del usuario; crea una rama, no fusiona main ni publica DATA.
 
 ## Cobertura
-Consulta `docs/revision-05.md` para esquemas, campos desconocidos, extracción Android y comprobaciones reales. No instales una copia editada en producción sin un respaldo y una prueba compatible del cliente y servidor.
+Consulta `docs/revision-05.md` y `docs/entrega-05.md` para esquemas, campos desconocidos, extracción Android y comprobaciones reales. No instales una copia editada en producción sin un respaldo y una prueba compatible del cliente y servidor.

@@ -13,6 +13,9 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -125,7 +128,27 @@ jobs:
           echo "$RUNNER_TEMP/cmake-shaiya/bin" >> "$GITHUB_PATH"
       - run: python3 tool/prepare.py
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build apk --debug
+      - name: Compilar APK con reintento limitado solo para errores de red
+        shell: bash
+        run: |
+          mkdir -p qa-android
+          for attempt in 1 2 3; do
+            if flutter build apk --debug 2>&1 | tee "qa-android/build-$attempt.log"; then
+              exit 0
+            fi
+            if ! grep -Eiq '429|503|Too Many Requests|timed out|Could not GET|Could not resolve host' "qa-android/build-$attempt.log"; then
+              exit 1
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep "$((attempt * 60))"
+          done
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Diagnostico-compilacion-Android
+          path: qa-android/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: Shaiya-Studio-Android-Pruebas
