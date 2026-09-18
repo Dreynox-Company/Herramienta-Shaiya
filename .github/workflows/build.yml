@@ -24,11 +24,19 @@ jobs:
       - name: Validar sintaxis y formatear fuentes de entrega
         run: dart format --output=none --set-exit-if-changed lib test integration_test tool
       - name: Analisis estatico
-        run: flutter analyze
+        run: |
+          mkdir -p qa-sources
+          flutter analyze 2>&1 | tee qa-sources/analyze.txt
       - name: Pruebas de movimiento, selectores, paneles y formatos
-        run: flutter test --reporter expanded
+        run: flutter test --reporter expanded --file-reporter=json:qa-sources/flutter-tests.json
       - name: Pruebas de integridad y scripts de entrega
-        run: python3 -m unittest discover -s tool/tests -v
+        run: python3 -m unittest discover -s tool/tests -v 2>&1 | tee qa-sources/python-tests.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Pruebas-fuentes-05
+          path: qa-sources/
+          if-no-files-found: ignore
       - name: Auditor nativo de clips originales
         run: dart compile exe tool/audit_locomotion.dart -o auditor_movimiento
       - uses: actions/upload-artifact@v4
@@ -65,15 +73,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Error generando los recursos sinteticos.' }
           "SHAIYA_FIXTURE_PATH=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append
           "SHAIYA_QA_PATH=$qa" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Integracion nativa - arma, salto, movimiento, monturas y objetivos
+      - name: Integracion nativa - editor, archivo, vuelo, monturas y objetivos
         run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
       - run: flutter build windows --release
       - name: Comprobar arranque nativo de release
         shell: pwsh
         run: ./tool/smoke_windows.ps1
-      - name: Incluir instrucciones
+      - name: Incluir instrucciones y procedencia de compilacion
         shell: pwsh
-        run: Copy-Item LEEME_WINDOWS.txt build/windows/x64/runner/Release/LEEME.txt
+        run: |
+          $release = 'build/windows/x64/runner/Release'
+          Copy-Item LEEME_WINDOWS.txt "$release/LEEME.txt"
+          Copy-Item INSTRUCCIONES.md "$release/INSTRUCCIONES.md"
+          New-Item -ItemType Directory -Force "$release/docs" | Out-Null
+          Copy-Item docs/revision-05.md "$release/docs/revision-05.md"
+          Copy-Item docs/entrega-05.md "$release/docs/entrega-05.md"
+          @{version='0.5.0+7';commit=$env:GITHUB_SHA;run=$env:GITHUB_RUN_ID;platform='windows-x64';mode='release'} | ConvertTo-Json | Set-Content -Encoding utf8 "$release/build-provenance.json"
       - uses: actions/upload-artifact@v4
         with:
           name: Shaiya-Studio-Windows-x64
@@ -145,9 +160,8 @@ jobs:
           path: Shaiya-Linux-QA.tar.gz
           if-no-files-found: error
           retention-days: 7
-
   publish-preview:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feat/studio-04-')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feat/studio-05-')
     needs: [tests, windows, android, linux-qa]
     runs-on: ubuntu-latest
     timeout-minutes: 15
