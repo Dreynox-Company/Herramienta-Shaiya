@@ -151,6 +151,7 @@ extension StudioGameplay on StudioScene {
   }
 
   void clearOpponents() {
+    flightState.cancel();
     game.opponentRevision++;
     for (final entry in game.opponents.values) {
       entry.actor.dispose();
@@ -316,6 +317,30 @@ extension StudioGameplay on StudioScene {
     final delta = _frameAccumulator.clamp(0.0, .10);
     _frameAccumulator = 0;
     final actor = character;
+    flightState.step(
+      delta,
+      eligible: flightAvailable,
+      inCombat: combat.inGuard,
+      hoverHeight: hoverOffset,
+    );
+    final pending = flightState.pendingTarget;
+    if (pending != null && flightState.grounded) {
+      flightState.cancel();
+      final selected = combat.target;
+      if (game.opponents.containsKey(pending) &&
+          targetDistance(pending) <= combat.range &&
+          combat.playerHealth > 0 &&
+          combatClips.isNotEmpty) {
+        combat.selectTarget(pending);
+        combat.attack(
+          targetDistance(pending),
+          duration: combatClips[attackCounter % combatClips.length].duration,
+        );
+        if (game.opponents.containsKey(selected)) combat.selectTarget(selected);
+      }
+      refreshIdle();
+      movementTransitions.invalidate();
+    }
     if (actor != null && !game.loadingWorld) {
       game.loaded?.focus(
         originX + actor.root.position.x,
@@ -493,6 +518,7 @@ extension StudioGameplay on StudioScene {
     final revision = ++_worldRevision;
     clearMovement();
     game.jump.reset();
+    flightState.reset();
     combat.cancelActions();
     if (path == null) {
       game.loaded?.dispose();

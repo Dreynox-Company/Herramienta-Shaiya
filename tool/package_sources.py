@@ -7,8 +7,8 @@ from pathlib import Path
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.4.0+6'
-BASE = '20520d37030afe5e7d34fc75241e0dadb2e91d99'
+VERSION = '0.5.0+7'
+BASE = '748d612a00bd8ef9f417bb38604f8dd4fe920aab'
 TOP_FILES = (
     '.gitignore', 'pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml',
     'README.md', 'INSTRUCCIONES.md', 'LEEME_WINDOWS.txt', 'THIRD_PARTY_NOTICES.md',
@@ -50,8 +50,8 @@ def package(destination: Path) -> None:
     temp = destination.with_suffix(destination.suffix + '.tmp')
     with zipfile.ZipFile(temp, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for name, data in files.items():
-            z.writestr('Shaiya_Studio_0_4_0/' + name, data)
-        z.writestr('Shaiya_Studio_0_4_0/manifest-entrega.json', manifest)
+            z.writestr('Shaiya_Studio_0_5_0/' + name, data)
+        z.writestr('Shaiya_Studio_0_5_0/manifest-entrega.json', manifest)
     with zipfile.ZipFile(temp) as z:
         if z.testzip() is not None:
             raise RuntimeError('La integridad del ZIP no es correcta.')
@@ -61,5 +61,5 @@ def package(destination: Path) -> None:
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('destination', nargs='?', default=str(ROOT / 'dist/Shaiya_Studio_0_4_0_Flutter.zip'))
+    p.add_argument('destination', nargs='?', default=str(ROOT / 'dist/Shaiya_Studio_0_5_0_Flutter.zip'))
     package(Path(p.parse_args().destination))

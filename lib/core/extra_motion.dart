@@ -10,14 +10,16 @@ class ExtraMotionProfile {
   final List<int> parents;
   final ClipData hover, flight;
   final int? head;
+  final Map<String, ClipData> mounted;
   ExtraMotionProfile(
     this.archetype,
     this.sex,
     this.parents,
     this.hover,
     this.flight,
-    this.head,
-  );
+    this.head, {
+    this.mounted = const {},
+  });
   bool matches(String id, bool female, ClipData original) =>
       id == archetype &&
       sex == (female ? 'Femenino' : 'Masculino') &&
@@ -112,6 +114,17 @@ class ExtraMotionLibrary {
         clip('hover'),
         clip('flight'),
         h is int ? h : null,
+        mounted: {
+          for (final key in [
+            'mounted_sword',
+            'mounted_twohand',
+            'mounted_spear',
+            'mounted_bow',
+            'mounted_crossbow',
+            'mounted_staff',
+          ])
+            if ((row['clips'] as Map).containsKey(key)) key: clip(key),
+        },
       );
     }
     return ExtraMotionLibrary(out);

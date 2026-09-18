@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'game_text_codec.dart';
 
 class LegacyText {
   static final _big5 = ByteData.sublistView(
@@ -12,14 +13,17 @@ class LegacyText {
       ),
     ),
   );
+  static GameTextEncoding preferred = GameTextEncoding.automatic;
   static String decode(List<int> bytes) {
     final zero = bytes.indexOf(0);
     final b = zero < 0 ? bytes : bytes.sublist(0, zero);
-    try {
-      return utf8.decode(b);
-    } on FormatException {
-      /* This client uses traditional Chinese Big5/CP950. */
-    }
+    return GameTextCodec(preferred).decode(b);
+  }
+
+  static String decodeBig5(List<int> bytes) {
+    final zero = bytes.indexOf(0);
+    final b = zero < 0 ? bytes : bytes.sublist(0, zero);
+
     final chars = <int>[];
     for (var i = 0; i < b.length; i++) {
       final hi = b[i];
@@ -56,14 +60,11 @@ class LegacyText {
       ),
     ),
   );
-  static String korean(List<int> bytes) {
+  static String korean(List<int> bytes) => decodeKorean(bytes);
+  static String decodeKorean(List<int> bytes) {
     final zero = bytes.indexOf(0);
     final b = zero < 0 ? bytes : bytes.sublist(0, zero);
-    try {
-      return utf8.decode(b);
-    } on FormatException {
-      /* WLD area labels are CP949. */
-    }
+
     final out = <int>[];
     for (var i = 0; i < b.length; i++) {
       final hi = b[i];
@@ -95,5 +96,38 @@ class LegacyText {
         (i) => d.getUint16(i * 2, Endian.little),
       ),
     ).replaceAll(' ', '');
+  }
+
+  static final Map<int, List<int>> _encodeBig5 = _reverse(_big5);
+  static final Map<int, List<int>> _encodeKorean = _reverse(_korean);
+  static Map<int, List<int>> _reverse(ByteData table) {
+    final out = <int, List<int>>{
+      for (var i = 0; i < 128; i++) i: [i],
+    };
+    for (var hi = 0x81; hi <= 0xfe; hi++) {
+      for (var lo = 0x40; lo <= 0xfe; lo++) {
+        final code = table.getUint16(
+          ((hi - 0x81) * 191 + lo - 0x40) * 2,
+          Endian.little,
+        );
+        if (code != 0 && code != 0xfffd) out.putIfAbsent(code, () => [hi, lo]);
+      }
+    }
+    return out;
+  }
+
+  static Uint8List encodeLegacy(String text, {bool korean = false}) {
+    final table = korean ? _encodeKorean : _encodeBig5;
+    final out = <int>[];
+    for (final rune in text.runes) {
+      final bytes = table[rune];
+      if (bytes == null) {
+        throw FormatException(
+          'Carácter U+${rune.toRadixString(16)} no representable en ${korean ? 'CP949' : 'Big5'}.',
+        );
+      }
+      out.addAll(bytes);
+    }
+    return Uint8List.fromList(out);
   }
 }

@@ -12,7 +12,7 @@ import cloud_build as cloud
 import publish_release as release
 
 SHA = 'a' * 40
-BRANCH = 'feat/studio-04-20260917-abc123'
+BRANCH = 'feat/studio-05-20260917-abc123'
 
 class CloudDeliveryTest(unittest.TestCase):
     def receipt(self):

@@ -10,8 +10,9 @@ import '../core/formats.dart';
 import '../core/textures.dart';
 import '../core/combat.dart';
 import '../core/locomotion.dart';
-import '../core/attachment_pose.dart';
 import '../core/pose_layers.dart';
+import '../core/rig_anchors.dart';
+import '../core/flight_transition.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
 import '../data/library.dart';
@@ -84,7 +85,14 @@ class ImpactParticle {
 }
 
 class Actor {
-  final t.Group root = t.Group();
+  final t.Group root = t.Group(), visual = t.Group();
+  Actor() {
+    root.add(visual);
+    visual.matrixAutoUpdate = false;
+  }
+  SurfaceAnchor? seat;
+  int pelvisBone = 1;
+  final Map<String, ClipData> mountedAttacks = {};
   final List<RenderPart> parts = [];
   ClipData? clip,
       idle,
@@ -177,6 +185,7 @@ class StudioScene extends ChangeNotifier {
   Attachment? shieldAttachment;
   CharacterClass? selectedClass;
   ExtraMotionLibrary? extraMotions;
+  final FlightTransition flightState = FlightTransition();
   bool flightEnabled = true, headTracking = true, inspectAnyEquipment = false;
   double hoverOffset = .38, wingYaw = 0;
   final Map<String, ({double height, double depth, double size, double yaw})>
@@ -222,11 +231,29 @@ class StudioScene extends ChangeNotifier {
       )
       .toList();
   bool get flying =>
+      flightAvailable && !combat.inGuard && flightState.pendingTarget == null;
+  bool get flightAvailable =>
+      combat.playerHealth > 0 &&
       flightEnabled &&
       wing != null &&
       mount == null &&
       character?.hover != null &&
       character?.flight != null;
+  List<ClipData> get combatClips {
+    if (mount == null) return attackClips;
+    final key = switch (weaponFamily(weaponRecord)) {
+      1 || 3 || 7 || 9 || 10 || 15 => 'mounted_sword',
+      2 || 4 || 8 => 'mounted_twohand',
+      6 => 'mounted_spear',
+      12 => 'mounted_staff',
+      13 => 'mounted_bow',
+      14 => 'mounted_crossbow',
+      _ => '',
+    };
+    final clip = character?.mountedAttacks[key];
+    return clip == null ? const [] : [clip];
+  }
+
   Attachment? weaponAttachment, secondAttachment;
   List<ClipData> attackClips = [];
   int attackCounter = 0;
@@ -316,6 +343,9 @@ class StudioScene extends ChangeNotifier {
     await prepareImpactParticles();
     if (disposed || impactParticles.isEmpty) return;
     _impactSequence++;
+    actor.root.updateMatrixWorld(true);
+    final impact = t.Vector3(0, (actor.height * .57).clamp(.3, 2.5), 0)
+      ..applyMatrix4(actor.visual.matrixWorld);
     for (var i = 0; i < 7; i++) {
       final p = impactParticles[_impactCursor++ % impactParticles.length],
           angle = i * 2.399 + _impactSequence * .37;
@@ -324,11 +354,7 @@ class StudioScene extends ChangeNotifier {
       p.vx = math.cos(angle) * .34;
       p.vz = math.sin(angle) * .34;
       p.vy = .12 + (i % 4) * .11;
-      p.sprite.position.setValues(
-        actor.root.position.x,
-        actor.root.position.y + (actor.height * .57).clamp(.3, 2.5),
-        actor.root.position.z,
-      );
+      p.sprite.position.setValues(impact.x, impact.y, impact.z);
       p.sprite.visible = true;
       p.sprite.scale.setValues(p.size, p.size, 1);
       p.sprite.material?.opacity = 1;
@@ -612,7 +638,7 @@ class StudioScene extends ChangeNotifier {
           opaque: record.raw.alpha == 1,
         );
         staged.parts.add(part);
-        staged.root.add(part.mesh);
+        staged.visual.add(part.mesh);
         if (disposed || revision != _appearanceRevision) {
           staged.dispose();
           return;
@@ -656,6 +682,7 @@ class StudioScene extends ChangeNotifier {
       if (compatibleProfile) {
         staged.hover = profile.hover;
         staged.flight = profile.flight;
+        staged.mountedAttacks.addAll(profile.mounted);
       }
       if (face != null) {
         final scores = <int, double>{};
@@ -676,19 +703,10 @@ class StudioScene extends ChangeNotifier {
         }
       }
       staged.play(c);
-      var score = double.infinity;
-      for (var i = 1; i < math.min(staged.world.length, 12); i++) {
-        final m = staged.world[i].storage;
-        final d =
-            (m[13] - staged.height * .74).abs() +
-            m[12].abs() * .7 +
-            m[14].abs() * .3;
-        if (d < score && staged.world[i].determinant().abs() > 1e-12) {
-          score = d;
-          staged.wingBone = i;
-          staged.wingReference = v.Matrix4.inverted(staged.world[i]);
-        }
-      }
+      staged.wingBone = backBone(c, staged.headLook?.bone, staged.height);
+      final b = staged.wingBone;
+      if (b != null) staged.wingReference = v.Matrix4.inverted(staged.world[b]);
+      staged.pelvisBone = c.bones.length > 1 ? 1 : 0;
       final keep =
           appearance?.archetype.id == next.archetype.id &&
           appearance?.archetype.race == next.archetype.race;
@@ -725,7 +743,7 @@ class StudioScene extends ChangeNotifier {
         for (final part in [weapon, secondWeapon, shield]) {
           if (part != null) {
             part.mesh.removeFromParent();
-            staged.root.add(part.mesh);
+            staged.visual.add(part.mesh);
           }
         }
       } else {
@@ -816,7 +834,7 @@ class StudioScene extends ChangeNotifier {
         }
         final part = await skinned(m, tex);
         a.parts.add(part);
-        a.root.add(part.mesh);
+        a.visual.add(part.mesh);
       }
       for (final entry in c.animations.entries) {
         final p = lib.resolve(entry.value, ['$root/ani', root]);
@@ -892,10 +910,22 @@ class StudioScene extends ChangeNotifier {
       mount?.dispose();
       mount = staged;
       mountRecord = c;
+      flightState.reset();
       combat.reset();
       if (staged != null) {
         final seat = _seats['${c!.source}#${c.id}'];
-        riderHeight = seat?.height ?? (staged.height * .58).clamp(.2, 5.0);
+        if (staged.normal != null) {
+          staged.seat = SurfaceAnchor.locate(
+            staged.parts.map((p) => p.data).toList(),
+            staged.normal!,
+          );
+        }
+        if (staged.seat == null) {
+          report(
+            'Montura sin superficie central reconocida. Usa los ajustes del asiento; no se ha certificado el encaje automático.',
+          );
+        }
+        riderHeight = seat?.height ?? .04;
         riderForward = seat?.forward ?? 0;
         await riderPose();
       } else if (character?.idle != null) {
@@ -906,8 +936,14 @@ class StudioScene extends ChangeNotifier {
       wing = staged;
       wingRecord = c;
       final cfg = _wingSettings['${c?.source}#${c?.id}'];
-      wingHeight = cfg?.height ?? 1.3;
-      wingDepth = cfg?.depth ?? .25;
+      final char = character;
+      final b = char?.wingBone;
+      final reference = char?.normal?.pose(0);
+      final p = b != null && reference != null
+          ? reference[b].getTranslation()
+          : v.Vector3(0, 1.3, 0);
+      wingHeight = cfg?.height ?? p.y;
+      wingDepth = cfg?.depth ?? (p.z + .08);
       wingSize = cfg?.size ?? 1;
       wingYaw = cfg?.yaw ?? 0;
     }
@@ -1028,7 +1064,7 @@ class StudioScene extends ChangeNotifier {
     secondAttachment = otherAttachment;
     for (final p in [part, other]) {
       if (p != null) {
-        a.root.add(p.mesh);
+        a.visual.add(p.mesh);
         p.mesh.matrixAutoUpdate = false;
       }
     }
@@ -1171,7 +1207,7 @@ class StudioScene extends ChangeNotifier {
     shield = staged;
     shieldRecord = item;
     shieldAttachment = socket;
-    actor.root.add(staged.mesh);
+    actor.visual.add(staged.mesh);
     staged.mesh.matrixAutoUpdate = false;
     updateAttachments();
     say('Escudo equipado en la mano secundaria.');
@@ -1198,9 +1234,13 @@ class StudioScene extends ChangeNotifier {
           p.matches(look.archetype.id, look.archetype.female, a.normal!)) {
         a.hover = p.hover;
         a.flight = p.flight;
+        a.mountedAttacks
+          ..clear()
+          ..addAll(p.mounted);
       } else {
         a.hover = null;
         a.flight = null;
+        a.mountedAttacks.clear();
         report(
           'Suplemento sin vuelo compatible para ${look.archetype.id}; se conservan sus ANI originales.',
         );
@@ -1240,6 +1280,8 @@ class StudioScene extends ChangeNotifier {
   bool get sceneCombatLocked {
     final a = character;
     return busy ||
+        flightState.pendingTarget != null ||
+        (flightState.landing && !flightState.grounded) ||
         combat.playerHealth <= 0 ||
         (combat.active &&
             a != null &&
@@ -1315,11 +1357,34 @@ class StudioScene extends ChangeNotifier {
     final x = a.root.position.x,
         z = a.root.position.z,
         rotation = a.root.rotation.y;
-    a.root.position.y =
-        groundY +
-        (mount == null
-            ? game.jump.height + (flying ? hoverOffset : 0)
-            : riderHeight);
+    a.visual.matrix.identity();
+    if (mount != null) {
+      final vehicle = mount!;
+      final saddle =
+          vehicle.seat?.position(vehicle.world) ??
+          (vehicle.world.isNotEmpty
+              ? vehicle.world[math.min(1, vehicle.world.length - 1)]
+                    .getTranslation()
+              : v.Vector3(0, vehicle.height * .45, 0));
+      final pelvis = a.world.isEmpty
+          ? v.Vector3.zero()
+          : a.world[a.pelvisBone.clamp(0, a.world.length - 1)].getTranslation();
+      final q =
+          vehicle.seat?.rotation(vehicle.world) ?? v.Quaternion.identity();
+      a.visual.matrix.copyFromArray(
+        seatedTransform(
+          saddle,
+          q,
+          pelvis,
+          height: riderHeight,
+          forward: riderForward,
+        ).storage,
+      );
+      a.root.position.y = groundY;
+    } else {
+      a.root.position.y = groundY + game.jump.height + flightState.height;
+    }
+    a.visual.matrixWorldNeedsUpdate = true;
     if (weapon != null &&
         weaponAttachment != null &&
         weaponAttachment!.bone < a.world.length) {
@@ -1345,26 +1410,28 @@ class StudioScene extends ChangeNotifier {
       shield!.mesh.matrixWorldNeedsUpdate = true;
     }
     if (mount != null) {
-      mount!.root.position.setValues(
-        x + math.sin(rotation) * riderForward,
-        groundY,
-        z + math.cos(rotation) * riderForward,
-      );
+      mount!.root.position.setValues(x, groundY, z);
       mount!.root.rotation.y = rotation;
     }
     if (wing != null) {
       final bone = a.wingBone;
       final valid =
           bone != null && bone < a.world.length && a.wingReference != null;
-      final matrix = backAttachmentPose(
-        position: v.Vector3(x, a.root.position.y, z),
-        yaw: rotation,
-        bone: valid ? a.world[bone] : v.Matrix4.identity(),
-        referenceInverse: valid ? a.wingReference! : v.Matrix4.identity(),
-        offset: v.Vector3(0, wingHeight, wingDepth),
-        scale: wingSize,
-        localYaw: wingYaw,
+      final root = v.Matrix4.compose(
+        v.Vector3(x, a.root.position.y, z),
+        v.Quaternion.axisAngle(v.Vector3(0, 1, 0), rotation),
+        v.Vector3(1, 1, -1),
       );
+      final delta = valid
+          ? a.world[bone] * a.wingReference!
+          : v.Matrix4.identity();
+      final local = v.Matrix4.compose(
+        v.Vector3(0, wingHeight, wingDepth),
+        v.Quaternion.axisAngle(v.Vector3(0, 1, 0), wingYaw),
+        v.Vector3.all(wingSize),
+      );
+      final matrix =
+          root * v.Matrix4.fromList(a.visual.matrix.storage) * delta * local;
       wing!.root.matrix.copyFromArray(matrix.storage);
       wing!.root.matrixWorldNeedsUpdate = true;
     }
@@ -1439,10 +1506,10 @@ class StudioScene extends ChangeNotifier {
         if (s != null) unawaited(playSound(s));
       } else {
         ClipData? c;
-        if (event == 'attack' && attackClips.isNotEmpty) {
-          c = attackClips[attackCounter++ % attackClips.length];
-          combat.attackDuration =
-              attackClips[attackCounter % attackClips.length].duration;
+        if (event == 'attack' && combatClips.isNotEmpty) {
+          final clips = combatClips;
+          c = clips[attackCounter++ % clips.length];
+          combat.attackDuration = clips[attackCounter % clips.length].duration;
         } else {
           final index = event == 'death'
               ? 9
@@ -1454,7 +1521,9 @@ class StudioScene extends ChangeNotifier {
                     : p.contains('damage'),
               )
               .toList();
-          c = await firstCompatible(a, candidates);
+          c = mount != null && event != 'death'
+              ? null
+              : await firstCompatible(a, candidates);
         }
         if (c != null && a == character) a.play(c, repeat: false);
       }
@@ -1485,13 +1554,13 @@ class StudioScene extends ChangeNotifier {
         'Carga un personaje y una criatura antes de combatir.',
       );
     }
-    if (mount != null) {
+    if (mount != null && combatClips.isEmpty) {
       throw const FormatException(
-        'Desmonta antes de iniciar la prueba de combate.',
+        'Esta familia no tiene un ataque montado suplementario compatible cargado. Importa el suplemento 0.5 o desmonta.',
       );
     }
-    if (attackClips.isEmpty) await prepareWeaponMotions();
-    if (attackClips.isEmpty) {
+    if (mount == null && attackClips.isEmpty) await prepareWeaponMotions();
+    if (combatClips.isEmpty) {
       throw const FormatException(
         'No existe un ataque compatible con el equipo y arquetipo seleccionados.',
       );
@@ -1503,7 +1572,24 @@ class StudioScene extends ChangeNotifier {
     if (game.jump.airborne) {
       throw const FormatException('Espera a aterrizar antes de atacar.');
     }
-    combat.attack(enemyDistance);
+    if (enemyDistance > combat.range ||
+        combat.cooldownRemaining > 0 ||
+        !combat.alive) {
+      combat.record('Ataque no iniciado: alcance, vida o tiempo de espera.');
+      notifyListeners();
+      return;
+    }
+    if (flightState.height > .004 && mount == null) {
+      flightState.queue(combat.target);
+      clearMovement();
+      character!.play(character!.normal!);
+      say('Aterrizando antes del ataque…');
+      return;
+    }
+    combat.attack(
+      enemyDistance,
+      duration: combatClips[attackCounter % combatClips.length].duration,
+    );
     notifyListeners();
   }
 
@@ -1515,6 +1601,7 @@ class StudioScene extends ChangeNotifier {
   }
 
   void resetCombat() {
+    flightState.cancel();
     combat.reset();
     movementTransitions.invalidate();
     for (final a in [character, ...game.opponents.values.map((e) => e.actor)]) {
@@ -1562,7 +1649,9 @@ class StudioScene extends ChangeNotifier {
         y =
             groundY +
             targetY +
-            (mount == null ? (flying ? hoverOffset : 0) : riderHeight * .6);
+            (mount == null
+                ? flightState.height
+                : (a?.visual.matrix.storage[13] ?? 0));
     view!.camera.position.setValues(
       x + math.sin(yaw) * math.cos(pitch) * distance,
       y + math.sin(pitch) * distance,

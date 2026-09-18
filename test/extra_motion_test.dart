@@ -83,6 +83,19 @@ void main() {
       expect(() => ExtraMotionLibrary.decode(encode(m)), throwsFormatException);
     }
   });
+  test(
+    'mounted supplement preserves ground ANI and validates its own checksum',
+    () {
+      final m = manifest();
+      final clips = (m['profiles'] as List).first['clips'] as Map;
+      clips['mounted_spear'] = Map<String, String>.from(clips['hover'] as Map);
+      final p = ExtraMotionLibrary.decode(encode(m)).profiles['humf']!;
+      expect(p.mounted['mounted_spear']!.source, 'extra:humf/mounted_spear');
+      expect(p.hover.source, 'extra:humf/hover');
+      (clips['mounted_spear'] as Map)['sha256'] = '0' * 64;
+      expect(() => ExtraMotionLibrary.decode(encode(m)), throwsFormatException);
+    },
+  );
   test('catalogue rejects duplicate identities', () {
     final m = manifest();
     (m['profiles'] as List).add((m['profiles'] as List).first);

@@ -81,10 +81,15 @@ write('world/stream.wld',b'FLD\0'+u(size)+struct.pack('<H',10000)*n+bytes(n)+u(1
 # Supplemental fixture matches this test's one-bone male rig. Never replaces original files.
 import gzip,hashlib,json,base64
 clips={}
-for name,bob in [('hover',.08),('flight',.12)]:
+for name,bob in [('hover',.08),('flight',.12),('mounted_sword',.12),('mounted_spear',.15)]:
  data=animation(bob);clips[name]={'data':base64.b64encode(data).decode(),'sha256':hashlib.sha256(data).hexdigest()}
 pack={'schema':1,'profiles':[{'archetype':'humf','sex':'Masculino','parents':[-1],'clips':clips}]}
 write('Extras/flight.json.gz',gzip.compress(json.dumps(pack).encode(),mtime=0))
+# Client table wire header + signed 64-bit records; all 18 loot slots remain visible.
+columns=['id','money1','money2','hp']+[s for i in range(1,19) for s in (f'item{i}',f'itemdroprate{i}')]
+header=bytes(128)+u(len(columns))+b''.join(bytes([len(c)])+c.encode('utf-16-le') for c in columns)
+rows=[[1,10,20,400]+[v for i in range(1,19) for v in (200+i,10)], [2,30,50,600]+[0]*36]
+write('BinarySData/DBMonsterData.SData',header+u(len(rows))+b''.join(struct.pack('<q',v) for r in rows for v in r))
 # Build real SAH/SAF wire format from the same synthetic tree, including subdirectories.
 payload=bytearray()
 all_files=sorted(p for p in root.rglob('*') if p.is_file())

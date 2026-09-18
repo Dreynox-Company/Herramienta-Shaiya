@@ -1,4 +1,8 @@
-# Shaiya Studio 0.4.0 — Flutter nativo
+# Shaiya Studio 0.5.0
+
+Laboratorio nativo y editor de recursos local. [Instrucciones](INSTRUCCIONES.md) · [Cobertura de la revisión 0.5](docs/revision-05.md).
+
+# Antecedentes: Shaiya Studio 0.4.0 — Flutter nativo
 
 Windows y Android. Sin HTML ni WebView. Selecciona **carpeta DATA** o el par **DATA.SAH + DATA.SAF**. La lectura es local y no modifica los recursos originales. Mantén la biblioteca separada de la carpeta `data` de Flutter, junto al ejecutable.
 

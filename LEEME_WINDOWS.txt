@@ -1,23 +1,13 @@
-SHAIYA STUDIO 0.3.1 — FLUTTER NATIVO
+SHAIYA STUDIO 0.5.0 - Laboratorio 3D y editor de datos
 
-Extrae TODO el ZIP de Windows; conserva EXE, DLL y la carpeta data.
-Ejecuta herramienta_shaiya.exe y pulsa DATA para seleccionar tu biblioteca.
+Extrae TODO el ZIP y abre herramienta_shaiya.exe. No se requiere compilar.
+No separes el ejecutable de sus DLL y de la carpeta data (Flutter).
+DATA del juego es otra carpeta: selecciónala dentro de la aplicación.
+También puedes abrir los archivos SAH/SAF.
 
-IMPORTANTE: data junto al EXE pertenece a Flutter. NO la reemplaces por
-DATA del juego. Conserva los recursos originales en otra ubicacion.
-
-WASD: moverse respecto a la camara. Shift: correr. Espacio: saltar a pie.
-Arrastrar: camara. Rueda: zoom. Clic en suelo: destino.
-Clic en mob / Tab: seleccionar objetivo. 1-4: ataques. R: reiniciar.
-En selectores: flechas arriba/abajo, Intro para catalogo.
-
-Datos locales de solo lectura; no se sube DATA ni se modifican sus archivos.
-El encantamiento y los elementos son una previsualizacion configurable;
-no se afirma una correspondencia exacta con todos los efectos del cliente.
-Consulta README.md y el diagnostico para limites de formatos y escenarios.
-
-El archivo no esta firmado con certificado comercial. Una compilacion
-correcta no sustituye la prueba de todas las combinaciones originales.
-
-Conjuntos > Cuerpo base original: restaura todas las regiones del cuerpo.
-Conserva la vestimenta que traen las texturas; no es un desnudo generado.
+El botón centrado Editor de datos abre el editor de SData/SVMAP.
+Exportar / herramientas permite extraer a DATA o generar un par nuevo.
+Nunca se sobrescribe el origen: se verifican copias y hashes.
+Consulta INSTRUCCIONES.md y docs/revision-05.md para alcance y pendientes.
+No todos los campos del servidor están en el cliente ni cambian al editarlo.
+Extras/flight.json.gz, cuando viene incluido, contiene movimientos aislados.

@@ -23,6 +23,9 @@ import 'render/studio_scene.dart';
 import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
+import 'ui/data_editor.dart';
+import 'core/game_text_codec.dart';
+import 'core/legacy_text.dart';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -158,12 +161,31 @@ class _StudioState extends State<StudioPage> {
     }
   }
 
+  Future<void> openDataEditor() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => RepaintBoundary(
+          key: const ValueKey('data-editor-capture'),
+          child: DataEditorPage(
+            library: library,
+            initialEncoding: LegacyText.preferred,
+          ),
+        ),
+      ),
+    );
+    if (mounted) focus.requestFocus();
+  }
+
   Future<void> sourceMenu() async {
     scene.clearMovement();
     final mode = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Abrir biblioteca de recursos'),
+        title: const Text('Biblioteca de recursos'),
         content: SizedBox(
           width: 440,
           child: Column(
@@ -187,6 +209,21 @@ class _StudioState extends State<StudioPage> {
                 ),
                 onTap: () => Navigator.pop(ctx, 'archive'),
               ),
+              if (catalog?.library.archive != null)
+                ListTile(
+                  leading: const Icon(Icons.drive_file_move_outlined),
+                  title: const Text('Extraer / editar el archivo DATA'),
+                  subtitle: const Text(
+                    'Exportación verificada desde el editor, sin sobrescribir originales',
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'editor'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.translate),
+                title: const Text('Codificación de nombres'),
+                subtitle: Text(LegacyText.preferred.label),
+                onTap: () => Navigator.pop(ctx, 'encoding'),
+              ),
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),
                 title: const Text('Exportar diagnóstico de archivo'),
@@ -207,11 +244,39 @@ class _StudioState extends State<StudioPage> {
       ),
     );
     if (!mounted) return;
-    if (mode == 'report') {
+    if (mode == 'editor') {
+      await openDataEditor();
+    } else if (mode == 'encoding') {
+      await chooseNameEncoding();
+    } else if (mode == 'report') {
       await act(exportArchiveReport);
     } else if (mode != null) {
       await connect(archive: mode == 'archive');
     }
+  }
+
+  Future<void> chooseNameEncoding() async {
+    final selected = await showDialog<GameTextEncoding>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: const Text('Codificación original del cliente'),
+        children: GameTextEncoding.values
+            .where((e) => e != GameTextEncoding.utf16le)
+            .map(
+              (e) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(c, e),
+                child: Text(e.label),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (selected == null) return;
+    LegacyText.preferred = selected;
+    scene.say(
+      'Codificación: ${selected.label}. Vuelve a abrir la biblioteca para actualizar todos los nombres. No se ha modificado DATA.',
+    );
+    if (mounted) setState(() {});
   }
 
   Future<void> loadBundledExtras() async {
@@ -275,7 +340,7 @@ class _StudioState extends State<StudioPage> {
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.4.0',
+        'version': '0.5.0',
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -856,7 +921,7 @@ class _StudioState extends State<StudioPage> {
                 ),
               ],
               note(
-                'El anclaje sigue el torso y la transformación del jinete, también al montar.',
+                'Anclaje en la cadena del torso, independiente de los brazos. Sigue el asiento al montar.',
               ),
             ]),
             section('Vuelo suplementario', [
@@ -887,10 +952,10 @@ class _StudioState extends State<StudioPage> {
               if (scene.mount != null) ...[
                 actorAnimation(scene.mount!, 'mount'),
                 slider(
-                  'Altura del asiento',
+                  'Ajuste vertical del asiento',
                   scene.riderHeight,
-                  0,
-                  6,
+                  -1,
+                  2,
                   (v) => setState(() => scene.riderHeight = v),
                 ),
                 slider(
@@ -910,7 +975,7 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
                 note(
-                  'W: marcha · W + Shift: carrera. El ajuste de asiento se recuerda por montura durante la sesión.',
+                  'El asiento sigue una superficie animada de la montura; la pelvis se alinea con ella. Ajuste manual por montura. W: marcha · Shift: carrera.',
                 ),
               ],
             ]),
@@ -948,7 +1013,7 @@ class _StudioState extends State<StudioPage> {
                 toggle(
                   'Ataque automático',
                   scene.combat.automatic,
-                  scene.enemy == null || scene.mount != null
+                  scene.enemy == null || scene.combatClips.isEmpty
                       ? null
                       : (v) {
                           if (v) {
@@ -1415,18 +1480,18 @@ class _StudioState extends State<StudioPage> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       children: [
-        for (var i = 0; i < scene.attackClips.length && i < 4; i++)
+        for (var i = 0; i < scene.combatClips.length && i < 4; i++)
           Padding(
             padding: const EdgeInsets.only(right: 6),
             child: Tooltip(
-              message: '${i + 1}: ${baseName(scene.attackClips[i].source)}',
+              message: '${i + 1}: ${baseName(scene.combatClips[i].source)}',
               child: SizedBox(
                 width: 91,
                 child: FilledButton.tonal(
                   onPressed:
                       disabled ||
                           scene.enemy == null ||
-                          scene.mount != null ||
+                          scene.flightState.pendingTarget != null ||
                           scene.combat.cooldownRemaining > 0
                       ? null
                       : () => performAttack(i),
@@ -1718,7 +1783,7 @@ class _StudioState extends State<StudioPage> {
                 LogicalKeyboardKey.digit4,
               ];
               final index = keys.indexOf(key);
-              if (index >= 0 && index < scene.attackClips.length) {
+              if (index >= 0 && index < scene.combatClips.length) {
                 performAttack(index);
               }
               if (key == LogicalKeyboardKey.keyR) scene.resetCombat();
@@ -2277,7 +2342,7 @@ class _StudioState extends State<StudioPage> {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.4.0',
+        'version': '0.5.0',
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,
@@ -2315,6 +2380,7 @@ class _StudioState extends State<StudioPage> {
     timeline: timeline(),
     actions: actionBar(),
     hasLibrary: scene.character != null,
+    onOpenEditor: catalog == null || working ? null : openDataEditor,
     onOpenData: disabled ? null : sourceMenu,
     tabs: const [
       'Personaje',

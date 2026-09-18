@@ -9,7 +9,14 @@ import 'seed_data.dart';
 class ArchiveEntry {
   final String path;
   final int offset, length, version;
-  const ArchiveEntry(this.path, this.offset, this.length, this.version);
+  final List<Uint8List> rawComponents;
+  const ArchiveEntry(
+    this.path,
+    this.offset,
+    this.length,
+    this.version, {
+    this.rawComponents = const [],
+  });
 }
 
 class ArchiveFailure implements Exception {
@@ -147,6 +154,7 @@ class _SahReader {
   final Bin r;
   final int safLength, countXor;
   int directories = 0, declared = 0, version = 0;
+  Uint8List lastNameBytes = Uint8List(0);
   final Map<String, ArchiveEntry> entries = {};
   final Set<String> folders = {};
   final List<String> warnings = [];
@@ -156,6 +164,7 @@ class _SahReader {
     final n = r.count(4096);
     r.need(n);
     final raw = r.bytes.sublist(r.offset, r.offset + n);
+    lastNameBytes = Uint8List.fromList(raw);
     r.skip(n);
     if (raw.contains(0) && raw.indexOf(0) != raw.length - 1) {
       r.fail('Nombre con terminador interior.');
@@ -201,11 +210,18 @@ class _SahReader {
     return entries;
   }
 
-  void directory(String parent, int depth) {
+  void directory(
+    String parent,
+    int depth, [
+    List<Uint8List> parentBytes = const [],
+  ]) {
     if (depth > 48 || ++directories > 25000) {
       r.fail('Árbol de carpetas fuera de límite.');
     }
     final own = name(root: depth == 0);
+    final components = depth == 0
+        ? <Uint8List>[]
+        : [...parentBytes, Uint8List.fromList(lastNameBytes)];
     final folder = depth == 0 ? '' : (parent.isEmpty ? own : '$parent/$own');
     if (!folders.add(folder.toLowerCase())) {
       r.fail('Directorio duplicado: $folder');
@@ -233,11 +249,17 @@ class _SahReader {
       if (entries.containsKey(path)) {
         r.fail('Recurso ambiguo por mayúsculas o duplicado: $path');
       }
-      entries[path] = ArchiveEntry(path, offset, length, fileVersion);
+      entries[path] = ArchiveEntry(
+        path,
+        offset,
+        length,
+        fileVersion,
+        rawComponents: [...components, Uint8List.fromList(lastNameBytes)],
+      );
     }
     final sub = r.count(25000);
     for (var i = 0; i < sub; i++) {
-      directory(folder, depth + 1);
+      directory(folder, depth + 1, components);
     }
   }
 }

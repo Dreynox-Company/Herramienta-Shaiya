@@ -10,6 +10,9 @@ import 'package:integration_test/integration_test.dart';
 import 'package:herramienta_shaiya/main.dart';
 import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
+import 'package:herramienta_shaiya/data/archive_export.dart';
+import 'package:herramienta_shaiya/ui/data_editor.dart';
+import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'package:herramienta_shaiya/core/extra_motion.dart';
 
 import 'package:herramienta_shaiya/render/studio_scene.dart';
@@ -122,7 +125,7 @@ void main() {
     expect(c.weapons, isNotEmpty);
     await scene.equip(c.weapons.first);
     expect(scene.weapon, isNotNull);
-    expect(scene.weapon!.mesh.parent, scene.character!.root);
+    expect(scene.weapon!.mesh.parent, scene.character!.visual);
     passed.add(
       'Rigid weapon with eight-byte zero footer equips through the native renderer',
     );
@@ -131,7 +134,7 @@ void main() {
     passed.add('Equipping does not activate combat guard');
     await scene.equipShield(scene.availableShields.first);
     expect(scene.shield, isNotNull);
-    expect(scene.shield!.mesh.parent, scene.character!.root);
+    expect(scene.shield!.mesh.parent, scene.character!.visual);
     expect(scene.weapon, isNotNull);
     passed.add('One-handed weapon and independent shield render together');
     await screenshot('native_weapon_shield');
@@ -218,15 +221,17 @@ void main() {
       'Exterior terrain and sky are rendered through original format readers',
     );
     await waitFor(
-      () =>
-          (scene.character!.root.position.y - scene.groundY - scene.riderHeight)
-              .abs() <
-          .001,
+      () => (scene.character!.root.position.y - scene.groundY).abs() < .001,
       'Map transition restores mounted actor height on the rendering loop',
     );
     expect(
       scene.wing!.root.matrix.storage[13],
-      closeTo(scene.character!.root.position.y + scene.wingHeight, .001),
+      closeTo(
+        scene.character!.root.position.y +
+            scene.character!.visual.matrix.storage[13] +
+            scene.wingHeight,
+        .001,
+      ),
     );
     passed.add(
       'Wing and rider remain in the same coordinate frame after loading a map',
@@ -310,11 +315,44 @@ void main() {
     expect(scene.wingYaw, closeTo(.65, .0001));
     passed.add('Wing horizontal rotation is local and restored per resource');
     await screenshot('native_supplemental_flight');
+    scene.clearMovement();
+    await scene.selectCreature(c.creatures.first, 'enemy');
+    scene.combat.counterattack = false;
+    await waitFor(
+      () => scene.flightState.height > .25,
+      'Wing hover settles above the ground',
+    );
+    final airTarget = scene.combat.target;
+    await scene.attack();
+    expect(scene.flightState.pendingTarget, airTarget);
+    expect(scene.combat.active, false);
+    await waitFor(
+      () => scene.combat.active,
+      'Queued aerial attack starts only after landing',
+    );
+    expect(scene.flightState.grounded, true);
+    await screenshot('native_grounded_wing_attack');
     await scene.selectCreature(null, 'wing');
+    scene.resetCombat();
     await waitFor(
       () => scene.character!.idle == scene.character!.normal,
       'Removing wings restores original ground animations',
     );
+    await scene.selectCreature(c.mounts.first, 'mount');
+    expect(scene.combatClips, isNotEmpty);
+    final mountedTarget = scene.combat.target;
+    await scene.attack();
+    await waitFor(
+      () => scene.character!.clip!.source.contains('mounted_sword'),
+      'Mounted attack uses its own isolated supplemental pose',
+    );
+    await waitFor(
+      () => scene.combat.health[mountedTarget]! < scene.combat.maxHealth,
+      'Mounted impact changes only target health',
+    );
+    await screenshot('native_mounted_attack');
+    scene.resetCombat();
+    await scene.selectCreature(null, 'mount');
     final archive = await Library.fromArchive('$input.sah', '$input.saf');
     final archiveCatalog = Catalog(archive);
     await archiveCatalog.load((_) {});
@@ -339,6 +377,106 @@ void main() {
     passed.add(
       'Archive diagnostics can be exported after successful native loading',
     );
+    // The editor runs in the real window. No dialogs are mocked or tests disabled.
+    await tester.tap(find.byKey(const ValueKey('open-data-editor')));
+    await waitFor(
+      () => find.byType(DataEditorPage).evaluate().isNotEmpty,
+      'Centered toolbar opens the dedicated editor',
+    );
+    if (find.byIcon(Icons.folder_open).evaluate().isNotEmpty) {
+      await tester.tap(find.byIcon(Icons.folder_open));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    await tester.tap(find.text('dbmonsterdata.sdata'));
+    await waitFor(
+      () => find.text('Oro mínimo (Money1)').evaluate().isNotEmpty,
+      'Native editor parses monster economy fields',
+    );
+    await tester.tap(find.text('Oro mínimo (Money1)'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.enterText(
+      find.byKey(const ValueKey('editor-field-input')),
+      '-1',
+    );
+    await tester.tap(find.byKey(const ValueKey('editor-apply')));
+    await waitFor(
+      () => find.text('-1').evaluate().isNotEmpty,
+      'Signed negative survives native editor interaction',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    final editorBoundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('data-editor-capture')),
+    );
+    final editorImage = await editorBoundary.toImage();
+    final editorBytes = await editorImage.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    editorImage.dispose();
+    await File(
+      '${output.path}/native_editor.png',
+    ).writeAsBytes(editorBytes!.buffer.asUint8List());
+    await tester.tap(find.text('Deshacer'));
+    await waitFor(
+      () => find.text('-1').evaluate().isEmpty,
+      'Undo restores the original economy value',
+    );
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await waitFor(
+      () => find.byType(DataEditorPage).evaluate().isEmpty,
+      'Closing editor returns to unchanged native viewer',
+    );
+    final exportDir = await Directory.systemTemp.createTemp(
+      'shaiya-export-integration-',
+    );
+    try {
+      final result = await ArchiveExport.extract(
+        archive.archive!,
+        exportDir,
+        control: ExportControl(),
+        progress: (_) {},
+      );
+      expect(
+        await File('${result.folder}/$model').readAsBytes(),
+        await archive.read(model),
+      );
+      const tablePath = 'binarysdata/dbmonsterdata.sdata';
+      final original = await archive.read(tablePath);
+      final doc = EditorReader.open(original, tablePath);
+      final money = doc
+          .fields(0)
+          .firstWhere((f) => f.spec.name.toLowerCase() == 'money1');
+      doc.edit(0, money, '-1');
+      final repacked = await ArchiveExport.repack(
+        archive.archive!,
+        exportDir,
+        replacements: {tablePath: doc.exportBytes()},
+        control: ExportControl(),
+        progress: (_) {},
+      );
+      final reopened = await Library.fromArchive(
+        '${repacked.folder}/data.sah',
+        '${repacked.folder}/data.saf',
+      );
+      final verified = EditorReader.open(
+        await reopened.read(tablePath),
+        tablePath,
+      );
+      expect(
+        verified.read(
+          verified
+              .fields(0)
+              .firstWhere((f) => f.spec.name.toLowerCase() == 'money1'),
+        ),
+        '-1',
+      );
+      expect(await archive.read(tablePath), original);
+      reopened.dispose();
+      passed.add(
+        'Windows extraction and new SAH/SAF pair preserve originals and edited signed values',
+      );
+    } finally {
+      await exportDir.delete(recursive: true);
+    }
     expect(tester.takeException(), isNull);
     await File('${output.path}/result.json').writeAsString(
       const JsonEncoder.withIndent('  ').convert({
@@ -350,5 +488,5 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 500));
-  }, timeout: const Timeout(Duration(minutes: 4)));
+  }, timeout: const Timeout(Duration(minutes: 6)));
 }

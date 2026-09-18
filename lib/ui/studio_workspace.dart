@@ -7,7 +7,7 @@ class StudioWorkspace extends StatefulWidget {
   final List<IconData> icons;
   final int selectedTab;
   final ValueChanged<int> onTab;
-  final VoidCallback? onOpenData;
+  final VoidCallback? onOpenData, onOpenEditor;
   final bool hasLibrary;
   const StudioWorkspace({
     super.key,
@@ -22,6 +22,7 @@ class StudioWorkspace extends StatefulWidget {
     required this.selectedTab,
     required this.onTab,
     required this.onOpenData,
+    this.onOpenEditor,
     this.hasLibrary = false,
   });
   @override
@@ -169,15 +170,22 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     ),
   );
 
-  Widget _header(double width, bool mobile, bool showLeft, bool showRight) =>
-      Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: const BoxDecoration(
-          color: Color(0xff121a26),
-          border: Border(bottom: BorderSide(color: Color(0xff30394a))),
-        ),
-        child: Row(
+  Widget _header(
+    double width,
+    bool mobile,
+    bool showLeft,
+    bool showRight,
+  ) => Container(
+    height: 48,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    decoration: const BoxDecoration(
+      color: Color(0xff121a26),
+      border: Border(bottom: BorderSide(color: Color(0xff30394a))),
+    ),
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        Row(
           children: [
             IconButton(
               key: const ValueKey('toggle-left'),
@@ -209,7 +217,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                 letterSpacing: 1.7,
               ),
             ),
-            if (width > 420)
+            if (width > 740)
               const Text(
                 '  STUDIO',
                 style: TextStyle(
@@ -219,9 +227,9 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                 ),
               ),
             const Spacer(),
-            if (width > 600)
+            if (width > 1100)
               const Text(
-                '0.4.0 · Laboratorio 3D',
+                '0.5.0 · Laboratorio 3D',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),
@@ -247,7 +255,29 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             ),
           ],
         ),
-      );
+        if (widget.onOpenEditor != null)
+          Align(
+            alignment: Alignment.center,
+            child: width < 570
+                ? IconButton(
+                    key: const ValueKey('open-data-editor'),
+                    tooltip: 'Editor avanzado de datos',
+                    onPressed: widget.onOpenEditor,
+                    icon: const Icon(Icons.edit_note, size: 24),
+                  )
+                : OutlinedButton.icon(
+                    key: const ValueKey('open-data-editor'),
+                    onPressed: widget.onOpenEditor,
+                    icon: const Icon(Icons.edit_note, size: 18),
+                    label: const Text(
+                      'Editor de datos',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+          ),
+      ],
+    ),
+  );
 
   Widget _center() => Column(
     children: [

@@ -112,7 +112,7 @@ def main() -> None:
             if not executable.is_file() or not (folder / "data").is_dir():
                 raise RuntimeError("La compilación no produjo un paquete Windows completo; no se generará el ZIP.")
             shutil.copy2(ROOT / "LEEME_WINDOWS.txt", folder / "LEEME.txt")
-            target = dist / "Shaiya_Studio_0_4_0_Windows.zip"
+            target = dist / "Shaiya_Studio_0_5_0_Windows.zip"
             temporary = target.with_suffix(".zip.tmp")
             with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as z:
                 for item in sorted(folder.rglob("*")):
@@ -128,10 +128,10 @@ def main() -> None:
             apk = ROOT / "build/app/outputs/flutter-apk/app-debug.apk"
             if not apk.is_file():
                 raise RuntimeError("La compilación no produjo el APK; no se generará un archivo de entrega.")
-            target = dist / "Shaiya_Studio_0_4_0_Android_PRUEBAS.apk"
+            target = dist / "Shaiya_Studio_0_5_0_Android_PRUEBAS.apk"
             shutil.copy2(apk, target)
             produced.append(str(target))
-        report = {"version": "0.4.0+6", "platform": args.platform, "commands": commands,
+        report = {"version": "0.5.0+7", "platform": args.platform, "commands": commands,
                   "outputs": produced, "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                   "native_window_integration": args.integration, "log": str(log_path)}
         (dist / "compilacion_local.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

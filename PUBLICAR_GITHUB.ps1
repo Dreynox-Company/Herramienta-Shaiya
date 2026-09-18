@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Repositorio,
-    [string]$Rama = 'feat/studio-04-integration',
+    [string]$Rama = 'feat/studio-05-integration',
     [switch]$SoloLocal
 )
 $ErrorActionPreference = 'Stop'

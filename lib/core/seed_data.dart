@@ -102,4 +102,70 @@ class SeedData {
     }
     return result;
   }
+
+  static bool isEncoded(List<int> bytes) =>
+      bytes.length >= 40 &&
+      ascii.decode(bytes.sublist(0, 40), allowInvalid: true) ==
+          '0001CBCEBC5B2784D3FC9A2A9DB84D1C3FEB6E99';
+
+  /// Preserves header variant and reserved bytes. Caller keeps the input byte
+  /// for byte when unedited; only newly edited copies get a recalculated CRC.
+  static Uint8List encode(
+    Uint8List payload, {
+    Uint8List? template,
+    bool extended = false,
+  }) {
+    if (payload.length > 128 * 1024 * 1024) {
+      throw const FormatException('SData supera 128 MiB.');
+    }
+    final out = Uint8List(64 + ((payload.length + 15) ~/ 16) * 16);
+    if (template != null && isEncoded(template) && template.length >= 64) {
+      out.setRange(0, 64, template);
+      extended =
+          ByteData.sublistView(template).getUint32(40, Endian.little) == 0;
+    } else {
+      out.setRange(
+        0,
+        40,
+        ascii.encode('0001CBCEBC5B2784D3FC9A2A9DB84D1C3FEB6E99'),
+      );
+    }
+    var crc = 0xffffffff;
+    for (final b in payload) {
+      crc ^= b;
+      for (var k = 0; k < 8; k++) {
+        crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320 : 0);
+      }
+    }
+    final data = ByteData.sublistView(out);
+    if (extended) data.setUint32(40, 0, Endian.little);
+    data.setUint32(extended ? 44 : 40, (~crc) & 0xffffffff, Endian.little);
+    data.setUint32(extended ? 48 : 44, payload.length, Endian.little);
+    final padded = Uint8List(out.length - 64)
+      ..setRange(0, payload.length, payload);
+    final input = ByteData.sublistView(padded);
+    for (var offset = 0; offset < padded.length; offset += 16) {
+      var l0 = input.getUint32(offset),
+          l1 = input.getUint32(offset + 4),
+          r0 = input.getUint32(offset + 8),
+          r1 = input.getUint32(offset + 12);
+      for (var round = 0; round < 32; round += 2) {
+        var a = r0 ^ _keys[round], b = r1 ^ _keys[round + 1];
+        b = _g(b ^ a);
+        a = _g((a + b) & 0xffffffff);
+        b = _g((a + b) & 0xffffffff);
+        a = (a + b) & 0xffffffff;
+        final t0 = l0 ^ a, t1 = l1 ^ b;
+        l0 = r0;
+        l1 = r1;
+        r0 = t0;
+        r1 = t1;
+      }
+      data.setUint32(64 + offset, r0);
+      data.setUint32(68 + offset, r1);
+      data.setUint32(72 + offset, l0);
+      data.setUint32(76 + offset, l1);
+    }
+    return out;
+  }
 }
