@@ -1,0 +1,31 @@
+name: Plataforma local de pruebas 0.5
+on:
+  push:
+    branches: [work/studio-05-toolchain]
+    paths: [.github/workflows/bootstrap-local05.yml]
+permissions:
+  contents: read
+jobs:
+  platform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter precache --linux
+      - name: Platform kernel and engine identity only
+        run: |
+          mkdir local-platform
+          cp -r "$FLUTTER_ROOT/bin/cache/artifacts/engine/common/flutter_patched_sdk" local-platform/
+          cp "$FLUTTER_ROOT/bin/internal/engine.version" local-platform/engine.version
+          tar -czf local-platform.tar.gz local-platform
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Internal-Platform-05
+          path: local-platform.tar.gz
+          if-no-files-found: error
+          retention-days: 3
