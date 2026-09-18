@@ -1,0 +1,408 @@
+               style: const TextStyle(
++                        fontSize: 10,
++                        color: Color(0xff9db2cc),
++                      ),
++                    ),
++                  ),
++                ],
++              ),
++            );
++          },
++        ),
++      ),
++    ),
++  );
++}
+diff --git a/lib/ui/studio_workspace.dart b/lib/ui/studio_workspace.dart
+index fef1036..2712094 100644
+--- a/lib/ui/studio_workspace.dart
++++ b/lib/ui/studio_workspace.dart
+@@ -10 +10 @@ class StudioWorkspace extends StatefulWidget {
+-  final VoidCallback? onOpenData;
++  final VoidCallback? onOpenData, onOpenEditor;
+@@ -24,0 +25 @@ class StudioWorkspace extends StatefulWidget {
++    this.onOpenEditor,
+@@ -172,9 +173,16 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
+-  Widget _header(double width, bool mobile, bool showLeft, bool showRight) =>
+-      Container(
+-        height: 48,
+-        padding: const EdgeInsets.symmetric(horizontal: 8),
+-        decoration: const BoxDecoration(
+-          color: Color(0xff121a26),
+-          border: Border(bottom: BorderSide(color: Color(0xff30394a))),
+-        ),
+-        child: Row(
++  Widget _header(
++    double width,
++    bool mobile,
++    bool showLeft,
++    bool showRight,
++  ) => Container(
++    height: 48,
++    padding: const EdgeInsets.symmetric(horizontal: 8),
++    decoration: const BoxDecoration(
++      color: Color(0xff121a26),
++      border: Border(bottom: BorderSide(color: Color(0xff30394a))),
++    ),
++    child: Stack(
++      alignment: Alignment.center,
++      children: [
++        Row(
+@@ -212 +220 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
+-            if (width > 420)
++            if (width > 740)
+@@ -222 +230 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
+-            if (width > 600)
++            if (width > 1100)
+@@ -224 +232 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
+-                '0.4.0 · Laboratorio 3D',
++                '0.5.0 · Laboratorio 3D',
+@@ -250 +258,23 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
+-      );
++        if (widget.onOpenEditor != null)
++          Align(
++            alignment: Alignment.center,
++            child: width < 570
++                ? IconButton(
++                    key: const ValueKey('open-data-editor'),
++                    tooltip: 'Editor avanzado de datos',
++                    onPressed: widget.onOpenEditor,
++                    icon: const Icon(Icons.edit_note, size: 24),
++                  )
++                : OutlinedButton.icon(
++                    key: const ValueKey('open-data-editor'),
++                    onPressed: widget.onOpenEditor,
++                    icon: const Icon(Icons.edit_note, size: 18),
++                    label: const Text(
++                      'Editor de datos',
++                      style: TextStyle(fontSize: 11),
++                    ),
++                  ),
++          ),
++      ],
++    ),
++  );
+diff --git a/platform/android/MainActivity.kt b/platform/android/MainActivity.kt
+index 9ebdff5..28f9bb6 100644
+--- a/platform/android/MainActivity.kt
++++ b/platform/android/MainActivity.kt
+@@ -26 +26 @@ class MainActivity : FlutterActivity() {
+-    private val extensions = setOf("sdata", "env", "seff", "wtr", "vani", "3de", "ini", "xml", "cfg", "3dc", "3do", "ani", "mlt", "alt", "itm", "mon", "dds", "png", "jpg", "jpeg", "tga", "bmp", "wav", "mp3", "ogg", "wld", "smod", "dg", "eft")
++    private val extensions = setOf("sdata", "svmap", "env", "seff", "wtr", "vani", "3de", "ini", "xml", "cfg", "3dc", "3do", "ani", "mlt", "alt", "itm", "mon", "dds", "png", "jpg", "jpeg", "tga", "bmp", "wav", "mp3", "ogg", "wld", "smod", "dg", "eft")
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 13d328b..8368213 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -4 +4 @@ publish_to: none
+-version: 0.4.0+6
++version: 0.5.0+7
+diff --git a/test/archive_export_test.dart b/test/archive_export_test.dart
+new file mode 100644
+index 0000000..d8cb2a7
+--- /dev/null
++++ b/test/archive_export_test.dart
+@@ -0,0 +1,175 @@
++import 'dart:convert';
++import 'dart:io';
++import 'dart:typed_data';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:herramienta_shaiya/core/archive_index.dart';
++import 'package:herramienta_shaiya/data/archive_source.dart';
++import 'package:herramienta_shaiya/data/archive_export.dart';
++
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++  late Directory temp;
++  setUp(() async {
++    temp = await Directory.systemTemp.createTemp('shaiya-export-');
++  });
++  tearDown(() async {
++    if (await temp.exists()) await temp.delete(recursive: true);
++  });
++  ArchiveSource source(Map<String, Uint8List> files) {
++    final entries = <String, ArchiveEntry>{};
++    final data = BytesBuilder();
++    var at = 0;
++    for (final e in files.entries) {
++      entries[e.key] = ArchiveEntry(e.key, at, e.value.length, 17);
++      data.add(e.value);
++      at += e.value.length;
++    }
++    final b = data.takeBytes();
++    return ArchiveSource(
++      ArchiveIndex(entries, {'version': 123}),
++      (offset, length) async =>
++          Uint8List.fromList(b.sublist(offset, offset + length)),
++    );
++  }
++
++  test(
++    'extracts all entries including formats not used by the renderer',
++    () async {
++      final s = source({
++        'binarysdata/mobs.sdata': Uint8List.fromList([1, 2]),
++        'extra/unknown.xyz': Uint8List.fromList([5, 6]),
++        'zero.dat': Uint8List(0),
++      });
++      final r = await ArchiveExport.extract(
++        s,
++        temp,
++        control: ExportControl(),
++        progress: (_) {},
++      );
++      expect(r.files, 3);
++      expect(await File('${r.folder}/extra/unknown.xyz').readAsBytes(), [5, 6]);
++      expect(await File('${r.folder}/zero.dat').length(), 0);
++    },
++  );
++  test('uses bounded ranges for large entries', () async {
++    final length = 3 * 1024 * 1024 + 11;
++    var max = 0;
++    final s = ArchiveSource(
++      ArchiveIndex({'large.dat': ArchiveEntry('large.dat', 0, length, 0)}, {}),
++      (o, n) async {
++        if (n > max) max = n;
++        return Uint8List(n);
++      },
++    );
++    await ArchiveExport.extract(
++      s,
++      temp,
++      control: ExportControl(),
++      progress: (_) {},
++    );
++    expect(max, lessThanOrEqualTo(1024 * 1024));
++  });
++  test('cancel removes only the new staging directory', () async {
++    final marker = File('${temp.path}/keep.txt');
++    await marker.writeAsString('do not touch');
++    final ctl = ExportControl();
++    await expectLater(
++      ArchiveExport.extract(
++        source({'x.dat': Uint8List(2000000)}),
++        temp,
++        control: ctl,
++        progress: (_) => ctl.cancelled = true,
++      ),
++      throwsA(isA<ExportCancelled>()),
++    );
++    expect(await marker.readAsString(), 'do not touch');
++    expect((await temp.list().toList()).length, 1);
++  });
++  test('truncated source cannot publish a partial DATA folder', () async {
++    final s = ArchiveSource(
++      ArchiveIndex({'bad.dat': const ArchiveEntry('bad.dat', 0, 4, 0)}, {}),
++      (o, n) async => Uint8List(1),
++    );
++    await expectLater(
++      ArchiveExport.extract(
++        s,
++        temp,
++        control: ExportControl(),
++        progress: (_) {},
++      ),
++      throwsFormatException,
++    );
++    expect(await temp.list().isEmpty, isTrue);
++  });
++  for (final p in [
++    '../out',
++    '/root',
++    'a/../../x',
++    'CON.txt',
++    'a:stream',
++    'a/last.',
++    'a/last ',
++    'a//b',
++  ]) {
++    test('unsafe path $p rejected before copying', () async {
++      await expectLater(
++        ArchiveExport.extract(
++          source({p: Uint8List(0)}),
++          temp,
++          control: ExportControl(),
++          progress: (_) {},
++        ),
++        throwsFormatException,
++      );
++      expect(await temp.list().isEmpty, isTrue);
++    });
++  }
++  test('new pair verifies hashes, entry versions and modified data', () async {
++    final s = source({
++      'item/item.sdata': Uint8List.fromList([1, 2]),
++      'other.dat': Uint8List.fromList([3, 4]),
++    });
++    final r = await ArchiveExport.repack(
++      s,
++      temp,
++      replacements: {
++        'item/item.sdata': Uint8List.fromList([7, 8, 9]),
++      },
++      control: ExportControl(),
++      progress: (_) {},
++    );
++    final b = File('${r.folder}/data.saf').readAsBytesSync(),
++        i = ArchiveIndex.decode(
++          File('${r.folder}/data.sah').readAsBytesSync(),
++          b.length,
++        );
++    expect(i.report['version'], 123);
++    expect(i.entries['other.dat']!.version, 17);
++    final e = i.entries['item/item.sdata']!;
++    expect(b.sublist(e.offset, e.offset + e.length), [7, 8, 9]);
++    expect(s.closed, isFalse);
++  });
++  test('original encoded filenames survive a reconstructed index', () {
++    final raw = [
++      Uint8List.fromList([...ascii.encode('Item'), 0]),
++      Uint8List.fromList([0x4e, 0x69, 0xf1, 0x6f, 0x2e, 0x64, 0x61, 0x74, 0]),
++    ];
++    final b = ArchiveExport.encodeIndex([
++      ArchiveEntry('item/niño.dat', 0, 2, 0, rawComponents: raw),
++    ]);
++    final i = ArchiveIndex.decode(b, 2);
++    expect(i.entries['item/niño.dat']!.rawComponents, raw);
++  });
++  test('unknown replacement path never enters the archive', () async {
++    await expectLater(
++      ArchiveExport.repack(
++        source({'a.dat': Uint8List(1)}),
++        temp,
++        replacements: {'unknown.dat': Uint8List(2)},
++        control: ExportControl(),
++        progress: (_) {},
++      ),
++      throwsFormatException,
++    );
++  });
++}
+diff --git a/test/editor_document_test.dart b/test/editor_document_test.dart
+new file mode 100644
+index 0000000..d5b80b9
+--- /dev/null
++++ b/test/editor_document_test.dart
+@@ -0,0 +1,300 @@
++import 'dart:convert';
++import 'dart:typed_data';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:herramienta_shaiya/core/game_text_codec.dart';
++import 'package:herramienta_shaiya/core/seed_data.dart';
++import 'package:herramienta_shaiya/editor/document.dart';
++import 'package:herramienta_shaiya/editor/schema_reader.dart';
++import 'package:herramienta_shaiya/editor/csv_document.dart';
++import 'package:herramienta_shaiya/editor/field_semantics.dart';
++
++Uint8List binaryTable(List<String> fields, List<List<int>> rows) {
++  final out = BytesBuilder();
++  out.add(Uint8List(128));
++  void u32(int v) {
++    final d = ByteData(4)..setUint32(0, v, Endian.little);
++    out.add(d.buffer.asUint8List());
++  }
++
++  u32(fields.length);
++  for (final f in fields) {
++    out.add([f.length]);
++    out.add(const GameTextCodec(GameTextEncoding.utf16le).encode(f));
++  }
++  u32(rows.length);
++  for (final row in rows) {
++    for (final v in row) {
++      final d = ByteData(8)..setInt64(0, v, Endian.little);
++      out.add(d.buffer.asUint8List());
++    }
++  }
++  return out.toBytes();
++}
++
++EditDocument typedDoc(String type, Uint8List bytes) => EditDocument(
++  path: 'fixture.sdata',
++  profile: 'fixture',
++  original: bytes,
++  payload: bytes,
++  codec: const GameTextCodec(GameTextEncoding.utf8),
++  rows: [
++    RecordRef(0, bytes.length, [FieldSpec('Value', type)]),
++  ],
++  warnings: [],
++  parsedBytes: bytes.length,
++);
++void main() {
++  group('Codificación sin pérdida', () {
++    for (final enc in [
++      GameTextEncoding.utf8,
++      GameTextEncoding.windows1252,
++      GameTextEncoding.utf16le,
++    ]) {
++      test('${enc.name} conserva Ñ, signos y acentos', () {
++        final c = GameTextCodec(enc),
++            s = 'Niño · ¡Espada áéíóú, pingüino! ¿Cuánto? €';
++        expect(c.decode(c.encode(s)), s);
++      });
++    }
++    test('UTF-8 y UTF-16 conservan caracteres fuera del BMP', () {
++      for (final e in [GameTextEncoding.utf8, GameTextEncoding.utf16le]) {
++        final c = GameTextCodec(e);
++        expect(c.decode(c.encode('山 🔥 𐐷')), '山 🔥 𐐷');
++      }
++    });
++    test('Windows-1252 rechaza emoji en lugar de poner interrogaciones', () {
++      expect(
++        () => GameTextCodec.windows.encode('Fuego 🔥'),
++        throwsFormatException,
++      );
++    });
++    test('Big5 conserva texto chino tradicional', () {
++      const c = GameTextCodec(GameTextEncoding.big5);
++      expect(c.decode(c.encode('武器 裝備')), '武器 裝備');
++    });
++    test('Coreano conserva texto de mapas', () {
++      const c = GameTextCodec(GameTextEncoding.korean);
++      expect(c.decode(c.encode('안녕하세요')), '안녕하세요');
++    });
++    test('automático recupera Ñ occidental y UTF-8', () {
++      expect(GameTextCodec.autoDecode([0x4e, 0x69, 0xf1, 0x6f]), 'Niño');
++      expect(GameTextCodec.autoDecode(utf8.encode('Águila')), 'Águila');
++    });
++    test('automático no escribe texto con una suposición', () {
++      expect(
++        () => const GameTextCodec(GameTextEncoding.automatic).encode('a'),
++        throwsFormatException,
++      );
++    });
++    test('UTF-16 incompleto y sustitutos aislados no se aceptan', () {
++      expect(
++        () => const GameTextCodec(GameTextEncoding.utf16le).decode([0]),
++        throwsFormatException,
++      );
++      expect(
++        () => const GameTextCodec(
++          GameTextEncoding.utf8,
++        ).encode(String.fromCharCode(0xd800)),
++        throwsFormatException,
++      );
++    });
++  });
++  group('SEED reversible y CRC', () {
++    for (final n in [0, 1, 15, 16, 17, 64, 1023]) {
++      test('longitud $n y relleno íntegro', () {
++        final data = Uint8List.fromList(
++          List.generate(n, (i) => (i * 71) % 256),
++        );
++        final encrypted = SeedData.encode(data);
++        expect(SeedData.decode(encrypted, verifyChecksum: true), data);
++      });
++    }
++    test('cabecera extendida válida', () {
++      final data = Uint8List.fromList([1, 2, 3]);
++      expect(
++        SeedData.decode(
++          SeedData.encode(data, extended: true),
++          verifyChecksum: true,
++        ),
++        data,
++      );
++    });
++    test('un campo editado se cifra y relee', () {
++      final raw = binaryTabl

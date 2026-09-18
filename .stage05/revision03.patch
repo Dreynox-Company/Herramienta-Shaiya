@@ -1,0 +1,416 @@
+ (m.inverses.isEmpty) return p;
++  final out = v.Vector3.zero();
++  for (var k = 0; k < 4; k++) {
++    final w = m.weights[index * 4 + k], j = m.joints[index * 4 + k];
++    if (w <= 1e-7 || j >= pose.length || j >= m.inverses.length) continue;
++    out.add((pose[j] * m.inverses[j]).transformed3(p) * w);
++  }
++  return out;
++}
++
++v.Quaternion matrixRotation(v.Matrix4 m) {
++  final q = v.Quaternion.identity();
++  m.decompose(v.Vector3.zero(), q, v.Vector3.zero());
++  return q..normalize();
++}
++
++/// Seat and pelvis are expressed in the same model coordinate convention.
++/// The resulting transform places the pelvis at the deformed saddle point.
++v.Matrix4 seatedTransform(
++  v.Vector3 saddle,
++  v.Quaternion rotation,
++  v.Vector3 pelvis, {
++  double height = 0,
++  double forward = 0,
++}) =>
++    v.Matrix4.compose(
++      saddle + v.Vector3(0, height, forward),
++      rotation,
++      v.Vector3.all(1),
++    ) *
++    (v.Matrix4.identity()..translateByVector3(-pelvis));
++
++/// Restrict the back anchor to ancestors of the actual head. Arms are not a
++/// valid back socket even when their height is close to the desired value.
++int? backBone(ClipData clip, int? head, double height) {
++  if (head == null || head <= 0 || head >= clip.bones.length) return null;
++  final pose = clip.pose(0);
++  var b = clip.bones[head].parent;
++  int? best;
++  double score = double.infinity;
++  var seen = <int>{};
++  while (b > 0 && b < pose.length && seen.add(b)) {
++    final p = pose[b].getTranslation();
++    final d = (p.y - height * .72).abs() + p.x.abs();
++    if (d < score) {
++      score = d;
++      best = b;
++    }
++    b = clip.bones[b].parent;
++  }
++  return best;
++}
+diff --git a/lib/core/seed_data.dart b/lib/core/seed_data.dart
+index 8b694b2..f92d2b6 100644
+--- a/lib/core/seed_data.dart
++++ b/lib/core/seed_data.dart
+@@ -104,0 +105,66 @@ class SeedData {
++
++  static bool isEncoded(List<int> bytes) =>
++      bytes.length >= 40 &&
++      ascii.decode(bytes.sublist(0, 40), allowInvalid: true) ==
++          '0001CBCEBC5B2784D3FC9A2A9DB84D1C3FEB6E99';
++
++  /// Preserves header variant and reserved bytes. Caller keeps the input byte
++  /// for byte when unedited; only newly edited copies get a recalculated CRC.
++  static Uint8List encode(
++    Uint8List payload, {
++    Uint8List? template,
++    bool extended = false,
++  }) {
++    if (payload.length > 128 * 1024 * 1024) {
++      throw const FormatException('SData supera 128 MiB.');
++    }
++    final out = Uint8List(64 + ((payload.length + 15) ~/ 16) * 16);
++    if (template != null && isEncoded(template) && template.length >= 64) {
++      out.setRange(0, 64, template);
++      extended =
++          ByteData.sublistView(template).getUint32(40, Endian.little) == 0;
++    } else {
++      out.setRange(
++        0,
++        40,
++        ascii.encode('0001CBCEBC5B2784D3FC9A2A9DB84D1C3FEB6E99'),
++      );
++    }
++    var crc = 0xffffffff;
++    for (final b in payload) {
++      crc ^= b;
++      for (var k = 0; k < 8; k++) {
++        crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320 : 0);
++      }
++    }
++    final data = ByteData.sublistView(out);
++    if (extended) data.setUint32(40, 0, Endian.little);
++    data.setUint32(extended ? 44 : 40, (~crc) & 0xffffffff, Endian.little);
++    data.setUint32(extended ? 48 : 44, payload.length, Endian.little);
++    final padded = Uint8List(out.length - 64)
++      ..setRange(0, payload.length, payload);
++    final input = ByteData.sublistView(padded);
++    for (var offset = 0; offset < padded.length; offset += 16) {
++      var l0 = input.getUint32(offset),
++          l1 = input.getUint32(offset + 4),
++          r0 = input.getUint32(offset + 8),
++          r1 = input.getUint32(offset + 12);
++      for (var round = 0; round < 32; round += 2) {
++        var a = r0 ^ _keys[round], b = r1 ^ _keys[round + 1];
++        b = _g(b ^ a);
++        a = _g((a + b) & 0xffffffff);
++        b = _g((a + b) & 0xffffffff);
++        a = (a + b) & 0xffffffff;
++        final t0 = l0 ^ a, t1 = l1 ^ b;
++        l0 = r0;
++        l1 = r1;
++        r0 = t0;
++        r1 = t1;
++      }
++      data.setUint32(64 + offset, r0);
++      data.setUint32(68 + offset, r1);
++      data.setUint32(72 + offset, l0);
++      data.setUint32(76 + offset, l1);
++    }
++    return out;
++  }
+diff --git a/lib/data/archive_export.dart b/lib/data/archive_export.dart
+new file mode 100644
+index 0000000..468ac3e
+--- /dev/null
++++ b/lib/data/archive_export.dart
+@@ -0,0 +1,403 @@
++import 'dart:convert';
++import 'dart:io';
++import 'dart:math';
++import 'dart:typed_data';
++import 'package:crypto/crypto.dart';
++import '../core/archive_index.dart';
++import 'archive_source.dart';
++
++class ExportCancelled implements Exception {
++  const ExportCancelled();
++  @override
++  String toString() => 'Exportación cancelada. El origen no se modificó.';
++}
++
++class ExportControl {
++  bool cancelled = false;
++  void check() {
++    if (cancelled) throw const ExportCancelled();
++  }
++}
++
++class ExportProgress {
++  final String phase, path;
++  final int done, total, bytes, totalBytes;
++  const ExportProgress(
++    this.phase,
++    this.path,
++    this.done,
++    this.total,
++    this.bytes,
++    this.totalBytes,
++  );
++  double? get ratio => totalBytes == 0 ? null : bytes / totalBytes;
++}
++
++class ExportResult {
++  final String folder;
++  final int files, bytes;
++  final List<Map<String, Object?>> manifest;
++  const ExportResult(this.folder, this.files, this.bytes, this.manifest);
++}
++
++/// Streaming copy-on-write export. Never edits a loaded archive in place.
++/// All products are staged in a new sibling directory and renamed only after
++/// successful range checks, re-reading and hashing. Originals remain untouched.
++class ArchiveExport {
++  static const chunkSize = 1024 * 1024;
++  static Future<ExportResult> extract(
++    ArchiveSource source,
++    Directory destinationParent, {
++    required ExportControl control,
++    required void Function(ExportProgress) progress,
++  }) => _run(source, destinationParent, control, progress, pack: false);
++  static Future<ExportResult> repack(
++    ArchiveSource source,
++    Directory destinationParent, {
++    required Map<String, Uint8List> replacements,
++    required ExportControl control,
++    required void Function(ExportProgress) progress,
++  }) => _run(
++    source,
++    destinationParent,
++    control,
++    progress,
++    pack: true,
++    replacements: replacements,
++  );
++  static String safePath(String path) {
++    final normalized = path.replaceAll('\\', '/');
++    if (normalized.startsWith('/') || normalized.length > 4096) {
++      throw FormatException('Ruta no extraíble: $path');
++    }
++    for (final s in normalized.split('/')) {
++      if (s.isEmpty ||
++          s == '.' ||
++          s == '..' ||
++          s.endsWith('.') ||
++          s.endsWith(' ') ||
++          RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(s) ||
++          RegExp(
++            r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)',
++            caseSensitive: false,
++          ).hasMatch(s)) {
++        throw FormatException(
++          'Ruta no segura en el sistema de archivos: $path',
++        );
++      }
++    }
++    return normalized;
++  }
++
++  static Future<ExportResult> _run(
++    ArchiveSource source,
++    Directory parent,
++    ExportControl control,
++    void Function(ExportProgress) notify, {
++    required bool pack,
++    Map<String, Uint8List> replacements = const {},
++  }) async {
++    control.check();
++    if (source.closed) throw StateError('Archivo cerrado.');
++    if (!await parent.exists()) {
++      throw const FormatException('La carpeta de destino no existe.');
++    }
++    final base = Directory(await parent.resolveSymbolicLinks());
++    final list = source.index.entries.values.toList()
++      ..sort((a, b) => a.path.compareTo(b.path));
++    if (replacements.keys.any((p) => !source.index.entries.containsKey(p))) {
++      throw const FormatException(
++        'Un cambio no pertenece al archivo de origen.',
++      );
++    }
++    // Preflight all paths before creating any outputs. One invalid entry fails
++    // the entire export rather than silently omitting a resource.
++    final paths = <String>{};
++    for (final e in list) {
++      final p = safePath(e.path);
++      if (!paths.add(p.toLowerCase())) {
++        throw const FormatException('Colisión de nombres de archivo.');
++      }
++    }
++    for (final p in paths) {
++      var prefix = p;
++      while (prefix.contains('/')) {
++        prefix = prefix.substring(0, prefix.lastIndexOf('/'));
++        if (paths.contains(prefix)) {
++          throw const FormatException(
++            'Un archivo también figura como directorio.',
++          );
++        }
++      }
++    }
++    final id =
++        '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff).toRadixString(16)}';
++    final staging = Directory('${base.path}/.shaiya-$id.partial');
++    await staging.create();
++    final target = '${base.path}/${pack ? 'SAH_SAF_editado' : 'DATA'}_$id';
++    final manifests = <Map<String, Object?>>[];
++    var offset = 0, doneBytes = 0;
++    final totalBytes = list.fold<int>(
++      0,
++      (n, e) => n + (replacements[e.path]?.length ?? e.length),
++    );
++    RandomAccessFile? saf;
++    try {
++      if (pack) {
++        saf = await File(
++          '${staging.path}/data.saf',
++        ).open(mode: FileMode.writeOnly);
++      }
++      final newEntries = <ArchiveEntry>[];
++      for (var i = 0; i < list.length; i++) {
++        control.check();
++        final e = list[i], replacement = replacements[e.path];
++        final length = replacement?.length ?? e.length;
++        if (length > 0x7fffffff) {
++          throw FormatException(
++            '${e.path} excede el tamaño que admite el índice SAH estándar.',
++          );
++        }
++        final sink = _DigestSink();
++        final hash = sha256.startChunkedConversion(sink);
++        RandomAccessFile? out;
++        try {
++          if (!pack) {
++            final f = File('${staging.path}/${e.path}');
++            await f.parent.create(recursive: true);
++            out = await f.open(mode: FileMode.writeOnly);
++          }
++          var p = 0;
++          while (p < length) {
++            control.check();
++            if (source.closed) {
++              throw StateError(
++                'Se cerró la biblioteca durante la exportación.',
++              );
++            }
++            final n = min(chunkSize, length - p);
++            final bytes = replacement != null
++                ? Uint8List.sublistView(replacement, p, p + n)
++                : await source.readRange(e.offset + p, n);
++            if (bytes.length != n) {
++              throw FormatException('Lectura truncada: ${e.path}, byte $p.');
++            }
++            hash.add(bytes);
++            await (saf ?? out!).writeFrom(bytes);
++            p += n;
++            doneBytes += n;
++            notify(
++              ExportProgress(
++                'Copiando',
++                e.path,
++                i,
++                list.length,
++                doneBytes,
++                totalBytes,
++              ),
++            );
++          }
++          hash.close();
++          if (out != null) await out.flush();
++        } finally {
++          await out?.close();
++        }
++        final digest = sink.value!;
++        manifests.add({
++          'path': e.path,
++          'bytes': length,
++          'sha256': digest,
++          'modified': replacement != null,
++        });
++        newEntries.add(
++          ArchiveEntry(
++            e.path,
++            offset,
++            length,
++            e.version,
++            rawComponents: e.rawComponents,
++          ),
++        );
++        offset += length;
++        // Verify the saved output, not merely the input stream.
++        if (!pack) {
++          final saved = await sha256
++              .bind(File('${staging.path}/${e.path}').openRead())
++              .first;
++          if (saved.toString() != digest) {
++            throw FormatException('No coincide la copia escrita: ${e.path}.');
++          }
++        }
++        notify(
++          ExportProgress(
++            'Verificado',
++            e.path,
++            i + 1,
++            list.length,
++            doneBytes,
++            totalBytes,
++          ),
++        );
++        await Future<void>.delayed(Duration.zero);
++      }
++      if (saf != null) {
++        await saf.flush();
++        await saf.close();
++        saf = null;
++        final sah = encodeIndex(
++          newEntries,
++          version: source.index.report['version'] as int? ?? 0,
++        );
++        await File('${staging.path}/data.sah').writeAsBytes(sah, flush: true);
++        final parsed = ArchiveIndex.decode(sah, offset);
++        if (parsed.entries.length != newEntries.length) {
++          throw const FormatException('El índice regenerado perdió registros.');
++        }
++        final dataFile = File('${staging.path}/data.saf');
++        for (var i = 0; i < newEntries.length; i++) {
++          control.check();
++          final e = newEntries[i], actual = parsed.entries[e.path];
++          if (actual == null ||
++              actual.offset != e.offset ||
++              actual.length != e.length ||
++              actual.version != e.version) {
++            throw const FormatException(
++              'El índice regenerado alteró un rango.',
++            );
++          }
++          final saved = await sha256
++              .bind(dataFile.openRead(e.offset, e.offset + e.length))
++              .first;
++          if (saved.toString() != manifests[i]['sha256']) {
++            throw FormatException('SAF escrito incorrectamente: ${e.path}.');
++          }
++          notify(
++            ExportProgress(
++              'Verificando SAF',
++              e.path,
++              i + 1,
++              list.length,
++              i + 1,
++              list.length,
++            ),
++          );
++        }
++      }
++      control.check();
++      await File('${staging.path}/manifest-shaiya-$id.json')

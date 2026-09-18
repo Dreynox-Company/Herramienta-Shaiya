@@ -1,0 +1,336 @@
+
++          style: Theme.of(context).textTheme.titleMedium,
++        ),
++        ...d.changes
++            .take(1000)
++            .map(
++              (c) => ListTile(
++                dense: true,
++                title: Text('#${c.row + 1} · ${c.field.spec.name}'),
++                subtitle: SelectableText('${c.beforeText}\n→ ${c.afterText}'),
++              ),
++            ),
++        if (d.changeCount > 1000)
++          const Text(
++            'La lista visual limita a 1.000 cambios; el parche exportado incluye todos.',
++          ),
++      ],
++    );
++  }
++
++  Widget _empty() => Center(
++    child: ConstrainedBox(
++      constraints: const BoxConstraints(maxWidth: 670),
++      child: Padding(
++        padding: const EdgeInsets.all(30),
++        child: Column(
++          mainAxisSize: MainAxisSize.min,
++          crossAxisAlignment: CrossAxisAlignment.start,
++          children: [
++            const Icon(Icons.tune, size: 36),
++            const SizedBox(height: 16),
++            const Text(
++              'Editor de datos del juego',
++              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
++            ),
++            const SizedBox(height: 14),
++            const Text(
++              'Objetos, monstruos, habilidades, tiendas, NPC y ubicaciones. Abre una tabla para ver sus campos reales, sus rangos y la procedencia de los valores.',
++            ),
++            const SizedBox(height: 12),
++            const Text(
++              'Cliente y servidor no son lo mismo. SAH/SAF contiene los archivos del cliente. Los cambios de oro, botín o balance pueden requerir una actualización equivalente del servidor. Puedes importar un CSV del servidor para examinarlo y editarlo por separado.',
++            ),
++            const SizedBox(height: 16),
++            const Text(
++              'Ningún original se sobrescribe. Deshacer/rehacer, edición múltiple, parches verificados, copias SData y pares SAH/SAF nuevos.',
++              style: TextStyle(color: Color(0xffa8c4ef)),
++            ),
++            const SizedBox(height: 20),
++            _smallButton(
++              Icons.file_open,
++              'Importar tabla externa',
++              _importTable,
++            ),
++          ],
++        ),
++      ),
++    ),
++  );
++  @override
++  Widget build(BuildContext context) => PopScope(
++    canPop: leaving || (!dirty && !busy),
++    onPopInvokedWithResult: (didPop, result) {
++      if (!didPop) _leave();
++    },
++    child: Shortcuts(
++      shortcuts: const {
++        SingleActivator(LogicalKeyboardKey.keyZ, control: true): _EditorUndo(),
++        SingleActivator(LogicalKeyboardKey.keyY, control: true): _EditorRedo(),
++        SingleActivator(LogicalKeyboardKey.keyS, control: true): _EditorSave(),
++      },
++      child: Actions(
++        actions: {
++          _EditorUndo: CallbackAction<_EditorUndo>(
++            onInvoke: (_) {
++              if (!busy) {
++                doc?.undo();
++                _refresh();
++              }
++              return null;
++            },
++          ),
++          _EditorRedo: CallbackAction<_EditorRedo>(
++            onInvoke: (_) {
++              if (!busy) {
++                doc?.redo();
++                _refresh();
++              }
++              return null;
++            },
++          ),
++          _EditorSave: CallbackAction<_EditorSave>(
++            onInvoke: (_) {
++              if (doc != null && !busy) _exportDocument();
++              return null;
++            },
++          ),
++        },
++        child: LayoutBuilder(
++          builder: (context, box) {
++            final narrow = box.maxWidth < 1000;
++            return Scaffold(
++              key: _scaffold,
++              drawer: narrow ? Drawer(child: SafeArea(child: _files())) : null,
++              appBar: AppBar(
++                leading: IconButton(
++                  onPressed: _leave,
++                  icon: const Icon(Icons.arrow_back),
++                ),
++                title: const Text(
++                  'EDITOR DE DATOS',
++                  style: TextStyle(fontSize: 15, letterSpacing: 1),
++                ),
++                actions: [
++                  if (narrow)
++                    IconButton(
++                      onPressed: () => _scaffold.currentState?.openDrawer(),
++                      icon: const Icon(Icons.folder_open),
++                    ),
++                  PopupMenuButton<String>(
++                    tooltip: 'Exportar / herramientas',
++                    onSelected: (action) {
++                      if (busy) return;
++                      switch (action) {
++                        case 'file':
++                          _exportDocument();
++                        case 'patch':
++                          _patch(false);
++                        case 'importPatch':
++                          _patch(true);
++                        case 'csv':
++                          _csv();
++                        case 'import':
++                          _importTable();
++                        case 'audit':
++                          _exportReport();
++                        case 'extract':
++                          _exportArchive(false);
++                        case 'pack':
++                          _exportArchive(true);
++                      }
++                    },
++                    itemBuilder: (_) => [
++                      const PopupMenuItem(
++                        value: 'import',
++                        child: Text('Importar tabla / CSV servidor'),
++                      ),
++                      if (doc != null) ...[
++                        const PopupMenuItem(
++                          value: 'file',
++                          child: Text('Exportar archivo verificado'),
++                        ),
++                        const PopupMenuItem(
++                          value: 'patch',
++                          child: Text('Guardar parche JSON'),
++                        ),
++                        const PopupMenuItem(
++                          value: 'importPatch',
++                          child: Text('Aplicar parche verificado'),
++                        ),
++                        const PopupMenuItem(
++                          value: 'csv',
++                          child: Text('Exportar vista a CSV UTF-8'),
++                        ),
++                      ],
++                      if (widget.library.archive != null &&
++                          !Platform.isAndroid) ...[
++                        const PopupMenuItem(
++                          value: 'extract',
++                          child: Text('Extraer todo a carpeta DATA'),
++                        ),
++                        const PopupMenuItem(
++                          value: 'pack',
++                          child: Text('Construir nuevo SAH + SAF'),
++                        ),
++                      ],
++                      const PopupMenuItem(
++                        value: 'audit',
++                        child: Text('Exportar informe de auditoría'),
++                      ),
++                    ],
++                  ),
++                ],
++              ),
++              body: Column(
++                children: [
++                  Container(
++                    color: const Color(0xff1a2536),
++                    padding: const EdgeInsets.symmetric(horizontal: 12),
++                    child: SingleChildScrollView(
++                      scrollDirection: Axis.horizontal,
++                      child: Row(
++                        children: [
++                          const Text(
++                            'Codificación: ',
++                            style: TextStyle(fontSize: 11),
++                          ),
++                          DropdownButton<GameTextEncoding>(
++                            value: encoding,
++                            items: GameTextEncoding.values
++                                .map(
++                                  (v) => DropdownMenuItem(
++                                    value: v,
++                                    child: Text(
++                                      v.label,
++                                      style: const TextStyle(fontSize: 11),
++                                    ),
++                                  ),
++                                )
++                                .toList(),
++                            onChanged: busy ? null : (e) => _encoding(e!),
++                          ),
++                          const SizedBox(width: 16),
++                          _smallButton(
++                            Icons.undo,
++                            'Deshacer',
++                            doc?.canUndo == true
++                                ? () {
++                                    doc!.undo();
++                                    _refresh();
++                                  }
++                                : null,
++                          ),
++                          _smallButton(
++                            Icons.redo,
++                            'Rehacer',
++                            doc?.canRedo == true
++                                ? () {
++                                    doc!.redo();
++                                    _refresh();
++                                  }
++                                : null,
++                          ),
++                          _smallButton(
++                            Icons.save_as_outlined,
++                            'Guardar copia',
++                            doc == null ? null : _exportDocument,
++                            key: const ValueKey('editor-save-copy'),
++                          ),
++                          if (doc != null)
++                            _smallButton(
++                              tab == 0
++                                  ? Icons.fact_check_outlined
++                                  : Icons.table_rows_outlined,
++                              tab == 0 ? 'Auditoría / cambios' : 'Registros',
++                              () => setState(() => tab = 1 - tab),
++                            ),
++                          if (doc?.dirty == true)
++                            _smallButton(
++                              Icons.restore,
++                              'Descartar cambios',
++                              () async {
++                                if (await _confirm(
++                                  'Descartar cambios',
++                                  'Se revierten los cambios de esta tabla, no los originales.',
++                                )) {
++                                  doc!.discard();
++                                  _refresh();
++                                }
++                              },
++                            ),
++                        ],
++                      ),
++                    ),
++                  ),
++                  if (busy && progress == null)
++                    const LinearProgressIndicator(minHeight: 2),
++                  Expanded(
++                    child: Row(
++                      children: [
++                        if (!narrow && showFiles)
++                          SizedBox(width: 230, child: _files()),
++                        if (doc == null)
++                          Expanded(child: _empty())
++                        else ...[
++                          if (box.maxWidth > 660)
++                            SizedBox(
++                              width: (box.maxWidth * .24).clamp(215, 295),
++                              child: _records(),
++                            ),
++                          Expanded(
++                            child: tab == 1
++                                ? _audit()
++                                : Column(
++                                    children: [
++                                      if (box.maxWidth <= 660)
++                                        SizedBox(
++                                          height: 190,
++                                          child: _records(),
++                                        ),
++                                      Expanded(child: _details()),
++                                    ],
++                                  ),
++                          ),
++                        ],
++                      ],
++                    ),
++                  ),
++                  if (progress != null)
++                    Padding(
++                      padding: const EdgeInsets.all(10),
++                      child: Row(
++                        children: [
++                          Expanded(
++                            child: Column(
++                              crossAxisAlignment: CrossAxisAlignment.start,
++                              children: [
++                                Text(
++                                  '${progress!.phase} · ${progress!.done}/${progress!.total} · ${progress!.path}',
++                                  maxLines: 1,
++                                  overflow: TextOverflow.ellipsis,
++                                ),
++                                LinearProgressIndicator(
++                                  value: progress!.ratio?.clamp(0, 1),
++                                ),
++                              ],
++                            ),
++                          ),
++                          TextButton(
++                            onPressed: () => exporting?.cancelled = true,
++                            child: const Text('Cancelar'),
++                          ),
++                        ],
++                      ),
++                    ),
++                  Container(
++                    width: double.infinity,
++                    color: const Color(0xff111a26),
++                    padding: const EdgeInsets.symmetric(
++                      horizontal: 14,
++                      vertical: 8,
++                    ),
++                    child: SelectableText(
++                      status,
++                      maxLines: 2,
++       

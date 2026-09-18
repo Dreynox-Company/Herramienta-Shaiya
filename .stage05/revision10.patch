@@ -1,0 +1,317 @@
+),
+@@ -210 +247,5 @@ class _StudioState extends State<StudioPage> {
+-    if (mode == 'report') {
++    if (mode == 'editor') {
++      await openDataEditor();
++    } else if (mode == 'encoding') {
++      await chooseNameEncoding();
++    } else if (mode == 'report') {
+@@ -216,0 +258,24 @@ class _StudioState extends State<StudioPage> {
++  Future<void> chooseNameEncoding() async {
++    final selected = await showDialog<GameTextEncoding>(
++      context: context,
++      builder: (c) => SimpleDialog(
++        title: const Text('Codificación original del cliente'),
++        children: GameTextEncoding.values
++            .where((e) => e != GameTextEncoding.utf16le)
++            .map(
++              (e) => SimpleDialogOption(
++                onPressed: () => Navigator.pop(c, e),
++                child: Text(e.label),
++              ),
++            )
++            .toList(),
++      ),
++    );
++    if (selected == null) return;
++    LegacyText.preferred = selected;
++    scene.say(
++      'Codificación: ${selected.label}. Vuelve a abrir la biblioteca para actualizar todos los nombres. No se ha modificado DATA.',
++    );
++    if (mounted) setState(() {});
++  }
++
+@@ -278 +343 @@ class _StudioState extends State<StudioPage> {
+-        'version': '0.4.0',
++        'version': '0.5.0',
+@@ -859 +924 @@ class _StudioState extends State<StudioPage> {
+-                'El anclaje sigue el torso y la transformación del jinete, también al montar.',
++                'Anclaje en la cadena del torso, independiente de los brazos. Sigue el asiento al montar.',
+@@ -890 +955 @@ class _StudioState extends State<StudioPage> {
+-                  'Altura del asiento',
++                  'Ajuste vertical del asiento',
+@@ -892,2 +957,2 @@ class _StudioState extends State<StudioPage> {
+-                  0,
+-                  6,
++                  -1,
++                  2,
+@@ -913 +978 @@ class _StudioState extends State<StudioPage> {
+-                  'W: marcha · W + Shift: carrera. El ajuste de asiento se recuerda por montura durante la sesión.',
++                  'El asiento sigue una superficie animada de la montura; la pelvis se alinea con ella. Ajuste manual por montura. W: marcha · Shift: carrera.',
+@@ -951 +1016 @@ class _StudioState extends State<StudioPage> {
+-                  scene.enemy == null || scene.mount != null
++                  scene.enemy == null || scene.combatClips.isEmpty
+@@ -1418 +1483 @@ class _StudioState extends State<StudioPage> {
+-        for (var i = 0; i < scene.attackClips.length && i < 4; i++)
++        for (var i = 0; i < scene.combatClips.length && i < 4; i++)
+@@ -1422 +1487 @@ class _StudioState extends State<StudioPage> {
+-              message: '${i + 1}: ${baseName(scene.attackClips[i].source)}',
++              message: '${i + 1}: ${baseName(scene.combatClips[i].source)}',
+@@ -1429 +1494 @@ class _StudioState extends State<StudioPage> {
+-                          scene.mount != null ||
++                          scene.flightState.pendingTarget != null ||
+@@ -1721 +1786 @@ class _StudioState extends State<StudioPage> {
+-              if (index >= 0 && index < scene.attackClips.length) {
++              if (index >= 0 && index < scene.combatClips.length) {
+@@ -2280 +2345 @@ class _StudioState extends State<StudioPage> {
+-        'version': '0.4.0',
++        'version': '0.5.0',
+@@ -2317,0 +2383 @@ class _StudioState extends State<StudioPage> {
++    onOpenEditor: catalog == null || working ? null : openDataEditor,
+diff --git a/lib/render/studio_gameplay.dart b/lib/render/studio_gameplay.dart
+index 874dad9..bcd46e4 100644
+--- a/lib/render/studio_gameplay.dart
++++ b/lib/render/studio_gameplay.dart
+@@ -153,0 +154 @@ extension StudioGameplay on StudioScene {
++    flightState.cancel();
+@@ -318,0 +320,24 @@ extension StudioGameplay on StudioScene {
++    flightState.step(
++      delta,
++      eligible: flightAvailable,
++      inCombat: combat.inGuard,
++      hoverHeight: hoverOffset,
++    );
++    final pending = flightState.pendingTarget;
++    if (pending != null && flightState.grounded) {
++      flightState.cancel();
++      final selected = combat.target;
++      if (game.opponents.containsKey(pending) &&
++          targetDistance(pending) <= combat.range &&
++          combat.playerHealth > 0 &&
++          combatClips.isNotEmpty) {
++        combat.selectTarget(pending);
++        combat.attack(
++          targetDistance(pending),
++          duration: combatClips[attackCounter % combatClips.length].duration,
++        );
++        if (game.opponents.containsKey(selected)) combat.selectTarget(selected);
++      }
++      refreshIdle();
++      movementTransitions.invalidate();
++    }
+@@ -495,0 +521 @@ extension StudioGameplay on StudioScene {
++    flightState.reset();
+diff --git a/lib/render/studio_scene.dart b/lib/render/studio_scene.dart
+index 5cea350..7ae905c 100644
+--- a/lib/render/studio_scene.dart
++++ b/lib/render/studio_scene.dart
+@@ -13 +12,0 @@ import '../core/locomotion.dart';
+-import '../core/attachment_pose.dart';
+@@ -14,0 +14,2 @@ import '../core/pose_layers.dart';
++import '../core/rig_anchors.dart';
++import '../core/flight_transition.dart';
+@@ -87 +88,8 @@ class Actor {
+-  final t.Group root = t.Group();
++  final t.Group root = t.Group(), visual = t.Group();
++  Actor() {
++    root.add(visual);
++    visual.matrixAutoUpdate = false;
++  }
++  SurfaceAnchor? seat;
++  int pelvisBone = 1;
++  final Map<String, ClipData> mountedAttacks = {};
+@@ -179,0 +188 @@ class StudioScene extends ChangeNotifier {
++  final FlightTransition flightState = FlightTransition();
+@@ -224,0 +234,3 @@ class StudioScene extends ChangeNotifier {
++      flightAvailable && !combat.inGuard && flightState.pendingTarget == null;
++  bool get flightAvailable =>
++      combat.playerHealth > 0 &&
+@@ -229,0 +242,15 @@ class StudioScene extends ChangeNotifier {
++  List<ClipData> get combatClips {
++    if (mount == null) return attackClips;
++    final key = switch (weaponFamily(weaponRecord)) {
++      1 || 3 || 7 || 9 || 10 || 15 => 'mounted_sword',
++      2 || 4 || 8 => 'mounted_twohand',
++      6 => 'mounted_spear',
++      12 => 'mounted_staff',
++      13 => 'mounted_bow',
++      14 => 'mounted_crossbow',
++      _ => '',
++    };
++    final clip = character?.mountedAttacks[key];
++    return clip == null ? const [] : [clip];
++  }
++
+@@ -318,0 +346,3 @@ class StudioScene extends ChangeNotifier {
++    actor.root.updateMatrixWorld(true);
++    final impact = t.Vector3(0, (actor.height * .57).clamp(.3, 2.5), 0)
++      ..applyMatrix4(actor.visual.matrixWorld);
+@@ -327,5 +357 @@ class StudioScene extends ChangeNotifier {
+-      p.sprite.position.setValues(
+-        actor.root.position.x,
+-        actor.root.position.y + (actor.height * .57).clamp(.3, 2.5),
+-        actor.root.position.z,
+-      );
++      p.sprite.position.setValues(impact.x, impact.y, impact.z);
+@@ -615 +641 @@ class StudioScene extends ChangeNotifier {
+-        staged.root.add(part.mesh);
++        staged.visual.add(part.mesh);
+@@ -658,0 +685 @@ class StudioScene extends ChangeNotifier {
++        staged.mountedAttacks.addAll(profile.mounted);
+@@ -679,13 +706,4 @@ class StudioScene extends ChangeNotifier {
+-      var score = double.infinity;
+-      for (var i = 1; i < math.min(staged.world.length, 12); i++) {
+-        final m = staged.world[i].storage;
+-        final d =
+-            (m[13] - staged.height * .74).abs() +
+-            m[12].abs() * .7 +
+-            m[14].abs() * .3;
+-        if (d < score && staged.world[i].determinant().abs() > 1e-12) {
+-          score = d;
+-          staged.wingBone = i;
+-          staged.wingReference = v.Matrix4.inverted(staged.world[i]);
+-        }
+-      }
++      staged.wingBone = backBone(c, staged.headLook?.bone, staged.height);
++      final b = staged.wingBone;
++      if (b != null) staged.wingReference = v.Matrix4.inverted(staged.world[b]);
++      staged.pelvisBone = c.bones.length > 1 ? 1 : 0;
+@@ -728 +746 @@ class StudioScene extends ChangeNotifier {
+-            staged.root.add(part.mesh);
++            staged.visual.add(part.mesh);
+@@ -819 +837 @@ class StudioScene extends ChangeNotifier {
+-        a.root.add(part.mesh);
++        a.visual.add(part.mesh);
+@@ -894,0 +913 @@ class StudioScene extends ChangeNotifier {
++      flightState.reset();
+@@ -898 +917,12 @@ class StudioScene extends ChangeNotifier {
+-        riderHeight = seat?.height ?? (staged.height * .58).clamp(.2, 5.0);
++        if (staged.normal != null) {
++          staged.seat = SurfaceAnchor.locate(
++            staged.parts.map((p) => p.data).toList(),
++            staged.normal!,
++          );
++        }
++        if (staged.seat == null) {
++          report(
++            'Montura sin superficie central reconocida. Usa los ajustes del asiento; no se ha certificado el encaje automático.',
++          );
++        }
++        riderHeight = seat?.height ?? .04;
+@@ -909,2 +939,8 @@ class StudioScene extends ChangeNotifier {
+-      wingHeight = cfg?.height ?? 1.3;
+-      wingDepth = cfg?.depth ?? .25;
++      final char = character;
++      final b = char?.wingBone;
++      final reference = char?.normal?.pose(0);
++      final p = b != null && reference != null
++          ? reference[b].getTranslation()
++          : v.Vector3(0, 1.3, 0);
++      wingHeight = cfg?.height ?? p.y;
++      wingDepth = cfg?.depth ?? (p.z + .08);
+@@ -1031 +1067 @@ class StudioScene extends ChangeNotifier {
+-        a.root.add(p.mesh);
++        a.visual.add(p.mesh);
+@@ -1174 +1210 @@ class StudioScene extends ChangeNotifier {
+-    actor.root.add(staged.mesh);
++    actor.visual.add(staged.mesh);
+@@ -1200,0 +1237,3 @@ class StudioScene extends ChangeNotifier {
++        a.mountedAttacks
++          ..clear()
++          ..addAll(p.mounted);
+@@ -1203,0 +1243 @@ class StudioScene extends ChangeNotifier {
++        a.mountedAttacks.clear();
+@@ -1242,0 +1283,2 @@ class StudioScene extends ChangeNotifier {
++        flightState.pendingTarget != null ||
++        (flightState.landing && !flightState.grounded) ||
+@@ -1318,5 +1360,28 @@ class StudioScene extends ChangeNotifier {
+-    a.root.position.y =
+-        groundY +
+-        (mount == null
+-            ? game.jump.height + (flying ? hoverOffset : 0)
+-            : riderHeight);
++    a.visual.matrix.identity();
++    if (mount != null) {
++      final vehicle = mount!;
++      final saddle =
++          vehicle.seat?.position(vehicle.world) ??
++          (vehicle.world.isNotEmpty
++              ? vehicle.world[math.min(1, vehicle.world.length - 1)]
++                    .getTranslation()
++              : v.Vector3(0, vehicle.height * .45, 0));
++      final pelvis = a.world.isEmpty
++          ? v.Vector3.zero()
++          : a.world[a.pelvisBone.clamp(0, a.world.length - 1)].getTranslation();
++      final q =
++          vehicle.seat?.rotation(vehicle.world) ?? v.Quaternion.identity();
++      a.visual.matrix.copyFromArray(
++        seatedTransform(
++          saddle,
++          q,
++          pelvis,
++          height: riderHeight,
++          forward: riderForward,
++        ).storage,
++      );
++      a.root.position.y = groundY;
++    } else {
++      a.root.position.y = groundY + game.jump.height + flightState.height;
++    }
++    a.visual.matrixWorldNeedsUpdate = true;
+@@ -1348,5 +1413 @@ class StudioScene extends ChangeNotifier {
+-      mount!.root.position.setValues(
+-        x + math.sin(rotation) * riderForward,
+-        groundY,
+-        z + math.cos(rotation) * riderForward,
+-      );
++      mount!.root.position.setValues(x, groundY, z);
+@@ -1359,8 +1420,12 @@ class StudioScene extends ChangeNotifier {
+-      final matrix = backAttachmentPose(
+-        position: v.Vector3(x, a.root.position.y, z),
+-        yaw: rotation,
+-        bone: valid ? a.world[bone] : v.Matrix4.identity(),
+-        referenceInverse: valid ? a.wingReference! : v.Matrix4.identity(),
+-        offset: v.Vector3(0, wingHeight, wingDepth),
+-        scale: wingSize,
+-        localYaw: wingYaw,
++      final root = v.Matrix4.compose(
++        v.Vector3(x, a.root.position.y, z),
++        v.Quaternion.axisAngle(v.Vector3(0, 1, 0), rotation),
++        v.Vector3(1, 1, -1),
++      );
++      final delta = valid
++          ? a.world[bone] * a.wingReference!
++          : v.Matrix4.identity();
++      final local = v.Matrix4.compose(
++        v.Vector3(0, wingHeight, wingDepth),
++        v.Quaternion.axisAngle(v.Vector3(0, 1, 0), wingYaw),
++        v.Vector3.all(wingSize),
+@@ -1367,0 +1433,2 @@ class StudioScene extends ChangeNotifier {
++      final matrix =
++          root * v.Matrix4.fromList(a.visual.matrix.storage) * delta * local;
+@@ -1442,4 +1509,4 @@ class StudioScene extends ChangeNotifier {
+-        if (event == 'attack' && attackClips.isNotEmpty) {
+-          c = attackClips[attackCounter++ % attackClips.length];
+-          combat.attackDuration =
+-              attackClips[attackCounter % attackClips.length].duration;
++        if (event == 'attack' && combatClips.isNotEmpty) {
++          final clips = combatClips;
++          c = clips[attackCounter++ % clips.length];
++          combat.attackDuration = clips[attackCounter % clips.length].duration;
+@@ -1457 +1524,3 @@ class StudioScene extends ChangeNotifier {
+-          c = await firstCompatible(a, candidates);
++          c = mount != null && event != 'death'
++              ? null
++              : await firstCompatible(a, candidates);
+@@ -1488 +1557 @@ class StudioScene extends ChangeNotifier {
+-    if (mount != null) {
++    if (mount != null && combatClips.isEmpty) {
+@@ -1490 +1559 @@ class StudioScene extends ChangeNotifier {
+-        'Desmonta antes de iniciar la prueba de combate.',
++        'Esta familia no tiene un ataque montado suplementario compatible cargado. Importa el suplemento 0.5 o desmonta.',
+@@ -1493,2 +1562,2 @@ class StudioScene extends ChangeNotifier {
+-    if (attackClips.isEmpty) await prepareWeaponMotions();
+-    if (attackClips.isEmpty) {
++    if (mount == null && attackClips.isEmpty) await prepareWeaponMotions();
++    if (combatClips.isEmpty) {
+@@ -1506 +1575,18 @@ cla

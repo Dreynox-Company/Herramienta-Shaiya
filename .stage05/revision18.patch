@@ -1,0 +1,124 @@
+   final clip = ClipData.parse(File(cpath).readAsBytesSync(), cpath);
++        final min = [double.infinity, double.infinity, double.infinity],
++            max = [-double.infinity, -double.infinity, -double.infinity];
++        for (final p in parts) {
++          for (var i = 0; i < p.positions.length; i++) {
++            min[i % 3] = math.min(min[i % 3], p.positions[i]);
++            max[i % 3] = math.max(max[i % 3], p.positions[i]);
++          }
++        }
++        rows.add({
++          'source': path,
++          'id': c.id,
++          'name': c.name,
++          'heightMeta': c.height,
++          'parts': c.parts.map((p) => p.mesh).toList(),
++          'min': min,
++          'max': max,
++          'bones': clip.bones.length,
++          'anims': c.animations,
++          'bonePoints': clip
++              .pose(0)
++              .take(10)
++              .map((m) => m.getTranslation().storage.toList())
++              .toList(),
++        });
++      } catch (e) {
++        rows.add({'source': path, 'id': c.id, 'error': '$e'});
++      }
++    }
++  }
++  File(
++    args[1],
++  ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(rows));
++}
+diff --git a/tool/make_native_fixture.py b/tool/make_native_fixture.py
+index 91b437a..019fafc 100644
+--- a/tool/make_native_fixture.py
++++ b/tool/make_native_fixture.py
+@@ -84 +84 @@ clips={}
+-for name,bob in [('hover',.08),('flight',.12)]:
++for name,bob in [('hover',.08),('flight',.12),('mounted_sword',.12),('mounted_spear',.15)]:
+@@ -87,0 +88,5 @@ write('Extras/flight.json.gz',gzip.compress(json.dumps(pack).encode(),mtime=0))
++# Client table wire header + signed 64-bit records; all 18 loot slots remain visible.
++columns=['id','money1','money2','hp']+[s for i in range(1,19) for s in (f'item{i}',f'itemdroprate{i}')]
++header=bytes(128)+u(len(columns))+b''.join(bytes([len(c)])+c.encode('utf-16-le') for c in columns)
++rows=[[1,10,20,400]+[v for i in range(1,19) for v in (200+i,10)], [2,30,50,600]+[0]*36]
++write('BinarySData/DBMonsterData.SData',header+u(len(rows))+b''.join(struct.pack('<q',v) for r in rows for v in r))
+diff --git a/tool/package_sources.py b/tool/package_sources.py
+index cfaceaa..7083aed 100644
+--- a/tool/package_sources.py
++++ b/tool/package_sources.py
+@@ -10,2 +10,2 @@ ROOT = Path(__file__).resolve().parents[1]
+-VERSION = '0.4.0+6'
+-BASE = '20520d37030afe5e7d34fc75241e0dadb2e91d99'
++VERSION = '0.5.0+7'
++BASE = '748d612a00bd8ef9f417bb38604f8dd4fe920aab'
+@@ -53,2 +53,2 @@ def package(destination: Path) -> None:
+-            z.writestr('Shaiya_Studio_0_4_0/' + name, data)
+-        z.writestr('Shaiya_Studio_0_4_0/manifest-entrega.json', manifest)
++            z.writestr('Shaiya_Studio_0_5_0/' + name, data)
++        z.writestr('Shaiya_Studio_0_5_0/manifest-entrega.json', manifest)
+@@ -64 +64 @@ if __name__ == '__main__':
+-    p.add_argument('destination', nargs='?', default=str(ROOT / 'dist/Shaiya_Studio_0_4_0_Flutter.zip'))
++    p.add_argument('destination', nargs='?', default=str(ROOT / 'dist/Shaiya_Studio_0_5_0_Flutter.zip'))
+diff --git a/tool/publish_release.py b/tool/publish_release.py
+index 8305e89..f738082 100644
+--- a/tool/publish_release.py
++++ b/tool/publish_release.py
+@@ -18,2 +18,2 @@ REPOSITORY = 'Dreynox-Company/Herramienta-Shaiya'
+-VERSION = '0.4.0+6'
+-PREFIX = 'Shaiya_Studio_0_4_0'
++VERSION = '0.5.0+7'
++PREFIX = 'Shaiya_Studio_0_5_0'
+@@ -27 +27 @@ def validate_environment(env: dict) -> tuple[str, int, str]:
+-            or not re.fullmatch(r'refs/heads/feat/studio-04-[a-zA-Z0-9-]{8,80}', env.get('GITHUB_REF', ''))
++            or not re.fullmatch(r'refs/heads/feat/studio-05-[a-zA-Z0-9-]{8,80}', env.get('GITHUB_REF', ''))
+@@ -31 +31 @@ def validate_environment(env: dict) -> tuple[str, int, str]:
+-    return sha, int(env['GITHUB_RUN_ID']), f'studio-0.4.0-{sha[:12]}'
++    return sha, int(env['GITHUB_RUN_ID']), f'studio-0.5.0-{sha[:12]}'
+@@ -73 +73 @@ def main() -> None:
+-            'Authorization': f'Bearer {token}', 'User-Agent': 'Dreynox-Shaiya-Release/0.4.0',
++            'Authorization': f'Bearer {token}', 'User-Agent': 'Dreynox-Shaiya-Release/0.5.0',
+@@ -84 +84 @@ def main() -> None:
+-        'name': f'Shaiya Studio 0.4.0 · {sha[:12]}', 'draft': True, 'prerelease': True, 'make_latest': 'false',
++        'name': f'Shaiya Studio 0.5.0 · {sha[:12]}', 'draft': True, 'prerelease': True, 'make_latest': 'false',
+diff --git a/tool/publish_sources.py b/tool/publish_sources.py
+index 5940ccb..b05c106 100644
+--- a/tool/publish_sources.py
++++ b/tool/publish_sources.py
+@@ -16 +16 @@ SOURCE = Path(__file__).resolve().parents[1]
+-BASE = "20520d37030afe5e7d34fc75241e0dadb2e91d99"
++BASE = "748d612a00bd8ef9f417bb38604f8dd4fe920aab"
+@@ -18 +18 @@ REPOSITORY = "Dreynox-Company/Herramienta-Shaiya"
+-BASE_BRANCH = "feat/studio-04-archive-streaming"
++BASE_BRANCH = "feat/studio-04-audited-release"
+@@ -23 +23 @@ def verified_sources() -> dict[str, bytes]:
+-    if manifest.get("base_commit") != BASE or manifest.get("version") != "0.4.0+6":
++    if manifest.get("base_commit") != BASE or manifest.get("version") != "0.5.0+7":
+@@ -45 +45 @@ def main() -> None:
+-    parser.add_argument("--branch", default="feat/studio-04-integration")
++    parser.add_argument("--branch", default="feat/studio-05-integration")
+@@ -101 +101 @@ def main() -> None:
+-    run("commit", "-m", "feat: integrate Shaiya Studio 0.4.0 archive support, equipment rules and streamed scenes")
++    run("commit", "-m", "feat: integrate Shaiya Studio 0.5.0 archive support, equipment rules and streamed scenes")
+diff --git a/tool/tests/test_cloud_delivery.py b/tool/tests/test_cloud_delivery.py
+index 48b0ebe..463db3d 100644
+--- a/tool/tests/test_cloud_delivery.py
++++ b/tool/tests/test_cloud_delivery.py
+@@ -15 +15 @@ SHA = 'a' * 40
+-BRANCH = 'feat/studio-04-20260917-abc123'
++BRANCH = 'feat/studio-05-20260917-abc123'
+diff --git a/tool/tests/test_delivery_tools.py b/tool/tests/test_delivery_tools.py
+index 66bd8e3..9e2cdb9 100644
+--- a/tool/tests/test_delivery_tools.py
++++ b/tool/tests/test_delivery_tools.py
+@@ -29 +29 @@ class DeliveryToolsTest(unittest.TestCase):
+-            (root / 'pubspec.yaml').write_text('version: 0.4.0+6')
++            (root / 'pubspec.yaml').write_text('version: 0.5.0+7')
+@@ -38 +38 @@ class DeliveryToolsTest(unittest.TestCase):
+-            self.assertEqual((root / 'pubspec.yaml').read_text(), 'version: 0.4.0+6')
++            self.assertEqual((root / 'pubspec.yaml').read_text(), 'version: 0.5.0+7')
+@@ -57 +57 @@ class DeliveryToolsTest(unittest.TestCase):
+-        manifest = {'version': '0.4.0+6', 'base_commit': publish_sources.BASE, 'files': files}
++        manifest = {'version': '0.5.0+7', 'base_commit': publish_sources.BASE, 'files': files}

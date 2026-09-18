@@ -1,0 +1,446 @@
+.writeAsString(
++        const JsonEncoder.withIndent('  ').convert({
++          'format': 'shaiya-safe-export',
++          'version': 1,
++          'createdAt': DateTime.now().toUtc().toIso8601String(),
++          'mode': pack ? 'nuevo SAH/SAF estándar' : 'extracción íntegra',
++          'sourceIndexSha256': source.index.report['indexSha256'],
++          'files': manifests,
++          'count': list.length,
++          'bytes': offset,
++          'notice': pack
++              ? 'Par nuevo en formato estándar. No sobrescribe el original ni conserva protecciones personalizadas del índice. La compatibilidad de un cliente modificado requiere prueba en ese cliente.'
++              : 'Todos los recursos del índice copiados y verificados sin reinterpretar su contenido.',
++        }),
++        flush: true,
++      );
++      await staging.rename(target);
++      return ExportResult(target, list.length, offset, manifests);
++    } catch (e) {
++      await saf?.close();
++      if (await staging.exists()) await staging.delete(recursive: true);
++      rethrow;
++    }
++  }
++
++  static Uint8List encodeIndex(List<ArchiveEntry> entries, {int version = 0}) {
++    if (entries.length > ArchiveIndex.maxEntries) {
++      throw const FormatException('Demasiados recursos para el SAH.');
++    }
++    final root = _DirectoryNode('', Uint8List.fromList([0]));
++    for (final e in entries) {
++      safePath(e.path);
++      final parts = e.path.split('/');
++      var node = root;
++      for (var i = 0; i < parts.length - 1; i++) {
++        final raw = e.rawComponents.length == parts.length
++            ? e.rawComponents[i]
++            : Uint8List.fromList([...utf8.encode(parts[i]), 0]);
++        node = node.children.putIfAbsent(
++          parts[i],
++          () => _DirectoryNode(parts[i], raw),
++        );
++      }
++      node.files.add(e);
++    }
++    final writer = _IndexWriter();
++    writer.out.add(ascii.encode('SAH'));
++    writer.i32(version);
++    writer.u32(entries.length);
++    writer.out.add(Uint8List(40));
++    void visit(_DirectoryNode node) {
++      writer.rawName(node.raw);
++      writer.u32(node.files.length);
++      for (final e in node.files) {
++        final parts = e.path.split('/');
++        final raw = e.rawComponents.length == parts.length
++            ? e.rawComponents.last
++            : Uint8List.fromList([...utf8.encode(parts.last), 0]);
++        writer.rawName(raw);
++        writer.i64(e.offset);
++        writer.i32(e.length);
++        writer.i32(e.version);
++      }
++      writer.u32(node.children.length);
++      for (final child in node.children.values) {
++        visit(child);
++      }
++    }
++
++    visit(root);
++    writer.out.add(Uint8List(8));
++    return writer.out.takeBytes();
++  }
++}
++
++class _DirectoryNode {
++  final String name;
++  final Uint8List raw;
++  final Map<String, _DirectoryNode> children = {};
++  final List<ArchiveEntry> files = [];
++  _DirectoryNode(this.name, this.raw);
++}
++
++class _IndexWriter {
++  final out = BytesBuilder(copy: false);
++  void u32(int v) {
++    final b = ByteData(4)..setUint32(0, v, Endian.little);
++    out.add(b.buffer.asUint8List());
++  }
++
++  void i32(int v) {
++    final b = ByteData(4)..setInt32(0, v, Endian.little);
++    out.add(b.buffer.asUint8List());
++  }
++
++  void i64(int v) {
++    final b = ByteData(8)..setInt64(0, v, Endian.little);
++    out.add(b.buffer.asUint8List());
++  }
++
++  void rawName(Uint8List b) {
++    if (b.length > 4096) throw const FormatException('Nombre demasiado largo.');
++    u32(b.length);
++    out.add(b);
++  }
++}
++
++class _DigestSink implements Sink<Digest> {
++  String? value;
++  @override
++  void add(Digest d) {
++    value = d.toString();
++  }
++
++  @override
++  void close() {}
++}
+diff --git a/lib/data/library.dart b/lib/data/library.dart
+index 8a79f7e..c3c6fb9 100644
+--- a/lib/data/library.dart
++++ b/lib/data/library.dart
+@@ -27,0 +28 @@ const supportedExtensions = {
++  '.svmap',
+diff --git a/lib/editor/csv_document.dart b/lib/editor/csv_document.dart
+new file mode 100644
+index 0000000..7484cb7
+--- /dev/null
++++ b/lib/editor/csv_document.dart
+@@ -0,0 +1,181 @@
++import 'dart:convert';
++import 'dart:typed_data';
++import '../core/game_text_codec.dart';
++import 'document.dart';
++
++/// Optional companion for server-exported tables. Import/export only; this
++/// class never connects to a database or claims to deploy server changes.
++class CsvDocument extends EditDocument {
++  final List<String> headers;
++  final String separator, newline;
++  final bool bom;
++  CsvDocument._({
++    required super.path,
++    required super.original,
++    required super.payload,
++    required super.rows,
++    required this.headers,
++    required this.separator,
++    required this.newline,
++    required this.bom,
++    required super.codec,
++  }) : super(
++         profile: 'server-csv',
++         warnings: [
++           'CSV de acompañamiento: exportar no actualiza el servidor. Conserva las columnas y valida sus tipos en el esquema SQL real antes de importarlo.',
++         ],
++         parsedBytes: payload.length,
++       );
++  @override
++  String get authority =>
++      'Servidor · CSV importado (sin despliegue automático)';
++  static CsvDocument open(
++    Uint8List bytes,
++    String path,
++    GameTextEncoding encoding,
++  ) {
++    if (bytes.length > 32 * 1024 * 1024) {
++      throw const FormatException('El CSV supera 32 MiB.');
++    }
++    final inputCodec = GameTextCodec(
++      encoding == GameTextEncoding.automatic ? GameTextEncoding.utf8 : encoding,
++    );
++    var text = inputCodec.decode(bytes);
++    final bom = text.startsWith('\uFEFF');
++    if (bom) text = text.substring(1);
++    final first = text.split(RegExp(r'\r?\n')).first;
++    final sep = first.contains('\t')
++        ? '\t'
++        : first.split(';').length > first.split(',').length
++        ? ';'
++        : ',';
++    final table = _parse(text, sep);
++    if (table.isEmpty || table.first.isEmpty) {
++      throw const FormatException('CSV sin encabezado.');
++    }
++    final headers = table.removeAt(0);
++    if (headers.length > 512 ||
++        headers.any((h) => h.isEmpty) ||
++        headers.toSet().length != headers.length) {
++      throw const FormatException(
++        'Columnas duplicadas, vacías o demasiadas columnas.',
++      );
++    }
++    if (table.length > 200000) {
++      throw const FormatException('El CSV supera 200.000 registros.');
++    }
++    final out = BytesBuilder(copy: false);
++    var at = 0;
++    final refs = <RecordRef>[];
++    final schema = headers
++        .map((h) => FieldSpec(h, 'text'))
++        .toList(growable: false);
++    for (var i = 0; i < table.length; i++) {
++      final row = table[i];
++      if (row.length != headers.length) {
++        throw FormatException(
++          'La fila ${i + 2} tiene ${row.length} columnas; se esperaban ${headers.length}.',
++        );
++      }
++      final start = at;
++      for (final value in row) {
++        final b = utf8.encode(value);
++        if (b.length > 65536) {
++          throw const FormatException('Celda CSV demasiado larga.');
++        }
++        final p = ByteData(4)..setUint32(0, b.length, Endian.little);
++        out.add(p.buffer.asUint8List());
++        out.add(b);
++        at += 4 + b.length;
++      }
++      refs.add(RecordRef(start, at, schema, kind: 'Servidor CSV', ordinal: i));
++    }
++    return CsvDocument._(
++      path: path,
++      original: Uint8List.fromList(bytes),
++      payload: out.takeBytes(),
++      rows: refs,
++      headers: headers,
++      separator: sep,
++      newline: text.contains('\r\n') ? '\r\n' : '\n',
++      bom: bom,
++      codec: const GameTextCodec(GameTextEncoding.utf8),
++    );
++  }
++
++  @override
++  Uint8List exportBytes() {
++    if (!dirty) return Uint8List.fromList(original);
++    String quote(String s) =>
++        s.contains(separator) ||
++            s.contains('"') ||
++            s.contains('\r') ||
++            s.contains('\n')
++        ? '"${s.replaceAll('"', '""')}"'
++        : s;
++    final out = StringBuffer(bom ? '\uFEFF' : '');
++    out.write(headers.map(quote).join(separator));
++    out.write(newline);
++    for (var i = 0; i < rows.length; i++) {
++      out.write(fields(i).map((f) => quote(read(f))).join(separator));
++      out.write(newline);
++    }
++    // Edited companion CSV is explicitly UTF8, not silently written with the
++    // legacy source codepage. Binary game exports retain their own encoding.
++    return Uint8List.fromList(utf8.encode(out.toString()));
++  }
++
++  static List<List<String>> _parse(String text, String sep) {
++    final rows = <List<String>>[];
++    var row = <String>[], cell = StringBuffer();
++    var quoted = false, closed = false;
++    for (var i = 0; i < text.length; i++) {
++      final c = text[i];
++      if (quoted) {
++        if (c == '"') {
++          if (i + 1 < text.length && text[i + 1] == '"') {
++            cell.write('"');
++            i++;
++          } else {
++            quoted = false;
++            closed = true;
++          }
++        } else {
++          cell.write(c);
++        }
++        continue;
++      }
++      if (c == '"' && cell.isEmpty && !closed) {
++        quoted = true;
++        continue;
++      }
++      if (c == sep) {
++        row.add(cell.toString());
++        cell = StringBuffer();
++        closed = false;
++        continue;
++      }
++      if (c == '\r' || c == '\n') {
++        if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++;
++        row.add(cell.toString());
++        rows.add(row);
++        row = [];
++        cell = StringBuffer();
++        closed = false;
++        continue;
++      }
++      if (closed) {
++        throw const FormatException(
++          'Carácter inesperado tras cerrar una celda CSV.',
++        );
++      }
++      cell.write(c);
++    }
++    if (quoted) throw const FormatException('CSV con comillas sin cerrar.');
++    if (cell.isNotEmpty || row.isNotEmpty || closed) {
++      row.add(cell.toString());
++      rows.add(row);
++    }
++    return rows;
++  }
++}
+diff --git a/lib/editor/document.dart b/lib/editor/document.dart
+new file mode 100644
+index 0000000..2007364
+--- /dev/null
++++ b/lib/editor/document.dart
+@@ -0,0 +1,476 @@
++import 'dart:convert';
++import 'dart:typed_data';
++import 'package:crypto/crypto.dart';
++import '../core/game_text_codec.dart';
++import '../core/seed_data.dart';
++
++/// Lossless editor: only validated spans change. Unrecognized bytes and headers
++/// are preserved. Never reinterpret unsigned values as signed to accept a minus.
++class FieldSpec {
++  final String name, type;
++  final bool editable;
++  const FieldSpec(this.name, this.type, {this.editable = true});
++  int get width => switch (type) {
++    'u8' || 'i8' => 1,
++    'u16' || 'i16' => 2,
++    'u32' || 'i32' || 'f32' => 4,
++    'i64' || 'u64' || 'f64' => 8,
++    _ => 0,
++  };
++  bool get text => type.startsWith('text');
++  bool get signed => type.startsWith('i') || type.startsWith('f');
++  String get limits {
++    if (text) return 'Texto · codificación del documento';
++    if (type == 'opaque') {
++      return 'Bytes sin significado documentado · solo lectura';
++    }
++    if (type.startsWith('f')) return '$type · número real finito';
++    final bits = width * 8;
++    return signed
++        ? '${-(BigInt.one << (bits - 1))} … ${(BigInt.one << (bits - 1)) - BigInt.one}'
++        : '0 … ${(BigInt.one << bits) - BigInt.one}';
++  }
++}
++
++class FieldSpan {
++  final FieldSpec spec;
++  final int start, length, prefix, stringUnit, terminators;
++  const FieldSpan(
++    this.spec,
++    this.start,
++    this.length, {
++    this.prefix = 0,
++    this.stringUnit = 1,
++    this.terminators = 0,
++  });
++}
++
++class RecordRef {
++  final int offset, end, group, ordinal;
++  final String kind;
++  final List<FieldSpec> schema;
++
++  /// Dynamic records have explicitly recorded, nonoverlapping spans.
++  final List<FieldSpan>? dynamicSpans;
++  const RecordRef(
++    this.offset,
++    this.end,
++    this.schema, {
++    this.kind = 'Registro',
++    this.group = 0,
++    this.ordinal = 0,
++    this.dynamicSpans,
++  });
++}
++
++class FieldChange {
++  final int row;
++  final FieldSpan field;
++  final Uint8List before, after;
++  final String beforeText, afterText;
++  const FieldChange(
++    this.row,
++    this.field,
++    this.before,
++    this.after,
++    this.beforeText,
++    this.afterText,
++  );
++}
++
++class ChangeBatch {
++  final List<FieldChange> changes;
++  final String title;
++  const ChangeBatch(this.changes, this.title);
++}
++
++class EditDocument {
++  final String path, profile, sha;
++  final Uint8List original, payload;
++  final GameTextCodec codec;
++  final List<RecordRef> rows;
++  final List<String> warnings;
++  final bool complete;
++  final int parsedBytes;
++  final Map<int, FieldChange> _changes = {};
++  final List<ChangeBatch> _undo = [], _redo = [];
++  int revision = 0;
++  EditDocument({
++    required this.path,
++    required this.profile,
++    required this.original,
++    required this.payload,
++    required this.codec,
++    required this.rows,
++    required this.warnings,
++    required this.parsedBytes,
++    this.complete = true,
++  }) : sha = sha256.convert(original).toString();
++  bool get dirty => _changes.isNotEmpty;
++  bool get canUndo => _undo.isNotEmpty;
++  bool get canRedo => _redo.isNotEmpty;
++  int get changeCount => _changes.length;
++  Iterable<FieldChange> get changes => _changes.values;
++  bool get encrypted => SeedData.isEncoded(original);
++  String get authority => path.toLowerCase().endsWith('.svmap')
++      ? 'Servidor · archivo SVMAP'
++      : 'Cliente · verificar correspondencia con servidor';
++
++  List<FieldSpan> fields(int row) {
++    final rec = rows[row];
++    if (rec.dynamicSpans != null) return rec.dynamicSpans!;
++    final result = <FieldSpan>[];
++    var offset = rec.offset;
++    final d = ByteData.sublistView(payload);
++    for (final spec in rec.schema) {
++      if (spec.text) {
++        final prefix = spec.type == 'text8' ? 1 : 4;
++        final n = prefix == 1
++            ? payload[offset]
++            : d.

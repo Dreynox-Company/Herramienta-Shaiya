@@ -1,0 +1,66 @@
+name: Integrar fuentes verificadas 0.5
+on:
+  push:
+    branches: [work/studio-05-review-source]
+    paths: [.stage05/**, .github/workflows/apply-audited05.yml]
+permissions:
+  contents: write
+jobs:
+  verify-and-integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verificar parche de texto revisable y aplicar fuentes
+        shell: bash
+        run: |
+          test "$GITHUB_REF_NAME" = 'work/studio-05-review-source'
+          git merge-base --is-ancestor 748d612a00bd8ef9f417bb38604f8dd4fe920aab HEAD
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,os,subprocess
+          raw=b''.join(Path(f'.stage05/revision{i:02d}.patch').read_bytes() for i in range(19))
+          print('Source patch:',len(raw),hashlib.sha256(raw).hexdigest())
+          for i in range(19):
+              b=Path(f'.stage05/revision{i:02d}.patch').read_bytes()
+              print(i,len(b),hashlib.sha256(b).hexdigest())
+          assert len(raw)==259184 and hashlib.sha256(raw).hexdigest()=='b4331800d4dc3ef905b91a66c95b7f3af5a50da2424256bacb80060cbcf759e8', 'Source transfer integrity failed'
+          patch=Path(os.environ['RUNNER_TEMP'])/'revision05.patch'
+          patch.write_bytes(raw)
+          subprocess.run(['git','apply','--unidiff-zero','--exclude=.github/workflows/build.yml','--check',str(patch)],check=True)
+          subprocess.run(['git','apply','--unidiff-zero','--exclude=.github/workflows/build.yml','--index',str(patch)],check=True)
+          p=Path('.stage05/polish.patch')
+          assert hashlib.sha256(p.read_bytes()).hexdigest()=='def0520ecc266660f8c44f9c58c9900d7f2fff45365e3c3bb2a823921656b471', 'Polish transfer integrity failed'
+          subprocess.run(['git','apply','--check',str(p)],check=True)
+          subprocess.run(['git','apply','--index',str(p)],check=True)
+          print('Fuentes verificadas. No se incluyen los archivos DATA del usuario.')
+          PY
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test tool
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+      - run: python3 -m unittest discover -s tool/tests -v
+      - name: Publicar fuentes verificadas sin modificar workflows
+        shell: bash
+        run: |
+          git fetch origin "$GITHUB_REF_NAME"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git rm -r .stage05
+          python3 - <<'PY'
+          import subprocess
+          files=subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()
+          assert not any(p.startswith('.github/workflows/') for p in files), 'Workflow changes need separate review'
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: audited data editor, safe archive extraction, signed economy fields and animated rider anchors'
+          git push origin HEAD:refs/heads/work/studio-05-review-source
+          git rev-parse HEAD

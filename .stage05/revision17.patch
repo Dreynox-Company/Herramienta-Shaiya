@@ -1,0 +1,379 @@
+          expect(f.wantsFlight, false);
++        }
++        expect(f.grounded, true);
++        expect(f.pendingTarget, 'mob-2');
++        f.cancel();
++        for (var i = 0; i < fps * 2; i++) {
++          f.step(1 / fps, eligible: true, inCombat: true, hoverHeight: .38);
++        }
++        expect(f.height, 0);
++        expect(f.wantsFlight, false);
++      },
++    );
++  }
++  test(
++    'stale landing request expires and disabling wings lands without a snap',
++    () {
++      final f = FlightTransition();
++      for (var i = 0; i < 180; i++) {
++        f.step(1 / 60, eligible: true, inCombat: false, hoverHeight: .6);
++      }
++      f.queue('removed');
++      for (var i = 0; i < 200; i++) {
++        f.step(1 / 60, eligible: false, inCombat: false, hoverHeight: .6);
++      }
++      expect(f.pendingTarget, null);
++      expect(f.grounded, true);
++      f.step(double.nan, eligible: true, inCombat: false, hoverHeight: 1);
++      expect(f.height, 0);
++    },
++  );
++}
+diff --git a/tool/audit_editor_data.dart b/tool/audit_editor_data.dart
+new file mode 100644
+index 0000000..a8af1c0
+--- /dev/null
++++ b/tool/audit_editor_data.dart
+@@ -0,0 +1,96 @@
++import 'dart:io';
++import 'dart:convert';
++import 'package:herramienta_shaiya/editor/schema_reader.dart';
++import 'package:herramienta_shaiya/core/game_text_codec.dart';
++import 'package:herramienta_shaiya/core/seed_data.dart';
++
++void main(List<String> args) async {
++  if (args.length < 2 || !Directory(args[0]).existsSync()) {
++    stderr.writeln('Uso: audit_editor_data DATA informe.json [filtro]');
++    exitCode = 2;
++    return;
++  }
++  final root = Directory(args[0]);
++  final report = <Map<String, Object?>>[];
++  for (final f
++      in root
++          .listSync(recursive: true)
++          .whereType<File>()
++          .where(
++            (f) =>
++                f.path.toLowerCase().endsWith('.sdata') ||
++                f.path.toLowerCase().endsWith('.svmap'),
++          )) {
++    final name = f.path.substring(root.path.length + 1);
++    if (args.length > 2 &&
++        !name.toLowerCase().contains(args[2].toLowerCase())) {
++      continue;
++    }
++    try {
++      final original = f.readAsBytesSync(),
++          doc = EditorReader.open(
++            original,
++            name,
++            encoding: GameTextEncoding.big5,
++          );
++      final same = doc.exportBytes();
++      bool equal = same.length == original.length;
++      for (var i = 0; equal && i < same.length; i++) {
++        if (same[i] != original[i]) equal = false;
++      }
++      if (!equal) throw StateError('Exportación sin cambios difiere.');
++      bool edit = false;
++      if (doc.rows.isNotEmpty) {
++        final editable = doc
++            .fields(0)
++            .where(
++              (v) => v.spec.type != 'opaque' && !v.spec.text && v.spec.editable,
++            )
++            .toList();
++        if (editable.isNotEmpty) {
++          final field = editable.first, value = doc.read(field);
++          final n = BigInt.tryParse(value);
++          if (n != null) {
++            final next = n == BigInt.zero ? '1' : '0';
++            doc.edit(0, field, next);
++            final output = doc.exportBytes();
++            if (doc.encrypted) SeedData.decode(output, verifyChecksum: true);
++            final fresh = EditorReader.open(
++              output,
++              name,
++              encoding: doc.codec.encoding,
++              forceProfile: doc.profile,
++            );
++            if (fresh.complete != doc.complete ||
++                fresh.rows.length != doc.rows.length ||
++                fresh.read(
++                      fresh
++                          .fields(0)
++                          .firstWhere((f) => f.spec.name == field.spec.name),
++                    ) !=
++                    next) {
++              throw StateError('Relectura no conserva cambio.');
++            }
++            doc.undo();
++            if (doc.dirty) throw StateError('Undo no regresa al original.');
++            edit = true;
++          }
++        }
++      }
++      report.add({
++        ...doc.report(),
++        'unchangedExact': equal,
++        'editReread': edit,
++      });
++      stdout.writeln(
++        '$name ${doc.profile} rows=${doc.rows.length} ${doc.complete ? 'OK' : 'NO'}',
++      );
++    } catch (e) {
++      report.add({'path': name, 'error': e.toString()});
++      stdout.writeln('ERROR $name $e');
++    }
++  }
++  File(
++    args.length > 1 ? args[1] : 'audit_editor.json',
++  ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
++}
+diff --git a/tool/audit_rig_anchors.dart b/tool/audit_rig_anchors.dart
+new file mode 100644
+index 0000000..397d3c8
+--- /dev/null
++++ b/tool/audit_rig_anchors.dart
+@@ -0,0 +1,157 @@
++import 'dart:convert';
++import 'dart:io';
++import 'dart:math' as math;
++import 'package:vector_math/vector_math_64.dart' as v;
++import 'package:herramienta_shaiya/core/formats.dart';
++import 'package:herramienta_shaiya/core/rig_anchors.dart';
++import 'package:herramienta_shaiya/core/extra_motion.dart';
++
++void main(List<String> args) async {
++  if (args.length < 2) {
++    stderr.writeln('Uso: audit_rig_anchors DATA informe.json [suplemento.gz]');
++    exitCode = 2;
++    return;
++  }
++  final root = Directory(args[0]);
++  final files = {
++    for (final f in root.listSync(recursive: true).whereType<File>())
++      f.path
++              .substring(root.path.length + 1)
++              .replaceAll('\\', '/')
++              .toLowerCase():
++          f,
++  };
++  String? resolve(String base, String dir, String raw) {
++    final name = raw.replaceAll('\\', '/').toLowerCase();
++    for (final p in ['$base/$dir/$name', '$base/$name', name]) {
++      if (files.containsKey(p)) return p;
++    }
++    return null;
++  }
++
++  final cache = <String, MeshData>{};
++  final report = <Map<String, Object?>>[];
++  for (final p in files.keys.where(
++    (p) => p.startsWith('vehicle/') && p.endsWith('.mon'),
++  )) {
++    final base = p.substring(0, p.lastIndexOf('/'));
++    for (final c in readMon(files[p]!.readAsBytesSync(), p)) {
++      try {
++        final parts = <MeshData>[];
++        for (final r in c.parts.where((r) => !r.isNull)) {
++          final path = resolve(base, '3dc', r.mesh);
++          if (path == null) throw FormatException('Malla ausente: ${r.mesh}');
++          parts.add(
++            cache.putIfAbsent(
++              path,
++              () => MeshData.skinned(files[path]!.readAsBytesSync(), path),
++            ),
++          );
++        }
++        final clips = <String, ClipData>{};
++        for (final e in c.animations.entries) {
++          if (!['Respirar', 'Reposo', 'Caminar', 'Correr'].contains(e.key)) {
++            continue;
++          }
++          final path = resolve(base, 'ani', e.value);
++          if (path == null) continue;
++          clips[e.key] = ClipData.parse(files[path]!.readAsBytesSync(), path);
++        }
++        final reference =
++            clips['Respirar'] ?? clips['Reposo'] ?? clips.values.first;
++        final seat = SurfaceAnchor.locate(parts, reference);
++        if (seat == null) {
++          report.add({
++            'source': p,
++            'id': c.id,
++            'name': c.name,
++            'status': 'manual-calibration',
++            'reason': 'No se encontró superficie central segura',
++          });
++          continue;
++        }
++        double residual = 0, motion = 0;
++        final initial = seat.position(reference.pose(0));
++        for (final clip in clips.values) {
++          for (var k = 0; k < 12; k++) {
++            final pose = clip.pose(k * clip.duration / 12),
++                target = seat.position(pose),
++                q = seat.rotation(pose);
++            if (!target.storage.every((n) => n.isFinite && n.abs() < 500)) {
++              throw const FormatException(
++                'Asiento no finito o fuera de escala.',
++              );
++            }
++            final pelvis = v.Vector3(.01, 1.1, -.05);
++            final matrix = seatedTransform(target, q, pelvis, height: .04);
++            residual = math.max(
++              residual,
++              (matrix.transformed3(pelvis) - (target + v.Vector3(0, .04, 0)))
++                  .length,
++            );
++            motion = math.max(motion, (initial - target).length);
++          }
++        }
++        if (residual > 1e-6) {
++          throw FormatException('Deriva de pelvis: $residual');
++        }
++        report.add({
++          'source': p,
++          'id': c.id,
++          'name': c.name,
++          'status': 'geometry-and-pose-verified',
++          'seat': initial.storage.toList(),
++          'animationCount': clips.length,
++          'pelvisResidual': residual,
++          'seatMotion': motion,
++        });
++      } catch (e) {
++        report.add({
++          'source': p,
++          'id': c.id,
++          'name': c.name,
++          'status': 'diagnostic',
++          'reason': '$e',
++        });
++      }
++    }
++  }
++  final extraReport = <Map<String, Object?>>[];
++  if (args.length > 2) {
++    final extras = ExtraMotionLibrary.decode(File(args[2]).readAsBytesSync());
++    for (final profile in extras.profiles.values) {
++      final original = files.entries
++          .where(
++            (e) => ['normal', 'nomal', 'nromal'].any(
++              (suffix) =>
++                  e.key.endsWith('/${profile.archetype}_000_$suffix.ani'),
++            ),
++          )
++          .firstOrNull;
++      final match =
++          original != null &&
++          profile.matches(
++            profile.archetype,
++            profile.sex == 'Femenino',
++            ClipData.parse(original.value.readAsBytesSync(), original.key),
++          );
++      extraReport.add({
++        'archetype': profile.archetype,
++        'originalHierarchyMatches': match,
++        'mountedAttacks': profile.mounted.keys.toList(),
++        'flightClips': 2,
++      });
++    }
++  }
++  File(args[1]).writeAsStringSync(
++    const JsonEncoder.withIndent('  ').convert({
++      'mounts': report,
++      'extras': extraReport,
++      'scope':
++          'Numeric animation/geometry verification; not a visual certification of all mount combinations.',
++    }),
++  );
++  stdout.writeln(
++    'Monturas: ${report.length}; geométricas: ${report.where((r) => r['status'] == 'geometry-and-pose-verified').length}; perfiles: ${extraReport.length}',
++  );
++}
+diff --git a/tool/build.py b/tool/build.py
+index b918e2b..055cff9 100644
+--- a/tool/build.py
++++ b/tool/build.py
+@@ -115 +115 @@ def main() -> None:
+-            target = dist / "Shaiya_Studio_0_4_0_Windows.zip"
++            target = dist / "Shaiya_Studio_0_5_0_Windows.zip"
+@@ -131 +131 @@ def main() -> None:
+-            target = dist / "Shaiya_Studio_0_4_0_Android_PRUEBAS.apk"
++            target = dist / "Shaiya_Studio_0_5_0_Android_PRUEBAS.apk"
+@@ -134 +134 @@ def main() -> None:
+-        report = {"version": "0.4.0+6", "platform": args.platform, "commands": commands,
++        report = {"version": "0.5.0+7", "platform": args.platform, "commands": commands,
+diff --git a/tool/cloud_build.py b/tool/cloud_build.py
+index 77121f4..a855fc5 100644
+--- a/tool/cloud_build.py
++++ b/tool/cloud_build.py
+@@ -30,2 +30,2 @@ REPOSITORY = publish_sources.REPOSITORY
+-VERSION = '0.4.0+6'
+-PREFIX = 'Shaiya_Studio_0_4_0'
++VERSION = '0.5.0+7'
++PREFIX = 'Shaiya_Studio_0_5_0'
+@@ -44 +44 @@ def release_tag(sha: str) -> str:
+-    return f'studio-0.4.0-{check_sha(sha)[:12]}'
++    return f'studio-0.5.0-{check_sha(sha)[:12]}'
+@@ -57 +57 @@ def get_json(url: str, *, not_found_ok: bool = False) -> dict | None:
+-        'Accept': 'application/vnd.github+json', 'User-Agent': 'Dreynox-Shaiya-Build/0.4.0',
++        'Accept': 'application/vnd.github+json', 'User-Agent': 'Dreynox-Shaiya-Build/0.5.0',
+@@ -93 +93 @@ def validate_receipt(receipt: dict) -> None:
+-    if not re.fullmatch(r'feat/studio-04-[a-zA-Z0-9-]{8,80}', receipt.get('branch', '')):
++    if not re.fullmatch(r'feat/studio-05-[a-zA-Z0-9-]{8,80}', receipt.get('branch', '')):
+@@ -126 +126 @@ def download(asset: dict, target: Path, expected_hash: str | None = None) -> str
+-        request = Request(url, headers={'User-Agent': 'Dreynox-Shaiya-Build/0.4.0'})
++        request = Request(url, headers={'User-Agent': 'Dreynox-Shaiya-Build/0.5.0'})
+@@ -249 +249 @@ def publish_new(*, yes: bool = False) -> tuple[dict, Path]:
+-    branch = f'feat/studio-04-{stamp}'
++    branch = f'feat/studio-05-{stamp}'
+diff --git a/tool/inspect_rigs05.dart b/tool/inspect_rigs05.dart
+new file mode 100644
+index 0000000..2b1524f
+--- /dev/null
++++ b/tool/inspect_rigs05.dart
+@@ -0,0 +1,73 @@
++import 'dart:io';
++import 'dart:convert';
++import 'dart:math' as math;
++import 'package:herramienta_shaiya/core/formats.dart';
++
++void main(List<String> args) {
++  final root = args[0];
++  final map = <String, String>{
++    for (final f in Directory(root).listSync(recursive: true).whereType<File>())
++      f.path.substring(root.length + 1).toLowerCase(): f.path,
++  };
++  final rows = <Map<String, Object?>>[];
++  for (final path in map.keys.where(
++    (p) =>
++        p.endsWith('.mon') &&
++        (p.startsWith('vehicle/') || p.startsWith('character/wing/')),
++  )) {
++    final records = readMon(File(map[path]!).readAsBytesSync(), path);
++    for (final c in records) {
++      final base = path.substring(0, path.lastIndexOf('/'));
++      String? resolve(String name, String dir) =>
++          map['$base/$dir/${name.toLowerCase()}'];
++      if (c.id > 40 && !args.contains('--all')) continue;
++      try {
++        final parts = c.parts
++            .map(
++              (p) => MeshData.skinned(
++                File(resolve(p.mesh, '3dc')!).readAsBytesSync(),
++                p.mesh,
++              ),
++            )
++            .toList();
++        final anims = {
++          for (final e in c.animations.entries)
++            if (resolve(e.value, 'ani') != null)
++              e.key: resolve(e.value, 'ani')!,
++        };
++        final cpath =
++            anims['Respirar'] ?? anims['Reposo'] ?? anims.values.first;
++     

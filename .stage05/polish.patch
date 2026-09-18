@@ -1,0 +1,274 @@
+diff --git a/lib/editor/csv_document.dart b/lib/editor/csv_document.dart
+index 7484cb7..df339b2 100644
+--- a/lib/editor/csv_document.dart
++++ b/lib/editor/csv_document.dart
+@@ -9,6 +9,9 @@ class CsvDocument extends EditDocument {
+   final List<String> headers;
+   final String separator, newline;
+   final bool bom;
++  final GameTextEncoding sourceEncoding;
++  GameTextEncoding get exportEncoding =>
++      dirty ? GameTextEncoding.utf8 : sourceEncoding;
+   CsvDocument._({
+     required super.path,
+     required super.original,
+@@ -18,6 +21,7 @@ CsvDocument._({
+     required this.separator,
+     required this.newline,
+     required this.bom,
++    required this.sourceEncoding,
+     required super.codec,
+   }) : super(
+          profile: 'server-csv',
+@@ -99,6 +103,7 @@ static CsvDocument open(
+       separator: sep,
+       newline: text.contains('\r\n') ? '\r\n' : '\n',
+       bom: bom,
++      sourceEncoding: inputCodec.encoding,
+       codec: const GameTextCodec(GameTextEncoding.utf8),
+     );
+   }
+diff --git a/lib/editor/field_semantics.dart b/lib/editor/field_semantics.dart
+index 937fc9e..5ce1300 100644
+--- a/lib/editor/field_semantics.dart
++++ b/lib/editor/field_semantics.dart
+@@ -42,7 +42,9 @@ class FieldMeaning {
+         'Valor original de la tabla. Esta edición de DATA no instala ni cambia automáticamente la base de datos del servidor.',
+       );
+     }
+-    if (n.contains('price') ||
++    if (n == 'buy' ||
++        n == 'sell' ||
++        n.contains('price') ||
+         n.contains('cost') ||
+         n == 'money' ||
+         n.contains('productcount') ||
+@@ -90,6 +92,20 @@ class FieldMeaning {
+         'Parámetro de habilidad en su unidad original. No se inventan conversiones de tiempo, distancia o porcentaje.',
+       );
+     }
++    if (const {
++      'attackfighter',
++      'defensefighter',
++      'patrolrogue',
++      'shootrogue',
++      'attackmage',
++      'defensemage',
++    }.contains(n)) {
++      return FieldMeaning(
++        _labels[n] ?? name,
++        'Requisitos',
++        'Restricción de clase original del cliente.',
++      );
++    }
+     if (n.contains('attack') ||
+         n.contains('defense') ||
+         n.contains('damage') ||
+@@ -181,6 +197,14 @@ class FieldMeaning {
+     'image': 'Modelo visual',
+     'icon': 'Icono',
+     'grade': 'Grupo / Grade',
++    'buy': 'Precio de compra',
++    'sell': 'Precio de venta al NPC',
++    'attackfighter': 'Luchador / Guerrero',
++    'defensefighter': 'Defensor / Guardián',
++    'patrolrogue': 'Ranger / Asesino',
++    'shootrogue': 'Arquero / Cazador',
++    'attackmage': 'Mago / Pagano',
++    'defensemage': 'Sacerdote / Oráculo',
+     'buyprice': 'Precio de compra',
+     'sellprice': 'Precio de venta al NPC',
+     'buycost': 'Costo de compra',
+@@ -223,7 +247,9 @@ List<String> rowWarnings(EditDocument doc, int row) {
+     if (f.spec.type == 'opaque') continue;
+     final value = doc.read(f), n = f.spec.name.toLowerCase();
+     if (value.startsWith('-') &&
+-        (n.contains('money') ||
++        (n == 'buy' ||
++            n == 'sell' ||
++            n.contains('money') ||
+             n.contains('price') ||
+             n.contains('cost') ||
+             n.contains('rate'))) {
+@@ -241,3 +267,40 @@ List<String> rowWarnings(EditDocument doc, int row) {
+   }
+   return warnings;
+ }
++
++/// Classic and DB tables use different captions for the same six class flags.
++/// Missing flags are not interpreted as universal permission.
++bool editorMatchesClass(Map<String, String> values, String selected) {
++  if (selected == 'Todas') return true;
++  const aliases = {
++    'fighter': ['fighter', 'attackfighter'],
++    'defender': ['defender', 'defensefighter'],
++    'ranger': ['ranger', 'patrolrogue'],
++    'archer': ['archer', 'shootrogue'],
++    'mage': ['mage', 'attackmage'],
++    'priest': ['priest', 'defensemage'],
++  };
++  for (final key
++      in aliases[selected.toLowerCase()] ?? [selected.toLowerCase()]) {
++    final value = BigInt.tryParse(values[key] ?? '');
++    if (value != null) return value > BigInt.zero;
++  }
++  return false;
++}
++
++String editorIdentityKey(Map<String, String> values, RecordRef record) {
++  final type = values['itemtype'] ?? values['type'];
++  final item = values['itemtypeid'] ?? values['typeid'];
++  if (type != null && item != null) return '$type:$item';
++  final id =
++      values['id'] ??
++      values['mobid'] ??
++      values['index'] ??
++      values['goods_id'] ??
++      values['npctypeid'];
++  final level = values['skilllevel'];
++  if (level != null) return '${id ?? record.group + 1}:$level';
++  if (id != null) return id;
++  if (record.kind == 'Criatura') return '${record.ordinal + 1}';
++  return '${record.group + 1}:${record.ordinal + 1}';
++}
+diff --git a/lib/ui/data_editor.dart b/lib/ui/data_editor.dart
+index 4c61ff9..1a7b88c 100644
+--- a/lib/ui/data_editor.dart
++++ b/lib/ui/data_editor.dart
+@@ -257,14 +257,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
+       'itemname',
+       'skillname',
+     ]);
+-    final id =
+-        pick(['id', 'mobid', 'index', 'goods_id', 'npctypeid', 'typeid']) ??
+-        '${rec.group + 1}:${rec.ordinal + 1}';
+-    final type = pick(['type']), level = pick(['skilllevel']);
+-    final mapped =
+-        _lookup[type == null
+-            ? (level == null ? id : '$id:$level')
+-            : '$type:$id'];
++    final id = editorIdentityKey(_values(row), rec);
++    final mapped = _lookup[id];
+     return '$id · ${name?.isNotEmpty == true ? name : mapped ?? rec.kind}';
+   });
+   void _filter() {
+@@ -277,8 +271,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
+       if (classFilter != 'Todas' || factionFilter != 'Todas') {
+         final v = _values(i);
+         if (classFilter != 'Todas') {
+-          final field = v[classFilter.toLowerCase()];
+-          if (field == null || field == '0') continue;
++          if (!editorMatchesClass(v, classFilter)) continue;
+         }
+         if (factionFilter != 'Todas') {
+           final value = v['country'] ?? v['faction'];
+@@ -551,7 +544,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
+     }
+     final bytes = d.exportBytes();
+     final check = d is CsvDocument
+-        ? CsvDocument.open(bytes, d.path, GameTextEncoding.utf8)
++        ? CsvDocument.open(bytes, d.path, d.exportEncoding)
+         : EditorReader.open(
+             bytes,
+             d.path,
+@@ -633,6 +626,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
+     selected = 0;
+     _lookup.clear();
+     _rowsQuery.clear();
++    _fieldQuery.clear();
+     _labels.clear();
+     group = 'Todos';
+     classFilter = 'Todas';
+diff --git a/test/editor_document_test.dart b/test/editor_document_test.dart
+index d5b80b9..8d5766b 100644
+--- a/test/editor_document_test.dart
++++ b/test/editor_document_test.dart
+@@ -140,6 +140,56 @@ void main() {
+       );
+     });
+   });
++  test(
++    'filtros de clase interpretan campos clásicos y DB sin inventar permisos',
++    () {
++      const pairs = {
++        'Fighter': 'AttackFighter',
++        'Defender': 'DefenseFighter',
++        'Ranger': 'PatrolRogue',
++        'Archer': 'ShootRogue',
++        'Mage': 'AttackMage',
++        'Priest': 'DefenseMage',
++      };
++      for (final e in pairs.entries) {
++        expect(editorMatchesClass({e.value.toLowerCase(): '1'}, e.key), true);
++        expect(editorMatchesClass({e.key.toLowerCase(): '1'}, e.key), true);
++        expect(editorMatchesClass({e.value.toLowerCase(): '0'}, e.key), false);
++        expect(editorMatchesClass({}, e.key), false);
++        expect(FieldMeaning.of(e.value).group, 'Requisitos');
++      }
++    },
++  );
++  test('precios Buy Sell numéricos no desaparecen en Otros', () {
++    final d = EditorReader.open(
++      binaryTable(
++        ['Buy', 'Sell'],
++        [
++          [-1, -2],
++        ],
++      ),
++      'BinarySData/DBItemData.SData',
++    );
++    expect(FieldMeaning.of('Buy').group, 'Precios y tienda');
++    expect(FieldMeaning.of('Sell').label, 'Precio de venta al NPC');
++    expect(rowWarnings(d, 0).length, 2);
++  });
++  test('nombres de objetos se enlazan por Type y TypeId reales', () {
++    const rec = RecordRef(0, 0, [], kind: 'Objeto', group: 1, ordinal: 3);
++    expect(
++      editorIdentityKey({'itemtype': '5', 'itemtypeid': '123'}, rec),
++      '5:123',
++    );
++    expect(editorIdentityKey({'type': '5', 'typeid': '123'}, rec), '5:123');
++    expect(editorIdentityKey({'skilllevel': '15'}, rec), '2:15');
++    expect(
++      editorIdentityKey(
++        {},
++        const RecordRef(0, 0, [], kind: 'Criatura', ordinal: 6),
++      ),
++      '7',
++    );
++  });
+   group('Tipos y transacciones del editor', () {
+     for (final type in ['i8', 'i16', 'i32', 'i64']) {
+       test('$type admite límites y signo menos Unicode', () {
+@@ -260,6 +310,31 @@ void main() {
+     });
+   });
+   group('CSV de servidor separado', () {
++    test('CSV legado sin cambios conserva su codificación para relectura', () {
++      final bytes = GameTextCodec.windows.encode(
++        'id;nombre\r\n1;Español á Ñ\r\n',
++      );
++      final d = CsvDocument.open(
++        bytes,
++        'legacy.csv',
++        GameTextEncoding.windows1252,
++      );
++      expect(d.exportEncoding, GameTextEncoding.windows1252);
++      final before = CsvDocument.open(
++        d.exportBytes(),
++        d.path,
++        d.exportEncoding,
++      );
++      expect(before.read(before.fields(0)[1]), 'Español á Ñ');
++      d.edit(0, d.fields(0)[1], 'Niño 🔥');
++      expect(d.exportEncoding, GameTextEncoding.utf8);
++      final after = CsvDocument.open(d.exportBytes(), d.path, d.exportEncoding);
++      expect(after.read(after.fields(0)[1]), 'Niño 🔥');
++      d.undo();
++      expect(d.exportEncoding, GameTextEncoding.windows1252);
++      expect(d.exportBytes(), bytes);
++    });
++
+     test('nombre español y números negativos conservados', () {
+       final b = Uint8List.fromList(
+         utf8.encode(

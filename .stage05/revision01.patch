@@ -1,0 +1,255 @@
+ funciones a bytes desconocidos: los conserva, señala su intervalo y permite inspección/exportación. Un bloque sin interpretar no equivale a una implementación completa de ese formato.
++
++## Segunda pantalla
++Botón centrado en la barra superior del visor. Abre una página dedicada dentro de la misma ventana nativa; no es un segundo proceso ni una ventana del sistema operativo.
++Biblioteca SData/SVMAP, búsqueda, filtros por categoría, clase y facción cuando el esquema proporciona esos campos; campos agrupados, edición individual y por lote, comparación de cambios, deshacer/rehacer, parches JSON, CSV y exportación verificada.
++Los filtros por códigos no inventan la correspondencia de un cliente personalizado. Se conservan los nombres/códigos originales además de las etiquetas españolas.
++
++## Monstruos, botín, oro y tiendas
++DBMonsterData utiliza sus columnas reales: en el paquete examinado son 114, incluidos Money1/Money2 y 18 pares Item/ItemDropRate. No se reduce a un número fijo de espacios. Los campos de botín pueden representar grados o grupos; no se presentan necesariamente como un ItemID ni como porcentajes normalizados sin confirmar el contrato del servidor.
++Item.SData incluye sus precios de compra/venta, requisitos y atributos según versión. DBItemData y otras tablas binarias exponen todos sus encabezados reales. Cash contiene los espacios originales de artículos. NPC permite vendedores y vínculos a ubicaciones SVMAP. La tabla extendida de misiones de este cliente conserva sus registros de 313 bytes como bloques no interpretados: no se edita su interior atribuyéndole recompensas arbitrarias.
++Importar CSV de servidor permite revisar y editar sus columnas sin conexión a SQL. Su exportación es CSV UTF-8; no es un despliegue ni una migración SQL.
++
++## Números y texto
++Los enteros con signo admiten negativos dentro del rango exacto del tipo. Los enteros sin signo rechazan negativos ANTES de modificar el documento. Se valida desbordamiento, valores finitos y precisión; no hay conversión silenciosa de -1 a 4294967295. Precios/oro negativos emiten advertencia: que el formato los almacene no prueba que el cliente o servidor acepte una economía negativa.
++Se admiten UTF-8, Windows-1252, Big5, coreano CP949 y UTF-16LE en los campos definidos. En detección automática la escritura de texto requiere elegir una codificación; no se adivina al exportar. Un carácter no representable se rechaza, no se sustituye por '?'. La exportación sin cambios conserva incluso bytes no interpretados y la codificación original.
++
++## Extracción y par SAH/SAF
++Exportar / herramientas permite extraer TODOS los registros del archivo, incluidas extensiones que el visor no muestra. Copia por bloques con progreso, cancelación, rutas seguras y hashes de los datos escritos. No requiere cargar un SAF entero en memoria.
++Guardar un par nuevo reconstruye offsets/tamaños, conserva nombres binarios/versiones de entradas y relee el resultado antes de publicarlo. Los cambios se preparan en una carpeta temporal propia; nunca sobrescribe el par abierto. El resultado usa la estructura SAH estándar soportada: no promete conservar una protección privada desconocida.
++Extracción y reconstrucción de carpetas se habilitan en escritorio. La salida de carpetas Android no está implementada en esta revisión; lectura de recursos y edición continúan disponibles, pero no se afirma equivalencia de todos los selectores del sistema.
++
++## Montura, alas y aterrizaje
++La pelvis del jinete sigue un punto baricéntrico de la superficie deformada de la montura; el conjunto visual se transforma por separado de la posición de navegación. Los ajustes de altura y avance son relativos a ese asiento, no la altura absoluta del personaje. Recursos que no proporcionan superficie segura muestran diagnóstico y conservan calibración manual.
++El anclaje de espalda se restringe a la cadena de antecesores de la cabeza. Hereda una sola vez la transformación del jinete, la escala y su rotación local.
++El suplemento separado puede incluir seis ataques montados por perfil, validados por hash, jerarquía y perfil corporal. No sustituye las animaciones originales.
++El ataque solicitado durante el vuelo captura su objetivo, desciende progresivamente con límites de velocidad y aceleración y se ejecuta SOLO al tocar el suelo y conservar alcance/estado válido. Durante la guardia de combate se mantiene la locomoción terrestre. La transición combina poses existentes con desplazamiento continuo: no se presenta como una nueva animación cinematográfica verificada para cada atuendo.
++
++## Verificación y pendientes
++Las pruebas automatizadas comprueban lectura/escritura, límites, cancelación y regresión; las de la ventana Windows usan recursos sintéticos propios. La auditoría de los archivos originales comprueba invariantes y no modifica DATA.
++En el paquete original: 137 archivos SData/SVMAP con conservación exacta sin cambios; 122 esquemas completos, 15 parciales/solo inspección. Para las 720 entradas de monturas: 605 con superficie y movimiento verificados numéricamente, 84 requieren calibración manual y 31 tienen diagnósticos. No son 720 modelos únicos ni una certificación visual de todas las combinaciones.
++Se verificaron jerarquías originales de 16 perfiles del suplemento. No hay vuelo suplementario Panda. Las recetas EFT completas, la correspondencia exacta de cada lapisia, agua avanzada y asociaciones UV ambiguas siguen sin certificación universal. No se incluyen ni fabrican texturas nude que no existen en los recursos inspeccionados.
+diff --git a/integration_test/native_studio_test.dart b/integration_test/native_studio_test.dart
+index a6dd563..81bd06f 100644
+--- a/integration_test/native_studio_test.dart
++++ b/integration_test/native_studio_test.dart
+@@ -12,0 +13,3 @@ import 'package:herramienta_shaiya/data/catalog.dart';
++import 'package:herramienta_shaiya/data/archive_export.dart';
++import 'package:herramienta_shaiya/ui/data_editor.dart';
++import 'package:herramienta_shaiya/editor/schema_reader.dart';
+@@ -125 +128 @@ void main() {
+-    expect(scene.weapon!.mesh.parent, scene.character!.root);
++    expect(scene.weapon!.mesh.parent, scene.character!.visual);
+@@ -134 +137 @@ void main() {
+-    expect(scene.shield!.mesh.parent, scene.character!.root);
++    expect(scene.shield!.mesh.parent, scene.character!.visual);
+@@ -221,4 +224 @@ void main() {
+-      () =>
+-          (scene.character!.root.position.y - scene.groundY - scene.riderHeight)
+-              .abs() <
+-          .001,
++      () => (scene.character!.root.position.y - scene.groundY).abs() < .001,
+@@ -229 +229,6 @@ void main() {
+-      closeTo(scene.character!.root.position.y + scene.wingHeight, .001),
++      closeTo(
++        scene.character!.root.position.y +
++            scene.character!.visual.matrix.storage[13] +
++            scene.wingHeight,
++        .001,
++      ),
+@@ -312,0 +318,17 @@ void main() {
++    scene.clearMovement();
++    await scene.selectCreature(c.creatures.first, 'enemy');
++    scene.combat.counterattack = false;
++    await waitFor(
++      () => scene.flightState.height > .25,
++      'Wing hover settles above the ground',
++    );
++    final airTarget = scene.combat.target;
++    await scene.attack();
++    expect(scene.flightState.pendingTarget, airTarget);
++    expect(scene.combat.active, false);
++    await waitFor(
++      () => scene.combat.active,
++      'Queued aerial attack starts only after landing',
++    );
++    expect(scene.flightState.grounded, true);
++    await screenshot('native_grounded_wing_attack');
+@@ -313,0 +336 @@ void main() {
++    scene.resetCombat();
+@@ -317,0 +341,15 @@ void main() {
++    await scene.selectCreature(c.mounts.first, 'mount');
++    expect(scene.combatClips, isNotEmpty);
++    final mountedTarget = scene.combat.target;
++    await scene.attack();
++    await waitFor(
++      () => scene.character!.clip!.source.contains('mounted_sword'),
++      'Mounted attack uses its own isolated supplemental pose',
++    );
++    await waitFor(
++      () => scene.combat.health[mountedTarget]! < scene.combat.maxHealth,
++      'Mounted impact changes only target health',
++    );
++    await screenshot('native_mounted_attack');
++    scene.resetCombat();
++    await scene.selectCreature(null, 'mount');
+@@ -341,0 +380,100 @@ void main() {
++    // The editor runs in the real window. No dialogs are mocked or tests disabled.
++    await tester.tap(find.byKey(const ValueKey('open-data-editor')));
++    await waitFor(
++      () => find.byType(DataEditorPage).evaluate().isNotEmpty,
++      'Centered toolbar opens the dedicated editor',
++    );
++    if (find.byIcon(Icons.folder_open).evaluate().isNotEmpty) {
++      await tester.tap(find.byIcon(Icons.folder_open));
++      await tester.pump(const Duration(milliseconds: 300));
++    }
++    await tester.tap(find.text('dbmonsterdata.sdata'));
++    await waitFor(
++      () => find.text('Oro mínimo (Money1)').evaluate().isNotEmpty,
++      'Native editor parses monster economy fields',
++    );
++    await tester.tap(find.text('Oro mínimo (Money1)'));
++    await tester.pump(const Duration(milliseconds: 350));
++    await tester.enterText(
++      find.byKey(const ValueKey('editor-field-input')),
++      '-1',
++    );
++    await tester.tap(find.byKey(const ValueKey('editor-apply')));
++    await waitFor(
++      () => find.text('-1').evaluate().isNotEmpty,
++      'Signed negative survives native editor interaction',
++    );
++    await tester.pump(const Duration(milliseconds: 350));
++    final editorBoundary = tester.renderObject<RenderRepaintBoundary>(
++      find.byKey(const ValueKey('data-editor-capture')),
++    );
++    final editorImage = await editorBoundary.toImage();
++    final editorBytes = await editorImage.toByteData(
++      format: ui.ImageByteFormat.png,
++    );
++    editorImage.dispose();
++    await File(
++      '${output.path}/native_editor.png',
++    ).writeAsBytes(editorBytes!.buffer.asUint8List());
++    await tester.tap(find.text('Deshacer'));
++    await waitFor(
++      () => find.text('-1').evaluate().isEmpty,
++      'Undo restores the original economy value',
++    );
++    await tester.tap(find.byIcon(Icons.arrow_back));
++    await waitFor(
++      () => find.byType(DataEditorPage).evaluate().isEmpty,
++      'Closing editor returns to unchanged native viewer',
++    );
++    final exportDir = await Directory.systemTemp.createTemp(
++      'shaiya-export-integration-',
++    );
++    try {
++      final result = await ArchiveExport.extract(
++        archive.archive!,
++        exportDir,
++        control: ExportControl(),
++        progress: (_) {},
++      );
++      expect(
++        await File('${result.folder}/$model').readAsBytes(),
++        await archive.read(model),
++      );
++      const tablePath = 'binarysdata/dbmonsterdata.sdata';
++      final original = await archive.read(tablePath);
++      final doc = EditorReader.open(original, tablePath);
++      final money = doc
++          .fields(0)
++          .firstWhere((f) => f.spec.name.toLowerCase() == 'money1');
++      doc.edit(0, money, '-1');
++      final repacked = await ArchiveExport.repack(
++        archive.archive!,
++        exportDir,
++        replacements: {tablePath: doc.exportBytes()},
++        control: ExportControl(),
++        progress: (_) {},
++      );
++      final reopened = await Library.fromArchive(
++        '${repacked.folder}/data.sah',
++        '${repacked.folder}/data.saf',
++      );
++      final verified = EditorReader.open(
++        await reopened.read(tablePath),
++        tablePath,
++      );
++      expect(
++        verified.read(
++          verified
++              .fields(0)
++              .firstWhere((f) => f.spec.name.toLowerCase() == 'money1'),
++        ),
++        '-1',
++      );
++      expect(await archive.read(tablePath), original);
++      reopened.dispose();
++      passed.add(
++        'Windows extraction and new SAH/SAF pair preserve originals and edited signed values',
++      );
++    } finally {
++      await exportDir.delete(recursive: true);
++    }
+@@ -353 +491 @@ void main() {
+-  }, timeout: const Timeout(Duration(minutes: 4)));
++  }, timeout: const Timeout(Duration(minutes: 6)));
+diff --git a/lib/core/archive_index.dart b/lib/core/archive_index.dart
+index d63d995..4188b39 100644
+--- a/lib/core/archive_index.dart
++++ b/lib/core/archive_index.dart
+@@ -12 +12,8 @@ class ArchiveEntry {
+-  const ArchiveEntry(this.path, this.offset, this.length, this.version);
++  final List<Uint8List> rawComponents;
++  const ArchiveEntry(
++    this.path,
++    this.offset,
++    this.length,
++    this.version, {
++    this.rawComponents = const [],
++  });
+@@ -149,0 +157 @@ class _SahReader {
++  Uint8List lastNameBytes = Uint8List(0);
+@@ -158,0 +167 @@ class _SahReader {
++    lastNameBytes = Uint8List.fromList(raw);
+@@ -204 +213,5 @@ class _SahReader {
+-  void directory(String parent, int depth) {
++  void directory(
++    String parent,
++    int depth, [
++    List<Uint8List> parentBytes = const [],
++  ]) {
+@@ -208,0 +222,3 @@ class _SahReader {
++    final components = depth == 0
++        ? <Uint8List>[]
++        : [...parentBytes, Uint8List.fromList(lastNameBytes)];
+@@ -236 +252,7 @@ class _SahReader {
+-      entries[path] = ArchiveEntry(path, offset, length, fileVersion);
++      entries[path] = ArchiveEntry(
++        path,
++        offset,
++        length,
++        fileVersion,
++        rawComponents: [...components, Uint8List.fromList(lastNameBytes)],
++      );
+@@ -240 +262 @@ class _SahReader {
+-      directory(folder, depth + 1);
++      directory(folder, depth + 1, components);
+diff --git a/lib/core/extra_motion.dart b/lib/core/extra_motion.dart
+index 930eb28..1b89ee4 100644
+--- a/lib/core/extra_motion.dart
++++ b/lib/core/extra_motion.dart
+@@ -12,0 +13 @@ class ExtraMotionProfile {
++  final Map<String, ClipData> mounted;
+@@ -19,2 +20,3 @@ class ExtraMotionProfile {
+-    this.head,
+-  );
++    this.head, {
++    this.mounted = const {},
++  });
+@@ -114,0 +117,11 @@ class ExtraMotionLibrary {
++        mounted: {
++          for (final key in [

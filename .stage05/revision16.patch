@@ -1,0 +1,389 @@
+e(
++            ['id', 'money1', 'money2'],
++            [
++              [1, 10, 20],
++            ],
++          ),
++          input = SeedData.encode(raw);
++      final d = EditorReader.open(input, 'BinarySData/DBMonsterData.SData');
++      d.edit(0, d.fields(0)[1], '-1');
++      final re = EditorReader.open(
++        d.exportBytes(),
++        'BinarySData/DBMonsterData.SData',
++      );
++      expect(re.read(re.fields(0)[1]), '-1');
++      expect(
++        () => SeedData.decode(d.exportBytes(), verifyChecksum: true),
++        returnsNormally,
++      );
++    });
++  });
++  group('Tipos y transacciones del editor', () {
++    for (final type in ['i8', 'i16', 'i32', 'i64']) {
++      test('$type admite límites y signo menos Unicode', () {
++        final w = FieldSpec('v', type).width,
++            d = typedDoc(type, Uint8List(w)),
++            f = FieldSpan(FieldSpec('Value', type), 0, w);
++        d.edit(0, f, '−1');
++        expect(d.read(f), '-1');
++        final max = (BigInt.one << (w * 8 - 1)) - BigInt.one;
++        d.edit(0, f, '$max');
++        expect(d.read(f), '$max');
++        expect(
++          () => d.edit(0, f, '${max + BigInt.one}'),
++          throwsFormatException,
++        );
++      });
++    }
++    for (final type in ['u8', 'u16', 'u32', 'u64']) {
++      test('$type rechaza negativos y no da la vuelta al máximo', () {
++        final w = FieldSpec('v', type).width,
++            d = typedDoc(type, Uint8List(w)),
++            f = d.fields(0).single;
++        expect(() => d.edit(0, f, '-1'), throwsFormatException);
++        expect(d.dirty, isFalse);
++        final max = (BigInt.one << (w * 8)) - BigInt.one;
++        d.edit(0, f, '$max');
++        expect(d.read(f), '$max');
++      });
++    }
++    test('float32 rechaza NaN e infinito', () {
++      final d = typedDoc('f32', Uint8List(4)), f = d.fields(0).single;
++      for (final s in ['NaN', 'Infinity', '1e99']) {
++        expect(() => d.edit(0, f, s), throwsFormatException);
++      }
++      d.edit(0, f, '-0,25');
++      expect(d.read(f), '-0.25');
++    });
++    test('tabla conserva los 18 espacios de loot sin truncar a 9', () {
++      final names = [
++        'id',
++        'money1',
++        'money2',
++        for (var i = 1; i <= 18; i++) ...['item$i', 'itemdroprate$i'],
++      ];
++      final d = EditorReader.open(
++        binaryTable(names, [List.filled(names.length, 0)]),
++        'BinarySData/DBMonsterData.SData',
++      );
++      expect(d.fields(0).length, 39);
++      expect(d.fields(0).last.spec.name, 'itemdroprate18');
++      expect(FieldMeaning.of('item18').group, 'Botín y oro');
++    });
++    test('sin modificaciones los bytes son idénticos incluso con padding', () {
++      final raw = binaryTable(
++            ['id'],
++            [
++              [1],
++            ],
++          ),
++          bytes = SeedData.encode(raw);
++      final d = EditorReader.open(bytes, 'BinarySData/DBMonsterData.SData');
++      expect(d.exportBytes(), bytes);
++    });
++    test('edición masiva valida todos antes de aplicar', () {
++      final d = typedDoc('u8', Uint8List(1));
++      expect(
++        () => d.editMany([
++          (0, d.fields(0).single, '3'),
++          (4, d.fields(0).single, '5'),
++        ]),
++        throwsFormatException,
++      );
++      expect(d.dirty, isFalse);
++    });
++    test('deshacer, rehacer y retorno al original', () {
++      final d = typedDoc('i64', Uint8List(8)), f = d.fields(0).single;
++      d.edit(0, f, '42');
++      d.undo();
++      expect(d.dirty, isFalse);
++      d.redo();
++      expect(d.read(f), '42');
++      d.edit(0, f, '0');
++      expect(d.dirty, isFalse);
++    });
++    test('parche aplica solo al hash y a los valores previstos', () {
++      final raw = binaryTable(
++            ['id', 'money1'],
++            [
++              [1, 20],
++            ],
++          ),
++          d = EditorReader.open(raw, 'BinarySData/DBMonsterData.SData');
++      d.edit(0, d.fields(0)[1], '-1');
++      final p = d.exportPatch(),
++          other = EditorReader.open(raw, 'BinarySData/DBMonsterData.SData');
++      other.importPatch(p);
++      expect(other.read(other.fields(0)[1]), '-1');
++      expect(() => other.importPatch(p), throwsFormatException);
++    });
++    test('bytes desconhecidos permanecen presentes y no editables', () {
++      final data = Uint8List.fromList([0xde, 0xad, 0xbe, 0xef]),
++          d = EditorReader.open(data, 'unknown.sdata');
++      expect(d.complete, isFalse);
++      expect(d.exportBytes(), data);
++      expect(() => d.edit(0, d.fields(0).first, '5'), throwsFormatException);
++    });
++    test('intervalo de oro invertido genera una advertencia', () {
++      final d = EditorReader.open(
++        binaryTable(
++          ['money1', 'money2'],
++          [
++            [20, 10],
++          ],
++        ),
++        'BinarySData/DBMonsterData.SData',
++      );
++      expect(rowWarnings(d, 0).join(), contains('Money1'));
++    });
++  });
++  group('CSV de servidor separado', () {
++    test('nombre español y números negativos conservados', () {
++      final b = Uint8List.fromList(
++        utf8.encode(
++          'MobID,MobName,Money1,Money2\r\n1,"Niño, dragón",-1,20\r\n',
++        ),
++      );
++      final d = CsvDocument.open(b, 'Mobs.csv', GameTextEncoding.utf8);
++      expect(d.exportBytes(), b);
++      d.edit(0, d.fields(0)[2], '-25');
++      final r = CsvDocument.open(
++        d.exportBytes(),
++        'Mobs.csv',
++        GameTextEncoding.utf8,
++      );
++      expect(r.read(r.fields(0)[2]), '-25');
++      expect(r.read(r.fields(0)[1]), 'Niño, dragón');
++    });
++    test('comillas y salto de línea dentro de celda', () {
++      final b = Uint8List.fromList(
++            utf8.encode('id;text\n1;"uno\ndos ""tres"""\n'),
++          ),
++          d = CsvDocument.open(b, 'a.csv', GameTextEncoding.utf8);
++      expect(d.read(d.fields(0)[1]), 'uno\ndos "tres"');
++    });
++    test('encabezado ambiguo y CSV truncado rechazados', () {
++      for (final s in ['a,a\n1,2', 'a,b\n1', 'a,b\n1,"x']) {
++        expect(
++          () => CsvDocument.open(
++            Uint8List.fromList(utf8.encode(s)),
++            'a.csv',
++            GameTextEncoding.utf8,
++          ),
++          throwsFormatException,
++        );
++      }
++    });
++  });
++}
+diff --git a/test/editor_ui_test.dart b/test/editor_ui_test.dart
+new file mode 100644
+index 0000000..9ebc253
+--- /dev/null
++++ b/test/editor_ui_test.dart
+@@ -0,0 +1,111 @@
++import 'dart:typed_data';
++import 'package:flutter/material.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:herramienta_shaiya/core/archive_index.dart';
++import 'package:herramienta_shaiya/data/archive_source.dart';
++import 'package:herramienta_shaiya/data/library.dart';
++import 'package:herramienta_shaiya/ui/data_editor.dart';
++import 'package:herramienta_shaiya/ui/studio_workspace.dart';
++import 'editor_document_test.dart' show binaryTable;
++
++void main() {
++  Future<void> settleIo(WidgetTester t) async {
++    for (var i = 0; i < 15; i++) {
++      await t.runAsync(
++        () => Future<void>.delayed(const Duration(milliseconds: 30)),
++      );
++      await t.pump(const Duration(milliseconds: 30));
++    }
++  }
++
++  Library lib() {
++    final b = binaryTable(
++      ['id', 'money1', 'money2', 'item1', 'itemdroprate1', 'hp'],
++      [
++        [1, 10, 20, 206, 10, 400],
++        [2, 30, 50, 99, 25, 500],
++      ],
++    );
++    const path = 'binarysdata/dbmonsterdata.sdata';
++    final source = ArchiveSource(
++      ArchiveIndex({path: ArchiveEntry(path, 0, b.length, 0)}, {}),
++      (o, n) async => Uint8List.sublistView(b, o, o + n),
++    );
++    return Library('test', false, {path: path}, archive: source);
++  }
++
++  for (final width in [1440.0, 980.0, 650.0, 390.0]) {
++    testWidgets('editor responsive at $width without overflow', (tester) async {
++      tester.view.physicalSize = Size(width, 900);
++      tester.view.devicePixelRatio = 1;
++      addTearDown(tester.view.resetPhysicalSize);
++      addTearDown(tester.view.resetDevicePixelRatio);
++      final source = lib();
++      await tester.pumpWidget(
++        MaterialApp(
++          theme: ThemeData.dark(useMaterial3: true),
++          home: DataEditorPage(library: source),
++        ),
++      );
++      expect(find.text('EDITOR DE DATOS'), findsOneWidget);
++      if (width < 1000) {
++        await tester.tap(find.byIcon(Icons.folder_open));
++        await tester.pumpAndSettle();
++      }
++      await tester.tap(find.text('dbmonsterdata.sdata'));
++      await settleIo(tester);
++      await tester.pumpAndSettle();
++      expect(find.text('Oro mínimo (Money1)'), findsOneWidget);
++      expect(tester.takeException(), isNull);
++      await tester.tap(find.text('Oro mínimo (Money1)'));
++      await tester.pumpAndSettle();
++      await tester.enterText(
++        find.byKey(const ValueKey('editor-field-input')),
++        '-1',
++      );
++      await tester.tap(find.byKey(const ValueKey('editor-apply')));
++      await tester.pumpAndSettle();
++      expect(find.text('-1'), findsOneWidget);
++      expect(tester.takeException(), isNull);
++      await tester.tap(find.text('Deshacer'));
++      await tester.pumpAndSettle();
++      expect(find.text('-1'), findsNothing);
++      await tester.pumpWidget(const SizedBox());
++      source.dispose();
++    });
++  }
++  testWidgets('editor button centered on main toolbar', (tester) async {
++    tester.view.physicalSize = const Size(1440, 900);
++    tester.view.devicePixelRatio = 1;
++    addTearDown(tester.view.resetPhysicalSize);
++    addTearDown(tester.view.resetDevicePixelRatio);
++    var calls = 0;
++    await tester.pumpWidget(
++      MaterialApp(
++        home: StudioWorkspace(
++          viewport: const SizedBox(),
++          left: const SizedBox(),
++          right: const SizedBox(),
++          timeline: const SizedBox(),
++          actions: const SizedBox(),
++          status: const SizedBox(),
++          tabs: const ['Personaje'],
++          icons: const [Icons.person],
++          selectedTab: 0,
++          onTab: (_) {},
++          onOpenData: () {},
++          onOpenEditor: () {
++            calls++;
++          },
++        ),
++      ),
++    );
++    expect(
++      tester.getCenter(find.byKey(const ValueKey('open-data-editor'))).dx,
++      closeTo(720, 1),
++    );
++    await tester.tap(find.byKey(const ValueKey('open-data-editor')));
++    expect(calls, 1);
++    expect(tester.takeException(), isNull);
++  });
++}
+diff --git a/test/extra_motion_test.dart b/test/extra_motion_test.dart
+index 02d1cff..6861117 100644
+--- a/test/extra_motion_test.dart
++++ b/test/extra_motion_test.dart
+@@ -85,0 +86,13 @@ void main() {
++  test(
++    'mounted supplement preserves ground ANI and validates its own checksum',
++    () {
++      final m = manifest();
++      final clips = (m['profiles'] as List).first['clips'] as Map;
++      clips['mounted_spear'] = Map<String, String>.from(clips['hover'] as Map);
++      final p = ExtraMotionLibrary.decode(encode(m)).profiles['humf']!;
++      expect(p.mounted['mounted_spear']!.source, 'extra:humf/mounted_spear');
++      expect(p.hover.source, 'extra:humf/hover');
++      (clips['mounted_spear'] as Map)['sha256'] = '0' * 64;
++      expect(() => ExtraMotionLibrary.decode(encode(m)), throwsFormatException);
++    },
++  );
+diff --git a/test/rig_transition_test.dart b/test/rig_transition_test.dart
+new file mode 100644
+index 0000000..606b840
+--- /dev/null
++++ b/test/rig_transition_test.dart
+@@ -0,0 +1,100 @@
++import 'dart:typed_data';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:vector_math/vector_math_64.dart' as v;
++import 'package:herramienta_shaiya/core/formats.dart';
++import 'package:herramienta_shaiya/core/rig_anchors.dart';
++import 'package:herramienta_shaiya/core/flight_transition.dart';
++
++void main() {
++  test(
++    'surface socket follows original weighted vertices, not bounding height',
++    () {
++      final mesh = MeshData(
++        Float32List.fromList([-1, 1, -1, 1, 1, -1, 0, 1, 1]),
++        Float32List(9),
++        Float32List(6),
++        Uint16List.fromList([0, 1, 2]),
++        Uint8List.fromList([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
++        Float32List.fromList([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]),
++        [v.Matrix4.identity()],
++        'synthetic',
++      );
++      final seat = SurfaceAnchor(
++        mesh,
++        [0, 1, 2],
++        [.25, .25, .5],
++        0,
++        v.Quaternion.identity(),
++      );
++      expect(seat.position([v.Matrix4.identity()]).storage, [0, 1, 0]);
++      final breath = v.Matrix4.identity()
++        ..translateByVector3(v.Vector3(.03, .11, -.04));
++      expect(
++        (seat.position([breath]) - v.Vector3(.03, 1.11, -.04)).length,
++        lessThan(1e-6),
++      );
++    },
++  );
++  test(
++    'rider pelvis equals the animated saddle under pitch, roll and breathing',
++    () {
++      for (var i = 0; i < 200; i++) {
++        final seat = v.Vector3(.03 * i, .2 + i * .002, -.08);
++        final q = v.Quaternion.euler(.04, .02 * i, .13);
++        final pelvis = v.Vector3(.05, 1.3 + i * .001, -.04);
++        final m = seatedTransform(seat, q, pelvis, height: .06, forward: .1);
++        expect(
++          (m.transformed3(pelvis) - (seat + v.Vector3(0, .06, .1))).length,
++          lessThan(1e-9),
++        );
++      }
++    },
++  );
++  for (final fps in [30, 60, 144]) {
++    test(
++      'flight descent is continuous and grounded before queued attack at $fps Hz',
++      () {
++        final f = FlightTransition();
++        for (var i = 0; i < fps * 3; i++) {
++          f.step(1 / fps, eligible: true, inCombat: false, hoverHeight: .38);
++        }
++        expect(f.height, closeTo(.38, .005));
++        f.queue('mob-2');
++        final before = f.height;
++        expect(f.height, before);
++        var last = f.height;
++        for (var i = 0; i < fps * 2; i++) {
++          f.step(1 / fps, eligible: true, inCombat: false, hoverHeight: .38);
++          expect((f.height - last).abs(), lessThanOrEqualTo(1.5 / fps + .0001));
++          last = f.height;
++

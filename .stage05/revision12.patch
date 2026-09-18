@@ -1,0 +1,397 @@
+               ],
++              ),
++            ),
++          ),
++          actions: [
++            TextButton(
++              onPressed: () => Navigator.pop(c),
++              child: const Text('Cancelar'),
++            ),
++            FilledButton(
++              key: const ValueKey('editor-apply'),
++              onPressed: () {
++                try {
++                  final edits = <(int, FieldSpan, String)>[];
++                  for (final row in all ? visible : [selected]) {
++                    final f = d
++                        .fields(row)
++                        .where(
++                          (s) =>
++                              s.spec.name == field.spec.name &&
++                              s.spec.type == field.spec.type,
++                        )
++                        .firstOrNull;
++                    if (f != null) edits.add((row, f, controller.text));
++                  }
++                  d.editMany(
++                    edits,
++                    title: all
++                        ? 'Edición de ${edits.length} registros'
++                        : 'Editar ${field.spec.name}',
++                  );
++                  _refresh();
++                  Navigator.pop(c);
++                } catch (e) {
++                  update(() => error = '$e');
++                }
++              },
++              child: const Text('Aplicar'),
++            ),
++          ],
++        ),
++      ),
++    );
++    await Navigator.of(context, rootNavigator: true).push(dialogRoute);
++    await dialogRoute.completed;
++    controller.dispose();
++  }
++
++  Future<void> _binaryDialog(FieldSpan field) async {
++    final d = doc!;
++    var page = 0;
++    await showDialog<void>(
++      context: context,
++      builder: (c) => StatefulBuilder(
++        builder: (c, update) {
++          final start = field.start + page * 1024,
++              end = (start + 1024).clamp(start, field.start + field.length),
++              b = d.payload.sublist(start, end);
++          final lines = <String>[];
++          for (var i = 0; i < b.length; i += 16) {
++            final part = b.sublist(i, (i + 16).clamp(i, b.length));
++            lines.add(
++              '${(start + i).toRadixString(16).padLeft(8, '0')}  ${part.map((v) => v.toRadixString(16).padLeft(2, '0')).join(' ')}',
++            );
++          }
++          return AlertDialog(
++            title: Text('Bytes conservados · ${field.length} bytes'),
++            content: SizedBox(
++              width: 700,
++              height: 470,
++              child: SingleChildScrollView(
++                child: SelectableText(
++                  lines.join('\n'),
++                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
++                ),
++              ),
++            ),
++            actions: [
++              TextButton(
++                onPressed: page == 0 ? null : () => update(() => page--),
++                child: const Text('Anterior'),
++              ),
++              Text(
++                '${page + 1} / ${(field.length / 1024).ceil().clamp(1, 1000000)}',
++              ),
++              TextButton(
++                onPressed: end >= field.start + field.length
++                    ? null
++                    : () => update(() => page++),
++                child: const Text('Siguiente'),
++              ),
++              TextButton(
++                onPressed: () => Navigator.pop(c),
++                child: const Text('Cerrar'),
++              ),
++            ],
++          );
++        },
++      ),
++    );
++  }
++
++  Future<String?> _save(String name, Uint8List bytes) async {
++    if (Platform.isAndroid) {
++      // Scoped application folder, never all-files storage permission.
++      final base = await getApplicationDocumentsDirectory();
++      final folder = Directory('${base.path}/ShaiyaEditor/Exportaciones');
++      await folder.create(recursive: true);
++      final file = File(
++        '${folder.path}/${DateTime.now().microsecondsSinceEpoch}_$name',
++      );
++      await file.writeAsBytes(bytes, flush: true);
++      return file.path;
++    }
++    final target = await getSaveLocation(
++      suggestedName: name,
++      confirmButtonText: 'Guardar copia',
++    );
++    if (target == null) return null;
++    // Even file-selector overwrite acceptance does not overwrite input files.
++    final path = target.path;
++    for (final input in widget.library.files.values) {
++      if (input.replaceAll('\\', '/').toLowerCase() ==
++          path.replaceAll('\\', '/').toLowerCase()) {
++        throw const FormatException(
++          'Elige una ruta de copia, no el archivo original de DATA.',
++        );
++      }
++    }
++    if (await File(path).exists()) {
++      throw const FormatException(
++        'El destino ya existe. Usa un nombre nuevo para conservar las copias anteriores.',
++      );
++    }
++    final temp = File('$path.${DateTime.now().microsecondsSinceEpoch}.partial');
++    try {
++      await temp.writeAsBytes(bytes, flush: true);
++      final saved = await temp.readAsBytes();
++      if (!listEquals(saved, bytes)) {
++        throw const FormatException('La copia escrita no coincide.');
++      }
++      if (await File(path).exists()) {
++        throw const FormatException('El destino fue creado por otro proceso.');
++      }
++      await temp.rename(path);
++    } catch (_) {
++      if (await temp.exists()) await temp.delete();
++      rethrow;
++    }
++    return path;
++  }
++
++  Future<void> _exportDocument() => _job(() async {
++    final d = doc!;
++    final warnings = d.changes
++        .map((c) => c.row)
++        .toSet()
++        .expand((r) => rowWarnings(d, r))
++        .take(30)
++        .toList();
++    if (!await _confirm(
++      'Exportar copia verificada',
++      '${d.changeCount} campos modificados. El original no se sobrescribe.\n\n${warnings.isEmpty ? 'La copia del cliente NO actualiza el servidor. Instálala solo en un entorno de prueba con datos compatibles.' : warnings.join('\n')}',
++    )) {
++      return;
++    }
++    final bytes = d.exportBytes();
++    final check = d is CsvDocument
++        ? CsvDocument.open(bytes, d.path, GameTextEncoding.utf8)
++        : EditorReader.open(
++            bytes,
++            d.path,
++            encoding: d.codec.encoding,
++            forceProfile: d.profile,
++          );
++    if (check.profile != d.profile || check.rows.length != d.rows.length) {
++      throw const FormatException(
++        'La relectura cambió el perfil o la cantidad de registros.',
++      );
++    }
++    for (final c in d.changes) {
++      final f = check
++          .fields(c.row)
++          .where((f) => f.spec.name == c.field.spec.name)
++          .single;
++      if (check.read(f) != c.afterText) {
++        throw FormatException(
++          'No se conservó el valor de ${c.field.spec.name}.',
++        );
++      }
++    }
++    final target = await _save(baseName(d.path), bytes);
++    if (target != null) {
++      _note(
++        'Copia verificada: $target · ${d.changeCount} cambios siguen en la sesión para revisión.',
++      );
++    }
++  });
++  Future<void> _patch(bool import) => _job(() async {
++    final d = doc!;
++    if (import) {
++      final file = await openFile(
++        acceptedTypeGroups: [
++          const XTypeGroup(label: 'Parche de editor', extensions: ['json']),
++        ],
++      );
++      if (file == null) return;
++      if (await file.length() > 32 * 1024 * 1024) {
++        throw const FormatException('Parche demasiado grande.');
++      }
++      d.importPatch(await file.readAsString());
++      _refresh();
++      _note('Parche aplicado de forma atómica y reversible.');
++    } else {
++      final p = await _save(
++        '${baseName(d.path)}.patch.json',
++        Uint8List.fromList(utf8.encode(d.exportPatch())),
++      );
++      if (p != null) _note('Parche con SHA-256 guardado: $p');
++    }
++  });
++  Future<void> _importTable() => _job(() async {
++    final file = await openFile(
++      acceptedTypeGroups: [
++        const XTypeGroup(
++          label: 'Tablas SData, SVMAP o CSV',
++          extensions: ['sdata', 'svmap', 'csv'],
++        ),
++      ],
++    );
++    if (file == null) return;
++    if (await file.length() > 128 * 1024 * 1024) {
++      throw const FormatException('Archivo demasiado grande.');
++    }
++    final path = 'Importado/${file.name}',
++        data = await compute(parseEditorDocument, {
++          'bytes': await file.readAsBytes(),
++          'path': path,
++          'encoding': encoding.name,
++        });
++    if (_cache[path]?.dirty == true) {
++      throw const FormatException(
++        'Ya hay una tabla importada con ese nombre y cambios pendientes.',
++      );
++    }
++    _cache[path] = data;
++    doc = data;
++    selected = 0;
++    _lookup.clear();
++    _rowsQuery.clear();
++    _labels.clear();
++    group = 'Todos';
++    classFilter = 'Todas';
++    factionFilter = 'Todas';
++    _filter();
++    _note('Tabla importada · ${data.authority}');
++  });
++  Future<void> _exportArchive(bool pack) => _job(() async {
++    final source = widget.library.archive!;
++    if (!await _confirm(
++      pack ? 'Construir SAH/SAF editado' : 'Extraer todos los recursos',
++      pack
++          ? 'Se crea un par estándar nuevo con las tablas modificadas de esta sesión. Los originales permanecen intactos. Un cliente con protecciones personalizadas puede necesitar su formato específico.'
++          : 'Se extraen TODOS los archivos del índice en una carpeta DATA nueva. Incluye formatos que el visor no interpreta. No se sobrescribe ninguna carpeta existente.',
++    )) {
++      return;
++    }
++    final parent = await getDirectoryPath(
++      confirmButtonText: 'Elegir carpeta de salida',
++    );
++    if (parent == null) return;
++    final control = ExportControl();
++    exporting = control;
++    var last = DateTime.fromMillisecondsSinceEpoch(0);
++    void notify(ExportProgress p) {
++      if (!mounted) return;
++      final now = DateTime.now();
++      if (now.difference(last).inMilliseconds > 90 || p.done == p.total) {
++        last = now;
++        setState(() => progress = p);
++      }
++    }
++
++    try {
++      final changes = <String, Uint8List>{};
++      if (pack) {
++        for (final entry in _cache.entries) {
++          if (entry.value.dirty) {
++            final id = widget.library.files[entry.key];
++            if (id == null || !source.index.entries.containsKey(id)) {
++              throw FormatException(
++                '${entry.key}: importación externa; expórtala por separado, no pertenece al SAH.',
++              );
++            }
++            final d = entry.value, bytes = d.exportBytes();
++            final read = EditorReader.open(
++              bytes,
++              d.path,
++              encoding: d.codec.encoding,
++              forceProfile: d.profile,
++            );
++            if (read.rows.length != d.rows.length ||
++                read.profile != d.profile) {
++              throw FormatException('Relectura fallida: ${d.path}');
++            }
++            for (final c in d.changes) {
++              final field = read
++                  .fields(c.row)
++                  .where((f) => f.spec.name == c.field.spec.name)
++                  .single;
++              if (read.read(field) != c.afterText) {
++                throw FormatException(
++                  'Valor no conservado: ${d.path}/${c.field.spec.name}',
++                );
++              }
++            }
++            changes[id] = bytes;
++          }
++        }
++      }
++      final result = pack
++          ? await ArchiveExport.repack(
++              source,
++              Directory(parent),
++              replacements: changes,
++              control: control,
++              progress: notify,
++            )
++          : await ArchiveExport.extract(
++              source,
++              Directory(parent),
++              control: control,
++              progress: notify,
++            );
++      _note('${result.files} archivos verificados · ${result.folder}');
++    } finally {
++      exporting = null;
++      if (mounted) setState(() => progress = null);
++    }
++  });
++  Future<void> _exportReport() => _job(() async {
++    final report = {
++      'version': '0.5.0',
++      'source': widget.library.sourceDiagnostics,
++      'tables': _cache.values.map((d) => d.report()).toList(),
++      'privacy':
++          'Sin contenido de tablas ni credenciales. No se envía automáticamente.',
++      'status': status,
++    };
++    final p = await _save(
++      'auditoria_editor.json',
++      Uint8List.fromList(
++        utf8.encode(const JsonEncoder.withIndent('  ').convert(report)),
++      ),
++    );
++    if (p != null) _note('Informe guardado: $p');
++  });
++  Future<void> _csv() => _job(() async {
++    final d = doc!;
++    if (d.rows.isEmpty) return;
++    final union = <String>{};
++    for (final row in visible) {
++      union.addAll(d.fields(row).map((f) => f.spec.name));
++    }
++    if (union.length > 5000) {
++      throw const FormatException(
++        'La vista combina más de 5.000 columnas diferentes. Filtra un tipo de registro o usa el parche sin pérdida.',
++      );
++    }
++    final names = union.toList();
++    String q(String s) => '"${s.replaceAll('"', '""')}"';
++    final out = StringBuffer('\uFEFF');
++    out.writeln(['row', ...names].map(q).join(','));
++    for (final row in visible) {
++      final map = {for (final f in d.fields(row)) f.spec.name: d.read(f)};
++      out.writeln(
++        [row.toString(), ...names.map((n) => map[n] ?? '')].map(q).join(','),
++      );
++    }
++    final path = await _save(
++      '${baseName(d.path)}.csv',
++      Uint8List.fromList(utf8.encode(out.toString())),
++    );
++    if (path != null) {
++      _note(
++        'Vista filtrada exportada como CSV UTF-8: $path. Es una vista de consulta; usa el parche JSON para intercambio sin pérdida.',
++      );
++    }
++  });
++  Widget _smallButton(
++    IconData icon,
++    String label,
++    VoidCallback? onPressed, {
++    Key? key,
++  }) => TextButton.icon(
++    key: key,
++    onPressed: busy ?
