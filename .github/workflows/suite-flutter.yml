@@ -1,0 +1,93 @@
+name: Suite Flutter - editor and independent client
+on:
+  push:
+    branches: [release/studio-06-suite]
+    paths: [.github/workflows/suite-flutter.yml]
+permissions:
+  contents: read
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      source_commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/studio-06-suite
+      - name: Restore checked source delta
+        run: python ci/suite_delta/apply.py
+      - name: Commit ordinary source files, never force push
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name 'Shaiya Studio CI'
+          git config user.email 'studio-ci@users.noreply.github.com'
+          git commit -m 'feat: independent Flutter local client, scene exchange and 0.6 preview fixes'
+          git push origin HEAD:release/studio-06-suite
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  editor:
+    needs: integrate
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.integrate.outputs.source_commit }}
+  local-game:
+    needs: integrate
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.integrate.outputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Prepare root native renderer integration
+        run: |
+          python tool/prepare.py --platforms windows
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          $fixture = Join-Path $env:RUNNER_TEMP 'shaiya-local-game-fixture'
+          python tool/make_native_fixture.py $fixture
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          "SHAIYA_FIXTURE_PATH=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHAIYA_QA_PATH=$(Join-Path $env:GITHUB_WORKSPACE 'qa-game')" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Test native play, rendering and save reload
+        run: flutter test integration_test/local_game_test.dart -d windows --reporter expanded
+      - name: Build separate Flutter game.exe
+        run: |
+          python tool/prepare_local_game.py --platforms windows
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          Push-Location ingenieria_inversa/flutter_game
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          flutter build windows --release
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          Pop-Location
+          python ci/package_local_game.py
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Local-Flutter-Windows
+          path: dist-game/
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Local-game-native-evidence
+          path: qa-game/
+          retention-days: 30
+          if-no-files-found: warn
