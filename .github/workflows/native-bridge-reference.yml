@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Fetch pinned sources and submodule dependencies
+      - name: Fetch pinned references for inspection, not a release
         shell: bash
         run: |
           set -euo pipefail
@@ -19,8 +19,13 @@ jobs:
           git -C upstream remote add origin https://github.com/aosyatnik/Imgeneus.git
           git -C upstream fetch --depth 1 origin 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
           git -C upstream checkout --detach FETCH_HEAD
-          test "$(git -C upstream rev-parse HEAD)" = 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
-          git -C upstream submodule update --init --recursive --depth 1
+          git -C upstream submodule update --init --recursive --depth 1 -- submodules/LiteNetwork submodules/Parsec submodules/Sylver.HandlerInvoker
+          mkdir -p upstream/submodules/Imgeneus.Authentication
+          git -C upstream/submodules/Imgeneus.Authentication init -q
+          git -C upstream/submodules/Imgeneus.Authentication remote add origin https://github.com/aosyatnik/Imgeneus.Authentication
+          git -C upstream/submodules/Imgeneus.Authentication fetch --depth 1 origin 77b3a65e9a0ba60f83e1aa452e9f0b997ea27a70
+          git -C upstream/submodules/Imgeneus.Authentication checkout --detach FETCH_HEAD
+          printf '%s\n' 'Authentication upstream pin b3410dd2c25af15d6f761c33574563ffa557a796 is unavailable. Reference 77b3a65e9a0ba60f83e1aa452e9f0b997ea27a70 is for compatibility inspection only; not assumed compatible.' > out/REFERENCE_LIMITATION.txt
           git -C upstream submodule status --recursive > out/submodule-versions.txt
           tar --exclude=.git -czf out/imgeneus-reference-complete.tar.gz -C upstream .
           cd out && sha256sum *.gz > SHA256.txt
