@@ -1,7 +1,4 @@
-"""Generate a trace-only COM wrapper using the installed SDK declarations.
-Anonymous parameters in SDK method declarations receive local names; their
-original types, argument ordering, return values and calling convention remain.
-"""
+"""Generate an SDK-exact, trace-only COM wrapper; never forge HRESULTs."""
 from pathlib import Path
 import os,re
 
@@ -15,12 +12,8 @@ def parameters(text):
   words=re.findall(r'\b\w+\b',clean)
   if not words:raise RuntimeError('Empty COM parameter: '+repr(part))
   match=re.search(r'([A-Za-z_]\w*)\s*$',clean)
-  # A lone type, or a declaration ending in pointer/reference, has no name.
-  qualifiers={'const','CONST','volatile','unsigned','signed','struct'}
-  significant=[w for w in words if w not in qualifiers]
-  anonymous=match is None or len(significant)==1
-  if anonymous:
-   name=f'arg{i}';arg=arg+' '+name
+  significant=[w for w in words if w not in {'const','CONST','volatile','unsigned','signed','struct'}]
+  if match is None or len(significant)==1:name=f'arg{i}';arg=arg+' '+name
   else:name=match[1]
   declarations.append(arg);names.append(name)
  return ', '.join(declarations),names
@@ -35,8 +28,8 @@ def instrument(source):
  text=header[start.end():];text=text[:text.index('};')]
  pattern=r'STDMETHOD(?:_\s*\(\s*([^,]+),\s*(\w+)\s*\)|\s*\(\s*(\w+)\s*\))\s*\((.*?)\)\s*PURE'
  methods=re.findall(pattern,text,re.S)
- if len(methods)!=119:raise RuntimeError('Expected 119 IDirect3DDevice9 methods; got '+str(len(methods)))
- code=['#include <intrin.h>','class DiagnosticDevice final : public IDirect3DDevice9 {','IDirect3DDevice9* d; std::atomic<ULONG> refs{1}; unsigned calls=0;','public: explicit DiagnosticDevice(IDirect3DDevice9* p):d(p){}']
+ if len(methods)!=119:raise RuntimeError('Expected 119 methods; got '+str(len(methods)))
+ code=['#include <intrin.h>',Path(__file__).with_name('error_diagnostics.h').read_text(),'class DiagnosticDevice final : public IDirect3DDevice9 {','IDirect3DDevice9* d; std::atomic<ULONG> refs{1}; unsigned calls=0;','public: explicit DiagnosticDevice(IDirect3DDevice9* p):d(p){}']
  for return_type,under_name,name,args in methods:
   name=under_name or name;ret=return_type.strip() or 'HRESULT';args,names=parameters(args)
   prefix=ret+' STDMETHODCALLTYPE '+name+'('+args+') override {'
@@ -57,7 +50,10 @@ def instrument(source):
  source=source.replace('class Diagnostic9 final:', '\n'.join(code)+'\nclass Diagnostic9 final:',1)
  needle='trace("Device=%08x",h);return h;'
  if source.count(needle)!=1:raise RuntimeError('Diagnostic CreateDevice contract changed')
- return source.replace(needle,'trace("Device=%08x",h);if(SUCCEEDED(h)&&o&&*o)*o=new DiagnosticDevice(*o);return h;')
+ source=source.replace(needle,'trace("Device=%08x",h);if(SUCCEEDED(h)&&o&&*o)*o=new DiagnosticDevice(*o);return h;')
+ needle='ProbeCreate9(UINT version){'
+ if source.count(needle)!=1:raise RuntimeError('Diagnostic entry contract changed')
+ return source.replace(needle,needle+'installErrors();')
 
 if __name__=='__main__':
  assert parameters('THIS_ D3DTRANSFORMSTATETYPE State, CONST D3DMATRIX*') == ('D3DTRANSFORMSTATETYPE State, CONST D3DMATRIX* arg1',['State','arg1'])
