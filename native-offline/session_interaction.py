@@ -1,5 +1,5 @@
-"""Bounded interaction with our own public-reference CI client window only.
-Positions come from inspected screenshots; captures do not prove full gameplay.
+"""Bounded interaction with the owned reference-client window in isolated CI.
+Screenshots and server logs remain the evidence; no automatic gameplay claim.
 """
 import ctypes, os, time
 from ctypes import wintypes
@@ -14,13 +14,18 @@ def advance(game, windows, screenshot, report):
     def click(x,y):
         if game.poll() is not None:raise RuntimeError('Native client exited.')
         user.SetForegroundWindow(hwnd);time.sleep(.2)
-        p=wintypes.POINT(round((rect.right-rect.left)*x),round((rect.bottom-rect.top)*y))
-        if not user.ClientToScreen(hwnd,ctypes.byref(p)):raise RuntimeError('Coordinate conversion failed')
-        user.SetCursorPos(p.x,p.y);user.mouse_event(2,0,0,0,0);time.sleep(.1);user.mouse_event(4,0,0,0,0)
+        point=wintypes.POINT(round((rect.right-rect.left)*x),round((rect.bottom-rect.top)*y))
+        if not user.ClientToScreen(hwnd,ctypes.byref(point)):raise RuntimeError('Coordinate conversion failed')
+        user.SetCursorPos(point.x,point.y);user.mouse_event(2,0,0,0,0);time.sleep(.1);user.mouse_event(4,0,0,0,0)
     click(.445,.855);time.sleep(15);screenshot('after-server-enter.png')
-    report['steps'].append('Local server selected; original client reached faction screen in the previous inspected run')
     click(.79,.39);time.sleep(1);screenshot('faction-highlight.png')
-    click(.933,.948);time.sleep(8);screenshot('after-faction-next.png')
-    report['steps'].append('Selected Alliance of Light and pressed Next on the verified faction layout')
+    click(.933,.948)
+    for i in range(3):
+        time.sleep(15)
+        if game.poll() is not None:raise RuntimeError('Client exited while loading character selection.')
+        visible=windows(game.pid)
+        if any('error' in w['title'].lower() for w in visible):raise RuntimeError('Native error dialog during character load: '+repr(visible))
+        screenshot('character-loading-'+str(i)+'.png')
+    report['steps'].append('Selected Light faction and observed 45 seconds of native scene loading')
     report['characterSelectionObservedByAutomation']=False
-    report['gate']='FACTION_SELECTION_ADVANCED_CAPTURE_REQUIRES_REVIEW'
+    report['gate']='CHARACTER_SCENE_CAPTURE_REQUIRES_REVIEW'
