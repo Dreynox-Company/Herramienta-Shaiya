@@ -7,7 +7,7 @@ root=Path(a.client_root).resolve();package=Path(a.package).resolve();proof=Path(
 slot=proof.parent/'private-native-slot';slot.mkdir(exist_ok=True)
 token=secrets.token_hex(24);password=secrets.token_hex(16);env=os.environ.copy()
 env.update(SHAIYA_OFFLINE_SLOT=str(slot),SHAIYA_OFFLINE_FACTION='light',SHAIYA_OFFLINE_PASSWORD=password,SHAIYA_OFFLINE_TOKEN=token,ASPNETCORE_ENVIRONMENT='Production',DOTNET_ENVIRONMENT='Production',ALSOFT_DRIVERS='null',DSOAL_LOGLEVEL='2',DSOAL_LOGFILE=str(proof/'audio-session.log'))
-processes=[];handles=[];report={'schema':3,'nativeGameEntered':False,'progressReloaded':False,'nativeLaunched':False,'audioOutput':'CI null backend','steps':[]};ok=False
+processes=[];handles=[];report={'schema':4,'nativeGameEntered':False,'progressReloaded':False,'nativeLaunched':False,'audioOutput':'CI null backend','steps':[]};ok=False
 user=ctypes.windll.user32;callback=ctypes.WINFUNCTYPE(ctypes.c_bool,ctypes.c_void_p,ctypes.c_void_p)
 def text(hwnd):
  n=user.GetWindowTextLengthW(ctypes.c_void_p(hwnd));buf=ctypes.create_unicode_buffer(n+1);user.GetWindowTextW(ctypes.c_void_p(hwnd),buf,n+1);return buf.value
@@ -57,7 +57,10 @@ try:
   if any('error' in w['title'].lower() for w in visible):raise RuntimeError('Native error dialog: '+repr(visible))
   if game.poll() is not None:break
  report['gate']='NATIVE_SESSION_REQUIRES_INTERACTIVE_VALIDATION';ok=game.poll() is None and any(w['title']=='Shaiya' for w in windows(game.pid))
-except Exception as error:report['error']=str(error)
+ if ok:
+  from session_interaction import advance
+  advance(game,windows,screenshot,report)
+except Exception as error:report['error']=str(error);ok=False
 finally:
  for process in reversed(processes):
   if process.poll() is None:
