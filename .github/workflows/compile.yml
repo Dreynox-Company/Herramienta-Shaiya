@@ -1,0 +1,16 @@
+name: Shaiya Bridge CI - Flutter Windows
+on:
+  push:
+    branches: [main, 'fix/**', 'feat/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flutter-windows-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  verify-and-build:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[restore-checkpoint]')
+    uses: ./.github/workflows/build.yml
