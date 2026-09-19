@@ -29,16 +29,17 @@ jobs:
           mkdir -p probe
           git -C upstream submodule status --recursive > probe/submodule-versions.txt
           python runtime/prepare_offline.py upstream
-          if test -f runtime/bootstrap_offline.py; then python runtime/bootstrap_offline.py upstream; fi
+          python runtime/bootstrap_offline.py upstream
       - name: Compile and verify reference projects
         shell: bash
         run: |
           set -euo pipefail
           dotnet build upstream/src/Imgeneus.Login/Imgeneus.Login.csproj -c SHAIYA_ps0032 --verbosity minimal 2>&1 | tee probe/login-build.log
           dotnet build upstream/src/Imgeneus.World/Imgeneus.World.csproj -c SHAIYA_ps0032 --verbosity minimal 2>&1 | tee probe/world-build.log
-          if test -f upstream/src/Offline.Verify/Offline.Verify.csproj; then dotnet run --project upstream/src/Offline.Verify/Offline.Verify.csproj -c Release 2>&1 | tee probe/storage-tests.log; fi
+          dotnet run --project upstream/src/Offline.Verify/Offline.Verify.csproj -c Release 2>&1 | tee probe/storage-tests.log
+          python runtime/service_smoke.py upstream probe
           cp upstream/OFFLINE_PORT_MANIFEST.json probe/
-          echo 'Compilation and synthetic tests do not prove native-game rendering or compatibility with the user client.' > probe/SCOPE.txt
+          echo 'Compiled and booted with reference definitions; native-game rendering and full gameplay require separate tests.' > probe/SCOPE.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
