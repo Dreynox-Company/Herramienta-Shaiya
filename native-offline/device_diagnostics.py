@@ -6,8 +6,8 @@ import os,re
 
 def instrument(source):
  base=Path(os.environ.get('ProgramFiles(x86)',r'C:\Program Files (x86)'))/'Windows Kits/10/Include'
- headers=sorted(base.glob('*/um/d3d9.h'))
- if not headers:raise RuntimeError('Direct3D SDK header unavailable')
+ headers=sorted([*base.glob('*/shared/d3d9.h'),*base.glob('*/um/d3d9.h')])
+ if not headers:raise RuntimeError('Direct3D SDK header unavailable: '+str(base))
  header=headers[-1].read_text(errors='replace')
  start=re.search(r'DECLARE_INTERFACE_\s*\(\s*IDirect3DDevice9\s*,\s*IUnknown\s*\)',header)
  if not start:raise RuntimeError('Unrecognized Direct3D header syntax')
@@ -28,8 +28,6 @@ def instrument(source):
    names.append(m[1])
   prefix=ret+' STDMETHODCALLTYPE '+name+'('+args+') override {'
   if name=='QueryInterface':
-   # Expose only the interface being implemented. Forwarding an Ex interface
-   # would bypass the trace; refusing it is valid for Direct3DCreate9 (non-Ex).
    body=f'if(!{names[1]})return E_POINTER;*{names[1]}=nullptr;if({names[0]}==__uuidof(IUnknown)||{names[0]}==__uuidof(IDirect3DDevice9)){{*{names[1]}=this;AddRef();return S_OK;}}return E_NOINTERFACE;'
   elif name=='AddRef':body='return ++refs;'
   elif name=='Release':body='auto n=--refs;if(!n){d->Release();delete this;}return n;'
