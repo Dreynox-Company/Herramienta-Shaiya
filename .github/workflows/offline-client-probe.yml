@@ -1,0 +1,107 @@
+name: Native offline client - Windows compatibility
+on:
+  push:
+    branches: [feat/studio-06-workbench-offline]
+    paths: [.github/workflows/offline-client-probe.yml, 'native-offline/**']
+permissions:
+  contents: read
+concurrency:
+  group: offline-native-windows
+  cancel-in-progress: true
+jobs:
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Recover exact already tested runtime adapters
+        shell: pwsh
+        run: |
+          git fetch origin 63afe4c3a2b97be1dd0f415930b7fa6bd59e82e9
+          git restore --source=63afe4c3a2b97be1dd0f415930b7fa6bd59e82e9 -- runtime
+          git clone --no-checkout https://github.com/aosyatnik/Imgeneus.git upstream
+          git -C upstream checkout 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
+          git -C upstream submodule update --init --recursive --depth 1 -- submodules/LiteNetwork submodules/Parsec submodules/Sylver.HandlerInvoker
+          git clone https://github.com/aosyatnik/Imgeneus.Authentication upstream/submodules/Imgeneus.Authentication
+          git -C upstream/submodules/Imgeneus.Authentication checkout 77b3a65e9a0ba60f83e1aa452e9f0b997ea27a70
+          python runtime/prepare_offline.py upstream
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          python runtime/bootstrap_offline.py upstream
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - name: Publish self-contained local services and prove SQLite integrity
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force proof, package/runtime | Out-Null
+          dotnet publish upstream/src/Imgeneus.Login/Imgeneus.Login.csproj -c SHAIYA_ps0032 -r win-x64 --self-contained true -o package/runtime/login -v minimal 2>&1 | Tee-Object proof/login-build.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          dotnet publish upstream/src/Imgeneus.World/Imgeneus.World.csproj -c SHAIYA_ps0032 -r win-x64 --self-contained true -o package/runtime/world -v minimal 2>&1 | Tee-Object proof/world-build.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          dotnet run --project upstream/src/Offline.Verify/Offline.Verify.csproj -c Release 2>&1 | Tee-Object proof/sqlite-tests.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          if (Test-Path native-offline/Offline.Launcher.csproj) {
+            dotnet publish native-offline/Offline.Launcher.csproj -c Release -r win-x64 --self-contained true -o package -v minimal 2>&1 | Tee-Object proof/launcher-build.log
+            if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          }
+      - name: Download public reference client without executing archive scripts
+        shell: python
+        run: |
+          import urllib.request, tarfile, pathlib, hashlib, json, time, shutil
+          root=pathlib.Path('reference-client').resolve(); root.mkdir()
+          count=0; size=0; start=time.monotonic()
+          with urllib.request.urlopen('https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz',timeout=120) as stream:
+              with tarfile.open(fileobj=stream,mode='r|gz') as archive:
+                  for entry in archive:
+                      p=pathlib.PurePosixPath(entry.name.replace('\\','/'))
+                      if p.is_absolute() or '..' in p.parts or ':' in str(p): raise RuntimeError('Unsafe archive path')
+                      if entry.isdir(): continue
+                      if not entry.isfile(): raise RuntimeError('Links or devices in reference archive')
+                      count+=1; size+=entry.size
+                      if count>150000 or size>20*1024**3 or time.monotonic()-start>1200: raise RuntimeError('Reference extraction budget exceeded')
+                      target=root.joinpath(*p.parts); target.parent.mkdir(parents=True,exist_ok=True)
+                      with archive.extractfile(entry) as source, target.open('xb') as output: shutil.copyfileobj(source,output,1024*1024)
+          matches=list(root.rglob('game.exe'))
+          if len(matches)!=1: raise RuntimeError('Ambiguous game executable')
+          sha=hashlib.sha256(matches[0].read_bytes()).hexdigest()
+          if sha!='509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d': raise RuntimeError('Native client fingerprint mismatch')
+          pathlib.Path('proof/reference-profile.json').write_text(json.dumps({'files':count,'bytes':size,'client':str(matches[0]),'sha256':sha,'userFilesUploaded':False},indent=2))
+          pathlib.Path('reference-root.txt').write_text(str(matches[0].parent))
+      - name: Native client session probe
+        shell: pwsh
+        run: |
+          if (Test-Path native-offline/probe_session.py) {
+            python native-offline/probe_session.py --client-root (Get-Content reference-root.txt) --package package --proof proof
+            if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          } else {
+            'Reference and backend built. Session driver pending; no gameplay assertion.' | Out-File proof/SESSION_NOT_RUN.txt
+          }
+      - name: Include corresponding modified runtime source
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path upstream/OFFLINE_PORT_MANIFEST.json) {
+            Copy-Item upstream/OFFLINE_PORT_MANIFEST.json proof/
+            Copy-Item upstream/OFFLINE_BOOTSTRAP_MANIFEST.json proof/
+            tar --exclude=.git --exclude=bin --exclude=obj -czf runtime-source.tar.gz -C upstream .
+            Copy-Item upstream/LICENSE package/RUNTIME-LICENSE.txt
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Offline-native-Windows-evidence
+          path: proof/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Offline-runtime-Windows-development
+          path: |
+            package/
+            runtime-source.tar.gz
+          retention-days: 14
+          compression-level: 6
