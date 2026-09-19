@@ -1,0 +1,24 @@
+name: Shaiya Bridge CI
+
+on:
+  pull_request:
+    branches: [ main ] # O la rama que uses como base
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Descargar código
+      uses: actions/checkout@v4
+
+    - name: Configurar Entorno
+      uses: actions/setup-node@v4 # Cambia por setup-dotnet, setup-python, etc., según tu stack
+      with:
+        node-version: '20'
+
+    - name: Instalar Dependencias
+      run: npm install # O el comando de tu gestor de paquetes
+
+    - name: Compilar Proyecto
+      run: npm run build # El comando exacto que usas para compilar localmente
