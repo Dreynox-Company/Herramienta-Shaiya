@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Recover exact already tested runtime adapters
+      - name: Recover exact runtime adapters and apply native protocol profile
         shell: pwsh
         run: |
           git fetch origin 63afe4c3a2b97be1dd0f415930b7fa6bd59e82e9
@@ -34,7 +34,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
           python runtime/bootstrap_offline.py upstream
           if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
-      - name: Publish self-contained local services and prove SQLite integrity
+          python native-offline/prepare_protocol.py upstream
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - name: Publish local services and verify SQLite integrity
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force proof, package/runtime | Out-Null
@@ -74,19 +76,14 @@ jobs:
       - name: Native client session probe
         shell: pwsh
         run: |
-          if (Test-Path native-offline/probe_session.py) {
-            python native-offline/probe_session.py --client-root (Get-Content reference-root.txt) --package package --proof proof
-            if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
-          } else {
-            'Reference and backend built. Session driver pending; no gameplay assertion.' | Out-File proof/SESSION_NOT_RUN.txt
-          }
+          python native-offline/probe_session.py --client-root (Get-Content reference-root.txt) --package package --proof proof
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
       - name: Include corresponding modified runtime source
         if: always()
         shell: pwsh
         run: |
           if (Test-Path upstream/OFFLINE_PORT_MANIFEST.json) {
-            Copy-Item upstream/OFFLINE_PORT_MANIFEST.json proof/
-            Copy-Item upstream/OFFLINE_BOOTSTRAP_MANIFEST.json proof/
+            Copy-Item upstream/OFFLINE_*MANIFEST.json proof/
             tar --exclude=.git --exclude=bin --exclude=obj -czf runtime-source.tar.gz -C upstream .
             Copy-Item upstream/LICENSE package/RUNTIME-LICENSE.txt
           }
