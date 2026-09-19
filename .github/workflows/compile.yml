@@ -1,24 +1,16 @@
-name: Shaiya Bridge CI
-
+name: Shaiya Bridge CI - Flutter Windows
 on:
+  push:
+    branches: [main, 'fix/**', 'feat/**']
   pull_request:
-    branches: [ main ] # O la rama que uses como base
-
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flutter-windows-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Descargar código
-      uses: actions/checkout@v4
-
-    - name: Configurar Entorno
-      uses: actions/setup-node@v4 # Cambia por setup-dotnet, setup-python, etc., según tu stack
-      with:
-        node-version: '20'
-
-    - name: Instalar Dependencias
-      run: npm install # O el comando de tu gestor de paquetes
-
-    - name: Compilar Proyecto
-      run: npm run build # El comando exacto que usas para compilar localmente
+  verify-and-build:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[restore-checkpoint]')
+    uses: ./.github/workflows/build.yml

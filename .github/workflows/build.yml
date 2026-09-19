@@ -1,0 +1,120 @@
+name: Flutter Windows - verified sources and native integration
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact commit to build; blank uses the workflow event commit
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Format validation
+        run: dart format --output=none --set-exit-if-changed lib test integration_test tool
+      - name: Static analysis
+        run: |
+          set -euo pipefail
+          mkdir -p qa-sources
+          flutter analyze 2>&1 | tee qa-sources/analyze.txt
+      - name: Complete Dart and Flutter regression
+        run: |
+          set -euo pipefail
+          flutter test --reporter expanded --file-reporter=json:qa-sources/flutter-tests.json 2>&1 | tee qa-sources/flutter-tests.txt
+      - name: Python delivery and integrity tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tool/tests -v 2>&1 | tee qa-sources/python-tests.txt
+      - name: Measure flight controller; not native-game impact latency
+        run: dart run tool/audit_flight_latency.dart | tee qa-sources/flight-latency.txt
+      - name: Archive exact committed sources
+        run: |
+          commit=$(git rev-parse HEAD)
+          printf '%s\n' "$commit" > qa-sources/source-commit.txt
+          git archive --format=zip --output=Shaiya-Studio-Source.zip "$commit"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Source-regression-evidence
+          path: qa-sources/
+          if-no-files-found: warn
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Studio-Source
+          path: Shaiya-Studio-Source.zip
+          if-no-files-found: error
+          retention-days: 30
+  windows:
+    needs: tests
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: python tool/prepare.py --platforms windows
+      - run: flutter pub get --enforce-lockfile
+      - name: Create own synthetic DATA for native regression
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'shaiya-native-fixture'
+          $qa = Join-Path $env:GITHUB_WORKSPACE 'qa-native'
+          python tool/make_native_fixture.py $fixture
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic fixture generation failed.' }
+          "SHAIYA_FIXTURE_PATH=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHAIYA_QA_PATH=$qa" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Native integration - editor, archives, flight, mounts and combat
+        run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
+      - name: Build Windows release
+        run: flutter build windows --release
+      - name: Start and check real release window
+        run: ./tool/smoke_windows.ps1
+      - name: Package matching EXE, DLLs, Flutter data and commit provenance
+        run: python ci/package_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Studio-Windows-Audited
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-native-evidence
+          path: |
+            qa-native/
+            qa-windows/
+          if-no-files-found: warn
+          retention-days: 30

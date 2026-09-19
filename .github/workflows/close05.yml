@@ -1,0 +1,53 @@
+name: Cierre de fuentes 0.5
+on:
+  push:
+    branches: [work/studio-05-final-source]
+    paths: [.stage05/**, .github/workflows/close05.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Comprobar y aplicar correccion revisable
+        shell: bash
+        run: |
+          test "$GITHUB_REF_NAME" = work/studio-05-final-source
+          git merge-base --is-ancestor 62ea137388116d000f2e5fc333e8471f85595100 HEAD
+          python3 - <<'PY'
+          import hashlib,subprocess
+          from pathlib import Path
+          p=Path('.stage05/closing.patch')
+          actual=hashlib.sha256(p.read_bytes()).hexdigest()
+          print(len(p.read_bytes()),actual)
+          assert actual=='4c0239eaf41b9fe8ec980151a4c1599118a81ca40b7dc1f3926f00dd1184faa1'
+          subprocess.run(['git','apply','--check',str(p)],check=True)
+          subprocess.run(['git','apply','--index',str(p)],check=True)
+          PY
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test tool
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+      - run: python3 -m unittest discover -s tool/tests -v
+      - name: Registrar exclusivamente las fuentes verificadas
+        shell: bash
+        run: |
+          git fetch origin "$GITHUB_REF_NAME"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git rm -r .stage05
+          git diff --cached --name-only | grep -qv '^.github/workflows/'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: match mounted attacks to original weapon families and retain auditable conversion'
+          git push origin HEAD:refs/heads/work/studio-05-final-source
+          git rev-parse HEAD
