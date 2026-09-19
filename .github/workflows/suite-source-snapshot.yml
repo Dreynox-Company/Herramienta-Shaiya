@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Archive committed sources
+      - name: Archive exact sources including interrupted import
         run: |
           mkdir -p snapshot
           git archive --format=zip --output=snapshot/source.zip HEAD
