@@ -8,12 +8,14 @@ class ViewportMovementInput extends StatefulWidget {
   final MovementChanged onChanged;
   final Widget child;
   final void Function(LogicalKeyboardKey)? onAction;
+  final VoidCallback? onFlightToggle;
   const ViewportMovementInput({
     super.key,
     required this.focusNode,
     required this.onChanged,
     required this.child,
     this.onAction,
+    this.onFlightToggle,
   });
   @override
   State<ViewportMovementInput> createState() => _ViewportMovementInputState();
@@ -61,7 +63,12 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
           !event.synthesized &&
           _active &&
           _actionKeys.contains(event.logicalKey)) {
-        widget.onAction?.call(event.logicalKey);
+        if (event.logicalKey == LogicalKeyboardKey.space &&
+            HardwareKeyboard.instance.isShiftPressed) {
+          widget.onFlightToggle?.call();
+        } else {
+          widget.onAction?.call(event.logicalKey);
+        }
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -70,6 +77,12 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
       _clear();
       return KeyEventResult.handled;
     }
+    _samplePressed();
+    return KeyEventResult.handled;
+  }
+
+  void _samplePressed() {
+    if (!_active) return;
     final keyboard = HardwareKeyboard.instance;
     final pressed = keyboard.logicalKeysPressed;
     final x =
@@ -79,7 +92,6 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
         (pressed.contains(LogicalKeyboardKey.keyS) ? 1.0 : 0.0) -
         (pressed.contains(LogicalKeyboardKey.keyW) ? 1.0 : 0.0);
     widget.onChanged(x, z, keyboard.isShiftPressed);
-    return KeyEventResult.handled;
   }
 
   @override
@@ -93,7 +105,11 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
     autofocus: true,
     focusNode: widget.focusNode,
     onFocusChange: (hasFocus) {
-      if (!hasFocus) _clear();
+      if (!hasFocus) {
+        _clear();
+      } else {
+        _samplePressed();
+      }
     },
     onKeyEvent: _key,
     child: widget.child,

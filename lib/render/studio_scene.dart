@@ -187,7 +187,7 @@ class StudioScene extends ChangeNotifier {
   CharacterClass? selectedClass;
   ExtraMotionLibrary? extraMotions;
   final FlightTransition flightState = FlightTransition();
-  bool flightEnabled = true, headTracking = true, inspectAnyEquipment = false;
+  bool flightEnabled = false, headTracking = true, inspectAnyEquipment = false;
   double hoverOffset = .38, wingYaw = 0;
   final Map<String, ({double height, double depth, double size, double yaw})>
   _wingSettings = {};
@@ -232,7 +232,10 @@ class StudioScene extends ChangeNotifier {
       )
       .toList();
   bool get flying =>
-      flightAvailable && !combat.inGuard && flightState.pendingTarget == null;
+      flightAvailable &&
+      !combat.inGuard &&
+      flightState.pendingTarget == null &&
+      !flightState.combatDescent;
   bool get flightAvailable =>
       combat.playerHealth > 0 &&
       flightEnabled &&
@@ -928,6 +931,7 @@ class StudioScene extends ChangeNotifier {
       wing?.dispose();
       wing = staged;
       wingRecord = c;
+      if (c == null) flightEnabled = false;
       final cfg = _wingSettings['${c?.source}#${c?.id}'];
       final char = character;
       final b = char?.wingBone;
@@ -1244,6 +1248,46 @@ class StudioScene extends ChangeNotifier {
     changed();
   }
 
+  /// UI actions normally cancel walking before opening tools or changing assets.
+  /// Flight mode changes opt out so a held key or click route is not lost.
+  Future<void> runUserAction(
+    Future<void> Function() action, {
+    bool preserveMovement = false,
+  }) async {
+    if (!preserveMovement) clearMovement();
+    await action();
+  }
+
+  Future<void> toggleFlight() => requestFlight(!flightEnabled);
+  Future<void> requestFlight(bool enabled) async {
+    if (enabled) {
+      if (wing == null) {
+        throw const FormatException('Equipa alas antes de activar el vuelo.');
+      }
+      if (mount != null) {
+        throw const FormatException('Desmonta antes de activar el vuelo.');
+      }
+      if (character?.hover == null || character?.flight == null) {
+        throw const FormatException(
+          'Este cuerpo necesita un suplemento de vuelo compatible.',
+        );
+      }
+      if (combat.playerHealth <= 0 || game.jump.airborne) {
+        throw const FormatException(
+          'El personaje debe estar vivo y terminar el salto para activar el vuelo.',
+        );
+      }
+    }
+    setFlightEnabled(enabled);
+    say(
+      enabled
+          ? (combat.inGuard
+                ? 'Vuelo preparado: se retomará al terminar el combate, sin detener el recorrido.'
+                : 'Modo vuelo activado · Shift + Espacio para aterrizar.')
+          : 'Modo terrestre activado; las alas siguen equipadas.',
+    );
+  }
+
   void setFlightEnabled(bool enabled) {
     flightEnabled = enabled;
     refreshIdle();
@@ -1273,8 +1317,6 @@ class StudioScene extends ChangeNotifier {
   bool get sceneCombatLocked {
     final a = character;
     return busy ||
-        flightState.pendingTarget != null ||
-        (flightState.landing && !flightState.grounded) ||
         combat.playerHealth <= 0 ||
         (combat.active &&
             a != null &&
@@ -1572,11 +1614,12 @@ class StudioScene extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (flightState.height > .004 && mount == null) {
+    if (!flightState.grounded && mount == null) {
       flightState.queue(combat.target);
-      clearMovement();
-      character!.play(character!.normal!);
-      say('Aterrizando antes del ataque…');
+      // Preserve held movement and click-to-move routes while touching down.
+      refreshIdle();
+      movementTransitions.invalidate();
+      say('Descenso rápido de combate…');
       return;
     }
     combat.attack(

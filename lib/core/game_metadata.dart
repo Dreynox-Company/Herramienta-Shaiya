@@ -2,6 +2,8 @@ import 'dart:typed_data';
 import 'formats.dart';
 import 'seed_data.dart';
 import 'legacy_text.dart';
+import 'client_locale.dart';
+import 'game_text_codec.dart';
 
 class DataTable {
   final List<String> fields;
@@ -49,6 +51,7 @@ class ItemName {
 
 List<ItemName> readItemNames(Uint8List bytes, String source) {
   final table = DataTable.open(bytes, source), r = table.reader;
+  r.decoder = GameTextCodec(ClientLocale.encodingForPath(source)).decode;
   if (!table.fields.contains('itemname')) {
     r.fail('No es una tabla de nombres de equipo.');
   }
@@ -65,6 +68,7 @@ List<ItemName> readItemNames(Uint8List bytes, String source) {
 
 Map<int, String> readMonsterNames(Uint8List bytes, String source) {
   final table = DataTable.open(bytes, source), r = table.reader;
+  r.decoder = GameTextCodec(ClientLocale.encodingForPath(source)).decode;
   if (!table.fields.contains('name')) {
     r.fail('No es una tabla de nombres de criaturas.');
   }
@@ -230,4 +234,28 @@ String spanishItemName(String original, String fallback) {
   return text.isEmpty
       ? fallback
       : '${text[0].toUpperCase()}${text.substring(1)}';
+}
+
+class SkillName {
+  final int id, level;
+  final String name, description;
+  const SkillName(this.id, this.level, this.name, this.description);
+  String get key => '$id:$level';
+}
+
+List<SkillName> readSkillNames(Uint8List bytes, String source) {
+  final table = DataTable.open(bytes, source), r = table.reader;
+  if (!table.fields.contains('skilllevel') || !table.fields.contains('name')) {
+    r.fail('No es una tabla de nombres de habilidades.');
+  }
+  r.decoder = GameTextCodec(ClientLocale.encodingForPath(source)).decode;
+  final result = <SkillName>[];
+  for (var i = 0; i < table.count; i++) {
+    result.add(SkillName(r.i64(), r.i64(), r.str(), r.str()));
+  }
+  if (r.remaining <= 15 && r.bytes.sublist(r.offset).every((b) => b == 0)) {
+    r.skip(r.remaining);
+  }
+  r.end();
+  return result;
 }

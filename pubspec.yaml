@@ -10,6 +10,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: ^3.0.7
+  path: ^1.9.1
   three_js: 0.3.0
   vector_math: '>=2.2.0 <3.0.0'
   image: '>=4.5.4 <5.0.0'

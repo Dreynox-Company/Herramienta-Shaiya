@@ -6,6 +6,7 @@ import '../core/formats.dart';
 import '../core/world_resources.dart';
 import '../core/motion_catalog.dart';
 import 'library.dart';
+import '../core/client_locale.dart';
 
 class GameNames {
   final Map<String, List<ItemRule>> itemRules = {};
@@ -14,6 +15,11 @@ class GameNames {
   final Map<String, WorldResource> maps = {};
   final List<EffectRecipe> weaponEffects = [];
   final List<String> warnings = [];
+  final Map<String, String> localeSources = {};
+  final Map<String, SkillName> skills = {}, npcSkills = {};
+  final Map<String, Map<int, String>> worldTexts = {};
+  final Map<int, String> systemMessages = {}, secondarySystemMessages = {};
+  final Map<String, Map<int, List<String>>> localeConflicts = {};
   int itemCount = 0;
   Future<void> load(Library library, void Function(String) progress) async {
     Future<Uint8List?> read(String path) async =>
@@ -21,26 +27,25 @@ class GameNames {
     try {
       final data = await read('binarysdata/dbitemdata.sdata');
       if (data != null) itemRules.addAll(await compute(_rules, data));
-      final titlePath =
-          library.files.keys
-              .where(
-                (p) =>
-                    p.startsWith('binarysdata/dbitemtext_') &&
-                    p.endsWith('.sdata'),
-              )
-              .toList()
-            ..sort(
-              (a, b) => (a.contains('_esp') ? 0 : 1).compareTo(
-                b.contains('_esp') ? 0 : 1,
-              ),
-            );
+      final titlePath = ClientLocale.tableCandidates(
+        library.files.keys,
+        'dbitemtext',
+        beside: 'binarysdata/dbitemdata.sdata',
+      );
       if (data != null && titlePath.isNotEmpty) {
         progress('Relacionando nombres y modelos de equipo…');
         final info = await compute(_itemMetadata, {
           'data': data,
           'text': await library.read(titlePath.first),
+          'textPath': titlePath.first,
         });
+        localeSources['items'] = titlePath.first;
         itemByModel.addAll(info);
+        if (library.files.containsKey('dbitemdata.sdata')) {
+          warnings.add(
+            'Hay DBItemData en la raíz y en BinarySData. Se utiliza BinarySData con su tabla de nombres de la misma carpeta, sin fusionarlos.',
+          );
+        }
         itemCount = info.values.fold(0, (n, l) => n + l.length);
       }
     } catch (e) {
@@ -48,23 +53,82 @@ class GameNames {
     }
     try {
       final data = await read('binarysdata/dbmonsterdata.sdata');
-      final path = library.files.keys
-          .where(
-            (p) =>
-                p.startsWith('binarysdata/dbmonstertext_') &&
-                p.endsWith('.sdata'),
-          )
-          .firstOrNull;
+      final path = ClientLocale.tableCandidates(
+        library.files.keys,
+        'dbmonstertext',
+        beside: 'binarysdata/dbmonsterdata.sdata',
+      ).firstOrNull;
       if (data != null && path != null) {
+        localeSources['monsters'] = path;
         monsters.addAll(
           await compute(_monsterMetadata, {
             'data': data,
             'text': await library.read(path),
+            'textPath': path,
           }),
         );
       }
     } catch (e) {
       warnings.add('Nombres de criaturas: $e');
+    }
+    for (final kind in ['skill', 'npcskill']) {
+      final path = ClientLocale.tableCandidates(
+        library.files.keys,
+        'db${kind}text',
+        beside: 'binarysdata/db${kind}data.sdata',
+      ).firstOrNull;
+      if (path == null) continue;
+      try {
+        final rows = await compute(_skillText, {
+          'bytes': await library.read(path),
+          'path': path,
+        });
+        final target = kind == 'skill' ? skills : npcSkills;
+        for (final row in rows) {
+          if (target.containsKey(row.key)) {
+            throw FormatException('Clave de habilidad duplicada: ${row.key}');
+          }
+          target[row.key] = row;
+        }
+        localeSources[kind] = path;
+      } catch (e) {
+        warnings.add('Texto de $kind: $e');
+      }
+    }
+    for (final path in library.files.keys.where(
+      (p) => p.startsWith('world/') && p.endsWith('_spn.txt'),
+    )) {
+      try {
+        final key = path.replaceFirst('_spn.txt', '.wld');
+        worldTexts[key] = ClientLocale.indexedText(
+          await library.read(path),
+          path,
+        );
+        localeSources[key] = path;
+      } catch (e) {
+        warnings.add('Texto de mapa $path: $e');
+      }
+    }
+    for (final folder in ['systemmessage', 'systemmessage2']) {
+      final path = '$folder/spn.txt';
+      if (!library.files.containsKey(path)) continue;
+      try {
+        final catalogue = ClientLocale.indexedCatalogue(
+          await library.read(path),
+          path,
+        );
+        (folder == 'systemmessage' ? systemMessages : secondarySystemMessages)
+            .addAll(catalogue.resolved);
+        localeSources[folder] = path;
+        if (catalogue.conflicts.isNotEmpty) {
+          localeConflicts[path] = catalogue.conflicts;
+          warnings.add(
+            '${catalogue.conflicts.length} IDs tienen textos distintos en $path. Se conservan todas las variantes; no se selecciona una arbitrariamente.',
+          );
+        }
+      } catch (e) {
+        warnings.add('Mensajes en español $path: $e');
+      }
     }
     final seff = await read('effect/weapon.seff');
     if (seff != null) {
@@ -147,7 +211,11 @@ class GameNames {
     return '${w?.terrain.size == 0 ? 'Mazmorra' : 'Región'} $id';
   }
 
-  String areaTitle(WorldArea area, int index) {
+  String areaTitle(WorldArea area, int index, {String? worldPath}) {
+    final local = worldPath == null
+        ? null
+        : worldTexts[ClientLocale.canonicalPath(worldPath)]?[index];
+    if (local != null && local.isNotEmpty) return local;
     final value = area.comment.isNotEmpty ? area.comment : area.name;
     const known = {
       '컬로스': 'Keolloseu',
@@ -177,10 +245,16 @@ class GameNames {
   }
 }
 
-Map<String, List<ItemName>> _itemMetadata(Map<String, Uint8List> input) {
-  final rows = DataTable.open(input['data']!, 'DBItemData').integers(),
+Map<String, List<ItemName>> _itemMetadata(Map<String, Object> input) {
+  final rows = DataTable.open(
+        input['data']! as Uint8List,
+        'DBItemData',
+      ).integers(),
       names = {
-        for (final item in readItemNames(input['text']!, 'DBItemText'))
+        for (final item in readItemNames(
+          input['text']! as Uint8List,
+          input['textPath']! as String,
+        ))
           item.key: item,
       };
   final output = <String, List<ItemName>>{};
@@ -193,9 +267,15 @@ Map<String, List<ItemName>> _itemMetadata(Map<String, Uint8List> input) {
   return output;
 }
 
-Map<int, List<String>> _monsterMetadata(Map<String, Uint8List> input) {
-  final rows = DataTable.open(input['data']!, 'DBMonsterData').integers(),
-      names = readMonsterNames(input['text']!, 'DBMonsterText'),
+Map<int, List<String>> _monsterMetadata(Map<String, Object> input) {
+  final rows = DataTable.open(
+        input['data']! as Uint8List,
+        'DBMonsterData',
+      ).integers(),
+      names = readMonsterNames(
+        input['text']! as Uint8List,
+        input['textPath']! as String,
+      ),
       out = <int, List<String>>{};
   for (final row in rows) {
     final id = row['image'], name = names[row['id']];
@@ -236,3 +316,6 @@ Map<String, List<ItemRule>> _rules(Uint8List data) {
   }
   return out;
 }
+
+List<SkillName> _skillText(Map<String, Object> input) =>
+    readSkillNames(input['bytes'] as Uint8List, input['path'] as String);

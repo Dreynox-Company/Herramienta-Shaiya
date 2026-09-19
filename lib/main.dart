@@ -145,12 +145,12 @@ class _StudioState extends State<StudioPage> {
   Future<void> act(
     Future<void> Function() action, {
     bool restoreFocus = false,
+    bool preserveMovement = false,
   }) async {
     if (working || importing) return;
-    scene.clearMovement();
     setState(() => working = true);
     try {
-      await action();
+      await scene.runUserAction(action, preserveMovement: preserveMovement);
     } catch (e) {
       showError(e);
     } finally {
@@ -929,11 +929,15 @@ class _StudioState extends State<StudioPage> {
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 title: const Text(
-                  'Flotar / volar al equipar alas',
+                  'Modo vuelo · Shift + Espacio',
                   style: TextStyle(fontSize: 11),
                 ),
                 value: scene.flightEnabled,
-                onChanged: scene.setFlightEnabled,
+                onChanged: (enabled) => act(
+                  () => scene.requestFlight(enabled),
+                  preserveMovement: true,
+                  restoreFocus: true,
+                ),
               ),
               if (scene.extraMotions == null)
                 OutlinedButton.icon(
@@ -1333,7 +1337,7 @@ class _StudioState extends State<StudioPage> {
         ]),
         section('Atajos', [
           note(
-            'W A S D  —  caminar\nShift + dirección  —  correr\n1–4  —  ataques disponibles\nR  —  reiniciar combate\nArrastrar  —  orbitar\nRueda / pellizco  —  acercar\n↑ / ↓ en un selector  —  cambiar recurso\nIntro en el selector  —  catálogo',
+            'W A S D  —  caminar\nShift + dirección  —  correr\nEspacio  —  salto terrestre\nShift + Espacio  —  alternar vuelo con alas\n1–4  —  ataques disponibles\nR  —  reiniciar combate\nArrastrar  —  orbitar\nRueda / pellizco  —  acercar\n↑ / ↓ en un selector  —  cambiar recurso\nIntro en el selector  —  catálogo',
           ),
           note(
             'Los atajos del personaje solo actúan cuando el visor tiene el foco. No interfieren con las búsquedas.',
@@ -1465,7 +1469,7 @@ class _StudioState extends State<StudioPage> {
   Future<void> performAttack([int index = 0]) async {
     if (disabled || scene.enemy == null) return;
     try {
-      scene.clearMovement();
+      // A queued combat landing keeps the current input/route intact.
       scene.attackCounter = index;
       await scene.attack();
       focus.requestFocus();
@@ -1681,7 +1685,11 @@ class _StudioState extends State<StudioPage> {
           loaded.data.areas,
           null,
           (a) => '${a.name}/${a.center}',
-          (a) => catalog!.names.areaTitle(a, loaded.data.areas.indexOf(a)),
+          (a) => catalog!.names.areaTitle(
+            a,
+            loaded.data.areas.indexOf(a),
+            worldPath: scene.worldPath,
+          ),
           (a) async {
             await scene.visitArea(a);
           },
@@ -1775,6 +1783,8 @@ class _StudioState extends State<StudioPage> {
           child: ViewportMovementInput(
             focusNode: focus,
             onChanged: (x, z, run) => scene.setMovement(x, z, run: run),
+            onFlightToggle: () =>
+                act(scene.toggleFlight, preserveMovement: true),
             onAction: (key) {
               final keys = [
                 LogicalKeyboardKey.digit1,

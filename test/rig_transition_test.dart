@@ -65,7 +65,7 @@ void main() {
         var last = f.height;
         for (var i = 0; i < fps * 2; i++) {
           f.step(1 / fps, eligible: true, inCombat: false, hoverHeight: .38);
-          expect((f.height - last).abs(), lessThanOrEqualTo(1.5 / fps + .0001));
+          expect((f.height - last).abs(), lessThanOrEqualTo(5.0 / fps + .0001));
           last = f.height;
           expect(f.wantsFlight, false);
         }

@@ -23,7 +23,7 @@ class MainActivity : FlutterActivity() {
     private var pendingPicker: MethodChannel.Result? = null
     private val archiveUris = ConcurrentHashMap<String, Long>()
     private val indexed = ConcurrentHashMap<String, Set<String>>()
-    private val extensions = setOf("sdata", "svmap", "env", "seff", "wtr", "vani", "3de", "ini", "xml", "cfg", "3dc", "3do", "ani", "mlt", "alt", "itm", "mon", "dds", "png", "jpg", "jpeg", "tga", "bmp", "wav", "mp3", "ogg", "wld", "smod", "dg", "eft")
+    private val extensions = setOf("txt", "csv", "sdata", "svmap", "env", "seff", "wtr", "vani", "3de", "ini", "xml", "cfg", "3dc", "3do", "ani", "mlt", "alt", "itm", "mon", "dds", "png", "jpg", "jpeg", "tga", "bmp", "wav", "mp3", "ogg", "wld", "smod", "dg", "eft")
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dreynox.shaiya/data").setMethodCallHandler { call, result ->

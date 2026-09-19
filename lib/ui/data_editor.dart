@@ -13,11 +13,15 @@ import '../editor/document.dart';
 import '../editor/schema_reader.dart';
 import '../editor/csv_document.dart';
 import '../editor/field_semantics.dart';
+import '../core/client_locale.dart';
 
 EditDocument parseEditorDocument(Map<String, Object?> args) {
   final bytes = args['bytes']! as Uint8List,
       path = args['path']! as String,
-      encoding = GameTextEncoding.values.byName(args['encoding']! as String);
+      chosen = GameTextEncoding.values.byName(args['encoding']! as String);
+  final encoding = chosen == GameTextEncoding.automatic
+      ? ClientLocale.encodingForPath(path)
+      : chosen;
   return path.toLowerCase().endsWith('.csv')
       ? CsvDocument.open(bytes, path, encoding)
       : EditorReader.open(bytes, path, encoding: encoding);
@@ -197,36 +201,39 @@ class _DataEditorPageState extends State<DataEditorPage> {
   });
   Future<void> _loadNames(String path) async {
     _lookup.clear();
-    final lower = path.toLowerCase();
-    final prefix = lower.contains('monster')
-        ? 'dbmonstertext'
-        : lower.contains('skill')
-        ? 'dbskilltext'
-        : lower.contains('item')
-        ? 'dbitemtext'
-        : null;
+    final prefix = ClientLocale.nameFamily(path);
     if (prefix == null) return;
-    final candidates =
-        widget.library.files.keys
-            .where((p) => baseName(p).startsWith(prefix))
-            .toList()
-          ..sort();
+    var beside = path;
+    // Classic Item/Skill/Monster tables have implicit IDs and separate binary
+    // tables. Their localized names are a reference, not a schema conversion.
+    if (!baseName(path).toLowerCase().startsWith('db')) {
+      beside = 'binarysdata/reference.sdata';
+    }
+    final candidates = ClientLocale.tableCandidates(
+      widget.library.files.keys,
+      prefix,
+      beside: beside,
+    );
     if (candidates.isEmpty) return;
     try {
       final textDoc = await compute(parseEditorDocument, {
         'bytes': await widget.library.read(candidates.first),
         'path': candidates.first,
-        'encoding': encoding.name,
+        'encoding': ClientLocale.encodingForPath(
+          candidates.first,
+          fallback: encoding,
+        ).name,
       });
       for (var i = 0; i < textDoc.rows.length; i++) {
         final fs = textDoc.fields(i);
         final name = fs.where((f) => f.spec.text).firstOrNull;
         if (name == null) continue;
-        final key = fs
-            .where((f) => !f.spec.text)
-            .take(prefix == 'dbmonstertext' ? 1 : 2)
-            .map(textDoc.read)
-            .join(':');
+        final values = {
+          for (final f in fs)
+            if (!f.spec.text && f.spec.type != 'opaque')
+              f.spec.name.toLowerCase(): textDoc.read(f),
+        };
+        final key = editorIdentityKey(values, textDoc.rows[i]);
         _lookup[key] = textDoc.read(name);
       }
     } catch (e) {

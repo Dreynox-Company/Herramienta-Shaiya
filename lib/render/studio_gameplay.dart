@@ -292,7 +292,7 @@ extension StudioGameplay on StudioScene {
     if (character == null || busy || game.loadingWorld || sceneCombatLocked) {
       return;
     }
-    if (mount != null || flying) {
+    if (mount != null || flying || !flightState.grounded) {
       throw const FormatException(
         'Desmonta o desactiva el vuelo para saltar a pie.',
       );
@@ -332,6 +332,13 @@ extension StudioGameplay on StudioScene {
           combat.playerHealth > 0 &&
           combatClips.isNotEmpty) {
         combat.selectTarget(pending);
+        final targetActor = game.opponents[pending]!.actor;
+        if (actor != null) {
+          actor.root.rotation.y = facingYaw(
+            targetActor.root.position.x - actor.root.position.x,
+            targetActor.root.position.z - actor.root.position.z,
+          );
+        }
         combat.attack(
           targetDistance(pending),
           duration: combatClips[attackCounter % combatClips.length].duration,

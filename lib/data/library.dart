@@ -25,6 +25,8 @@ String canon(String path) {
 
 const supportedExtensions = {
   '.sdata',
+  '.txt',
+  '.csv',
   '.svmap',
   '.env',
   '.seff',
