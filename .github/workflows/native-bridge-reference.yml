@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Fetch pinned source without running project scripts
+      - name: Fetch pinned sources and submodule dependencies
         shell: bash
         run: |
           set -euo pipefail
@@ -20,14 +20,13 @@ jobs:
           git -C upstream fetch --depth 1 origin 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
           git -C upstream checkout --detach FETCH_HEAD
           test "$(git -C upstream rev-parse HEAD)" = 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
-          git -C upstream archive --format=tar.gz --output="$PWD/out/imgeneus-reference-source.tar.gz" HEAD
-          mkdir wheels
-          python -m pip download --only-binary=:all: --dest wheels pefile==2024.8.26 capstone==5.0.6 unicorn==2.1.4
-          tar -czf out/inspection-wheels.tar.gz wheels
+          git -C upstream submodule update --init --recursive --depth 1
+          git -C upstream submodule status --recursive > out/submodule-versions.txt
+          tar --exclude=.git -czf out/imgeneus-reference-complete.tar.gz -C upstream .
           cd out && sha256sum *.gz > SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Native-bridge-reference-inputs
+          name: Native-bridge-reference-complete
           path: out/
           retention-days: 7
           compression-level: 0
