@@ -1,3 +1,4 @@
+import '../render/native_view.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -562,7 +563,7 @@ class _PlaySessionState extends State<PlaySession> with WidgetsBindingObserver {
       Map<String, dynamic>.from(save.state['rules']! as Map),
     );
     scene = StudioScene(_log)..catalog = widget.catalog;
-    renderer = three.ThreeJS(
+    renderer = NativeView(
       settings: three.Settings(
         clearColor: 0x11151e,
         antialias: true,

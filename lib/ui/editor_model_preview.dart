@@ -1,3 +1,4 @@
+import '../render/native_view.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -154,7 +155,7 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   void initState() {
     super.initState();
     parts = StudioScene((_) {});
-    view = t.ThreeJS(
+    view = NativeView(
       settings: t.Settings(
         clearColor: 0x10151e,
         antialias: true,

@@ -1,3 +1,4 @@
+import 'render/native_view.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -104,7 +105,7 @@ class _StudioState extends State<StudioPage> {
   void initState() {
     super.initState();
     scene = StudioScene(log);
-    renderer = three.ThreeJS(
+    renderer = NativeView(
       settings: three.Settings(
         clearColor: 0x11151e,
         antialias: true,

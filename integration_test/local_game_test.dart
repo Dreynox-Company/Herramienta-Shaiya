@@ -32,6 +32,8 @@ void main() {
         await t.pump(const Duration(milliseconds: 40));
         await Future<void>.delayed(const Duration(milliseconds: 40));
       }
+      // State may settle between frames: repaint controls before tapping.
+      await t.pump();
       expect(predicate(), true, reason: label);
       checks.add(label);
     }
@@ -132,6 +134,13 @@ void main() {
       await wait(() => !session.saving, 'Save flush completed');
       final before = (await store.list()).saves.single;
       expect((before.state['progress']! as Map)['gold'], 5);
+      await t.pump();
+      expect(
+        t
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Partidas'))
+            .onPressed,
+        isNotNull,
+      );
       await t.tap(find.text('Partidas'));
       await wait(
         () => find.byType(PlaySession).evaluate().isEmpty && !menu.busy,
@@ -154,6 +163,13 @@ void main() {
         'Gold, victories, appearance and equipment persist across native sessions',
       );
       await shot('04-partida-recargada');
+      await t.pump();
+      expect(
+        t
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Partidas'))
+            .onPressed,
+        isNotNull,
+      );
       await t.tap(find.text('Partidas'));
       await wait(
         () => find.byType(PlaySession).evaluate().isEmpty,

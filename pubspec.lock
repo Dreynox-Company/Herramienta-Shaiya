@@ -247,7 +247,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_angle:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_angle
       sha256: "63e596f964cb5952ed3b891a344e459514380fd3536b6d513af3237640ecc0e1"
