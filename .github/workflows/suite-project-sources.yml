@@ -1,0 +1,37 @@
+name: Suite IDE sources and reverse-engineering checks
+on:
+  push:
+    branches: [release/studio-06-suite]
+    paths: [.github/workflows/suite-project-sources.yml, 'ingenieria_inversa/tools/**', 'ingenieria_inversa/tests/**', 'ingenieria_inversa/specs/**']
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned inspection dependencies
+        run: python -m pip install -r ingenieria_inversa/tools/requirements.txt
+      - name: Verify synthetic PE cases without executing binaries
+        run: |
+          mkdir -p source-proof
+          set -o pipefail
+          python -m unittest discover -s ingenieria_inversa/tests -v 2>&1 | tee source-proof/inspection-tests.log
+      - name: Export exact committed project for IDE review
+        run: |
+          git archive --format=zip --output=source-proof/project.zip HEAD
+          git rev-parse HEAD > source-proof/commit.txt
+          git ls-tree -r HEAD > source-proof/tree.txt
+          sha256sum source-proof/project.zip > source-proof/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Suite-IDE-Sources
+          path: source-proof/
+          if-no-files-found: error
+          retention-days: 30
