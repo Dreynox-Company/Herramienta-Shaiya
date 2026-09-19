@@ -164,6 +164,7 @@ class _StudioState extends State<StudioPage> {
   Future<void> openDataEditor() async {
     final library = catalog?.library;
     if (library == null || working) return;
+    final beforeRevision = library.revision;
     scene.clearMovement();
     focus.unfocus();
     await Navigator.of(context).push<void>(
@@ -177,6 +178,45 @@ class _StudioState extends State<StudioPage> {
         ),
       ),
     );
+    if (!mounted) return;
+    if (library.revision != beforeRevision) {
+      await act(() async {
+        final look = scene.appearance;
+        final refreshed = Catalog(library);
+        await refreshed.load((s) {
+          if (mounted) setState(() => progress = s);
+        });
+        if (!mounted) return;
+        final a = refreshed.archetypes
+            .where(
+              (a) =>
+                  a.id == look?.archetype.id && a.race == look?.archetype.race,
+            )
+            .firstOrNull;
+        scene.catalog = refreshed;
+        catalog = refreshed;
+        _memories.clear();
+        if (a != null && look != null) {
+          final slots = <Slot, PartRecord?>{};
+          for (final slot in Slot.values) {
+            final prior = look.selected[slot];
+            slots[slot] = prior == null
+                ? null
+                : (a.parts[slot] ?? [])
+                      .where(
+                        (p) =>
+                            p.raw.id == prior.raw.id &&
+                            p.tablePath == prior.tablePath,
+                      )
+                      .firstOrNull;
+          }
+          await scene.setAppearance(Appearance(a, slots, preset: look.preset));
+        }
+        scene.say(
+          'Datos guardados y catálogo recargado. Las referencias y texturas nuevas están disponibles en el laboratorio.',
+        );
+      });
+    }
     if (mounted) focus.requestFocus();
   }
 
@@ -340,7 +380,7 @@ class _StudioState extends State<StudioPage> {
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.5.0',
+        'version': '0.6.0',
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -2352,7 +2392,7 @@ class _StudioState extends State<StudioPage> {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.5.0',
+        'version': '0.6.0',
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,

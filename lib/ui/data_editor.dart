@@ -9,11 +9,24 @@ import 'package:path_provider/path_provider.dart';
 import '../core/game_text_codec.dart';
 import '../data/library.dart';
 import '../data/archive_export.dart';
+import '../data/archive_write.dart';
+import '../data/file_save.dart';
+import '../data/directory_pack.dart';
 import '../editor/document.dart';
 import '../editor/schema_reader.dart';
 import '../editor/csv_document.dart';
+import '../editor/catalog_document.dart';
+import '../editor/text_document.dart';
 import '../editor/field_semantics.dart';
 import '../core/client_locale.dart';
+import '../editor/workbench_model.dart';
+import '../editor/structure_editor.dart';
+import 'editor_style.dart';
+import 'editor_icons.dart';
+import 'editor_catalog.dart';
+import 'editor_map.dart';
+import 'editor_relations.dart';
+import 'record_editor.dart';
 
 EditDocument parseEditorDocument(Map<String, Object?> args) {
   final bytes = args['bytes']! as Uint8List,
@@ -22,6 +35,12 @@ EditDocument parseEditorDocument(Map<String, Object?> args) {
   final encoding = chosen == GameTextEncoding.automatic
       ? ClientLocale.encodingForPath(path)
       : chosen;
+  if (RegExp(r'\.(mlt|itm|mon)$', caseSensitive: false).hasMatch(path)) {
+    return CatalogDocument.open(bytes, path, encoding);
+  }
+  if (RegExp(r'\.(ini|cfg|txt|xml)$', caseSensitive: false).hasMatch(path)) {
+    return TextDocument.open(bytes, path, encoding);
+  }
   return path.toLowerCase().endsWith('.csv')
       ? CsvDocument.open(bytes, path, encoding)
       : EditorReader.open(bytes, path, encoding: encoding);
@@ -39,8 +58,8 @@ class _EditorSave extends Intent {
   const _EditorSave();
 }
 
-/// Dedicated, full-page editor. Source libraries are borrowed read-only;
-/// export always creates a copy or a completely new verified archive pair.
+/// Dedicated multi-document editor. Changes are explicit, version checked and
+/// committed transactionally; Save As retains the original source.
 class DataEditorPage extends StatefulWidget {
   final Library library;
   final GameTextEncoding initialEncoding;
@@ -58,6 +77,88 @@ class _DataEditorPageState extends State<DataEditorPage> {
       _rowsQuery = TextEditingController(),
       _fieldQuery = TextEditingController();
   final _cache = <String, EditDocument>{};
+  final _views = <String, (String, int, String, String)>{};
+  final _summaries = <int, RecordSummary>{};
+  final _windows = <RecordWindowState>[];
+  late final EditorImages _images;
+  String sortColumn = '@id';
+  bool descending = false, showInspector = true;
+  double explorerWidth = 220, inspectorWidth = 290;
+  Size workspaceSize = const Size(1200, 700);
+  bool get hasDrafts => _windows.any((w) => w.draft.dirty);
+  RecordSummary _summary(int row) => _summaries.putIfAbsent(row, () {
+    final base = RecordSummary.from(doc!, row);
+    return RecordSummary.from(doc!, row, name: _lookup[base.id]);
+  });
+  void _remember() {
+    if (doc != null) {
+      _views[doc!.path] = (
+        _rowsQuery.text,
+        selected,
+        classFilter,
+        factionFilter,
+      );
+    }
+  }
+
+  void _openRecord(int row) {
+    if (doc == null || row < 0 || row >= doc!.rows.length) return;
+    final existing = _windows
+        .where((w) => w.document == doc && w.row == row)
+        .firstOrNull;
+    if (existing != null) {
+      setState(() {
+        _windows.remove(existing);
+        existing.minimized = false;
+        _windows.add(existing);
+      });
+      return;
+    }
+    if (_windows.length >= 12) {
+      _note(
+        'Hay 12 registros abiertos. Cierra una ventana antes de abrir otra.',
+      );
+      return;
+    }
+    final x = workspaceSize.width > 800
+        ? 110.0 + (_windows.length % 5) * 22
+        : 8.0;
+    final width = (workspaceSize.width - 32).clamp(280.0, 1000.0),
+        height = (workspaceSize.height - 32).clamp(250.0, 680.0);
+    setState(
+      () => _windows.add(
+        RecordWindowState(
+          doc!,
+          row,
+          _label(row),
+          Rect.fromLTWH(
+            x.clamp(8, workspaceSize.width - width - 8),
+            16,
+            width,
+            height,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Rect _bound(Rect r) {
+    final w = r.width.clamp(
+          280.0,
+          (workspaceSize.width - 16).clamp(280.0, 1600.0),
+        ),
+        h = r.height.clamp(
+          280.0,
+          (workspaceSize.height - 16).clamp(280.0, 1000.0),
+        );
+    return Rect.fromLTWH(
+      r.left.clamp(8.0, (workspaceSize.width - w - 8).clamp(8.0, 2000.0)),
+      r.top.clamp(8.0, (workspaceSize.height - h - 8).clamp(8.0, 2000.0)),
+      w,
+      h,
+    );
+  }
+
   final _labels = <int, String>{};
   final _lookup = <String, String>{};
   final _scaffold = GlobalKey<ScaffoldState>();
@@ -78,20 +179,34 @@ class _DataEditorPageState extends State<DataEditorPage> {
   List<String> get paths =>
       {...widget.library.files.keys, ..._cache.keys}
           .where(
-            (p) => ['.sdata', '.svmap', '.csv'].any(p.toLowerCase().endsWith),
+            (p) => [
+              '.sdata',
+              '.svmap',
+              '.csv',
+              '.mlt',
+              '.itm',
+              '.mon',
+              '.ini',
+              '.cfg',
+              '.txt',
+              '.xml',
+            ].any(p.toLowerCase().endsWith),
           )
           .toList()
         ..sort();
   bool get dirty => _cache.values.any((d) => d.dirty);
+  bool keepBackup = false;
   @override
   void initState() {
     super.initState();
     encoding = widget.initialEncoding;
+    _images = EditorImages(widget.library);
   }
 
   @override
   void dispose() {
     debounce?.cancel();
+    _images.dispose();
     _generation++;
     exporting?.cancelled = true;
     _filesQuery.dispose();
@@ -145,10 +260,10 @@ class _DataEditorPageState extends State<DataEditorPage> {
       _note('Espera la operación o cancela la exportación antes de cerrar.');
       return;
     }
-    if (dirty &&
+    if ((dirty || hasDrafts) &&
         !await _confirm(
-          'Cambios sin exportar',
-          'Los originales siguen intactos. Volver al visor descarta los cambios de esta sesión. ¿Continuar?',
+          'Cambios sin guardar',
+          'Hay cambios recientes que todavía no se han guardado. Volver al visor los descarta; los guardados anteriormente se conservan. ¿Descartar y continuar?',
         )) {
       return;
     }
@@ -160,6 +275,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
   }
 
   Future<void> openTable(String path, {bool reload = false}) => _job(() async {
+    _remember();
     final generation = ++_generation;
     if (!reload && _cache.containsKey(path)) {
       doc = _cache[path];
@@ -184,16 +300,18 @@ class _DataEditorPageState extends State<DataEditorPage> {
       doc = parsed;
     }
     await _loadNames(path);
-    selected = 0;
+    final view = _views[path];
+    selected = view?.$2 ?? 0;
     group = 'Todos';
     _labels.clear();
-    _rowsQuery.clear();
+    _summaries.clear();
+    _rowsQuery.text = view?.$1 ?? '';
     _fieldQuery.clear();
-    classFilter = 'Todas';
-    factionFilter = 'Todas';
+    classFilter = view?.$3 ?? 'Todas';
+    factionFilter = view?.$4 ?? 'Todas';
     _filter();
     _note(
-      '${doc!.rows.length} registros · ${doc!.profile} · original protegido',
+      '${doc!.rows.length} registros · ${doc!.profile} · ${doc!.codec.encoding.label}',
     );
     if (_scaffold.currentState?.isDrawerOpen ?? false) {
       _scaffold.currentState!.closeDrawer();
@@ -206,7 +324,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
     var beside = path;
     // Classic Item/Skill/Monster tables have implicit IDs and separate binary
     // tables. Their localized names are a reference, not a schema conversion.
-    if (!baseName(path).toLowerCase().startsWith('db')) {
+    if (!baseName(path).toLowerCase().startsWith('db') &&
+        prefix != 'npcquesttrans') {
       beside = 'binarysdata/reference.sdata';
     }
     final candidates = ClientLocale.tableCandidates(
@@ -273,10 +392,10 @@ class _DataEditorPageState extends State<DataEditorPage> {
   void _filter() {
     final d = doc;
     if (d == null) return;
-    final q = _rowsQuery.text.trim().toLowerCase();
+    final q = foldedSearch(_rowsQuery.text.trim());
     final out = <int>[];
     for (var i = 0; i < d.rows.length; i++) {
-      if (q.isNotEmpty && !_label(i).toLowerCase().contains(q)) continue;
+      if (q.isNotEmpty && !foldedSearch(_label(i)).contains(q)) continue;
       if (classFilter != 'Todas' || factionFilter != 'Todas') {
         final v = _values(i);
         if (classFilter != 'Todas') {
@@ -289,6 +408,20 @@ class _DataEditorPageState extends State<DataEditorPage> {
       }
       out.add(i);
     }
+    out.sort((a, b) {
+      String val(int row) {
+        final v = _summary(row);
+        return switch (sortColumn) {
+          '@id' => v.id,
+          '@name' => v.name,
+          '@category' => v.category,
+          _ => v.values[sortColumn] ?? '',
+        };
+      }
+
+      final c = compareEditorValues(val(a), val(b));
+      return (descending ? -c : c);
+    });
     visible = out;
     if (out.isNotEmpty && !out.contains(selected)) selected = out.first;
     if (mounted) setState(() {});
@@ -301,6 +434,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
 
   void _refresh() {
     _labels.clear();
+    _summaries.clear();
     _filter();
   }
 
@@ -314,6 +448,13 @@ class _DataEditorPageState extends State<DataEditorPage> {
       return;
     }
     final path = doc?.path;
+    if (hasDrafts) {
+      _note('Aplica o cierra los borradores antes de cambiar la codificación.');
+      return;
+    }
+    _windows.clear();
+    _views.clear();
+    _summaries.clear();
     _cache.clear();
     doc = null;
     _lookup.clear();
@@ -487,6 +628,262 @@ class _DataEditorPageState extends State<DataEditorPage> {
     );
   }
 
+  Future<void> _duplicateSelected() async {
+    final d = doc;
+    if (d == null || !StructureEditor.supported(d) || visible.isEmpty) return;
+    if (_windows.any((w) => w.document == d && w.draft.dirty)) {
+      _note(
+        'Aplica o cancela los borradores de esta tabla antes de crear filas.',
+      );
+      return;
+    }
+    final row = selected, ids = StructureEditor.identity(d, row);
+    final controls = {
+      for (final f in ids) f.spec.name: TextEditingController(text: d.read(f)),
+    };
+    String? error;
+    final route = DialogRoute<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('Duplicar como registro nuevo'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'La nueva clave debe estar libre. Se conservan los parámetros del registro. Las tablas de nombres y las referencias del servidor se editan por separado.',
+                ),
+                const SizedBox(height: 16),
+                ...ids.map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      controller: controls[f.spec.name],
+                      decoration: InputDecoration(
+                        labelText: FieldMeaning.of(f.spec.name).label,
+                        helperText: f.spec.name,
+                      ),
+                    ),
+                  ),
+                ),
+                if (error != null)
+                  Text(error!, style: const TextStyle(color: Colors.orange)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                try {
+                  StructureEditor.duplicate(d, row, {
+                    for (final e in controls.entries) e.key: e.value.text,
+                  });
+                  _windows.removeWhere((w) => w.document == d);
+                  selected = d.rows.length - 1;
+                  _refresh();
+                  Navigator.pop(c, true);
+                } catch (e) {
+                  update(() => error = '$e');
+                }
+              },
+              child: const Text('Crear registro'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final created = await Navigator.of(context).push(route);
+    await route.completed;
+    for (final c in controls.values) {
+      c.dispose();
+    }
+    if (created == true && mounted) _openRecord(selected);
+  }
+
+  Future<void> _deleteSelected() async {
+    final d = doc;
+    if (d == null || !StructureEditor.supported(d) || visible.isEmpty) return;
+    if (_windows.any((w) => w.document == d && w.draft.dirty)) {
+      _note('Aplica o cancela los borradores antes de eliminar filas.');
+      return;
+    }
+    if (!await _confirm(
+      'Eliminar ${_summary(selected).id}',
+      'Se elimina esta fila de la tabla con ID explícito. No se eliminan automáticamente objetos de tiendas, botín ni otras referencias. Puedes deshacer antes de guardar. ¿Continuar?',
+    )) {
+      return;
+    }
+    try {
+      StructureEditor.delete(d, selected);
+      _windows.removeWhere((w) => w.document == d);
+      _refresh();
+    } catch (e) {
+      _note('$e');
+    }
+  }
+
+  Future<void> _saveChanges() => _job(() async {
+    if (hasDrafts) {
+      throw const FormatException(
+        'Aplica o cancela los borradores de las ventanas antes de guardar.',
+      );
+    }
+    final changed = _cache.values.where((d) => d.dirty).toList();
+    if (changed.isEmpty) {
+      _note('No hay cambios nuevos para guardar.');
+      return;
+    }
+    final library = widget.library, source = library.archive;
+    if (library.saf || source != null && source.sahPath == null) {
+      throw const FormatException(
+        'El proveedor Android concede solo lectura. Exporta una copia o abre los archivos en Windows para guardarlos en su ubicación.',
+      );
+    }
+    if (changed.any((d) => !library.files.containsKey(d.path))) {
+      throw const FormatException(
+        'Hay archivos importados externos. Guárdalos como copia antes de guardar esta biblioteca.',
+      );
+    }
+    if (!await _confirm(
+      'Guardar cambios',
+      '${changed.length} archivos modificados. Se guardarán en la biblioteca que abriste, no en una copia adicional. Cierra el juego antes de continuar. Los datos del servidor se gestionan por separado.',
+    )) {
+      return;
+    }
+    final output = <String, Uint8List>{};
+    final fresh = <String, EditDocument>{};
+    for (final d in changed) {
+      final b = d.exportBytes(), check = reopenDocument(d, b);
+      if (!check.complete ||
+          check.profile != d.profile ||
+          check.rows.length != d.rows.length) {
+        throw FormatException('Relectura fallida: ${d.path}');
+      }
+      for (final c in d.changes) {
+        final f = check
+            .fields(c.row)
+            .singleWhere((f) => f.spec.name == c.field.spec.name);
+        if (check.read(f) != c.afterText) {
+          throw FormatException('Valor no conservado: ${c.field.spec.name}');
+        }
+      }
+      output[library.files[d.path]!] = b;
+      fresh[d.path] = check;
+    }
+    if (source != null) {
+      final control = ExportControl();
+      exporting = control;
+      try {
+        await ArchiveWriter.writeInPlace(
+          source,
+          output,
+          expectedHashes: {
+            for (final d in changed) library.files[d.path]!: d.sha,
+          },
+          control: control,
+          keepBackup: keepBackup,
+          progress: (p) {
+            if (mounted) setState(() => progress = p);
+          },
+        );
+      } finally {
+        exporting = null;
+        progress = null;
+      }
+      for (final d in changed) {
+        _cache[d.path] = fresh[d.path]!;
+      }
+    } else {
+      // Each file is an independent atomic save. A later failure does not roll
+      // back an earlier completed file: its in-memory baseline is updated now.
+      for (final d in changed) {
+        await FileSave.replace(
+          library.files[d.path]!,
+          output[library.files[d.path]!]!,
+          expectedHash: d.sha,
+          keepBackup: keepBackup,
+        );
+        _cache[d.path] = fresh[d.path]!;
+        _windows.removeWhere((w) => w.document == d);
+        if (doc == d) doc = fresh[d.path]!;
+        library.revision++;
+        _refresh();
+      }
+    }
+    _windows.removeWhere((w) => changed.contains(w.document));
+    if (doc != null) doc = _cache[doc!.path];
+    library.revision++;
+    _refresh();
+    _note(
+      '${changed.length} archivos guardados y releídos en la biblioteca original.',
+    );
+  });
+  Future<void> _buildDirectory() => _job(() async {
+    if (hasDrafts) {
+      throw const FormatException(
+        'Aplica los borradores antes de construir el archivo.',
+      );
+    }
+    if (widget.library.archive != null || widget.library.saf) {
+      throw const FormatException('Se necesita una carpeta DATA local.');
+    }
+    final parent = await getDirectoryPath(
+      confirmButtonText: 'Construir SAH/SAF aquí',
+    );
+    if (parent == null) return;
+    final c = ExportControl();
+    exporting = c;
+    try {
+      final replacements = <String, Uint8List>{};
+      for (final d in _cache.values.where((d) => d.dirty)) {
+        if (!widget.library.files.containsKey(d.path)) {
+          throw const FormatException(
+            'Una tabla importada no pertenece a DATA.',
+          );
+        }
+        final b = d.exportBytes(), check = reopenDocument(d, b);
+        if (!check.complete ||
+            check.profile != d.profile ||
+            check.rows.length != d.rows.length) {
+          throw const FormatException(
+            'Una tabla editada no supera la relectura.',
+          );
+        }
+        replacements[d.path] = b;
+      }
+      final r = await DirectoryPack.build(
+        Directory(widget.library.location),
+        Directory(parent),
+        replacements: replacements,
+        control: c,
+        progress: (p) {
+          if (mounted) setState(() => progress = p);
+        },
+      );
+      _note(
+        'Construido y verificado: ${r.folder} · ${r.files} recursos, incluidos los formatos no visualizables.',
+      );
+    } finally {
+      exporting = null;
+      progress = null;
+    }
+  });
+  Future<void> _recoverArchive() => _job(() async {
+    final s = widget.library.archive;
+    if (s?.sahPath == null) {
+      throw const FormatException('Abre un par SAH/SAF local.');
+    }
+    final outcome = await ArchiveWriter.recover(s!.sahPath!, s.safPath!);
+    await s.refreshAfterWrite();
+    _note(outcome);
+  });
+
   Future<String?> _save(String name, Uint8List bytes) async {
     if (Platform.isAndroid) {
       // Scoped application folder, never all-files storage permission.
@@ -552,14 +949,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
       return;
     }
     final bytes = d.exportBytes();
-    final check = d is CsvDocument
-        ? CsvDocument.open(bytes, d.path, d.exportEncoding)
-        : EditorReader.open(
-            bytes,
-            d.path,
-            encoding: d.codec.encoding,
-            forceProfile: d.profile,
-          );
+    final check = reopenDocument(d, bytes);
     if (check.profile != d.profile || check.rows.length != d.rows.length) {
       throw const FormatException(
         'La relectura cambió el perfil o la cantidad de registros.',
@@ -610,8 +1000,19 @@ class _DataEditorPageState extends State<DataEditorPage> {
     final file = await openFile(
       acceptedTypeGroups: [
         const XTypeGroup(
-          label: 'Tablas SData, SVMAP o CSV',
-          extensions: ['sdata', 'svmap', 'csv'],
+          label: 'Tablas, catálogos y configuración',
+          extensions: [
+            'sdata',
+            'svmap',
+            'csv',
+            'mlt',
+            'itm',
+            'mon',
+            'ini',
+            'cfg',
+            'txt',
+            'xml',
+          ],
         ),
       ],
     );
@@ -690,12 +1091,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
               );
             }
             final d = entry.value, bytes = d.exportBytes();
-            final read = EditorReader.open(
-              bytes,
-              d.path,
-              encoding: d.codec.encoding,
-              forceProfile: d.profile,
-            );
+            final read = reopenDocument(d, bytes);
             if (read.rows.length != d.rows.length ||
                 read.profile != d.profile) {
               throw FormatException('Relectura fallida: ${d.path}');
@@ -737,7 +1133,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
   });
   Future<void> _exportReport() => _job(() async {
     final report = {
-      'version': '0.5.0',
+      'version': '0.6.0',
       'source': widget.library.sourceDiagnostics,
       'tables': _cache.values.map((d) => d.report()).toList(),
       'privacy':
@@ -852,7 +1248,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
             padding: const EdgeInsets.all(8),
             child: Text(
               '${list.length} tablas · ${_cache.values.where((d) => d.dirty).length} con cambios',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: const TextStyle(fontSize: 11, color: EditorStyle.muted),
             ),
           ),
           Expanded(
@@ -888,7 +1284,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
           ),
           _smallButton(
             Icons.file_open_outlined,
-            'Importar SData / CSV',
+            'Importar archivo…',
             _importTable,
           ),
         ],
@@ -897,69 +1293,99 @@ class _DataEditorPageState extends State<DataEditorPage> {
   }
 
   Widget _records() {
-    final d = doc!;
-    return Material(
-      color: const Color(0xff111b28),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: TextField(
-              controller: _rowsQuery,
-              onChanged: (_) => _queueFilter(),
-              decoration: const InputDecoration(
-                hintText: 'Nombre / identificador…',
-                prefixIcon: Icon(Icons.search, size: 16),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: classFilter,
-                    isExpanded: true,
-                    items:
-                        [
-                              'Todas',
-                              'Fighter',
-                              'Defender',
-                              'Ranger',
-                              'Archer',
-                              'Mage',
-                              'Priest',
-                            ]
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(
-                                  s == 'Todas'
-                                      ? 'Todas las clases'
-                                      : FieldMeaning.of(s).label,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 10),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (v) {
-                      classFilter = v!;
-                      _filter();
-                    },
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('record-search'),
+                  controller: _rowsQuery,
+                  onChanged: (_) => _queueFilter(),
+                  decoration: const InputDecoration(
+                    hintText: 'Buscar nombre, ID…',
+                    prefixIcon: Icon(Icons.search, size: 16),
                   ),
                 ),
-                const SizedBox(width: 6),
-                DropdownButton<String>(
+              ),
+              const SizedBox(width: 7),
+              IconButton(
+                key: const ValueKey('edit-selected-record'),
+                tooltip: 'Editar registro completo',
+                onPressed: visible.isEmpty ? null : () => _openRecord(selected),
+                icon: const Icon(Icons.open_in_new),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Wrap(
+            spacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 160,
+                child: DropdownButton<String>(
+                  value: classFilter,
+                  isExpanded: true,
+                  isDense: true,
+                  items:
+                      [
+                            'Todas',
+                            'Fighter',
+                            'Defender',
+                            'Ranger',
+                            'Archer',
+                            'Mage',
+                            'Priest',
+                          ]
+                          .map(
+                            (v) => DropdownMenuItem(
+                              value: v,
+                              child: Text(
+                                v == 'Todas'
+                                    ? 'Todas las clases'
+                                    : const {
+                                        'Fighter': 'Luchador / Guerrero',
+                                        'Defender': 'Defensor / Guardián',
+                                        'Ranger': 'Ranger / Asesino',
+                                        'Archer': 'Arquero / Cazador',
+                                        'Mage': 'Mago / Pagano',
+                                        'Priest': 'Sacerdote / Oráculo',
+                                      }[v]!,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (v) {
+                    classFilter = v!;
+                    _filter();
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 124,
+                child: DropdownButton<String>(
                   value: factionFilter,
-                  items: ['Todas', '0', '1', '2', '3']
+                  isExpanded: true,
+                  isDense: true,
+                  items: ['Todas', '0', '1', '2', '3', '4', '5', '6']
                       .map(
-                        (s) => DropdownMenuItem(
-                          value: s,
+                        (v) => DropdownMenuItem(
+                          value: v,
                           child: Text(
-                            s == 'Todas' ? 'Facción' : 'Código $s',
-                            style: const TextStyle(fontSize: 10),
+                            v == 'Todas'
+                                ? 'Todas las facciones'
+                                : editorDomain(doc!.path) == EditorDomain.items
+                                ? itemCountryLabel(v)
+                                : 'Código $v',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
                           ),
                         ),
                       )
@@ -969,42 +1395,258 @@ class _DataEditorPageState extends State<DataEditorPage> {
                     _filter();
                   },
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+        if (doc!.profile == 'svmap')
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => mapView = !mapView),
+              icon: Icon(
+                mapView ? Icons.table_rows_outlined : Icons.map_outlined,
+              ),
+              label: Text(
+                mapView
+                    ? 'Ver tabla de ubicaciones'
+                    : 'Ver plano de ubicaciones',
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: Text(
-              '${visible.length} / ${d.rows.length} registros · filtro de facción por código original',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemExtent: 54,
-              itemCount: visible.length,
-              itemBuilder: (c, i) {
-                final row = visible[i];
-                return ListTile(
-                  dense: true,
-                  selected: row == selected,
-                  title: Text(
-                    _label(row),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+        Expanded(
+          child: doc!.profile == 'svmap' && mapView
+              ? EditorMapView(
+                  document: doc!,
+                  images: _images,
+                  rows: visible,
+                  selected: selected,
+                  onSelect: (r) => setState(() => selected = r),
+                  onEdit: _openRecord,
+                )
+              : EditorCatalog(
+                  key: ValueKey('catalog-${doc!.path}'),
+                  document: doc!,
+                  rows: visible,
+                  selected: selected,
+                  summary: _summary,
+                  images: _images,
+                  onSelect: (r) => setState(() => selected = r),
+                  onEdit: _openRecord,
+                  onDuplicate: StructureEditor.supported(doc!)
+                      ? _duplicateSelected
+                      : null,
+                  onDelete: StructureEditor.supported(doc!)
+                      ? _deleteSelected
+                      : null,
+                  onSort: (key, desc) {
+                    sortColumn = key;
+                    descending = desc;
+                    _filter();
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  bool mapView = true;
+  void _history(bool redo) {
+    final d = doc;
+    if (d == null) return;
+    if (_windows.any((w) => w.document == d && w.draft.dirty)) {
+      _note(
+        'Aplica o cancela los borradores de esta tabla antes de usar el historial.',
+      );
+      return;
+    }
+    _windows.removeWhere((w) => w.document == d);
+    if (redo) {
+      d.redo();
+    } else {
+      d.undo();
+    }
+    _refresh();
+  }
+
+  Widget _tabs() => SizedBox(
+    height: 34,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _cache.entries
+            .map(
+              (e) => Container(
+                decoration: BoxDecoration(
+                  color: doc == e.value
+                      ? EditorStyle.panel
+                      : EditorStyle.background,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: doc == e.value
+                          ? EditorStyle.accent
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                    right: const BorderSide(color: EditorStyle.line),
                   ),
-                  subtitle: Text(
-                    '${d.rows[row].kind} · #${row + 1}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                ),
+                child: InkWell(
+                  onTap: busy ? null : () => openTable(e.key),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(domainIcon(editorDomain(e.key)), size: 13),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${e.value.dirty ? '● ' : ''}${baseName(e.key)}',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar tabla',
+                          icon: const Icon(Icons.close, size: 13),
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  if (_windows.any(
+                                    (w) => w.document == e.value,
+                                  )) {
+                                    _note(
+                                      'Cierra primero las ventanas de registros de esta tabla.',
+                                    );
+                                    return;
+                                  }
+                                  if (e.value.dirty &&
+                                      !await _confirm(
+                                        'Cerrar tabla',
+                                        'Hay cambios sin guardar. ¿Descartarlos?',
+                                      )) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    _cache.remove(e.key);
+                                    _views.remove(e.key);
+                                    if (doc == e.value) {
+                                      doc = null;
+                                      _labels.clear();
+                                      _summaries.clear();
+                                      visible = [];
+                                    }
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
                   ),
-                  onTap: () => setState(() => selected = row),
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              ),
+            )
+            .toList(),
       ),
+    ),
+  );
+  Widget _workbench(BoxConstraints box) {
+    workspaceSize = Size(box.maxWidth, box.maxHeight);
+    final narrow = box.maxWidth < 1000;
+    final content = Row(
+      children: [
+        if (!narrow && showFiles)
+          SizedBox(width: explorerWidth, child: _files()),
+        if (!narrow && showFiles)
+          GestureDetector(
+            onHorizontalDragUpdate: (d) => setState(
+              () =>
+                  explorerWidth = (explorerWidth + d.delta.dx).clamp(170, 350),
+            ),
+            child: const MouseRegion(
+              cursor: SystemMouseCursors.resizeLeftRight,
+              child: SizedBox(width: 5, child: VerticalDivider(width: 1)),
+            ),
+          ),
+        Expanded(
+          child: doc == null
+              ? _empty()
+              : tab == 1
+              ? _audit()
+              : _records(),
+        ),
+        if (doc != null &&
+            tab == 0 &&
+            showInspector &&
+            box.maxWidth >= 1150) ...[
+          GestureDetector(
+            onHorizontalDragUpdate: (d) => setState(
+              () => inspectorWidth = (inspectorWidth - d.delta.dx).clamp(
+                240,
+                420,
+              ),
+            ),
+            child: const MouseRegion(
+              cursor: SystemMouseCursors.resizeLeftRight,
+              child: SizedBox(width: 5, child: VerticalDivider(width: 1)),
+            ),
+          ),
+          SizedBox(width: inspectorWidth, child: _details()),
+        ],
+      ],
+    );
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Positioned.fill(child: content),
+        for (final w in _windows.where((w) => !w.minimized))
+          Positioned.fromRect(
+            rect: _bound(w.rect),
+            child: RecordEditorWindow(
+              key: ValueKey(w.key),
+              window: w,
+              images: _images,
+              onReference: () async {
+                try {
+                  final selected = await showEditorRelations(
+                    context,
+                    _images,
+                    w.draft.previewDocument(),
+                    w.row,
+                    _cache,
+                  );
+                  if (selected == null || !mounted) return;
+                  await openTable(selected.path);
+                  if (mounted && doc?.path == selected.path) {
+                    _openRecord(selected.row);
+                  }
+                } catch (e) {
+                  _note('$e');
+                }
+              },
+              onApply: _refresh,
+              onClose: () => setState(() => _windows.remove(w)),
+              onFocus: () {
+                if (_windows.last != w) {
+                  setState(() {
+                    _windows.remove(w);
+                    _windows.add(w);
+                  });
+                }
+              },
+              onMinimize: () => setState(() => w.minimized = true),
+              onMove: (delta) =>
+                  setState(() => w.rect = _bound(w.rect.shift(delta))),
+              onResize: (delta) => setState(
+                () => w.rect = _bound(
+                  Rect.fromLTWH(
+                    w.rect.left,
+                    w.rect.top,
+                    w.rect.width + delta.dx,
+                    w.rect.height + delta.dy,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1037,7 +1679,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
             '${fs.length} campos · registro ${d.rows[selected].offset}–${d.rows[selected].end} · ${d.authority}',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: const TextStyle(fontSize: 11, color: EditorStyle.muted),
           ),
         ),
         Padding(
@@ -1215,7 +1857,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
             const SizedBox(height: 16),
             const Text(
               'Editor de datos del juego',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 14),
             const Text(
@@ -1227,7 +1869,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Ningún original se sobrescribe. Deshacer/rehacer, edición múltiple, parches verificados, copias SData y pares SAH/SAF nuevos.',
+              'Catálogos visuales, ventanas de registro independientes, borradores, deshacer y exportación verificada. Abre una tabla del explorador para empezar.',
               style: TextStyle(color: Color(0xffa8c4ef)),
             ),
             const SizedBox(height: 20),
@@ -1243,7 +1885,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
   );
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: leaving || (!dirty && !busy),
+    canPop: leaving || (!dirty && !hasDrafts && !busy),
     onPopInvokedWithResult: (didPop, result) {
       if (!didPop) _leave();
     },
@@ -1258,8 +1900,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
           _EditorUndo: CallbackAction<_EditorUndo>(
             onInvoke: (_) {
               if (!busy) {
-                doc?.undo();
-                _refresh();
+                _history(false);
               }
               return null;
             },
@@ -1267,15 +1908,14 @@ class _DataEditorPageState extends State<DataEditorPage> {
           _EditorRedo: CallbackAction<_EditorRedo>(
             onInvoke: (_) {
               if (!busy) {
-                doc?.redo();
-                _refresh();
+                _history(true);
               }
               return null;
             },
           ),
           _EditorSave: CallbackAction<_EditorSave>(
             onInvoke: (_) {
-              if (doc != null && !busy) _exportDocument();
+              if (doc != null && !busy) _saveChanges();
               return null;
             },
           ),
@@ -1283,246 +1923,298 @@ class _DataEditorPageState extends State<DataEditorPage> {
         child: LayoutBuilder(
           builder: (context, box) {
             final narrow = box.maxWidth < 1000;
-            return Scaffold(
-              key: _scaffold,
-              drawer: narrow ? Drawer(child: SafeArea(child: _files())) : null,
-              appBar: AppBar(
-                leading: IconButton(
-                  onPressed: _leave,
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                title: const Text(
-                  'EDITOR DE DATOS',
-                  style: TextStyle(fontSize: 15, letterSpacing: 1),
-                ),
-                actions: [
-                  if (narrow)
-                    IconButton(
-                      onPressed: () => _scaffold.currentState?.openDrawer(),
-                      icon: const Icon(Icons.folder_open),
-                    ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Exportar / herramientas',
-                    onSelected: (action) {
-                      if (busy) return;
-                      switch (action) {
-                        case 'file':
-                          _exportDocument();
-                        case 'patch':
-                          _patch(false);
-                        case 'importPatch':
-                          _patch(true);
-                        case 'csv':
-                          _csv();
-                        case 'import':
-                          _importTable();
-                        case 'audit':
-                          _exportReport();
-                        case 'extract':
-                          _exportArchive(false);
-                        case 'pack':
-                          _exportArchive(true);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'import',
-                        child: Text('Importar tabla / CSV servidor'),
-                      ),
-                      if (doc != null) ...[
-                        const PopupMenuItem(
-                          value: 'file',
-                          child: Text('Exportar archivo verificado'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'patch',
-                          child: Text('Guardar parche JSON'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'importPatch',
-                          child: Text('Aplicar parche verificado'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'csv',
-                          child: Text('Exportar vista a CSV UTF-8'),
-                        ),
-                      ],
-                      if (widget.library.archive != null &&
-                          !Platform.isAndroid) ...[
-                        const PopupMenuItem(
-                          value: 'extract',
-                          child: Text('Extraer todo a carpeta DATA'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'pack',
-                          child: Text('Construir nuevo SAH + SAF'),
-                        ),
-                      ],
-                      const PopupMenuItem(
-                        value: 'audit',
-                        child: Text('Exportar informe de auditoría'),
-                      ),
-                    ],
+            return Theme(
+              data: EditorStyle.theme(Theme.of(context)),
+              child: Scaffold(
+                key: _scaffold,
+                drawer: narrow
+                    ? Drawer(child: SafeArea(child: _files()))
+                    : null,
+                appBar: AppBar(
+                  leading: IconButton(
+                    onPressed: _leave,
+                    icon: const Icon(Icons.arrow_back),
                   ),
-                ],
-              ),
-              body: Column(
-                children: [
-                  Container(
-                    color: const Color(0xff1a2536),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 4,
-                      children: [
-                        SizedBox(
-                          width: (box.maxWidth - 24).clamp(160.0, 320.0),
-                          child: DropdownButton<GameTextEncoding>(
-                            isExpanded: true,
-                            value: encoding,
-                            items: GameTextEncoding.values
+                  title: const Text(
+                    'EDITOR DE DATOS',
+                    style: TextStyle(fontSize: 15, letterSpacing: 1),
+                  ),
+                  actions: [
+                    IconButton(
+                      tooltip: 'Mostrar / ocultar inspector',
+                      onPressed: () =>
+                          setState(() => showInspector = !showInspector),
+                      icon: const Icon(Icons.view_sidebar_outlined),
+                    ),
+                    if (narrow)
+                      IconButton(
+                        onPressed: () => _scaffold.currentState?.openDrawer(),
+                        icon: const Icon(Icons.folder_open),
+                      ),
+                    PopupMenuButton<String>(
+                      tooltip: 'Exportar / herramientas',
+                      onSelected: (action) {
+                        if (busy) return;
+                        switch (action) {
+                          case 'file':
+                            _exportDocument();
+                          case 'patch':
+                            _patch(false);
+                          case 'importPatch':
+                            _patch(true);
+                          case 'csv':
+                            _csv();
+                          case 'import':
+                            _importTable();
+                          case 'audit':
+                            _exportReport();
+                          case 'extract':
+                            _exportArchive(false);
+                          case 'pack':
+                            _exportArchive(true);
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'import',
+                          child: Text('Importar tabla / CSV servidor'),
+                        ),
+                        if (doc != null) ...[
+                          const PopupMenuItem(
+                            value: 'file',
+                            child: Text('Exportar archivo verificado'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'patch',
+                            child: Text('Guardar parche JSON'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'importPatch',
+                            child: Text('Aplicar parche verificado'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'csv',
+                            child: Text('Exportar vista a CSV UTF-8'),
+                          ),
+                        ],
+                        if (widget.library.archive != null &&
+                            !Platform.isAndroid) ...[
+                          const PopupMenuItem(
+                            value: 'extract',
+                            child: Text('Extraer todo a carpeta DATA'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'pack',
+                            child: Text('Construir nuevo SAH + SAF'),
+                          ),
+                        ],
+                        const PopupMenuItem(
+                          value: 'audit',
+                          child: Text('Exportar informe de auditoría'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                body: Column(
+                  children: [
+                    Container(
+                      color: const Color(0xff1a2536),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
+                        children: [
+                          SizedBox(
+                            width: (box.maxWidth - 24).clamp(160.0, 320.0),
+                            child: DropdownButton<GameTextEncoding>(
+                              isExpanded: true,
+                              value: encoding,
+                              items: GameTextEncoding.values
+                                  .map(
+                                    (v) => DropdownMenuItem(
+                                      value: v,
+                                      child: Text(
+                                        v == GameTextEncoding.automatic
+                                            ? 'Codificación automática por archivo'
+                                            : v.label,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: busy ? null : (e) => _encoding(e!),
+                            ),
+                          ),
+                          _smallButton(
+                            Icons.undo,
+                            'Deshacer',
+                            doc?.canUndo == true
+                                ? () {
+                                    _history(false);
+                                  }
+                                : null,
+                          ),
+                          _smallButton(
+                            Icons.redo,
+                            'Rehacer',
+                            doc?.canRedo == true
+                                ? () {
+                                    _history(true);
+                                  }
+                                : null,
+                          ),
+                          _smallButton(
+                            Icons.save_outlined,
+                            'Guardar',
+                            dirty ? _saveChanges : null,
+                            key: const ValueKey('editor-save'),
+                          ),
+                          if (widget.library.archive == null &&
+                              !widget.library.saf)
+                            _smallButton(
+                              Icons.inventory_2_outlined,
+                              'Construir SAH/SAF',
+                              _buildDirectory,
+                            ),
+                          Tooltip(
+                            message:
+                                'Respaldo opcional; el guardado utiliza una transacción temporal incluso sin esta opción.',
+                            child: FilterChip(
+                              label: const Text(
+                                'Respaldo',
+                                style: TextStyle(fontSize: 10),
+                              ),
+                              selected: keepBackup,
+                              onSelected: (v) => setState(() => keepBackup = v),
+                            ),
+                          ),
+                          _smallButton(
+                            Icons.save_as_outlined,
+                            'Guardar copia',
+                            doc == null ? null : _exportDocument,
+                            key: const ValueKey('editor-save-copy'),
+                          ),
+                          if (widget.library.archive?.sahPath != null)
+                            _smallButton(
+                              Icons.restore_page_outlined,
+                              'Recuperar transacción',
+                              _recoverArchive,
+                            ),
+                          if (doc != null)
+                            _smallButton(
+                              tab == 0
+                                  ? Icons.fact_check_outlined
+                                  : Icons.table_rows_outlined,
+                              tab == 0 ? 'Auditoría / cambios' : 'Registros',
+                              () => setState(() => tab = 1 - tab),
+                            ),
+                          if (doc?.dirty == true)
+                            _smallButton(
+                              Icons.restore,
+                              'Descartar cambios',
+                              () async {
+                                if (await _confirm(
+                                  'Descartar cambios',
+                                  'Se revierten los cambios de esta tabla, no los originales.',
+                                )) {
+                                  doc!.discard();
+                                  _refresh();
+                                }
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (busy && progress == null)
+                      const LinearProgressIndicator(minHeight: 2),
+                    if (_cache.isNotEmpty) _tabs(),
+                    if (_windows.isNotEmpty)
+                      SizedBox(
+                        height: 30,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _windows
                                 .map(
-                                  (v) => DropdownMenuItem(
-                                    value: v,
-                                    child: Text(
-                                      v.label,
+                                  (w) => TextButton.icon(
+                                    onPressed: () => setState(() {
+                                      w.minimized = !w.minimized;
+                                      _windows.remove(w);
+                                      _windows.add(w);
+                                    }),
+                                    icon: Icon(
+                                      w.minimized
+                                          ? Icons.open_in_new
+                                          : Icons.remove,
+                                      size: 13,
+                                    ),
+                                    label: Text(
+                                      '${w.draft.dirty ? '● ' : ''}${w.title}',
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 11),
+                                      style: const TextStyle(fontSize: 10),
                                     ),
                                   ),
                                 )
                                 .toList(),
-                            onChanged: busy ? null : (e) => _encoding(e!),
                           ),
                         ),
-                        _smallButton(
-                          Icons.undo,
-                          'Deshacer',
-                          doc?.canUndo == true
-                              ? () {
-                                  doc!.undo();
-                                  _refresh();
-                                }
-                              : null,
+                      ),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, area) => AbsorbPointer(
+                          absorbing: busy,
+                          child: _workbench(area),
                         ),
-                        _smallButton(
-                          Icons.redo,
-                          'Rehacer',
-                          doc?.canRedo == true
-                              ? () {
-                                  doc!.redo();
-                                  _refresh();
-                                }
-                              : null,
-                        ),
-                        _smallButton(
-                          Icons.save_as_outlined,
-                          'Guardar copia',
-                          doc == null ? null : _exportDocument,
-                          key: const ValueKey('editor-save-copy'),
-                        ),
-                        if (doc != null)
-                          _smallButton(
-                            tab == 0
-                                ? Icons.fact_check_outlined
-                                : Icons.table_rows_outlined,
-                            tab == 0 ? 'Auditoría / cambios' : 'Registros',
-                            () => setState(() => tab = 1 - tab),
-                          ),
-                        if (doc?.dirty == true)
-                          _smallButton(
-                            Icons.restore,
-                            'Descartar cambios',
-                            () async {
-                              if (await _confirm(
-                                'Descartar cambios',
-                                'Se revierten los cambios de esta tabla, no los originales.',
-                              )) {
-                                doc!.discard();
-                                _refresh();
-                              }
-                            },
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
-                  if (busy && progress == null)
-                    const LinearProgressIndicator(minHeight: 2),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        if (!narrow && showFiles)
-                          SizedBox(width: 230, child: _files()),
-                        if (doc == null)
-                          Expanded(child: _empty())
-                        else ...[
-                          if (box.maxWidth > 660)
-                            SizedBox(
-                              width: (box.maxWidth * .24).clamp(215, 295),
-                              child: _records(),
-                            ),
-                          Expanded(
-                            child: tab == 1
-                                ? _audit()
-                                : Column(
-                                    children: [
-                                      if (box.maxWidth <= 660)
-                                        SizedBox(
-                                          height: 190,
-                                          child: _records(),
-                                        ),
-                                      Expanded(child: _details()),
-                                    ],
+                    if (progress != null)
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${progress!.phase} · ${progress!.done}/${progress!.total} · ${progress!.path}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (progress != null)
-                    Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${progress!.phase} · ${progress!.done}/${progress!.total} · ${progress!.path}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                LinearProgressIndicator(
-                                  value: progress!.ratio?.clamp(0, 1),
-                                ),
-                              ],
+                                  LinearProgressIndicator(
+                                    value: progress!.ratio?.clamp(0, 1),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          TextButton(
-                            onPressed: () => exporting?.cancelled = true,
-                            child: const Text('Cancelar'),
-                          ),
-                        ],
+                            TextButton(
+                              onPressed: () => exporting?.cancelled = true,
+                              child: const Text('Cancelar'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Container(
+                      width: double.infinity,
+                      color: const Color(0xff111a26),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      child: SelectableText(
+                        status,
+                        maxLines: 2,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xff9db2cc),
+                        ),
                       ),
                     ),
-                  Container(
-                    width: double.infinity,
-                    color: const Color(0xff111a26),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    child: SelectableText(
-                      status,
-                      maxLines: 2,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xff9db2cc),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },

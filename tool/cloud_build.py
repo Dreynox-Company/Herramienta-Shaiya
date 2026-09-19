@@ -27,8 +27,8 @@ import publish_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = publish_sources.REPOSITORY
-VERSION = '0.5.0+7'
-PREFIX = 'Shaiya_Studio_0_5_0'
+VERSION = '0.6.0+8'
+PREFIX = 'Shaiya_Studio_0_6_0'
 EXPECTED_OUTPUTS = {f'{PREFIX}_Windows.zip', f'{PREFIX}_Android_PRUEBAS.apk'}
 API = f'https://api.github.com/repos/{REPOSITORY}'
 POLL_SECONDS = 90  # Keep public API use below its unauthenticated rate limit.
@@ -41,7 +41,7 @@ def check_sha(sha: str) -> str:
 
 
 def release_tag(sha: str) -> str:
-    return f'studio-0.5.0-{check_sha(sha)[:12]}'
+    return f'studio-0.6.0-{check_sha(sha)[:12]}'
 
 
 def safe_url(url: str) -> str:
@@ -54,7 +54,7 @@ def safe_url(url: str) -> str:
 
 def get_json(url: str, *, not_found_ok: bool = False) -> dict | None:
     request = Request(safe_url(url), headers={
-        'Accept': 'application/vnd.github+json', 'User-Agent': 'Dreynox-Shaiya-Build/0.5.0',
+        'Accept': 'application/vnd.github+json', 'User-Agent': 'Dreynox-Shaiya-Build/0.6.0',
         'X-GitHub-Api-Version': '2022-11-28',
     })
     try:
@@ -123,7 +123,7 @@ def download(asset: dict, target: Path, expected_hash: str | None = None) -> str
     digest = hashlib.sha256()
     total = 0
     try:
-        request = Request(url, headers={'User-Agent': 'Dreynox-Shaiya-Build/0.5.0'})
+        request = Request(url, headers={'User-Agent': 'Dreynox-Shaiya-Build/0.6.0'})
         with urlopen(request, timeout=90) as response, temporary.open('wb') as output:
             final = urlparse(response.geturl())
             if final.scheme != 'https' or not (

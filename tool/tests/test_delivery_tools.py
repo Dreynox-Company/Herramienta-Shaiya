@@ -54,7 +54,7 @@ class DeliveryToolsTest(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text('source ' + name)
             files[name] = hashlib.sha256(p.read_bytes()).hexdigest()
-        manifest = {'version': '0.5.0+7', 'base_commit': publish_sources.BASE, 'files': files}
+        manifest = {'version': '0.6.0+8', 'base_commit': publish_sources.BASE, 'files': files}
         (root / 'manifest-entrega.json').write_text(json.dumps(manifest))
         return manifest
 

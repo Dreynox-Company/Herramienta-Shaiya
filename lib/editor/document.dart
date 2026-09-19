@@ -81,17 +81,45 @@ class FieldChange {
 class ChangeBatch {
   final List<FieldChange> changes;
   final String title;
-  const ChangeBatch(this.changes, this.title);
+  final DocumentStructureState? beforeStructure, afterStructure;
+  const ChangeBatch(this.changes, this.title)
+    : beforeStructure = null,
+      afterStructure = null;
+  const ChangeBatch.structure(
+    this.title,
+    this.beforeStructure,
+    this.afterStructure,
+  ) : changes = const [];
+}
+
+class DocumentStructureState {
+  final Uint8List payload;
+  final List<RecordRef> rows;
+  final int parsedBytes;
+  final Map<int, FieldChange> changes;
+  final bool structural;
+  const DocumentStructureState(
+    this.payload,
+    this.rows,
+    this.parsedBytes,
+    this.changes,
+    this.structural,
+  );
 }
 
 class EditDocument {
   final String path, profile, sha;
-  final Uint8List original, payload;
+  final Uint8List original;
+  Uint8List payload;
   final GameTextCodec codec;
-  final List<RecordRef> rows;
+  List<RecordRef> rows;
   final List<String> warnings;
   final bool complete;
-  final int parsedBytes;
+  int parsedBytes;
+  bool _structural = false;
+  late final Uint8List _initialPayload;
+  late final List<RecordRef> _initialRows;
+  late final int _initialParsed;
   final Map<int, FieldChange> _changes = {};
   final List<ChangeBatch> _undo = [], _redo = [];
   int revision = 0;
@@ -105,11 +133,16 @@ class EditDocument {
     required this.warnings,
     required this.parsedBytes,
     this.complete = true,
-  }) : sha = sha256.convert(original).toString();
-  bool get dirty => _changes.isNotEmpty;
+  }) : sha = sha256.convert(original).toString() {
+    _initialPayload = payload;
+    _initialRows = rows;
+    _initialParsed = parsedBytes;
+  }
+  bool get structuralChanges => _structural;
+  bool get dirty => _structural || _changes.isNotEmpty;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
-  int get changeCount => _changes.length;
+  int get changeCount => _changes.length + (_structural ? 1 : 0);
   Iterable<FieldChange> get changes => _changes.values;
   bool get encrypted => SeedData.isEncoded(original);
   String get authority => path.toLowerCase().endsWith('.svmap')
@@ -343,11 +376,61 @@ class EditDocument {
     }
   }
 
+  DocumentStructureState _state() => DocumentStructureState(
+    payload,
+    rows,
+    parsedBytes,
+    Map.of(_changes),
+    _structural,
+  );
+  void _restore(DocumentStructureState state) {
+    payload = state.payload;
+    rows = state.rows;
+    parsedBytes = state.parsedBytes;
+    _changes
+      ..clear()
+      ..addAll(state.changes);
+    _structural = state.structural;
+  }
+
+  void replaceStructure(EditDocument parsed, String title) {
+    if (profile != 'binary' ||
+        !complete ||
+        !parsed.complete ||
+        parsed.profile != profile ||
+        parsed.path != path ||
+        parsed.codec.encoding != codec.encoding ||
+        parsed.dirty) {
+      throw const FormatException(
+        'La estructura candidata no coincide con la tabla DB validada.',
+      );
+    }
+    if (payload.length > 32 * 1024 * 1024 ||
+        _undo.where((b) => b.beforeStructure != null).length >= 16) {
+      throw const FormatException(
+        'Historial estructural completo. Guarda y vuelve a abrir antes de seguir creando filas.',
+      );
+    }
+    final before = _state();
+    payload = parsed.payload;
+    rows = parsed.rows;
+    parsedBytes = parsed.parsedBytes;
+    _changes.clear();
+    _structural = !_equal(payload, _initialPayload);
+    _undo.add(ChangeBatch.structure(title, before, _state()));
+    _redo.clear();
+    revision++;
+  }
+
   void undo() {
     if (_undo.isEmpty) return;
     final b = _undo.removeLast();
-    for (final c in b.changes.reversed) {
-      _apply(c, false);
+    if (b.beforeStructure != null) {
+      _restore(b.beforeStructure!);
+    } else {
+      for (final c in b.changes.reversed) {
+        _apply(c, false);
+      }
     }
     _redo.add(b);
     revision++;
@@ -356,14 +439,22 @@ class EditDocument {
   void redo() {
     if (_redo.isEmpty) return;
     final b = _redo.removeLast();
-    for (final c in b.changes) {
-      _apply(c, true);
+    if (b.afterStructure != null) {
+      _restore(b.afterStructure!);
+    } else {
+      for (final c in b.changes) {
+        _apply(c, true);
+      }
     }
     _undo.add(b);
     revision++;
   }
 
   void discard() {
+    payload = _initialPayload;
+    rows = _initialRows;
+    parsedBytes = _initialParsed;
+    _structural = false;
     _changes.clear();
     _undo.clear();
     _redo.clear();
@@ -395,26 +486,39 @@ class EditDocument {
     return encrypted ? SeedData.encode(out, template: original) : out;
   }
 
-  String exportPatch() => const JsonEncoder.withIndent('  ').convert({
-    'format': 'shaiya-editor-patch',
-    'version': 1,
-    'path': path,
-    'sourceSha256': sha,
-    'profile': profile,
-    'encoding': codec.encoding.name,
-    'changes': changes
-        .map(
-          (c) => {
-            'row': c.row,
-            'name': c.field.spec.name,
-            'type': c.field.spec.type,
-            'before': c.beforeText,
-            'after': c.afterText,
-          },
-        )
-        .toList(),
-  });
+  String exportPatch() {
+    if (_structural) {
+      throw const FormatException(
+        'Hay filas nuevas o eliminadas. Guarda el archivo completo; un parche de campos no conserva cambios estructurales.',
+      );
+    }
+    return const JsonEncoder.withIndent('  ').convert({
+      'format': 'shaiya-editor-patch',
+      'version': 1,
+      'path': path,
+      'sourceSha256': sha,
+      'profile': profile,
+      'encoding': codec.encoding.name,
+      'changes': changes
+          .map(
+            (c) => {
+              'row': c.row,
+              'name': c.field.spec.name,
+              'type': c.field.spec.type,
+              'before': c.beforeText,
+              'after': c.afterText,
+            },
+          )
+          .toList(),
+    });
+  }
+
   void importPatch(String text) {
+    if (_structural) {
+      throw const FormatException(
+        'No se importa un parche sobre una estructura con filas cambiadas.',
+      );
+    }
     final obj = jsonDecode(text);
     if (obj is! Map ||
         obj['format'] != 'shaiya-editor-patch' ||
@@ -463,6 +567,7 @@ class EditDocument {
     'originalSha256': sha,
     'encrypted': encrypted,
     'changes': changeCount,
+    'structuralChanges': structuralChanges,
     'warnings': warnings,
     'authority': authority,
   };

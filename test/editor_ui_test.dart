@@ -56,18 +56,19 @@ void main() {
       await tester.tap(find.text('dbmonsterdata.sdata'));
       await settleIo(tester);
       await tester.pumpAndSettle();
-      expect(find.text('Oro mínimo (Money1)'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Oro mínimo (Money1)'));
+      await tester.tap(find.byKey(const ValueKey('edit-selected-record')));
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('record-field-money1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
       await tester.enterText(
-        find.byKey(const ValueKey('editor-field-input')),
+        find.byKey(const ValueKey('record-field-money1')),
         '-1',
       );
-      await tester.tap(find.byKey(const ValueKey('editor-apply')));
+      await tester.tap(find.byKey(const ValueKey('record-accept')));
       await tester.pumpAndSettle();
-      expect(find.text('-1'), findsOneWidget);
+      expect(find.text('-1'), findsWidgets);
       expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Deshacer'));
       await tester.tap(find.text('Deshacer'));
       await tester.pumpAndSettle();
       expect(find.text('-1'), findsNothing);

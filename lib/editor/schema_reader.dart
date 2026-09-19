@@ -2,6 +2,9 @@ import 'dart:typed_data';
 import '../core/game_text_codec.dart';
 import '../core/seed_data.dart';
 import 'document.dart';
+import 'catalog_document.dart';
+import 'text_document.dart';
+import 'csv_document.dart';
 import 'primitive_schemas.dart';
 
 class EditorReader {
@@ -13,6 +16,12 @@ class EditorReader {
   }) {
     if (input.length > 128 * 1024 * 1024) {
       throw const FormatException('El editor limita cada tabla a 128 MiB.');
+    }
+    if (RegExp(r'\.(mlt|itm|mon)$', caseSensitive: false).hasMatch(path)) {
+      return CatalogDocument.open(input, path, encoding);
+    }
+    if (RegExp(r'\.(ini|cfg|txt|xml)$', caseSensitive: false).hasMatch(path)) {
+      return TextDocument.open(input, path, encoding);
     }
     final payload = SeedData.decode(input), warnings = <String>[];
     if (SeedData.isEncoded(input)) {
@@ -788,4 +797,19 @@ class _Cursor {
       ),
     );
   }
+}
+
+EditDocument reopenDocument(EditDocument d, Uint8List bytes) {
+  if (d is TextDocument) {
+    return TextDocument.open(bytes, d.path, d.sourceEncoding);
+  }
+  if (d is CsvDocument) {
+    return CsvDocument.open(bytes, d.path, d.exportEncoding);
+  }
+  return EditorReader.open(
+    bytes,
+    d.path,
+    encoding: d.codec.encoding,
+    forceProfile: d.profile,
+  );
 }

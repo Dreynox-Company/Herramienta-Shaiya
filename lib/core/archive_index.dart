@@ -9,6 +9,7 @@ import 'seed_data.dart';
 class ArchiveEntry {
   final String path;
   final int offset, length, version;
+  final int metadataOffset;
   final List<Uint8List> rawComponents;
   const ArchiveEntry(
     this.path,
@@ -16,6 +17,7 @@ class ArchiveEntry {
     this.length,
     this.version, {
     this.rawComponents = const [],
+    this.metadataOffset = -1,
   });
 }
 
@@ -65,6 +67,7 @@ class ArchiveIndex {
     }
     var bytes = input;
     final profiles = <String>[];
+    var uniformXor = 0;
     if (input.length >= 40 &&
         ascii.decode(input.sublist(0, 40), allowInvalid: true) ==
             '0001CBCEBC5B2784D3FC9A2A9DB84D1C3FEB6E99') {
@@ -84,6 +87,7 @@ class ArchiveIndex {
     if (bytes.length >= 3) {
       final key = bytes[0] ^ 0x53;
       if (key != 0 && (bytes[1] ^ key) == 0x41 && (bytes[2] ^ key) == 0x48) {
+        uniformXor = key;
         bytes = Uint8List.fromList(bytes.map((b) => b ^ key).toList());
         profiles.add('XOR uniforme de índice; SAF sin transformar');
       }
@@ -107,6 +111,8 @@ class ArchiveIndex {
         return ArchiveIndex(entries, {
           ...info,
           'status': 'index_validated',
+          'uniformXor': uniformXor,
+          'countXor': key,
           'signature': signature,
           'version': reader.version,
           'declaredEntries': reader.declared,
@@ -237,6 +243,7 @@ class _SahReader {
       final label = name(),
           path = (folder.isEmpty ? label : '$folder/$label').toLowerCase();
       if (path.length > 8192) r.fail('Ruta demasiado larga.');
+      final metadataOffset = r.offset;
       final offset = r.i64(), length = r.i32(), fileVersion = r.i32();
       if (offset < 0 ||
           length < 0 ||
@@ -255,6 +262,7 @@ class _SahReader {
         length,
         fileVersion,
         rawComponents: [...components, Uint8List.fromList(lastNameBytes)],
+        metadataOffset: metadataOffset,
       );
     }
     final sub = r.count(25000);

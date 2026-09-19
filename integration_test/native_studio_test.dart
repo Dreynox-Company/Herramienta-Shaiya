@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -12,6 +13,9 @@ import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/data/archive_export.dart';
 import 'package:herramienta_shaiya/ui/data_editor.dart';
+import 'package:herramienta_shaiya/ui/editor_model_preview.dart';
+import 'package:herramienta_shaiya/data/archive_write.dart';
+import 'package:herramienta_shaiya/data/directory_pack.dart';
 import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'package:herramienta_shaiya/core/extra_motion.dart';
 
@@ -402,13 +406,13 @@ void main() {
       () => find.text('Oro mínimo (Money1)').evaluate().isNotEmpty,
       'Native editor parses monster economy fields',
     );
-    await tester.tap(find.text('Oro mínimo (Money1)'));
+    await tester.tap(find.byKey(const ValueKey('edit-selected-record')));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.enterText(
-      find.byKey(const ValueKey('editor-field-input')),
+      find.byKey(const ValueKey('record-field-money1')),
       '-1',
     );
-    await tester.tap(find.byKey(const ValueKey('editor-apply')));
+    await tester.tap(find.byKey(const ValueKey('record-accept')));
     await waitFor(
       () => find.text('-1').evaluate().isNotEmpty,
       'Signed negative survives native editor interaction',
@@ -430,6 +434,36 @@ void main() {
       () => find.text('-1').evaluate().isEmpty,
       'Undo restores the original economy value',
     );
+    final dynamic editorState = tester.state(find.byType(DataEditorPage));
+    await editorState.openTable('monster/fixture.mon');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.byKey(const ValueKey('edit-selected-record')));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('Ver modelo / animaciones'));
+    await waitFor(
+      () => find.byType(NativeModelPreview).evaluate().isNotEmpty,
+      'MON resolves a real preview from its own mesh and DDS',
+    );
+    final dynamic preview = tester.state(find.byType(NativeModelPreview));
+    await waitFor(
+      () => preview.ready == true,
+      'Second native GL preview initializes',
+    );
+    expect(preview.error, isNull);
+    expect(preview.actor.parts, isNotEmpty);
+    await preview.chooseClip('Correr');
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(preview.error, isNull);
+    expect(preview.actor.clip, isNotNull);
+    passed.add(
+      'Record preview renders original-format mesh, DDS and MON ANI in a second native context',
+    );
+    await tester.tap(find.byKey(const ValueKey('model-preview-close')));
+    await tester.pump(const Duration(milliseconds: 350));
+    // Close the unchanged record; then return to the viewer, whose context
+    // must still work after disposing the temporary preview.
+    await tester.tap(find.byTooltip('Cerrar registro'));
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.byIcon(Icons.arrow_back));
     await waitFor(
       () => find.byType(DataEditorPage).evaluate().isEmpty,
@@ -480,7 +514,55 @@ void main() {
         '-1',
       );
       expect(await archive.read(tablePath), original);
+      const otherValue = '-8';
+      final currentHash = sha256
+          .convert(await reopened.read(tablePath))
+          .toString();
+      verified.edit(
+        0,
+        verified
+            .fields(0)
+            .firstWhere((f) => f.spec.name.toLowerCase() == 'money1'),
+        otherValue,
+      );
+      await ArchiveWriter.writeInPlace(
+        reopened.archive!,
+        {tablePath: verified.exportBytes()},
+        expectedHashes: {tablePath: currentHash},
+        control: ExportControl(),
+        progress: (_) {},
+      );
+      final committed = EditorReader.open(
+        await reopened.read(tablePath),
+        tablePath,
+      );
+      expect(
+        committed.read(
+          committed
+              .fields(0)
+              .firstWhere((f) => f.spec.name.toLowerCase() == 'money1'),
+        ),
+        otherValue,
+      );
+      passed.add(
+        'Saving over the same SAH/SAF on Windows invalidates the read view and preserves signed values',
+      );
       reopened.dispose();
+      final packed = await DirectoryPack.build(
+        Directory(input!),
+        exportDir,
+        control: ExportControl(),
+        progress: (_) {},
+      );
+      final built = await Library.fromArchive(
+        '${packed.folder}/data.sah',
+        '${packed.folder}/data.saf',
+      );
+      expect(await built.read(model), await archive.read(model));
+      built.dispose();
+      passed.add(
+        'Native Windows builds a readable SAH/SAF from the DATA folder',
+      );
       passed.add(
         'Windows extraction and new SAH/SAF pair preserve originals and edited signed values',
       );

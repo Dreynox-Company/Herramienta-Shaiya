@@ -81,6 +81,7 @@ class Library {
   }
 
   final Map<String, String> files;
+  int revision = 0;
   final Map<String, List<String>> _names = {};
   Library(this.location, this.saf, this.files, {this.archive}) {
     for (final p in files.keys) {

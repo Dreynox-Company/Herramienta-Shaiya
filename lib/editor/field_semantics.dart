@@ -14,11 +14,53 @@ class FieldMeaning {
     'Habilidades',
     'Requisitos',
     'Coordenadas',
+    'Anclajes 3D',
     'Texto',
     'Otros',
   ];
   static FieldMeaning of(String name) {
     final n = name.toLowerCase().replaceAll('_', '');
+    final socket = RegExp(
+      r'^attachment\[(\d+)\]\[(\d+)\]\.(.+)$',
+    ).firstMatch(n);
+    if (socket != null) {
+      return FieldMeaning(
+        'Anclaje ${socket[1]} · mano ${socket[2]} · ${socket[3]}',
+        'Anclajes 3D',
+        'Transformación original IT2. La rotación se guarda como cuaternión X/Y/Z/W, no como grados. El índice de hueso pertenece al esqueleto del perfil.',
+      );
+    }
+    if (n.startsWith('animation.')) {
+      return FieldMeaning(
+        'Animación · ${const {'walk': 'Caminar', 'run': 'Correr', 'attack1': 'Ataque 1', 'attack2': 'Ataque 2', 'attack3': 'Ataque 3', 'death': 'Muerte', 'breathe': 'Respirar', 'damage': 'Recibir daño', 'idle': 'Reposo'}[n.substring(10)] ?? n.substring(10)}',
+        'Habilidades',
+        'Ruta ANI original del catálogo MON, conservada sin reemplazar otro gesto.',
+      );
+    }
+    if (n.startsWith('parts[') ||
+        n == 'mesh' ||
+        n == 'texture' ||
+        n == 'meshindex' ||
+        n == 'textureindex') {
+      return FieldMeaning(
+        const {
+              'mesh': 'Geometría',
+              'texture': 'Textura',
+              'meshindex': 'Índice de geometría',
+              'textureindex': 'Índice de textura',
+            }[n] ??
+            name,
+        'Identidad',
+        'Referencia exacta a la malla o textura del catálogo; no se reasigna por parecido del nombre.',
+      );
+    }
+    if (_extra.containsKey(n)) {
+      return FieldMeaning(
+        _extra[n]!.$1,
+        _extra[n]!.$2,
+        'Valor original de $name. Se conserva su tipo y unidad del archivo.',
+      );
+    }
     final drop = RegExp(r'^itemdroprate(\d+)$').firstMatch(n);
     if (drop != null) {
       return FieldMeaning(
@@ -78,7 +120,7 @@ class FieldMeaning {
       return FieldMeaning(
         _labels[n] ?? name,
         'Coordenadas',
-        'Coordenadas originales; SVMAP se instala en el servidor correspondiente. Los cambios se guardan en una copia.',
+        'Coordenadas originales; SVMAP se instala en el servidor correspondiente. Guardar actualiza el origen abierto; Guardar como crea una copia.',
       );
     }
     if (n.contains('skill') ||
@@ -185,6 +227,128 @@ class FieldMeaning {
     );
   }
 
+  static const _extra = <String, (String, String)>{
+    'itemtype': ('Tipo de objeto', 'Identidad'),
+    'itemtypeid': ('ID dentro del tipo', 'Identidad'),
+    'str': ('Fuerza (STR)', 'Combate'),
+    'dex': ('Destreza (DEX)', 'Combate'),
+    'rec': ('Resistencia (REC)', 'Combate'),
+    'int': ('Inteligencia (INT)', 'Combate'),
+    'wis': ('Sabiduría (WIS)', 'Combate'),
+    'luc': ('Suerte (LUC)', 'Combate'),
+    'consthp': ('Bonificación de vida', 'Combate'),
+    'constmp': ('Bonificación de maná', 'Combate'),
+    'constsp': ('Bonificación de resistencia', 'Combate'),
+    'quality': ('Durabilidad', 'Combate'),
+    'slot': ('Ranuras', 'Otros'),
+    'attrib': ('Atributo elemental', 'Combate'),
+    'range': ('Alcance', 'Combate'),
+    'attacktime': ('Tiempo / velocidad de ataque', 'Combate'),
+    'attackplus': ('Ataque adicional', 'Combate'),
+    'attackadd': ('Ataque adicional', 'Combate'),
+    'attack': ('Ataque base', 'Combate'),
+    'def': ('Defensa física', 'Combate'),
+    'resist': ('Resistencia mágica', 'Combate'),
+    'magic': ('Resistencia mágica', 'Combate'),
+    'speed': ('Velocidad', 'Combate'),
+    'drops': ('Distribución de botín', 'Botín y oro'),
+    'grade': ('Grupo / grado', 'Botín y oro'),
+    'skillpoint': ('Puntos de habilidad necesarios', 'Habilidades'),
+    'point': ('Puntos necesarios', 'Habilidades'),
+    'resettime': ('Recarga', 'Habilidades'),
+    'readytime': ('Preparación', 'Habilidades'),
+    'keeptime': ('Duración de efecto', 'Habilidades'),
+    'applyrange': ('Radio de aplicación', 'Habilidades'),
+    'attackrange': ('Alcance de ataque', 'Habilidades'),
+    'successtype': ('Tipo de éxito', 'Habilidades'),
+    'successvalue': ('Valor de éxito', 'Habilidades'),
+    'targettype': ('Tipo de objetivo', 'Habilidades'),
+    'typeattack': ('Tipo de ataque', 'Habilidades'),
+    'typeeffect': ('Tipo de efecto', 'Habilidades'),
+    'typeshow': ('Aprendizaje / visibilidad', 'Habilidades'),
+    'count': ('Cantidad máxima', 'Otros'),
+    'grow': ('Modo requerido', 'Requisitos'),
+    'droprate': ('Tasa original de botín', 'Botín y oro'),
+    'movedistance': ('Distancia de movimiento', 'Coordenadas'),
+    'movespeed': ('Velocidad de movimiento', 'Coordenadas'),
+    'height': ('Altura del modelo', 'Identidad'),
+    'size': ('Tamaño', 'Identidad'),
+    'npcid': ('ID del NPC', 'Identidad'),
+    'npcname': ('Nombre del NPC', 'Texto'),
+    'mobname': ('Nombre del monstruo', 'Texto'),
+    'itemname': ('Nombre del objeto', 'Texto'),
+    'bag': ('Categoría de tienda', 'Precios y tienda'),
+    'welcomemessage': ('Mensaje de bienvenida', 'Texto'),
+    'description': ('Descripción', 'Texto'),
+    'desc': ('Descripción', 'Texto'),
+    'reqlevel': ('Nivel requerido', 'Requisitos'),
+    'reqstr': ('Fuerza requerida', 'Requisitos'),
+    'reqdex': ('Destreza requerida', 'Requisitos'),
+    'reqrec': ('Resistencia requerida', 'Requisitos'),
+    'reqint': ('Inteligencia requerida', 'Requisitos'),
+    'reqwis': ('Sabiduría requerida', 'Requisitos'),
+    'reqluc': ('Suerte requerida', 'Requisitos'),
+    'sound0': ('Sonido 1', 'Otros'),
+    'sound1': ('Sonido 2', 'Otros'),
+    'sound2': ('Sonido 3', 'Otros'),
+    'sound3': ('Sonido 4', 'Otros'),
+    'conststr': ('Bonificación STR', 'Combate'),
+    'constdex': ('Bonificación DEX', 'Combate'),
+    'constrec': ('Bonificación REC', 'Combate'),
+    'constint': ('Bonificación INT', 'Combate'),
+    'constwis': ('Bonificación WIS', 'Combate'),
+    'constluc': ('Bonificación LUC', 'Combate'),
+    'damagehp': ('Daño de vida', 'Habilidades'),
+    'damagemp': ('Daño de maná', 'Habilidades'),
+    'damagesp': ('Daño de resistencia', 'Habilidades'),
+    'damage1': ('Daño 1', 'Habilidades'),
+    'damage2': ('Daño 2', 'Habilidades'),
+    'damage3': ('Daño 3', 'Habilidades'),
+    'timedamagehp': ('Daño periódico de vida', 'Habilidades'),
+    'timedamagemp': ('Daño periódico de maná', 'Habilidades'),
+    'timedamagesp': ('Daño periódico de resistencia', 'Habilidades'),
+    'timedamage1': ('Daño periódico 1', 'Habilidades'),
+    'timedamage2': ('Daño periódico 2', 'Habilidades'),
+    'timedamage3': ('Daño periódico 3', 'Habilidades'),
+    'adddamagehp': ('Daño adicional de vida', 'Habilidades'),
+    'adddamagemp': ('Daño adicional de maná', 'Habilidades'),
+    'adddamagesp': ('Daño adicional de resistencia', 'Habilidades'),
+    'adddamage1': ('Daño adicional 1', 'Habilidades'),
+    'adddamage2': ('Daño adicional 2', 'Habilidades'),
+    'adddamage3': ('Daño adicional 3', 'Habilidades'),
+    'healhp': ('Curación de vida', 'Habilidades'),
+    'healmp': ('Curación de maná', 'Habilidades'),
+    'healsp': ('Curación de resistencia', 'Habilidades'),
+    'heal1': ('Curación 1', 'Habilidades'),
+    'heal2': ('Curación 2', 'Habilidades'),
+    'heal3': ('Curación 3', 'Habilidades'),
+    'timehealhp': ('Curación periódica de vida', 'Habilidades'),
+    'timehealmp': ('Curación periódica de maná', 'Habilidades'),
+    'timehealsp': ('Curación periódica de resistencia', 'Habilidades'),
+    'timeheal1': ('Curación periódica 1', 'Habilidades'),
+    'timeheal2': ('Curación periódica 2', 'Habilidades'),
+    'timeheal3': ('Curación periódica 3', 'Habilidades'),
+    'abilitytype1': ('Tipo de efecto 1', 'Habilidades'),
+    'abilityvalue1': ('Valor de efecto 1', 'Habilidades'),
+    'abilitytype2': ('Tipo de efecto 2', 'Habilidades'),
+    'abilityvalue2': ('Valor de efecto 2', 'Habilidades'),
+    'abilitytype3': ('Tipo de efecto 3', 'Habilidades'),
+    'abilityvalue3': ('Valor de efecto 3', 'Habilidades'),
+    'abilitytype4': ('Tipo de efecto 4', 'Habilidades'),
+    'abilityvalue4': ('Valor de efecto 4', 'Habilidades'),
+    'abilitytype5': ('Tipo de efecto 5', 'Habilidades'),
+    'abilityvalue5': ('Valor de efecto 5', 'Habilidades'),
+    'abilitytype6': ('Tipo de efecto 6', 'Habilidades'),
+    'abilityvalue6': ('Valor de efecto 6', 'Habilidades'),
+    'abilitytype7': ('Tipo de efecto 7', 'Habilidades'),
+    'abilityvalue7': ('Valor de efecto 7', 'Habilidades'),
+    'abilitytype8': ('Tipo de efecto 8', 'Habilidades'),
+    'abilityvalue8': ('Valor de efecto 8', 'Habilidades'),
+    'abilitytype9': ('Tipo de efecto 9', 'Habilidades'),
+    'abilityvalue9': ('Valor de efecto 9', 'Habilidades'),
+    'abilitytype10': ('Tipo de efecto 10', 'Habilidades'),
+    'abilityvalue10': ('Valor de efecto 10', 'Habilidades'),
+  };
   static const _labels = <String, String>{
     'id': 'Identificador',
     'name': 'Nombre',
@@ -289,6 +453,9 @@ bool editorMatchesClass(Map<String, String> values, String selected) {
 }
 
 String editorIdentityKey(Map<String, String> values, RecordRef record) {
+  if (values['npctype'] != null && values['npctypeid'] != null) {
+    return '${values['npctype']}:${values['npctypeid']}';
+  }
   final type = values['itemtype'] ?? values['type'];
   final item = values['itemtypeid'] ?? values['typeid'];
   if (type != null && item != null) return '$type:$item';

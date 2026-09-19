@@ -497,7 +497,8 @@ class StudioScene extends ChangeNotifier {
     String texturePath, {
     bool opaque = false,
   }) async {
-    final key = '${identityHashCode(library)}|$texturePath|$opaque';
+    final key =
+        '${identityHashCode(library)}|${library.revision}|$texturePath|$opaque';
     final future = _textures.putIfAbsent(key, () async {
       final bytes = await library.read(texturePath);
       final png = await compute(_decodeTexture, {

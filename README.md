@@ -1,6 +1,12 @@
-# Shaiya Studio 0.5.0
+# Shaiya Studio 0.6
 
-Laboratorio nativo y editor de recursos local. [Instrucciones](INSTRUCCIONES.md) · [Cobertura de la revisión 0.5](docs/revision-05.md).
+Editor nativo de recursos para Windows y Android. [Guía del editor 0.6](docs/EDITOR_06.md).
+
+Esta revisión incluye catálogos visuales compactos, ventanas de edición independientes, relaciones entre recursos, vista 3D y animaciones, minimapa SVMAP, edición MLT/ITM/MON y configuración de texto. **Guardar actualiza el origen abierto**, incluido SAH/SAF; Guardar copia y Respaldo son opcionales. También se construyen SAH/SAF desde carpetas DATA.
+
+La lectura y edición utilizan el esquema real: se conservan encabezados, bytes desconocidos, codificación y rangos. Los datos del servidor se distinguen de los del cliente. El juego offline y el enlace directo con su motor son una integración separada y no se declaran terminados mediante esta entrega del editor.
+
+## Notas históricas (anteriores a 0.6)
 
 # Antecedentes: Shaiya Studio 0.4.0 — Flutter nativo
 

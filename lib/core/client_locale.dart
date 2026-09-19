@@ -91,6 +91,7 @@ class ClientLocale {
 
   static String? nameFamily(String dataPath) {
     final n = stem(dataPath);
+    if (n == 'npcquest') return 'npcquesttrans';
     if (n.contains('npcskill')) return 'dbnpcskilltext';
     if (n.contains('itemsell') || n == 'cash') return 'dbitemselltext';
     if (n.contains('setitem')) return 'dbsetitemtext';

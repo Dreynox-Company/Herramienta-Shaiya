@@ -13,14 +13,14 @@ import subprocess
 import sys
 
 SOURCE = Path(__file__).resolve().parents[1]
-BASE = "748d612a00bd8ef9f417bb38604f8dd4fe920aab"
+BASE = "82cc2a15e1ca375f5b27a5344ab41e3f952d1d7d"
 REPOSITORY = "Dreynox-Company/Herramienta-Shaiya"
-BASE_BRANCH = "feat/studio-04-audited-release"
+BASE_BRANCH = "fix/windows-ci-audited-20260919"
 
 
 def verified_sources() -> dict[str, bytes]:
     manifest = json.loads((SOURCE / "manifest-entrega.json").read_text(encoding="utf-8"))
-    if manifest.get("base_commit") != BASE or manifest.get("version") != "0.5.0+7":
+    if manifest.get("base_commit") != BASE or manifest.get("version") != "0.6.0+8":
         raise RuntimeError("El manifiesto no pertenece a esta entrega.")
     result = {}
     for name, expected in manifest["files"].items():
@@ -42,7 +42,7 @@ def verified_sources() -> dict[str, bytes]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repository", help="Ruta de un clon limpio de Dreynox-Company/Herramienta-Shaiya")
-    parser.add_argument("--branch", default="feat/studio-05-integration")
+    parser.add_argument("--branch", default="feat/studio-06-integration")
     parser.add_argument("--no-push", action="store_true", help="Crear el commit local sin enviarlo a GitHub")
     parser.add_argument("--yes", action="store_true", help="Confirmar la publicación explícitamente")
     args = parser.parse_args()
@@ -98,7 +98,7 @@ def main() -> None:
     diff_names = run("diff", "--cached", "--name-only").splitlines()
     if any(name not in files for name in diff_names):
         raise RuntimeError("Hay cambios en el índice ajenos al paquete. Se detiene antes del commit.")
-    run("commit", "-m", "feat: integrate Shaiya Studio 0.5.0 archive support, equipment rules and streamed scenes")
+    run("commit", "-m", "feat: integrate Shaiya Studio 0.6.0 archive support, equipment rules and streamed scenes")
     sha = run("rev-parse", "HEAD")
     if args.no_push:
         print(f"Commit LOCAL creado: {sha}. No se ha enviado a GitHub.")
