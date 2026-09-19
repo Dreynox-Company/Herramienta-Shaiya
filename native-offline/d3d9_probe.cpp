@@ -3,21 +3,43 @@
 #include <d3d9.h>
 #include <cstdio>
 #include <cstdarg>
-#include <intrin.h>
-// Diagnostic forwarding proxy, not a replacement for Windows Direct3D.
-// Loaded only beside the public reference client on an isolated test runner.
+#include <atomic>
+// Test-only forwarding object: the system's device and internal COM tables
+// remain untouched. No global device pointers, truncated tables or hooks.
 static SRWLOCK guard=SRWLOCK_INIT;
-static void log(const char* fmt,...){AcquireSRWLockExclusive(&guard);FILE* f=nullptr;fopen_s(&f,"native-d3d9-trace.txt","a");if(f){va_list a;va_start(a,fmt);vfprintf(f,fmt,a);va_end(a);fputc('\n',f);fclose(f);}ReleaseSRWLockExclusive(&guard);}
-static void** original=nullptr;static void** deviceOriginal=nullptr;
-using Make=IDirect3D9*(WINAPI*)(UINT);
-static Make systemMake(){static Make fn=nullptr;if(!fn){wchar_t path[MAX_PATH]={};GetSystemDirectoryW(path,MAX_PATH);wcscat_s(path,L"\\d3d9.dll");HMODULE m=LoadLibraryW(path);fn=m?reinterpret_cast<Make>(GetProcAddress(m,"Direct3DCreate9")):nullptr;}return fn;}
-static HRESULT STDMETHODCALLTYPE caps(IDirect3D9* p,UINT a,D3DDEVTYPE t,D3DCAPS9* c){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*,UINT,D3DDEVTYPE,D3DCAPS9*);auto hr=reinterpret_cast<F>(original[14])(p,a,t,c);log("GetDeviceCaps a=%u t=%u hr=%08x caps=%08x vs=%08x ps=%08x caller=%p",a,t,hr,SUCCEEDED(hr)?c->DevCaps:0,SUCCEEDED(hr)?c->VertexShaderVersion:0,SUCCEEDED(hr)?c->PixelShaderVersion:0,_ReturnAddress());return hr;}
-static HRESULT STDMETHODCALLTYPE type(IDirect3D9* p,UINT a,D3DDEVTYPE t,D3DFORMAT x,D3DFORMAT y,BOOL w){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*,UINT,D3DDEVTYPE,D3DFORMAT,D3DFORMAT,BOOL);auto hr=reinterpret_cast<F>(original[9])(p,a,t,x,y,w);log("CheckDeviceType a=%u type=%u formats=%u/%u window=%u hr=%08x caller=%p",a,t,x,y,w,hr,_ReturnAddress());return hr;}
-static HRESULT STDMETHODCALLTYPE format(IDirect3D9* p,UINT a,D3DDEVTYPE t,D3DFORMAT f,DWORD u,D3DRESOURCETYPE r,D3DFORMAT q){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*,UINT,D3DDEVTYPE,D3DFORMAT,DWORD,D3DRESOURCETYPE,D3DFORMAT);auto hr=reinterpret_cast<F>(original[10])(p,a,t,f,u,r,q);log("CheckDeviceFormat a=%u f=%u usage=%x resource=%u query=%u hr=%08x caller=%p",a,f,u,r,q,hr,_ReturnAddress());return hr;}
-static UINT STDMETHODCALLTYPE modes(IDirect3D9* p,UINT a,D3DFORMAT f){using F=UINT(STDMETHODCALLTYPE*)(IDirect3D9*,UINT,D3DFORMAT);auto n=reinterpret_cast<F>(original[6])(p,a,f);log("ModeCount a=%u f=%u n=%u caller=%p",a,f,n,_ReturnAddress());return n;}
-static HRESULT STDMETHODCALLTYPE display(IDirect3D9* p,UINT a,D3DDISPLAYMODE* m){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*,UINT,D3DDISPLAYMODE*);auto hr=reinterpret_cast<F>(original[8])(p,a,m);log("DisplayMode a=%u hr=%08x %ux%u f=%u hz=%u",a,hr,SUCCEEDED(hr)?m->Width:0,SUCCEEDED(hr)?m->Height:0,SUCCEEDED(hr)?m->Format:0,SUCCEEDED(hr)?m->RefreshRate:0);return hr;}
-static HRESULT STDMETHODCALLTYPE texture(IDirect3DDevice9* p,UINT w,UINT h,UINT n,DWORD u,D3DFORMAT f,D3DPOOL pool,IDirect3DTexture9** o,HANDLE* handle){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*,UINT,UINT,UINT,DWORD,D3DFORMAT,D3DPOOL,IDirect3DTexture9**,HANDLE*);auto hr=reinterpret_cast<F>(deviceOriginal[23])(p,w,h,n,u,f,pool,o,handle);if(FAILED(hr))log("CreateTexture %ux%u f=%u usage=%x pool=%u hr=%08x caller=%p",w,h,f,u,pool,hr,_ReturnAddress());return hr;}
-static HRESULT STDMETHODCALLTYPE depth(IDirect3DDevice9* p,UINT w,UINT h,D3DFORMAT f,D3DMULTISAMPLE_TYPE ms,DWORD quality,BOOL discard,IDirect3DSurface9** o,HANDLE* handle){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*,UINT,UINT,D3DFORMAT,D3DMULTISAMPLE_TYPE,DWORD,BOOL,IDirect3DSurface9**,HANDLE*);auto hr=reinterpret_cast<F>(deviceOriginal[29])(p,w,h,f,ms,quality,discard,o,handle);log("CreateDepth %ux%u f=%u ms=%u hr=%08x caller=%p",w,h,f,ms,hr,_ReturnAddress());return hr;}
-static HRESULT STDMETHODCALLTYPE target(IDirect3DDevice9* p,UINT w,UINT h,D3DFORMAT f,D3DMULTISAMPLE_TYPE ms,DWORD quality,BOOL lock,IDirect3DSurface9** o,HANDLE* handle){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*,UINT,UINT,D3DFORMAT,D3DMULTISAMPLE_TYPE,DWORD,BOOL,IDirect3DSurface9**,HANDLE*);auto hr=reinterpret_cast<F>(deviceOriginal[28])(p,w,h,f,ms,quality,lock,o,handle);log("CreateTarget %ux%u f=%u ms=%u hr=%08x caller=%p",w,h,f,ms,hr,_ReturnAddress());return hr;}
-static HRESULT STDMETHODCALLTYPE create(IDirect3D9* p,UINT a,D3DDEVTYPE t,HWND h,DWORD flags,D3DPRESENT_PARAMETERS* q,IDirect3DDevice9** o){using F=HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*,UINT,D3DDEVTYPE,HWND,DWORD,D3DPRESENT_PARAMETERS*,IDirect3DDevice9**);log("CreateDevice a=%u type=%u flags=%x %ux%u f=%u count=%u ms=%u quality=%u swap=%u windowed=%u autodepth=%u depth=%u pflags=%x hz=%u interval=%x caller=%p",a,t,flags,q->BackBufferWidth,q->BackBufferHeight,q->BackBufferFormat,q->BackBufferCount,q->MultiSampleType,q->MultiSampleQuality,q->SwapEffect,q->Windowed,q->EnableAutoDepthStencil,q->AutoDepthStencilFormat,q->Flags,q->FullScreen_RefreshRateInHz,q->PresentationInterval,_ReturnAddress());auto hr=reinterpret_cast<F>(original[16])(p,a,t,h,flags,q,o);log("CreateDevice hr=%08x ptr=%p",hr,SUCCEEDED(hr)?*o:nullptr);if(SUCCEEDED(hr)&&*o){deviceOriginal=*reinterpret_cast<void***>(*o);auto v=new void*[119];memcpy(v,deviceOriginal,119*sizeof(void*));v[23]=reinterpret_cast<void*>(&texture);v[28]=reinterpret_cast<void*>(&target);v[29]=reinterpret_cast<void*>(&depth);*reinterpret_cast<void***>(*o)=v;}return hr;}
-extern "C" __declspec(dllexport) IDirect3D9* WINAPI Direct3DCreate9(UINT version){log("Direct3DCreate9 version=%u",version);auto fn=systemMake();auto p=fn?fn(version):nullptr;if(p){original=*reinterpret_cast<void***>(p);auto v=new void*[17];memcpy(v,original,17*sizeof(void*));v[6]=reinterpret_cast<void*>(&modes);v[8]=reinterpret_cast<void*>(&display);v[9]=reinterpret_cast<void*>(&type);v[10]=reinterpret_cast<void*>(&format);v[14]=reinterpret_cast<void*>(&caps);v[16]=reinterpret_cast<void*>(&create);*reinterpret_cast<void***>(p)=v;}return p;}
+static void trace(const char* fmt,...){AcquireSRWLockExclusive(&guard);FILE* f=nullptr;fopen_s(&f,"native-d3d9-trace.txt","a");if(f){va_list a;va_start(a,fmt);vfprintf(f,fmt,a);va_end(a);fputc('\n',f);fclose(f);}ReleaseSRWLockExclusive(&guard);}
+class D3DTrace final:public IDirect3D9 {
+ IDirect3D9* value;std::atomic<ULONG> references{1};
+ public:
+ explicit D3DTrace(IDirect3D9* v):value(v){}
+ HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id,void** out) override {
+  if(!out)return E_POINTER;*out=nullptr;
+  if(IsEqualGUID(id,__uuidof(IUnknown))||IsEqualGUID(id,__uuidof(IDirect3D9))){*out=static_cast<IDirect3D9*>(this);AddRef();return S_OK;}
+  return E_NOINTERFACE;
+ }
+ ULONG STDMETHODCALLTYPE AddRef() override{return ++references;}
+ ULONG STDMETHODCALLTYPE Release() override{ULONG n=--references;if(!n){value->Release();delete this;}return n;}
+ HRESULT STDMETHODCALLTYPE RegisterSoftwareDevice(void* f) override{return value->RegisterSoftwareDevice(f);}
+ UINT STDMETHODCALLTYPE GetAdapterCount() override {auto n=value->GetAdapterCount();trace("AdapterCount %u",n);return n;}
+ HRESULT STDMETHODCALLTYPE GetAdapterIdentifier(UINT a,DWORD f,D3DADAPTER_IDENTIFIER9* id) override{auto hr=value->GetAdapterIdentifier(a,f,id);trace("Adapter %u result=%08x description=%s",a,hr,SUCCEEDED(hr)?id->Description:"");return hr;}
+ UINT STDMETHODCALLTYPE GetAdapterModeCount(UINT a,D3DFORMAT f) override {auto n=value->GetAdapterModeCount(a,f);trace("ModeCount adapter=%u format=%u count=%u",a,f,n);return n;}
+ HRESULT STDMETHODCALLTYPE EnumAdapterModes(UINT a,D3DFORMAT f,UINT n,D3DDISPLAYMODE* m) override{return value->EnumAdapterModes(a,f,n,m);}
+ HRESULT STDMETHODCALLTYPE GetAdapterDisplayMode(UINT a,D3DDISPLAYMODE* m) override {auto hr=value->GetAdapterDisplayMode(a,m);trace("DisplayMode result=%08x %ux%u f=%u",hr,SUCCEEDED(hr)?m->Width:0,SUCCEEDED(hr)?m->Height:0,SUCCEEDED(hr)?m->Format:0);return hr;}
+ HRESULT STDMETHODCALLTYPE CheckDeviceType(UINT a,D3DDEVTYPE t,D3DFORMAT f,D3DFORMAT b,BOOL w) override {auto hr=value->CheckDeviceType(a,t,f,b,w);trace("CheckDeviceType %u %u %u %u %d hr=%08x",a,t,f,b,w,hr);return hr;}
+ HRESULT STDMETHODCALLTYPE CheckDeviceFormat(UINT a,D3DDEVTYPE t,D3DFORMAT f,DWORD u,D3DRESOURCETYPE r,D3DFORMAT q) override {auto hr=value->CheckDeviceFormat(a,t,f,u,r,q);if(FAILED(hr))trace("CheckDeviceFormat f=%u u=%x r=%u q=%u hr=%08x",f,u,r,q,hr);return hr;}
+ HRESULT STDMETHODCALLTYPE CheckDeviceMultiSampleType(UINT a,D3DDEVTYPE t,D3DFORMAT f,BOOL w,D3DMULTISAMPLE_TYPE m,DWORD* q) override {auto hr=value->CheckDeviceMultiSampleType(a,t,f,w,m,q);trace("MultiSample f=%u window=%d ms=%u hr=%08x",f,w,m,hr);return hr;}
+ HRESULT STDMETHODCALLTYPE CheckDepthStencilMatch(UINT a,D3DDEVTYPE t,D3DFORMAT f,D3DFORMAT b,D3DFORMAT d) override {auto hr=value->CheckDepthStencilMatch(a,t,f,b,d);trace("DepthMatch f=%u b=%u depth=%u hr=%08x",f,b,d,hr);return hr;}
+ HRESULT STDMETHODCALLTYPE CheckDeviceFormatConversion(UINT a,D3DDEVTYPE t,D3DFORMAT s,D3DFORMAT d) override{return value->CheckDeviceFormatConversion(a,t,s,d);}
+ HRESULT STDMETHODCALLTYPE GetDeviceCaps(UINT a,D3DDEVTYPE t,D3DCAPS9* c) override{auto hr=value->GetDeviceCaps(a,t,c);trace("Caps hr=%08x vs=%08x ps=%08x",hr,SUCCEEDED(hr)?c->VertexShaderVersion:0,SUCCEEDED(hr)?c->PixelShaderVersion:0);return hr;}
+ HMONITOR STDMETHODCALLTYPE GetAdapterMonitor(UINT a) override{return value->GetAdapterMonitor(a);}
+ HRESULT STDMETHODCALLTYPE CreateDevice(UINT a,D3DDEVTYPE t,HWND h,DWORD flags,D3DPRESENT_PARAMETERS* p,IDirect3DDevice9** out) override {
+  trace("CreateDevice flags=%x size=%ux%u format=%u count=%u swap=%u window=%d depth=%u auto=%d",flags,p->BackBufferWidth,p->BackBufferHeight,p->BackBufferFormat,p->BackBufferCount,p->SwapEffect,p->Windowed,p->AutoDepthStencilFormat,p->EnableAutoDepthStencil);
+  auto hr=value->CreateDevice(a,t,h,flags,p,out);trace("CreateDevice result=%08x",hr);return hr;
+ }
+};
+extern "C" __declspec(dllexport) IDirect3D9* WINAPI Direct3DCreate9(UINT version){
+ trace("Direct3DCreate9 sdk=%u",version);wchar_t path[MAX_PATH]={};GetSystemDirectoryW(path,MAX_PATH);wcscat_s(path,L"\\d3d9.dll");
+ static HMODULE module=LoadLibraryW(path);if(!module)return nullptr;
+ using Make=IDirect3D9*(WINAPI*)(UINT);auto fn=reinterpret_cast<Make>(GetProcAddress(module,"Direct3DCreate9"));
+ auto value=fn?fn(version):nullptr;return value?new D3DTrace(value):nullptr;
+}
