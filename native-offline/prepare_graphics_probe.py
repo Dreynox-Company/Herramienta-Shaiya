@@ -16,7 +16,7 @@ source=r'''#define WIN32_LEAN_AND_MEAN
 #include <cstdio>
 #include <cstdarg>
 #include <atomic>
-static void trace(const char* f,...){FILE* out=nullptr;fopen_s(&out,"native-d3d9-trace.txt","a");if(out){va_list a;va_start(a,f);vfprintf(out,f,a);va_end(a);fputc('\n',out);fclose(out);}}
+static void trace(const char* f,...){static unsigned n=0;if(n++>5000)return;FILE* out=nullptr;fopen_s(&out,"native-d3d9-trace.txt","a");if(out){va_list a;va_start(a,f);vfprintf(out,f,a);va_end(a);fputc('\n',out);fclose(out);}}
 class Diagnostic9 final: public IDirect3D9 {
  IDirect3D9* d;std::atomic<ULONG> refs{1};
  public: explicit Diagnostic9(IDirect3D9* input):d(input){}
@@ -40,6 +40,8 @@ class Diagnostic9 final: public IDirect3D9 {
 };
 extern "C" __declspec(dllexport) IDirect3D9* WINAPI ProbeCreate9(UINT version){wchar_t p[MAX_PATH]={};GetSystemDirectoryW(p,MAX_PATH);wcscat_s(p,L"\\d3d9.dll");auto m=LoadLibraryW(p);using F=IDirect3D9*(WINAPI*)(UINT);auto f=m?reinterpret_cast<F>(GetProcAddress(m,"Direct3DCreate9")):nullptr;auto d=f?f(version):nullptr;trace("Create9 %u -> %p",version,d);return d?new Diagnostic9(d):nullptr;}
 '''
+from device_diagnostics import instrument
+source=instrument(source)
 cpp=proof/'d3d9_trace.cpp';cpp.write_text(source)
 vswhere=Path(os.environ.get('ProgramFiles(x86)',r'C:\Program Files (x86)'))/'Microsoft Visual Studio/Installer/vswhere.exe'
 vs=subprocess.check_output([str(vswhere),'-latest','-products','*','-property','installationPath'],text=True).strip();vc=Path(vs)/'VC/Auxiliary/Build/vcvars32.bat'
