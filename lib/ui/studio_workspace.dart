@@ -7,7 +7,7 @@ class StudioWorkspace extends StatefulWidget {
   final List<IconData> icons;
   final int selectedTab;
   final ValueChanged<int> onTab;
-  final VoidCallback? onOpenData, onOpenEditor;
+  final VoidCallback? onOpenData, onOpenEditor, onExportScene;
   final bool hasLibrary;
   const StudioWorkspace({
     super.key,
@@ -23,6 +23,7 @@ class StudioWorkspace extends StatefulWidget {
     required this.onTab,
     required this.onOpenData,
     this.onOpenEditor,
+    this.onExportScene,
     this.hasLibrary = false,
   });
   @override
@@ -238,6 +239,13 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
               icon: const Icon(Icons.folder_open, size: 17),
               label: const Text('DATA', style: TextStyle(fontSize: 12)),
             ),
+            if (widget.onExportScene != null)
+              IconButton(
+                key: const ValueKey('export-game-scene'),
+                tooltip: 'Exportar escena al cliente Flutter',
+                onPressed: widget.onExportScene,
+                icon: const Icon(Icons.link, size: 18),
+              ),
             IconButton(
               key: const ValueKey('toggle-right'),
               tooltip: 'Inspector · mostrar / plegar',

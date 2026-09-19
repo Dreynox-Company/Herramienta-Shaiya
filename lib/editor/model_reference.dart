@@ -59,7 +59,21 @@ class ModelReferences {
           '${directoryName(d.path)}/ani',
           directoryName(d.path),
         ], uniqueFallback: true);
-        if (path != null) anim[f.spec.name.substring(10)] = path;
+        if (path != null) {
+          final key = f.spec.name.substring(10);
+          const labels = {
+            'Walk': 'Caminar',
+            'Run': 'Correr',
+            'Attack1': 'Ataque 1',
+            'Attack2': 'Ataque 2',
+            'Attack3': 'Ataque 3',
+            'Damage': 'Daño',
+            'Death': 'Caída',
+            'Idle': 'Respirar',
+            'Stop': 'Respirar',
+          };
+          anim[labels[key] ?? key] = path;
+        }
       }
       return [
         ModelReference(

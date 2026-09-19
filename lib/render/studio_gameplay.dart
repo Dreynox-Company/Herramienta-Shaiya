@@ -512,9 +512,15 @@ extension StudioGameplay on StudioScene {
     }
   }
 
-  Future<void> loadWorldScene(String? path, {double? x, double? z}) async {
+  Future<void> loadWorldScene(
+    String? path, {
+    double? x,
+    double? z,
+    bool forceReload = false,
+  }) async {
     // A same-map teleport must not invalidate the live streaming controller.
-    if (path != null &&
+    if (!forceReload &&
+        path != null &&
         path == worldPath &&
         game.loaded != null &&
         x != null &&

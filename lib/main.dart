@@ -26,6 +26,8 @@ import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
+import 'offline_game/scene_profile.dart';
+import 'data/file_save.dart';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -220,6 +222,39 @@ class _StudioState extends State<StudioPage> {
     if (mounted) focus.requestFocus();
   }
 
+  Future<void> exportGameScene() async {
+    final selected = await getSaveLocation(
+      suggestedName: 'escena.shaiya.json',
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Escena del cliente Flutter', extensions: ['json']),
+      ],
+    );
+    if (selected == null) return;
+    await act(() async {
+      final bytes = Uint8List.fromList(
+        utf8.encode(
+          const JsonEncoder.withIndent(
+            '  ',
+          ).convert(SceneProfile.capture(scene)),
+        ),
+      );
+      final file = File(selected.path);
+      if (await file.exists()) {
+        await FileSave.replace(
+          file.path,
+          bytes,
+          expectedHash: FileSave.hash(await file.readAsBytes()),
+        );
+      } else {
+        await file.create(exclusive: true);
+        await file.writeAsBytes(bytes, flush: true);
+      }
+      scene.say(
+        'Escena exportada. Vincúlala en el cliente Flutter; no modifica el ejecutable clásico.',
+      );
+    });
+  }
+
   Future<void> sourceMenu() async {
     scene.clearMovement();
     final mode = await showDialog<String>(
@@ -254,7 +289,7 @@ class _StudioState extends State<StudioPage> {
                   leading: const Icon(Icons.drive_file_move_outlined),
                   title: const Text('Extraer / editar el archivo DATA'),
                   subtitle: const Text(
-                    'Exportación verificada desde el editor, sin sobrescribir originales',
+                    'Extracción y guardado transaccional desde el editor',
                   ),
                   onTap: () => Navigator.pop(ctx, 'editor'),
                 ),
@@ -2431,6 +2466,7 @@ class _StudioState extends State<StudioPage> {
     actions: actionBar(),
     hasLibrary: scene.character != null,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
+    onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,
     tabs: const [
       'Personaje',

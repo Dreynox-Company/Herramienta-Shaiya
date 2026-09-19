@@ -381,6 +381,7 @@ class StudioScene extends ChangeNotifier {
   AudioPlayer? _audio;
   AudioPlayer get audio => _audio ??= AudioPlayer();
   bool separateCostumeHead = true;
+  bool paused = false;
   bool sound = true,
       wireframe = false,
       ready = false,
@@ -1665,7 +1666,9 @@ class StudioScene extends ChangeNotifier {
     notifyListeners();
   }
 
-  void tick(double dt) => tickGameplay(dt);
+  void tick(double dt) {
+    if (!paused) tickGameplay(dt);
+  }
 
   void orbit(double dx, double dy) {
     yaw -= dx * .006;
@@ -1758,8 +1761,12 @@ class StudioScene extends ChangeNotifier {
     say('Cielo original: ${baseName(path)}');
   }
 
-  Future<void> setWorld(String? path, {double? x, double? z}) =>
-      loadWorldScene(path, x: x, z: z);
+  Future<void> setWorld(
+    String? path, {
+    double? x,
+    double? z,
+    bool forceReload = false,
+  }) => loadWorldScene(path, x: x, z: z, forceReload: forceReload);
 
   @override
   void dispose() {

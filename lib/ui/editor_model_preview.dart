@@ -147,6 +147,7 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   Actor? actor;
   String? error;
   String clipName = 'Pose original';
+  int _clipRequest = 0;
   bool dead = false, ready = false, wire = false, playing = true;
   double yaw = .35, pitch = .18, distance = 4, centerY = 1, zoom = 1;
   @override
@@ -261,8 +262,14 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   }
 
   Future<void> chooseClip(String name) async {
+    final request = ++_clipRequest;
     if (name == 'Pose original') {
-      if (mounted) setState(() => clipName = name);
+      if (mounted) {
+        setState(() {
+          clipName = name;
+          error = null;
+        });
+      }
       actor?.clip = null;
       final a = actor;
       if (a != null) {
@@ -281,19 +288,25 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
       return;
     }
     try {
-      final path = widget.model.animations[name]!,
-          b = await widget.library.read(path),
+      final path = widget.model.animations[name];
+      if (path == null) {
+        throw FormatException('Animación no disponible: $name');
+      }
+      final b = await widget.library.read(path),
           clip = await compute(_clip, (b, path));
-      if (dead) return;
+      if (dead || request != _clipRequest) return;
       if (actor == null || clip.bones.length < actor!.requiredBones) {
         throw const FormatException(
           'Animación incompatible con los huesos del modelo.',
         );
       }
       actor!.play(clip);
-      setState(() => clipName = name);
+      setState(() {
+        clipName = name;
+        error = null;
+      });
     } catch (e) {
-      if (mounted) setState(() => error = '$e');
+      if (mounted && request == _clipRequest) setState(() => error = '$e');
     }
   }
 
