@@ -17,16 +17,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: release/studio-06-suite
-      - name: Restore checked source delta including new-file declarations
-        run: python ci/suite_delta/apply.py
-      - name: Commit ordinary source files, never force push
+      - name: Apply native integration corrections
+        run: python ci/finalize_suite.py
+      - name: Commit only corrected application sources
         id: commit
         run: |
           set -euo pipefail
           git config user.name 'Shaiya Studio CI'
           git config user.email 'studio-ci@users.noreply.github.com'
-          git commit -m 'feat: independent Flutter local client, scene exchange and 0.6 preview fixes'
-          git push origin HEAD:release/studio-06-suite
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: native save-menu transition and complete regression inventory'
+            git push origin HEAD:release/studio-06-suite
+          fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   editor:
     needs: integrate
