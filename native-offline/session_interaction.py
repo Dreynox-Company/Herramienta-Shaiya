@@ -1,5 +1,5 @@
 """Bounded interaction with the owned reference-client window in isolated CI.
-Screenshots and server logs remain the evidence; no automatic gameplay claim.
+Capture state for review; never claim gameplay from a successful process start.
 """
 import ctypes, os, time
 from ctypes import wintypes
@@ -26,6 +26,7 @@ def advance(game, windows, screenshot, report):
         visible=windows(game.pid)
         if any('error' in w['title'].lower() for w in visible):raise RuntimeError('Native error dialog during character load: '+repr(visible))
         screenshot('character-loading-'+str(i)+'.png')
-    report['steps'].append('Selected Light faction and observed 45 seconds of native scene loading')
+    click(.146,.893);time.sleep(10);screenshot('create-character-form.png')
+    report['steps'].append('Opened Create Character using the inspected reference-client selection layout')
     report['characterSelectionObservedByAutomation']=False
-    report['gate']='CHARACTER_SCENE_CAPTURE_REQUIRES_REVIEW'
+    report['gate']='CHARACTER_CREATION_FORM_REQUIRES_REVIEW'
