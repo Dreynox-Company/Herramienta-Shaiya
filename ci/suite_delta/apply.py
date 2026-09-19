@@ -17,6 +17,8 @@ def main():
    if p.is_absolute() or '..' in p.parts or '\\' in name or not(name in {'README_SUITE.md','Shaiya-Suite.code-workspace','COMPILAR_CLIENTE_FLUTTER.cmd'} or p.parts[0] in {'lib','test','integration_test','tool','ci','ingenieria_inversa'}):raise RuntimeError('Out-of-scope source path')
    paths.append(name)
  if len(paths)!=23 or len(set(paths))!=23:raise RuntimeError('Expected 23 unique source files.')
+ # difflib unified output needs explicit git mode metadata for /dev/null.
+ patch=re.sub(rb'(diff --git [^\n]+\n)(--- /dev/null\n)',rb'\1new file mode 100644\n\2',patch)
  with tempfile.TemporaryDirectory() as temp:
   f=Path(temp)/'source.patch';f.write_bytes(patch)
   subprocess.run(['git','apply','--check',str(f)],cwd=ROOT,check=True)
