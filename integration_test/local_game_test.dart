@@ -146,7 +146,10 @@ void main() {
         () => find.byType(PlaySession).evaluate().isEmpty && !menu.busy,
         'Return to save menu',
       );
-      await t.tap(find.text('Ñandú local'));
+      final savedRow = find.widgetWithText(ListTile, 'Ñandú local');
+      expect(savedRow, findsOneWidget);
+      await t.ensureVisible(savedRow);
+      await t.tap(savedRow);
       await wait(
         () => find.byType(PlaySession).evaluate().isNotEmpty,
         'Reopen persisted local session',
