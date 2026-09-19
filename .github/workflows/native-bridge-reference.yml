@@ -1,0 +1,33 @@
+name: Native bridge - reference inputs
+on:
+  push:
+    branches: [work/native-bridge-integration]
+    paths: [.github/workflows/native-bridge-reference.yml]
+permissions:
+  contents: read
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Fetch pinned source without running project scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out upstream
+          git -C upstream init -q
+          git -C upstream remote add origin https://github.com/aosyatnik/Imgeneus.git
+          git -C upstream fetch --depth 1 origin 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
+          git -C upstream checkout --detach FETCH_HEAD
+          test "$(git -C upstream rev-parse HEAD)" = 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
+          git -C upstream archive --format=tar.gz --output="$PWD/out/imgeneus-reference-source.tar.gz" HEAD
+          mkdir wheels
+          python -m pip download --only-binary=:all: --dest wheels pefile==2024.8.26 capstone==5.0.6 unicorn==2.1.4
+          tar -czf out/inspection-wheels.tar.gz wheels
+          cd out && sha256sum *.gz > SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-bridge-reference-inputs
+          path: out/
+          retention-days: 7
+          compression-level: 0
