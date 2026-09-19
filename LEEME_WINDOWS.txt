@@ -1,0 +1,13 @@
+SHAIYA STUDIO 0.5.0 - Laboratorio 3D y editor de datos
+
+Extrae TODO el ZIP y abre herramienta_shaiya.exe. No se requiere compilar.
+No separes el ejecutable de sus DLL y de la carpeta data (Flutter).
+DATA del juego es otra carpeta: selecciónala dentro de la aplicación.
+También puedes abrir los archivos SAH/SAF.
+
+El botón centrado Editor de datos abre el editor de SData/SVMAP.
+Exportar / herramientas permite extraer a DATA o generar un par nuevo.
+Nunca se sobrescribe el origen: se verifican copias y hashes.
+Consulta INSTRUCCIONES.md y docs/revision-05.md para alcance y pendientes.
+No todos los campos del servidor están en el cliente ni cambian al editarlo.
+Extras/flight.json.gz, cuando viene incluido, contiene movimientos aislados.
