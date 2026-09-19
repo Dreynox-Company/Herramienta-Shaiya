@@ -2,9 +2,12 @@ name: Offline runtime - compatibility probe
 on:
   push:
     branches: [work/native-bridge-integration]
-    paths: [.github/workflows/offline-runtime-probe.yml, runtime/prepare_offline.py]
+    paths: [.github/workflows/offline-runtime-probe.yml, 'runtime/**']
 permissions:
   contents: read
+concurrency:
+  group: offline-runtime-probe
+  cancel-in-progress: true
 jobs:
   compile-reference:
     runs-on: ubuntu-latest
@@ -13,8 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
-      - name: Fetch pinned reference and available authentication dependency
+          dotnet-version: '10.0.x'
+      - name: Fetch pinned reference and explicit authentication reference
         shell: bash
         run: |
           set -euo pipefail
@@ -25,14 +28,17 @@ jobs:
           git -C upstream/submodules/Imgeneus.Authentication checkout 77b3a65e9a0ba60f83e1aa452e9f0b997ea27a70
           mkdir -p probe
           git -C upstream submodule status --recursive > probe/submodule-versions.txt
-          if test -f runtime/prepare_offline.py; then python runtime/prepare_offline.py upstream; fi
-      - name: Compile ps0032 reference projects
+          python runtime/prepare_offline.py upstream
+          if test -f runtime/bootstrap_offline.py; then python runtime/bootstrap_offline.py upstream; fi
+      - name: Compile and verify reference projects
         shell: bash
         run: |
           set -euo pipefail
           dotnet build upstream/src/Imgeneus.Login/Imgeneus.Login.csproj -c SHAIYA_ps0032 --verbosity minimal 2>&1 | tee probe/login-build.log
           dotnet build upstream/src/Imgeneus.World/Imgeneus.World.csproj -c SHAIYA_ps0032 --verbosity minimal 2>&1 | tee probe/world-build.log
-          echo 'Compilation does not prove compatibility with a user client or offline readiness.' > probe/SCOPE.txt
+          if test -f upstream/src/Offline.Verify/Offline.Verify.csproj; then dotnet run --project upstream/src/Offline.Verify/Offline.Verify.csproj -c Release 2>&1 | tee probe/storage-tests.log; fi
+          cp upstream/OFFLINE_PORT_MANIFEST.json probe/
+          echo 'Compilation and synthetic tests do not prove native-game rendering or compatibility with the user client.' > probe/SCOPE.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
