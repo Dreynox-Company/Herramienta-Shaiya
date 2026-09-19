@@ -1,0 +1,27 @@
+name: Suite source snapshot
+on:
+  push:
+    branches: [release/studio-06-suite]
+    paths: [.github/workflows/suite-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive committed sources
+        run: |
+          mkdir -p snapshot
+          git archive --format=zip --output=snapshot/source.zip HEAD
+          git ls-tree -r HEAD > snapshot/tree.txt
+          git rev-parse HEAD > snapshot/commit.txt
+          sha256sum snapshot/source.zip > snapshot/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Suite-source-snapshot
+          path: snapshot/
+          retention-days: 14
