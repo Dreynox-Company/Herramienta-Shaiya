@@ -1,0 +1,42 @@
+name: Native client - public fingerprint probe
+on:
+  push:
+    branches: [work/native-bridge-integration]
+    paths: [.github/workflows/native-public-client-profile.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Inspect public reference archive, do not execute client
+        shell: bash
+        run: |
+          mkdir -p proof
+          python - <<'PY'
+          import urllib.request,tarfile,hashlib,json,time
+          url='https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz'
+          report={'url':url,'nativeExecuted':False,'userFilesUploaded':False}
+          start=time.monotonic();budget=0
+          try:
+              with urllib.request.urlopen(url,timeout=45) as response:
+                  with tarfile.open(fileobj=response,mode='r|gz') as archive:
+                      for entry in archive:
+                          budget+=entry.size
+                          if budget>12*1024**3 or time.monotonic()-start>540:raise RuntimeError('Bounded inspection budget reached')
+                          if entry.isfile() and entry.name.replace('\\','/').split('/')[-1].lower()=='game.exe':
+                              if entry.size>32*1024**2:raise RuntimeError('Native executable size exceeds profile budget')
+                              body=archive.extractfile(entry).read()
+                              report.update(path=entry.name,bytes=len(body),sha256=hashlib.sha256(body).hexdigest(),matchesUserProfile=hashlib.sha256(body).hexdigest()=='509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d')
+                              break
+                      else:raise RuntimeError('No game.exe in public archive')
+          except Exception as e:report.update(error=str(e),matchesUserProfile=False)
+          open('proof/public-client-profile.json','w').write(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-public-client-profile
+          path: proof/
+          retention-days: 7
