@@ -712,7 +712,8 @@ class _PlaySessionState extends State<PlaySession> with WidgetsBindingObserver {
     if (ready && !await _save()) return;
     if (!mounted) return;
     setState(() => leaving = true);
-    Navigator.of(context).pop();
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override

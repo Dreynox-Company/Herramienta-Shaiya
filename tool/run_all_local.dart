@@ -25,6 +25,8 @@ import '../test/streaming_test.dart' as suite22;
 import '../test/workspace_interaction_test.dart' as suite23;
 import '../test/workspace_material_test.dart' as suite24;
 
+import '../test/local_game_test.dart' as suite25;
+
 void main() {
   suite0.main();
   suite1.main();
@@ -51,4 +53,5 @@ void main() {
   suite22.main();
   suite23.main();
   suite24.main();
+  suite25.main();
 }
