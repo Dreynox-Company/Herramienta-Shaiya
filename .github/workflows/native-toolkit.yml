@@ -1,0 +1,36 @@
+name: Native game - isolated QA toolkit
+on:
+  push:
+    branches: [work/native-game-tools-20260920]
+    paths: [.github/workflows/native-toolkit.yml]
+permissions:
+  contents: read
+jobs:
+  package-public-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Fetch public Debian tools only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/debs out/wheels
+          docker run --rm -v "$PWD/out:/out" debian:trixie-slim bash -euc '
+            dpkg --add-architecture i386
+            apt-get update
+            apt-get -y --download-only --no-install-recommends install wine wine32:i386 wine64 libgl1-mesa-dri:i386 libglx-mesa0:i386 libpulse0:i386 gdb g++-mingw-w64-i686-posix
+            cp /var/cache/apt/archives/*.deb /out/debs/
+            cd /out/debs
+            apt-get download libc6:amd64 libgcc-s1:amd64 libstdc++6:amd64 zlib1g:amd64
+          '
+          python3 -m pip download --only-binary=:all: --dest out/wheels pefile capstone unicorn keystone-engine
+          printf '%s\n' 'Public toolchain only. No uploaded game binaries, game assets, credentials or user data are included. Not a game build and not proof of native gameplay.' > out/SCOPE.txt
+          (cd out && find debs wheels -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+          tar -I 'zstd -T0 -3' -cf native-qa-toolkit.tar.zst -C out .
+          ls -lh native-qa-toolkit.tar.zst
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-QA-Toolkit-Debian13
+          path: native-qa-toolkit.tar.zst
+          retention-days: 2
+          compression-level: 0
