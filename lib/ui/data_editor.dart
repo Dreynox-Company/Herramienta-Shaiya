@@ -1133,7 +1133,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
   });
   Future<void> _exportReport() => _job(() async {
     final report = {
-      'version': '0.6.0',
+      'version': '0.6.1',
       'source': widget.library.sourceDiagnostics,
       'tables': _cache.values.map((d) => d.report()).toList(),
       'privacy':

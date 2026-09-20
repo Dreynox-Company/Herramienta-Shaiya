@@ -299,11 +299,33 @@ void main() {
     await scene.selectCreature(c.wings.first, 'wing');
     expect(scene.flightEnabled, false);
     expect(scene.flying, false);
-    scene.setMovement(0, -1, run: true);
-    await state.act(scene.toggleFlight, preserveMovement: true);
+    (state.focus as FocusNode).requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.backslash,
+      physicalKey: PhysicalKeyboardKey.intlBackslash,
+    );
+    await tester.sendKeyRepeatEvent(
+      LogicalKeyboardKey.backslash,
+      physicalKey: PhysicalKeyboardKey.intlBackslash,
+    );
+    await waitFor(
+      () => scene.flightEnabled,
+      'ISO < flight key reached editor controller',
+    );
     expect(scene.walkZ, -1);
     expect(scene.running, true);
-    passed.add('Flight mode UI action preserves maintained sprint');
+    passed.add(
+      'Physical ISO key toggles flight once without cancelling held sprint',
+    );
+    await tester.sendKeyUpEvent(
+      LogicalKeyboardKey.backslash,
+      physicalKey: PhysicalKeyboardKey.intlBackslash,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     scene.clearMovement();
     await waitFor(
       () => scene.flying && scene.character!.clip == scene.character!.hover,

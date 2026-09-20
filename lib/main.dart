@@ -416,7 +416,7 @@ class _StudioState extends State<StudioPage> {
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.6.0',
+        'version': '0.6.1',
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -1005,7 +1005,7 @@ class _StudioState extends State<StudioPage> {
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 title: const Text(
-                  'Modo vuelo · Shift + Espacio',
+                  'Modo vuelo · <',
                   style: TextStyle(fontSize: 11),
                 ),
                 value: scene.flightEnabled,
@@ -1413,7 +1413,7 @@ class _StudioState extends State<StudioPage> {
         ]),
         section('Atajos', [
           note(
-            'W A S D  —  caminar\nShift + dirección  —  correr\nEspacio  —  salto terrestre\nShift + Espacio  —  alternar vuelo con alas\n1–4  —  ataques disponibles\nR  —  reiniciar combate\nArrastrar  —  orbitar\nRueda / pellizco  —  acercar\n↑ / ↓ en un selector  —  cambiar recurso\nIntro en el selector  —  catálogo',
+            'W A S D  —  caminar\nShift + dirección  —  correr\nEspacio  —  salto terrestre\n<  —  alternar vuelo con alas\n1–4  —  ataques disponibles\nR  —  reiniciar combate\nArrastrar  —  orbitar\nRueda / pellizco  —  acercar\n↑ / ↓ en un selector  —  cambiar recurso\nIntro en el selector  —  catálogo',
           ),
           note(
             'Los atajos del personaje solo actúan cuando el visor tiene el foco. No interfieren con las búsquedas.',
@@ -2428,7 +2428,7 @@ class _StudioState extends State<StudioPage> {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.6.0',
+        'version': '0.6.1',
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,

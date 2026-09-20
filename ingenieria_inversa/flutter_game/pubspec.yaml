@@ -1,7 +1,7 @@
 name: shaiya_local_game
 description: Reconstrucción independiente de cliente local sobre los lectores de Shaiya Studio.
 publish_to: none
-version: 0.1.0+1
+version: 0.1.1+2
 environment:
   sdk: '>=3.10.0 <4.0.0'
 dependencies:

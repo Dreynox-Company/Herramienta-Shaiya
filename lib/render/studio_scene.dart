@@ -1285,7 +1285,7 @@ class StudioScene extends ChangeNotifier {
       enabled
           ? (combat.inGuard
                 ? 'Vuelo preparado: se retomará al terminar el combate, sin detener el recorrido.'
-                : 'Modo vuelo activado · Shift + Espacio para aterrizar.')
+                : 'Modo vuelo activado · < para aterrizar.')
           : 'Modo terrestre activado; las alas siguen equipadas.',
     );
   }

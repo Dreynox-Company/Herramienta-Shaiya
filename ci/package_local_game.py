@@ -13,14 +13,14 @@ def main():
     checks=json.loads((ROOT/'qa-game/local-game/result.json').read_text())
     if checks.get('native_render') is not True:raise RuntimeError('Falta integración nativa')
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
-    provenance={'schema':1,'name':'Shaiya Local','version':'0.1.0+1','commit':revision,'engine':'Flutter independent reconstruction','originalExecutableModified':False,'completeShaiyaReconstruction':False,'nativeChecks':checks,'files':{p.relative_to(release).as_posix():{'sha256':digest(p),'bytes':p.stat().st_size} for p in sorted(release.rglob('*')) if p.is_file()}}
+    provenance={'schema':1,'name':'Shaiya Local','version':'0.1.1+2','commit':revision,'engine':'Flutter independent reconstruction','originalExecutableModified':False,'completeShaiyaReconstruction':False,'nativeChecks':checks,'files':{p.relative_to(release).as_posix():{'sha256':digest(p),'bytes':p.stat().st_size} for p in sorted(release.rglob('*')) if p.is_file()}}
     (release/'build-provenance.json').write_text(json.dumps(provenance,indent=2,ensure_ascii=False),encoding='utf-8')
-    (release/'LEEME_CLIENTE.txt').write_text('''SHAIYA LOCAL 0.1 — CLIENTE FLUTTER INDEPENDIENTE
+    (release/'LEEME_CLIENTE.txt').write_text('''SHAIYA LOCAL 0.1.1 — CLIENTE FLUTTER INDEPENDIENTE
 Extrae en una carpeta NUEVA y ejecuta game.exe con todas sus DLL/data juntas.
 NO reemplaces con él el game.exe original ni mezcles las carpetas data.
 Selecciona la DATA extraída o el par SAH/SAF del juego desde el menú.
 Crea una partida Luz/Furia, abre el panel, elige mapa y añade encuentros.
-WASD: movimiento; Shift: correr; Espacio: salto; Shift+Espacio: alternar
+WASD: movimiento; Shift: correr; Espacio: salto; <: alternar
 vuelo únicamente con alas y suplemento ANI compatible. 1-4: atacar.
 El editor de datos abre desde la sesión. Al volver, recarga lo guardado.
 El laboratorio exporta una escena JSON que el cliente puede seguir localmente

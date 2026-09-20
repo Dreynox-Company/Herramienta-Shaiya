@@ -98,13 +98,28 @@ void main() {
       await scene.selectCreature(scene.catalog!.wings.first, 'wing');
       (session.focus as FocusNode).requestFocus();
       await t.pump();
-      await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await t.sendKeyDownEvent(LogicalKeyboardKey.space);
-      await t.sendKeyUpEvent(LogicalKeyboardKey.space);
-      await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await wait(() => scene.flying, 'Shift+Space toggles manual wing flight');
+      await t.sendKeyDownEvent(
+        LogicalKeyboardKey.backslash,
+        physicalKey: PhysicalKeyboardKey.intlBackslash,
+      );
+      await t.sendKeyRepeatEvent(
+        LogicalKeyboardKey.backslash,
+        physicalKey: PhysicalKeyboardKey.intlBackslash,
+      );
+      await t.sendKeyUpEvent(
+        LogicalKeyboardKey.backslash,
+        physicalKey: PhysicalKeyboardKey.intlBackslash,
+      );
+      await wait(() => scene.flying, 'ISO < toggles manual wing flight once');
       await shot('02-vuelo-escenario');
-      await scene.requestFlight(false);
+      await t.sendKeyDownEvent(
+        LogicalKeyboardKey.backslash,
+        physicalKey: PhysicalKeyboardKey.intlBackslash,
+      );
+      await t.sendKeyUpEvent(
+        LogicalKeyboardKey.backslash,
+        physicalKey: PhysicalKeyboardKey.intlBackslash,
+      );
       await wait(
         () => scene.flightState.grounded,
         'Controlled landing without removing wings',

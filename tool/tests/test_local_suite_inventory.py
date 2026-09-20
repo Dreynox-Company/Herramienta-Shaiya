@@ -20,7 +20,7 @@ class LocalSuiteInventoryTest(unittest.TestCase):
         self.assertRegex(main, r"onFlightToggle:\s*\(\)\s*=>\s*act\(scene\.toggleFlight,\s*preserveMovement:\s*true\)")
         self.assertRegex(main, r"onChanged:\s*\(enabled\)\s*=>\s*act\([\s\S]{0,150}requestFlight\(enabled\)[\s\S]{0,100}preserveMovement:\s*true")
         self.assertIn("await scene.runUserAction(action, preserveMovement: preserveMovement)", main)
-        self.assertIn("Shift + Espacio  —  alternar vuelo con alas", main)
+        self.assertIn("<  —  alternar vuelo con alas", main)
 
 if __name__ == "__main__":
     unittest.main()

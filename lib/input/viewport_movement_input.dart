@@ -58,17 +58,30 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
+    // A viewport can contain focused controls: never intercept their typing.
+    if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
+    // The ISO key beside Z (< / > on a Spanish layout), not Shift+comma.
+    // Use its location so it also works while Shift is held for sprinting.
+    if (event.physicalKey == PhysicalKeyboardKey.intlBackslash) {
+      final keyboard = HardwareKeyboard.instance;
+      if (!_active ||
+          event.synthesized ||
+          keyboard.isControlPressed ||
+          keyboard.isAltPressed ||
+          keyboard.isMetaPressed ||
+          widget.onFlightToggle == null) {
+        return KeyEventResult.ignored;
+      }
+      // One toggle per press; holding the key must not alternate repeatedly.
+      if (event is KeyDownEvent) widget.onFlightToggle!.call();
+      return KeyEventResult.handled;
+    }
     if (!_movementKeys.contains(event.logicalKey)) {
       if (event is KeyDownEvent &&
           !event.synthesized &&
           _active &&
           _actionKeys.contains(event.logicalKey)) {
-        if (event.logicalKey == LogicalKeyboardKey.space &&
-            HardwareKeyboard.instance.isShiftPressed) {
-          widget.onFlightToggle?.call();
-        } else {
-          widget.onAction?.call(event.logicalKey);
-        }
+        widget.onAction?.call(event.logicalKey);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -105,7 +118,7 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
     autofocus: true,
     focusNode: widget.focusNode,
     onFocusChange: (hasFocus) {
-      if (!hasFocus) {
+      if (!hasFocus || !widget.focusNode.hasPrimaryFocus) {
         _clear();
       } else {
         _samplePressed();

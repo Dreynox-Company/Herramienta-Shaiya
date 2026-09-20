@@ -1086,7 +1086,7 @@ class _PlaySessionState extends State<PlaySession> with WidgetsBindingObserver {
                     child: const Text('Cargar movimientos suplementarios'),
                   ),
                   const Text(
-                    'Shift + Espacio: alternar vuelo con alas. Los ANI incompatibles no se mezclan con el esqueleto.',
+                    '<: alternar vuelo con alas. Los ANI incompatibles no se mezclan con el esqueleto.',
                     style: TextStyle(
                       color: Colors.white54,
                       fontSize: 11,
@@ -1375,7 +1375,7 @@ class _PlaySessionState extends State<PlaySession> with WidgetsBindingObserver {
                 ),
                 const SizedBox(width: 15),
                 const Text(
-                  'WASD · Shift: correr · Espacio: saltar · Shift+Espacio: vuelo',
+                  'WASD · Shift: correr · Espacio: saltar · <: vuelo',
                   style: TextStyle(fontSize: 10, color: Colors.white54),
                 ),
               ],
