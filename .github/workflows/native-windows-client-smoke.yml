@@ -1,0 +1,99 @@
+name: Native game - Windows client smoke
+on:
+  push:
+    branches: [work/native-game-tools-20260920]
+    paths: [.github/workflows/native-windows-client-smoke.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native-reference:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Native-Backend-Windows
+          run-id: 35536595183
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: backend-download
+      - name: Prepare Python decoder and public reference client
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force proof,services,client,save | Out-Null
+          python -m pip install --disable-pip-version-check zstandard pillow
+          @'
+          import tarfile,zstandard,urllib.request,pathlib,hashlib,json,shutil,time
+          with open('backend-download/native-services-win-x64.tar.zst','rb') as f:
+            with zstandard.ZstdDecompressor().stream_reader(f) as s:
+              with tarfile.open(fileobj=s,mode='r|') as t: t.extractall('services',filter='data')
+          start=time.monotonic(); total=0
+          with urllib.request.urlopen('https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz',timeout=60) as response:
+            with tarfile.open(fileobj=response,mode='r|gz') as archive:
+              for entry in archive:
+                if not entry.isfile(): continue
+                total+=entry.size
+                if total>12*1024**3 or time.monotonic()-start>720:raise RuntimeError('Reference exceeds bounded test budget')
+                parts=pathlib.PurePosixPath(entry.name.replace('\\','/')).parts
+                if '..' in parts or pathlib.PurePosixPath(entry.name).is_absolute():raise RuntimeError('Unsafe archive path')
+                target=pathlib.Path('client').joinpath(*parts);target.parent.mkdir(parents=True,exist_ok=True)
+                with archive.extractfile(entry) as src,target.open('wb') as dst:shutil.copyfileobj(src,dst,8*1024*1024)
+          games=list(pathlib.Path('client').rglob('game.exe'))
+          if len(games)!=1:raise RuntimeError('Expected exactly one native client')
+          game=games[0]; digest=hashlib.sha256(game.read_bytes()).hexdigest()
+          if digest!='509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d':raise RuntimeError('Reference fingerprint mismatch')
+          pathlib.Path('game-path.txt').write_text(str(game.resolve()))
+          pathlib.Path('proof/reference.json').write_text(json.dumps({'sha256':digest,'bytes':game.stat().st_size,'source':'public ps0032 reference, not user uploads','nativeGameplayVerified':False},indent=2))
+          '@ | Set-Content prepare.py
+          python prepare.py
+          if ($LASTEXITCODE -ne 0) { throw 'Public reference preparation failed' }
+      - name: Boot native executable and capture real Windows desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $env:SHAIYA_OFFLINE_SLOT=(Resolve-Path save).Path
+          $env:SHAIYA_OFFLINE_FACTION='light'
+          $env:SHAIYA_OFFLINE_PASSWORD=[Guid]::NewGuid().ToString('N').Substring(0,16)
+          $env:SHAIYA_OFFLINE_TOKEN=[Guid]::NewGuid().ToString('N')
+          $login=$null;$world=$null;$game=$null
+          function Wait-Tcp([int]$Port,[int]$Seconds=60) {
+            for($i=0;$i -lt $Seconds;$i++) { $c=New-Object Net.Sockets.TcpClient;try {$c.Connect('127.0.0.1',$Port);$c.Dispose();return}catch{$c.Dispose();Start-Sleep 1} };throw "Local port $Port did not become ready"
+          }
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          function Capture([string]$Name) {
+            $bounds=[Windows.Forms.SystemInformation]::VirtualScreen
+            $bitmap=New-Object Drawing.Bitmap $bounds.Width,$bounds.Height
+            $graphics=[Drawing.Graphics]::FromImage($bitmap)
+            $graphics.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bounds.Size)
+            $bitmap.Save((Join-Path (Resolve-Path proof) $Name),[Drawing.Imaging.ImageFormat]::Png)
+            $graphics.Dispose();$bitmap.Dispose()
+          }
+          try {
+            $login=Start-Process (Resolve-Path services/login/Imgeneus.Login.exe) -WorkingDirectory (Resolve-Path services/login) -RedirectStandardOutput proof/login.stdout.txt -RedirectStandardError proof/login.stderr.txt -PassThru
+            Wait-Tcp 30800
+            $world=Start-Process (Resolve-Path services/world/Imgeneus.World.exe) -WorkingDirectory (Resolve-Path services/world) -RedirectStandardOutput proof/world.stdout.txt -RedirectStandardError proof/world.stderr.txt -PassThru
+            Wait-Tcp 30810
+            Start-Sleep 4
+            $path=(Get-Content game-path.txt -Raw).Trim()
+            $game=Start-Process $path -WorkingDirectory (Split-Path $path) -ArgumentList @('start','127.0.0.1',"localplayer:$env:SHAIYA_OFFLINE_PASSWORD") -PassThru
+            $states=@()
+            for($i=0;$i -lt 10;$i++) {
+              Start-Sleep 5;$game.Refresh();Capture("native-$i.png")
+              $states+=@{second=($i+1)*5;exited=$game.HasExited;title=$game.MainWindowTitle;pid=$game.Id}
+              if($game.HasExited){break}
+              if($i -eq 4){$ws=New-Object -ComObject WScript.Shell;if($ws.AppActivate($game.Id)){Start-Sleep 1;$ws.SendKeys('{ENTER}')}}
+            }
+            $states | ConvertTo-Json -Depth 5 | Set-Content proof/native-states.json
+            Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in @(30800,30810) -or $_.RemotePort -in @(30800,30810)} | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State,OwningProcess | ConvertTo-Json | Set-Content proof/loopback-connections.json
+            if($game.HasExited){$game.ExitCode | Set-Content proof/native-exit-code.txt}
+          } finally {
+            foreach($p in @($game,$world,$login)){if($p){try{Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}catch{}}}
+            foreach($p in Get-ChildItem proof -Filter *.txt){$s=Get-Content $p -Raw -ErrorAction SilentlyContinue;if($s){$s=$s.Replace($env:SHAIYA_OFFLINE_PASSWORD,'[ephemeral-redacted]').Replace($env:SHAIYA_OFFLINE_TOKEN,'[ephemeral-redacted]');Set-Content $p $s}}
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-Windows-Client-Smoke-Proof
+          path: proof/
+          retention-days: 7
