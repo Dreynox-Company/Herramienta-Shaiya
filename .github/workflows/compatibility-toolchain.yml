@@ -1,0 +1,40 @@
+name: Compatibility validation toolchain
+on:
+  push:
+    branches: [feat/studio-061-spk-flight]
+    paths: [.github/workflows/compatibility-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Package validation SDK and verified sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p transfer
+          flutter precache --linux
+          flutter --version --machine > transfer/toolchain.json
+          git archive --format=zip --output=transfer/project.zip HEAD
+          git bundle create transfer/history.bundle --all
+          git rev-parse HEAD > transfer/commit.txt
+          tar --exclude=.git --exclude=examples --exclude=dev -czf transfer/flutter-linux.tar.gz -C "$FLUTTER_ROOT" .
+          sha256sum transfer/* > SHA256.txt
+          mv SHA256.txt transfer/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Compatibility-validation-toolchain
+          path: transfer/
+          if-no-files-found: error
+          retention-days: 7
