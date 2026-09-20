@@ -1,0 +1,35 @@
+name: Windows platform symbol inventory
+on:
+  push:
+    branches: [work/spk-real-reader-20260920]
+    paths: [.github/workflows/spk-platform-symbols.yml]
+permissions:
+  contents: read
+jobs:
+  symbols:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pefile==2024.8.26
+      - name: Record export names and ordinals, never DLL contents
+        shell: python
+        run: |
+          import pefile,pathlib,os,json
+          out=pathlib.Path('symbols');out.mkdir()
+          names=['ntdll.dll','kernel32.dll','kernelbase.dll','user32.dll','advapi32.dll','shell32.dll','shlwapi.dll','gdi32.dll','bcrypt.dll','crypt32.dll','ole32.dll','oleaut32.dll','winmm.dll','imm32.dll','setupapi.dll','version.dll','ws2_32.dll']
+          result={}
+          for name in names:
+              p=pefile.PE(str(pathlib.Path(os.environ['SystemRoot'])/'System32'/name),fast_load=True)
+              p.parse_data_directories(directories=[0])
+              result[name]=[{'name':s.name.decode('ascii') if s.name else None,'ordinal':s.ordinal,'forwarder':s.forwarder.decode('ascii') if s.forwarder else None} for s in p.DIRECTORY_ENTRY_EXPORT.symbols]
+              p.close()
+          (out/'windows_exports.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-platform-symbols
+          path: symbols/
+          retention-days: 7
+          if-no-files-found: error
