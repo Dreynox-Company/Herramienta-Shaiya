@@ -2,7 +2,7 @@ name: Native game - real Windows interaction
 on:
   push:
     branches: [work/native-game-tools-20260920]
-    paths: [.github/workflows/native-click-probe.yml, native-ci/click_probe.ps1]
+    paths: [.github/workflows/native-click-probe.yml, 'native-ci/**']
 permissions:
   contents: read
   actions: read
