@@ -1,0 +1,32 @@
+name: V3 Native validation toolchain
+on:
+  push:
+    branches: ['tools/studio-v3-native-validation']
+    paths: ['.github/workflows/v3-native-validation-sdk.yml']
+permissions:
+  contents: read
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    timeout-minutes: 15
+    steps:
+      - name: Install Debian desktop development files
+        shell: bash
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev liblzma-dev libstdc++-14-dev python3 ca-certificates
+      - name: Pack isolated native SDK (no user files)
+        shell: bash
+        run: |
+          mkdir -p /tmp/export
+          tar -czf /tmp/export/desktop-sdk.tar.gz -C / usr/include usr/lib/x86_64-linux-gnu usr/share/pkgconfig
+          cd /tmp/export
+          sha256sum desktop-sdk.tar.gz > SHA256.txt
+          du -h desktop-sdk.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Debian-native-validation-sdk
+          path: /tmp/export/*
+          compression-level: 0
+          retention-days: 3
