@@ -1,0 +1,87 @@
+name: Native game - silent Windows diagnostic
+on:
+  push:
+    branches: [work/native-game-tools-20260920]
+    paths: [.github/workflows/native-windows-silent-probe.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostic:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Native-Backend-Windows
+          run-id: 35536595183
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: backend
+      - name: Prepare bounded public reference and explicit test-only sound branch
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force proof,services,client,save | Out-Null
+          python -m pip install --disable-pip-version-check zstandard
+          @'
+          import tarfile,zstandard,urllib.request,pathlib,hashlib,json,shutil,time,configparser
+          with open('backend/native-services-win-x64.tar.zst','rb') as f:
+            with zstandard.ZstdDecompressor().stream_reader(f) as s:
+              with tarfile.open(fileobj=s,mode='r|') as t:t.extractall('services',filter='data')
+          started=time.monotonic();total=0
+          with urllib.request.urlopen('https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz',timeout=60) as r:
+            with tarfile.open(fileobj=r,mode='r|gz') as t:
+              for e in t:
+                if not e.isfile():continue
+                total+=e.size
+                if total>12*1024**3 or time.monotonic()-started>480:raise RuntimeError('Reference budget exceeded')
+                p=pathlib.PurePosixPath(e.name.replace('\\','/'))
+                if p.is_absolute() or '..' in p.parts:raise RuntimeError('Unsafe path')
+                dst=pathlib.Path('client').joinpath(*p.parts);dst.parent.mkdir(parents=True,exist_ok=True)
+                with t.extractfile(e) as a,dst.open('wb') as b:shutil.copyfileobj(a,b,8*1024*1024)
+          g=list(pathlib.Path('client').rglob('game.exe'));assert len(g)==1
+          original=g[0].read_bytes();assert hashlib.sha256(original).hexdigest()=='509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d'
+          assert original[0x10a084:0x10a086]==bytes.fromhex('7537')
+          altered=bytearray(original);altered[0x10a084]=0xeb
+          probe=g[0].with_name('game_silent_diagnostic.exe');probe.write_bytes(altered)
+          cfg=g[0].parent/'config.ini';c=configparser.ConfigParser(strict=False);c.read(cfg,encoding='latin1')
+          if 'VIDEO' not in c:c['VIDEO']={}
+          c['VIDEO'].update(SIZE_X='1024',SIZE_Y='768',FULLSCREEN='FALSE')
+          c['SOUND']={'VOL_BGM':'0','VOL_EFFECT':'0','VOL_WORLD':'0','VOICE_CHAR':'FALSE','VOICE_NPC':'FALSE','DANGER_DETECT':'FALSE'}
+          with cfg.open('w',encoding='latin1') as f:c.write(f)
+          pathlib.Path('game-path.txt').write_text(str(probe.resolve()))
+          pathlib.Path('proof/scope.json').write_text(json.dumps({'testOnly':True,'originalSha256':hashlib.sha256(original).hexdigest(),'probeSha256':hashlib.sha256(altered).hexdigest(),'changedOffset':'0x10a084','change':'75 to EB: proceed after failed sound initialization on a headless Windows runner','offlineLoginPatch':False,'fullGameplayVerified':False},indent=2))
+          '@ | Set-Content prepare.py
+          python prepare.py
+          if($LASTEXITCODE -ne 0){throw 'Reference preparation failed'}
+      - name: Observe native client and local service traffic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $env:SHAIYA_OFFLINE_SLOT=(Resolve-Path save).Path
+          $env:SHAIYA_OFFLINE_FACTION='light'
+          $env:SHAIYA_OFFLINE_PASSWORD=[Guid]::NewGuid().ToString('N').Substring(0,16)
+          $env:SHAIYA_OFFLINE_TOKEN=[Guid]::NewGuid().ToString('N')
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          function WaitPort([int]$Port){for($i=0;$i -lt 60;$i++){$s=[Net.Sockets.TcpClient]::new();try{$s.Connect('127.0.0.1',$Port);$s.Dispose();return}catch{$s.Dispose();Start-Sleep 1}};throw "Port $Port unavailable"}
+          function Screenshot([string]$Name){$r=[Windows.Forms.SystemInformation]::VirtualScreen;$b=[Drawing.Bitmap]::new($r.Width,$r.Height);$g=[Drawing.Graphics]::FromImage($b);$g.CopyFromScreen($r.Left,$r.Top,0,0,$r.Size);$b.Save((Join-Path (Resolve-Path proof) $Name));$g.Dispose();$b.Dispose()}
+          $children=@()
+          try {
+            $l=Start-Process (Resolve-Path services/login/Imgeneus.Login.exe) -WorkingDirectory (Resolve-Path services/login) -RedirectStandardOutput proof/login.txt -RedirectStandardError proof/login-error.txt -PassThru;$children+=$l;WaitPort 30800
+            $w=Start-Process (Resolve-Path services/world/Imgeneus.World.exe) -WorkingDirectory (Resolve-Path services/world) -RedirectStandardOutput proof/world.txt -RedirectStandardError proof/world-error.txt -PassThru;$children+=$w;WaitPort 30810;Start-Sleep 4
+            $path=(Get-Content game-path.txt -Raw).Trim()
+            $game=Start-Process $path -WorkingDirectory (Split-Path $path) -ArgumentList @('start','127.0.0.1',"localplayer:$env:SHAIYA_OFFLINE_PASSWORD") -PassThru;$children+=$game
+            $states=@();$ws=New-Object -ComObject WScript.Shell
+            for($i=0;$i -lt 15;$i++){Start-Sleep 4;$game.Refresh();Screenshot("native-$i.png");$states+=@{seconds=4*($i+1);title=$game.MainWindowTitle;exited=$game.HasExited};if($game.HasExited){$game.ExitCode|Set-Content proof/exit.txt;break};if($i -in @(5,10)){if($ws.AppActivate($game.Id)){Start-Sleep 1;$ws.SendKeys('{ENTER}')}}}
+            $states|ConvertTo-Json -Depth 4|Set-Content proof/states.json
+            Get-NetTCPConnection -ErrorAction SilentlyContinue|Where-Object {$_.LocalPort -in @(30800,30810) -or $_.RemotePort -in @(30800,30810)}|Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State,OwningProcess|ConvertTo-Json|Set-Content proof/connections.json
+          } finally {
+            foreach($c in $children){Stop-Process -Id $c.Id -Force -ErrorAction SilentlyContinue}
+            foreach($f in Get-ChildItem proof -Filter *.txt){$s=Get-Content $f -Raw -ErrorAction SilentlyContinue;if($s){$s.Replace($env:SHAIYA_OFFLINE_PASSWORD,'[redacted]').Replace($env:SHAIYA_OFFLINE_TOKEN,'[redacted]')|Set-Content $f}}
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-Silent-Diagnostic-Proof
+          path: proof/
+          retention-days: 7
