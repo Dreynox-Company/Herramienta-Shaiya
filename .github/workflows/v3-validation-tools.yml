@@ -1,0 +1,35 @@
+name: V3 local validation dependencies
+on:
+  push:
+    branches: [fix/studio-062-v3-wings-spk]
+    paths: [.github/workflows/v3-validation-tools.yml]
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Bundle locked dependency sources and native reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p transfer
+          tar -czf transfer/pub-cache.tar.gz -C "${PUB_CACHE:-$HOME/.pub-cache}" hosted
+          tar -czf transfer/archive-reader.tar.gz -C /usr/lib 7zip
+          tar -czf transfer/gradle-wrapper.tar.gz -C "$FLUTTER_ROOT" bin/cache/artifacts/gradle_wrapper
+          sha256sum transfer/*.tar.gz > transfer/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V3-validation-dependencies
+          path: transfer/
+          retention-days: 7
