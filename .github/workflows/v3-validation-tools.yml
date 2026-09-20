@@ -19,17 +19,22 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - name: Bundle locked dependency sources and native reader
-        shell: bash
+      - name: Bundle every actual hosted dependency root
+        shell: python
         run: |
-          set -euo pipefail
-          mkdir -p transfer
-          tar -czf transfer/pub-cache.tar.gz -C "${PUB_CACHE:-$HOME/.pub-cache}" hosted
-          tar -czf transfer/archive-reader.tar.gz -C /usr/lib 7zip
-          tar -czf transfer/gradle-wrapper.tar.gz -C "$FLUTTER_ROOT" bin/cache/artifacts/gradle_wrapper
-          sha256sum transfer/*.tar.gz > transfer/SHA256.txt
+          import json, pathlib, os, tarfile, urllib.parse
+          out=pathlib.Path('transfer');out.mkdir(exist_ok=True)
+          roots={}
+          for config in [pathlib.Path('.dart_tool/package_config.json'),pathlib.Path(os.environ['FLUTTER_ROOT'])/'packages/flutter_tools/.dart_tool/package_config.json']:
+              for p in json.loads(config.read_text())['packages']:
+                  uri=urllib.parse.urljoin(config.resolve().as_uri(),p['rootUri'])
+                  f=pathlib.Path(urllib.parse.unquote(urllib.parse.urlparse(uri).path)).resolve()
+                  if 'hosted' in f.parts and (f/'pubspec.yaml').exists(): roots[f.name]=f
+          with tarfile.open(out/'pub-all.tar.gz','w:gz',dereference=True) as t:
+              for name,f in sorted(roots.items()): t.add(f,arcname='hosted/pub.dev/'+name)
+          (out/'roots.json').write_text(json.dumps({n:str(p) for n,p in roots.items()},indent=2))
       - uses: actions/upload-artifact@v4
         with:
-          name: V3-validation-dependencies
+          name: V3-validation-all-packages
           path: transfer/
           retention-days: 7
