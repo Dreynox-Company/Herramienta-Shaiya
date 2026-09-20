@@ -1,0 +1,33 @@
+name: Native game - CPU QA tools
+on:
+  push:
+    branches: [work/native-game-tools-20260920]
+    paths: [.github/workflows/native-cpu-qa.yml]
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Package public static user-mode CPU emulators
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" debian:trixie-slim bash -euc '
+            apt-get update
+            mkdir -p /tmp/pkg /tmp/root
+            cd /tmp/pkg
+            apt-get download qemu-user
+            for p in *.deb; do dpkg-deb -x "$p" /tmp/root; done
+            cp /tmp/root/usr/bin/qemu-i386 /tmp/root/usr/bin/qemu-x86_64 /out/
+          '
+          (cd out && sha256sum qemu-* > SHA256SUMS.txt)
+          tar -I 'zstd -T0 -3' -cf native-cpu-tools.tar.zst -C out .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-CPU-QA-Tools
+          path: native-cpu-tools.tar.zst
+          retention-days: 2
+          compression-level: 0
