@@ -26,10 +26,13 @@ try {
  $l=Start-Process (Resolve-Path services/login/Imgeneus.Login.exe) -WorkingDirectory (Resolve-Path services/login) -RedirectStandardOutput proof/login.txt -RedirectStandardError proof/login-error.txt -PassThru;$children+=$l;WaitPort 30800
  $w=Start-Process (Resolve-Path services/world/Imgeneus.World.exe) -WorkingDirectory (Resolve-Path services/world) -RedirectStandardOutput proof/world.txt -RedirectStandardError proof/world-error.txt -PassThru;$children+=$w;WaitPort 30810;Start-Sleep 4
  $path=(Get-Content game-path.txt -Raw).Trim()
+ if(Test-Path 'native-ci/prepare_raw.py'){python native-ci/prepare_raw.py $path;if($LASTEXITCODE -ne 0){throw 'Raw DATA preparation failed'}}
  $game=Start-Process $path -WorkingDirectory (Split-Path $path) -ArgumentList @('start','127.0.0.1',"localplayer:$env:SHAIYA_OFFLINE_PASSWORD") -PassThru;$children+=$game
  Start-Sleep 12;Shot '01-server-list.png';Click 0.50 0.427;Click 0.449 0.851
  Start-Sleep 12;Shot '02-after-server.png'
- Start-Sleep 8;Shot '03-after-server.png'
+ Start-Sleep 4;Click 0.78 0.40;Shot '03-faction-selected.png';Click 0.933 0.948
+ Start-Sleep 8;Shot '04-after-faction.png'
+ if(Test-Path 'native-ci/steps.ps1'){. ./native-ci/steps.ps1}
  $game.Refresh();@{exited=$game.HasExited;title=$game.MainWindowTitle}|ConvertTo-Json|Set-Content proof/native-state.json
  Get-NetTCPConnection -ErrorAction SilentlyContinue|Where-Object {$_.LocalPort -in @(30800,30810) -or $_.RemotePort -in @(30800,30810)}|Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State,OwningProcess|ConvertTo-Json|Set-Content proof/connections.json
  Get-ChildItem (Split-Path $path)|Select-Object Name,Length,Mode|ConvertTo-Json|Set-Content proof/public-client-root.json
