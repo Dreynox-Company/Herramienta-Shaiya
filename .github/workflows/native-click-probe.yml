@@ -27,6 +27,20 @@ jobs:
           python -c "import yaml,pathlib; d=yaml.safe_load(pathlib.Path('.github/workflows/native-windows-silent-probe.yml').read_text()); pathlib.Path('prepare_reference.ps1').write_text(d['jobs']['diagnostic']['steps'][1]['run'])"
           & ./prepare_reference.ps1
           if($LASTEXITCODE -ne 0){throw 'Reference preparation failed'}
+      - name: Deny external traffic for tested game and local services
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          & netsh advfirewall set allprofiles state on
+          if($LASTEXITCODE -ne 0){throw 'Firewall could not be enabled'}
+          $targets=@((Get-Content game-path.txt -Raw).Trim(),(Resolve-Path services/login/Imgeneus.Login.exe).Path,(Resolve-Path services/world/Imgeneus.World.exe).Path)
+          $i=0
+          foreach($target in $targets){
+            $i++
+            & netsh advfirewall firewall add rule "name=NativeOfflineQA-$i" dir=out action=block "program=$target" remoteip=0.0.0.0-126.255.255.255,128.0.0.0-255.255.255.255,::/0 enable=yes
+            if($LASTEXITCODE -ne 0){throw 'External traffic block failed'}
+          }
+          Get-NetFirewallRule -DisplayName 'NativeOfflineQA-*' | Select-Object DisplayName,Enabled,Direction,Action | ConvertTo-Json | Set-Content proof/network-isolation.json
       - name: Exercise native client interface
         shell: pwsh
         run: ./native-ci/click_probe.ps1
