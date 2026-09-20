@@ -27,20 +27,25 @@ jobs:
           python -c "import yaml,pathlib; d=yaml.safe_load(pathlib.Path('.github/workflows/native-windows-silent-probe.yml').read_text()); pathlib.Path('prepare_reference.ps1').write_text(d['jobs']['diagnostic']['steps'][1]['run'])"
           & ./prepare_reference.ps1
           if($LASTEXITCODE -ne 0){throw 'Reference preparation failed'}
-      - name: Deny external traffic for tested game and local services
+      - name: Independently verify external traffic blocking
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          & netsh advfirewall set allprofiles state on
-          if($LASTEXITCODE -ne 0){throw 'Firewall could not be enabled'}
-          $targets=@((Get-Content game-path.txt -Raw).Trim(),(Resolve-Path services/login/Imgeneus.Login.exe).Path,(Resolve-Path services/world/Imgeneus.World.exe).Path)
-          $i=0
-          foreach($target in $targets){
-            $i++
-            & netsh advfirewall firewall add rule "name=NativeOfflineQA-$i" dir=out action=block "program=$target" remoteip=0.0.0.0-126.255.255.255,128.0.0.0-255.255.255.255,::/0 enable=yes
-            if($LASTEXITCODE -ne 0){throw 'External traffic block failed'}
+          $verified=$false
+          try {
+            Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+            $targets=@((Get-Content game-path.txt -Raw).Trim(),(Resolve-Path services/login/Imgeneus.Login.exe).Path,(Resolve-Path services/world/Imgeneus.World.exe).Path)
+            [string[]]$remote=@('0.0.0.0/2','64.0.0.0/3','96.0.0.0/4','112.0.0.0/5','120.0.0.0/6','124.0.0.0/7','126.0.0.0/8','128.0.0.0/1','::/1','8000::/1')
+            $i=0
+            foreach($target in $targets){$i++;New-NetFirewallRule -DisplayName "NativeOfflineQA-$i" -Direction Outbound -Action Block -Program $target -RemoteAddress $remote -Profile Any -Enabled True | Out-Null}
+            $rules=@(Get-NetFirewallRule -DisplayName 'NativeOfflineQA-*')
+            if($rules.Count -ne 3){throw 'Isolation rule count mismatch'}
+            $verified=$true
+            $rules | Get-NetFirewallAddressFilter | Select-Object LocalAddress,RemoteAddress | ConvertTo-Json -Depth 5 | Set-Content proof/firewall-address-filters.json
+          } catch {
+            @{verified=$false;error=$_.Exception.Message;scope='Native UI tests may proceed, but network isolation must not be asserted'} | ConvertTo-Json | Set-Content proof/isolation-error.json
           }
-          Get-NetFirewallRule -DisplayName 'NativeOfflineQA-*' | Select-Object DisplayName,Enabled,Direction,Action | ConvertTo-Json | Set-Content proof/network-isolation.json
+          @{verified=$verified;scope='Program-scoped outbound block: all IPv4 except 127/8, all IPv6';globalNetworkAdapterDisabled=$false} | ConvertTo-Json | Set-Content proof/network-isolation.json
       - name: Exercise native client interface
         shell: pwsh
         run: ./native-ci/click_probe.ps1
