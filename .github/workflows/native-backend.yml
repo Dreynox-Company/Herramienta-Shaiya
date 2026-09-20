@@ -1,0 +1,102 @@
+name: Native game - localhost backend build
+on:
+  push:
+    branches: [work/native-game-tools-20260920]
+    paths: [.github/workflows/native-backend.yml]
+permissions:
+  contents: read
+jobs:
+  build-public-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 63afe4c3a2b97be1dd0f415930b7fa6bd59e82e9
+          path: scaffold
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore pinned public sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p upstream out/proof
+          git -C upstream init -q
+          git -C upstream remote add origin https://github.com/aosyatnik/Imgeneus.git
+          git -C upstream fetch --depth 1 origin 0ce355594d521c3a06a08f24d0a9b60ebc8a459f
+          git -C upstream checkout --detach FETCH_HEAD
+          git -C upstream submodule update --init --recursive --depth 1 -- submodules/LiteNetwork submodules/Parsec submodules/Sylver.HandlerInvoker
+          git clone https://github.com/aosyatnik/Imgeneus.Authentication upstream/submodules/Imgeneus.Authentication
+          git -C upstream/submodules/Imgeneus.Authentication checkout 77b3a65e9a0ba60f83e1aa452e9f0b997ea27a70
+          python3 scaffold/runtime/prepare_offline.py upstream
+          python3 scaffold/runtime/bootstrap_offline.py upstream
+          git -C upstream submodule status --recursive > out/proof/submodules.txt
+      - name: Build, boot and publish localhost services
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build upstream/src/Imgeneus.Login/Imgeneus.Login.csproj -c SHAIYA_ps0032 --verbosity minimal > out/proof/login-build.txt 2>&1
+          dotnet build upstream/src/Imgeneus.World/Imgeneus.World.csproj -c SHAIYA_ps0032 --verbosity minimal > out/proof/world-build.txt 2>&1
+          dotnet run --project upstream/src/Offline.Verify/Offline.Verify.csproj -c Release > out/proof/storage-test.txt 2>&1
+          python3 scaffold/runtime/service_smoke.py upstream out/proof
+          for rid in linux-x64 win-x64; do
+            dotnet publish upstream/src/Imgeneus.Login/Imgeneus.Login.csproj -c SHAIYA_ps0032 -r "$rid" --self-contained true -o "publish/$rid/login" --verbosity minimal > "out/proof/login-$rid.txt" 2>&1
+            dotnet publish upstream/src/Imgeneus.World/Imgeneus.World.csproj -c SHAIYA_ps0032 -r "$rid" --self-contained true -o "publish/$rid/world" --verbosity minimal > "out/proof/world-$rid.txt" 2>&1
+            tar -I 'zstd -T0 -3' -cf "out/native-services-$rid.tar.zst" -C "publish/$rid" .
+          done
+          tar --exclude=.git --exclude=bin --exclude=obj -I 'zstd -T0 -3' -cf out/native-services-source.tar.zst -C upstream .
+          printf '%s\n' 'Public reference service build. No user game files are included. Backend boot and SQLite checks do not establish native world entry or complete gameplay.' > out/proof/SCOPE.txt
+          (cd out && sha256sum *.tar.zst > proof/SHA256SUMS.txt)
+      - name: Package tools for local, private native compatibility tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p workspace
+          tar -I 'zstd -T0 -3' -cf workspace/dotnet-sdk.tar.zst -C "$DOTNET_ROOT" .
+          tar -I 'zstd -T0 -3' -cf workspace/nuget-cache.tar.zst -C "$HOME/.nuget" packages
+          tar --exclude=.git -I 'zstd -T0 -3' -cf workspace/backend-workspace.tar.zst upstream scaffold/runtime
+          ls -lh out/*.tar.zst workspace/*.tar.zst
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-Backend-Build-Proof
+          path: out/proof/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Backend-Windows
+          path: out/native-services-win-x64.tar.zst
+          retention-days: 7
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Backend-Linux
+          path: out/native-services-linux-x64.tar.zst
+          retention-days: 2
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Backend-Source
+          path: out/native-services-source.tar.zst
+          retention-days: 7
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Private-QA-SDK
+          path: workspace/dotnet-sdk.tar.zst
+          retention-days: 2
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Private-QA-Packages
+          path: workspace/nuget-cache.tar.zst
+          retention-days: 2
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Native-Private-QA-Workspace
+          path: workspace/backend-workspace.tar.zst
+          retention-days: 2
+          compression-level: 0
