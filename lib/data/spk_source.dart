@@ -480,9 +480,23 @@ class SpkArchiveSource {
     return decodePayload(packed.takeBytes(), record.decodedBytes);
   }
 
-  Uint8List _fragmentNonce(SpkRecord record, SpkAuxRecord part, int ordinal) {
+  static const supportedChunkNonceRules = <String>[
+    'offset_le96',
+    'entry_id_chunk_le',
+    'offset_aux_le96',
+    'entry_id_aux_le',
+    'offset_chunk1_le96',
+    'entry_id_chunk1_le',
+  ];
+
+  Uint8List _fragmentNonceForRule(
+    String rule,
+    SpkRecord record,
+    SpkAuxRecord part,
+    int ordinal,
+  ) {
     final data = ByteData(12);
-    switch (profile.chunkNonceRule) {
+    switch (rule) {
       case 'offset_le96':
         data.setUint64(0, part.dataOffset, Endian.little);
         data.setUint32(8, ordinal, Endian.little);
@@ -513,6 +527,45 @@ class SpkArchiveSource {
           'Regla de nonce fragmentado no implementada.',
         );
     }
+  }
+
+  Uint8List _fragmentNonce(SpkRecord record, SpkAuxRecord part, int ordinal) =>
+      _fragmentNonceForRule(profile.chunkNonceRule, record, part, ordinal);
+
+  String identifyChunkNonceRule({
+    required int parentOrdinal,
+    required int auxiliaryOrdinal,
+    required Uint8List observedNonce,
+  }) {
+    if (observedNonce.length != 12 ||
+        parentOrdinal < 0 ||
+        parentOrdinal >= index.records.length ||
+        auxiliaryOrdinal < 0 ||
+        auxiliaryOrdinal >= index.auxiliary.length) {
+      return 'unsupported';
+    }
+    final record = index.records[parentOrdinal];
+    if (!record.fragmented ||
+        auxiliaryOrdinal < record.auxiliaryStart ||
+        auxiliaryOrdinal >= record.auxiliaryStart + record.chunkCount) {
+      return 'unsupported';
+    }
+    final part = index.auxiliary[auxiliaryOrdinal];
+    final local = auxiliaryOrdinal - record.auxiliaryStart;
+    for (final rule in supportedChunkNonceRules) {
+      final candidate = _fragmentNonceForRule(rule, record, part, local);
+      if (candidate.length == observedNonce.length) {
+        var same = true;
+        for (var i = 0; i < candidate.length; i++) {
+          if (candidate[i] != observedNonce[i]) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return rule;
+      }
+    }
+    return 'unsupported';
   }
 
   static Future<Uint8List> decodePayload(
