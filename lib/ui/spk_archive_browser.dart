@@ -11,9 +11,10 @@ import '../data/spk_source.dart';
 List<String> spkProfileCandidatePaths(
   String spkPath, {
   String? executablePath,
+  String? separatorOverride,
 }) {
   final spk = File(spkPath);
-  final separator = Platform.pathSeparator;
+  final separator = separatorOverride ?? Platform.pathSeparator;
   final exe = File(executablePath ?? Platform.resolvedExecutable);
   final exeDir = exe.parent.path;
   return <String>[
