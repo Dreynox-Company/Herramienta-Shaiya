@@ -329,8 +329,13 @@ class Catalog {
 
     var added = 0;
     for (final entry in byCode.entries) {
-      final upper = entry.value[Slot.upper] ?? const <PartRecord>[];
-      if (upper.isEmpty) continue;
+      final completeBody = <Slot>[
+        Slot.upper,
+        Slot.lower,
+        Slot.hand,
+        Slot.foot,
+      ].every((slot) => (entry.value[slot] ?? const <PartRecord>[]).isNotEmpty);
+      if (!completeBody) continue;
       final root = roots[entry.key]!;
       final animationPrefix = '$root/ani/${entry.key}_';
       final animations = paths
@@ -353,10 +358,10 @@ class Catalog {
 
     if (added > 0) {
       warnings.add(
-        'SPK: se añadieron $added arquetipos de vista previa usando '
-        'únicamente parejas 3DC/DDS con el mismo nombre. No se inventaron '
-        'asociaciones aproximadas; los MLT siguen teniendo prioridad cuando '
-        'se resuelven.',
+        'SPK: se añadieron $added arquetipos 3D con cuerpo completo '
+        '(torso, piernas, manos y pies) usando únicamente parejas 3DC/DDS '
+        'con el mismo nombre. No se inventaron asociaciones aproximadas; '
+        'los MLT siguen teniendo prioridad cuando se resuelven.',
       );
       progress('SPK: ${archetypes.length} arquetipos disponibles para 3D');
     }
