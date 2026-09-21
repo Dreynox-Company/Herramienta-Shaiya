@@ -34,7 +34,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
           width: 430,
           child: ValueListenableBuilder<String>(
             valueListenable: progress,
-            builder: (_, value, __) => Column(
+            builder: (_, value, _) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const LinearProgressIndicator(),
@@ -81,9 +81,9 @@ class SpkArchiveBrowserPage extends StatefulWidget {
   ) async {
     final spk = File(spkPath);
     final candidates = [
-      File(spkPath + '.profile.json'),
-      File(spk.parent.path + '/data.spk.profile.json'),
-      File(spk.parent.path + '/spk-crypto-profile.json'),
+      File('$spkPath.profile.json'),
+      File('${spk.parent.path}/data.spk.profile.json'),
+      File('${spk.parent.path}/spk-crypto-profile.json'),
     ];
     for (final file in candidates) {
       if (!await file.exists()) continue;
@@ -164,18 +164,18 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   }
 
   String bytesLabel(int value) {
-    if (value < 1024) return value.toString() + ' B';
+    if (value < 1024) return '$value B';
     if (value < 1024 * 1024) {
-      return (value / 1024).toStringAsFixed(1) + ' KiB';
+      return '${(value / 1024).toStringAsFixed(1)} KiB';
     }
     if (value < 1024 * 1024 * 1024) {
-      return (value / (1024 * 1024)).toStringAsFixed(1) + ' MiB';
+      return '${(value / (1024 * 1024)).toStringAsFixed(1)} MiB';
     }
-    return (value / (1024 * 1024 * 1024)).toStringAsFixed(2) + ' GiB';
+    return '${(value / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
   }
 
   List<String> childFolders() {
-    final prefix = currentFolder.isEmpty ? '' : currentFolder + '/';
+    final prefix = currentFolder.isEmpty ? '' : '$currentFolder/';
     final out = <String>{};
     for (final path in source.folders()) {
       if (path.isEmpty || path == currentFolder || !path.startsWith(prefix)) {
@@ -290,9 +290,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Recurso extraído en ' + result['folder'].toString()),
-        ),
+        SnackBar(content: Text('Recurso extraído en ${result['folder']}')),
       );
     }
   });
@@ -318,9 +316,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result['files'].toString() +
-                ' recursos extraídos en ' +
-                result['folder'].toString(),
+            '${result['files']} recursos extraídos en ${result['folder']}',
           ),
           duration: const Duration(seconds: 8),
         ),
@@ -338,20 +334,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         content: SizedBox(
           width: 590,
           child: SelectableText(
-            'ID: ' +
-                record.idHex +
-                '\nFormato: ' +
-                result.format +
-                '\nOffset: ' +
-                record.dataOffset.toString() +
-                '\nAlmacenado: ' +
-                bytesLabel(record.storedBytes) +
-                '\nDecodificado: ' +
-                bytesLabel(result.bytes.length) +
-                '\nSHA-256: ' +
-                sha256.convert(result.bytes).toString() +
-                '\n\nPrimeros 64 bytes:\n' +
-                spkHex(result.bytes.take(64)),
+            'ID: ${record.idHex}\nFormato: ${result.format}\nOffset: ${record.dataOffset}\nAlmacenado: ${bytesLabel(record.storedBytes)}\nDecodificado: ${bytesLabel(result.bytes.length)}\nSHA-256: ${sha256.convert(result.bytes)}\n\nPrimeros 64 bytes:\n${spkHex(result.bytes.take(64))}',
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           ),
         ),
@@ -373,7 +356,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     Widget node(String path, int depth) {
       final children = all.where((candidate) {
-        if (!candidate.startsWith(path + '/')) return false;
+        if (!candidate.startsWith('$path/')) return false;
         final rest = candidate.substring(path.length + 1);
         return rest.isNotEmpty && !rest.contains('/');
       }).toList()..sort();
@@ -704,7 +687,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     child: Text(
                       currentFolder.isEmpty
                           ? 'data.spk:/'
-                          : 'data.spk:/' + currentFolder,
+                          : 'data.spk:/$currentFolder',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -788,9 +771,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                           Text(
                             operationTotal == 0
                                 ? ''
-                                : operationDone.toString() +
-                                      ' / ' +
-                                      operationTotal.toString(),
+                                : '$operationDone / $operationTotal',
                             style: const TextStyle(fontSize: 9),
                           ),
                         ],
@@ -800,12 +781,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 : Row(
                     children: [
                       Text(
-                        summary['resources'].toString() +
-                            ' recursos · ' +
-                            summary['fragmentedResources'].toString() +
-                            ' fragmentados · ' +
-                            source.names.paths.length.toString() +
-                            ' nombres resueltos',
+                        '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · ${source.names.paths.length} nombres resueltos',
                         style: const TextStyle(
                           fontSize: 10,
                           color: Color(0xff92a0b7),

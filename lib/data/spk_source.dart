@@ -137,11 +137,7 @@ class SpkArchiveSource {
       encryptedIndexSha256: encryptedHash,
       decodedIndexSha256: sha256.convert(decoded).toString(),
     );
-    progress?.call(
-      'SPK validado: ' + index.resources.length.toString() + ' recursos.',
-      4,
-      4,
-    );
+    progress?.call('SPK validado: ${index.resources.length} recursos.', 4, 4);
     return SpkArchiveSource._(
       file,
       size,
@@ -218,7 +214,7 @@ class SpkArchiveSource {
     final group = record.simple
         ? '_SPK_SinNombre/Simples'
         : '_SPK_SinNombre/Fragmentados';
-    return group + '/' + record.idHex + '.bin';
+    return '$group/${record.idHex}.bin';
   }
 
   List<String> folders() {
@@ -237,7 +233,7 @@ class SpkArchiveSource {
     String search = '',
     bool recursive = false,
   }) {
-    final prefix = folder.isEmpty ? '' : folder + '/';
+    final prefix = folder.isEmpty ? '' : '$folder/';
     final q = search.trim().toLowerCase();
     final out = <SpkRecord>[];
     for (final record in index.resources) {
@@ -274,9 +270,7 @@ class SpkArchiveSource {
       );
     }
     if (record.storedBytes > limit || record.decodedBytes > limit) {
-      throw FormatException(
-        'El recurso supera el límite de ' + limit.toString() + ' bytes.',
-      );
+      throw FormatException('El recurso supera el límite de $limit bytes.');
     }
     try {
       final bytes = record.simple
@@ -463,8 +457,8 @@ class SpkArchiveSource {
     }
 
     final stamp = DateTime.now().millisecondsSinceEpoch.toString();
-    final stage = Directory(parent.path + '/.shaiya-spk-' + stamp + '.partial');
-    final published = Directory(parent.path + '/DATA_SPK_' + stamp);
+    final stage = Directory('${parent.path}/.shaiya-spk-$stamp.partial');
+    final published = Directory('${parent.path}/DATA_SPK_$stamp');
     if (await stage.exists() || await published.exists()) {
       throw const FileSystemException('La carpeta de salida ya existe.');
     }
@@ -478,9 +472,9 @@ class SpkArchiveSource {
         final result = await readEntry(record);
         var relative = names[record.entryId];
         relative ??=
-            '_SPK_SinNombre/' + record.idHex + extensionFor(result.format);
+            '_SPK_SinNombre/${record.idHex}${extensionFor(result.format)}';
         final safe = safeRelative(relative);
-        final target = File(stage.path + '/' + safe);
+        final target = File('${stage.path}/$safe');
         await target.parent.create(recursive: true);
         await target.writeAsBytes(result.bytes, flush: true);
         manifest.add({
@@ -493,9 +487,9 @@ class SpkArchiveSource {
           'resolvedName': names[record.entryId] != null,
         });
         bytes += result.bytes.length;
-        progress('Extrayendo ' + relative, i + 1, list.length);
+        progress('Extrayendo $relative', i + 1, list.length);
       }
-      await File(stage.path + '/_SPK_MANIFEST.json').writeAsString(
+      await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
         const JsonEncoder.withIndent('  ').convert({
           'schema': 1,
           'source': file.path,
@@ -520,7 +514,7 @@ class SpkArchiveSource {
   static String safeRelative(String path) {
     final value = path.replaceAll('\\', '/');
     if (value.startsWith('/') || value.contains(':') || value.length > 4096) {
-      throw FormatException('Ruta no extraíble: ' + path);
+      throw FormatException('Ruta no extraíble: $path');
     }
     final parts = value.split('/');
     for (final p in parts) {
@@ -534,7 +528,7 @@ class SpkArchiveSource {
             r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)',
             caseSensitive: false,
           ).hasMatch(p)) {
-        throw FormatException('Ruta no segura: ' + path);
+        throw FormatException('Ruta no segura: $path');
       }
     }
     return parts.join(Platform.pathSeparator);

@@ -30,7 +30,7 @@ Uint8List spkHexBytes(String value, {int? expectedBytes}) {
   }
   if (expectedBytes != null && out.length != expectedBytes) {
     throw FormatException(
-      'Longitud hexadecimal inválida: ' + out.length.toString() + ' bytes.',
+      'Longitud hexadecimal inválida: ${out.length} bytes.',
     );
   }
   return out;
@@ -43,7 +43,7 @@ class SpkFailure implements Exception {
   const SpkFailure(this.code, this.message, [this.report = const {}]);
 
   @override
-  String toString() => code + ': ' + message;
+  String toString() => '$code: $message';
 }
 
 class SpkHeader {
