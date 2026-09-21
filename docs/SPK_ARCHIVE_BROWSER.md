@@ -67,3 +67,11 @@ gate es importar el perfil de recursos obtenido por la observación dirigida y
 validar el nonce/tag de los 1.467 recursos fragmentados; entonces el botón
 "Extraer todo" queda habilitado para el SPK observado y la misma fuente puede
 conectarse al catálogo 3D.
+
+
+## CI gate
+
+The focused SPK format/profile tests pass after deterministic Dart formatting.
+The branch is now ready for the repository-wide regression and Windows native
+build. Full archive extraction remains intentionally fail-closed until the
+fragmented-resource crypto profile is validated.
