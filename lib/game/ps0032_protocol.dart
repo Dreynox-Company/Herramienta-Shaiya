@@ -400,23 +400,47 @@ class PsCharacterSlot {
 }
 
 class PsCharacterDetails {
+  final int strength,dexterity,reaction,intelligence,wisdom,luck;
+  final int statPoints,skillPoints,maxHp,maxMp,maxSp,angle;
+  final int previousExp,nextExp,currentExp,gold;
   final double x,y,z;
-  final int angle;
-  const PsCharacterDetails(this.x,this.y,this.z,this.angle);
+  const PsCharacterDetails({
+    required this.strength,required this.dexterity,required this.reaction,
+    required this.intelligence,required this.wisdom,required this.luck,
+    required this.statPoints,required this.skillPoints,
+    required this.maxHp,required this.maxMp,required this.maxSp,required this.angle,
+    required this.previousExp,required this.nextExp,required this.currentExp,required this.gold,
+    required this.x,required this.y,required this.z,
+  });
+
   static PsCharacterDetails parse(PsPacket p){
     if(p.type!=PsPacketType.characterDetails||p.body.length<58){
-      throw FormatException('CHARACTER_DETAILS truncado: ${p.body.length}');
+      throw FormatException('CHARACTER_DETAILS truncado: '+p.body.length.toString());
     }
     final d=ByteData.sublistView(p.body);
     return PsCharacterDetails(
-      d.getFloat32(46,Endian.little),
-      d.getFloat32(50,Endian.little),
-      d.getFloat32(54,Endian.little),
-      d.getUint16(28,Endian.little),
+      strength:d.getUint16(0,Endian.little),
+      dexterity:d.getUint16(2,Endian.little),
+      reaction:d.getUint16(4,Endian.little),
+      intelligence:d.getUint16(6,Endian.little),
+      wisdom:d.getUint16(8,Endian.little),
+      luck:d.getUint16(10,Endian.little),
+      statPoints:d.getUint16(12,Endian.little),
+      skillPoints:d.getUint16(14,Endian.little),
+      maxHp:d.getUint32(16,Endian.little),
+      maxMp:d.getUint32(20,Endian.little),
+      maxSp:d.getUint32(24,Endian.little),
+      angle:d.getUint16(28,Endian.little),
+      previousExp:d.getUint32(30,Endian.little),
+      nextExp:d.getUint32(34,Endian.little),
+      currentExp:d.getUint32(38,Endian.little),
+      gold:d.getUint32(42,Endian.little),
+      x:d.getFloat32(46,Endian.little),
+      y:d.getFloat32(50,Endian.little),
+      z:d.getFloat32(54,Endian.little),
     );
   }
 }
-
 class WorldBootstrap {
   final int faction,maxMode;
   final List<PsPacket> packets;
