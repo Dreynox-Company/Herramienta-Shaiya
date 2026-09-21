@@ -480,11 +480,9 @@ class SpkNameMap {
   final Map<int, String> paths;
   final Map<int, SpkNameHint> hints;
 
-  SpkNameMap(
-    Map<int, String> confirmed, [
-    Map<int, Object?>? inferred,
-  ]) : paths = Map<int, String>.from(confirmed),
-       hints = _normalizeHints(inferred);
+  SpkNameMap(Map<int, String> confirmed, [Map<int, Object?>? inferred])
+    : paths = Map<int, String>.from(confirmed),
+      hints = _normalizeHints(inferred);
 
   static Map<int, SpkNameHint> _normalizeHints(Map<int, Object?>? raw) {
     final out = <int, SpkNameHint>{};
