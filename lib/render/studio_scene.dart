@@ -419,9 +419,9 @@ class StudioScene extends ChangeNotifier {
             final p=await makePart(piece.mesh,tex);parts.add(p);group.add(p.mesh);pieceCount++;
           }
           if(pieceCount==0){missingWorldAssets.add('empty:${obj.asset}');continue;}
-          group.scale.z=-1;
-          group.position.setValues(obj.position.x-ox,obj.position.y,-(obj.position.z-oz));
-          group.rotation.y=-math.atan2(obj.forward.x,obj.forward.z);
+          group.matrixAutoUpdate=false;
+          group.matrix.copyFromArray(worldInstanceMatrix(obj,ox,oz).storage);
+          group.matrixWorldNeedsUpdate=true;
           stage.add(group);loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
         }catch(e){missingWorldAssets.add('error:${obj.asset}:$e');report('Objeto $model: $e');}
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
