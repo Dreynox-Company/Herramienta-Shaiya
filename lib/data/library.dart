@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import '../core/archive_index.dart';
+import '../core/spk_archive.dart';
 import 'archive_source.dart';
+import 'spk_source.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
@@ -67,15 +72,39 @@ class Library {
   final String location;
   final bool saf;
   final ArchiveSource? archive;
+  final SpkArchiveSource? spk;
+  final String? spkOverlayRoot;
+  final Map<String, Object?> _spkMountReport;
   static Map<String, Object?>? lastArchiveReport;
-  Map<String, Object?> get sourceDiagnostics =>
-      archive?.diagnostics() ??
-      {
-        'sourceMode': saf ? 'carpeta Android' : 'carpeta local',
-        'files': files.length,
+
+  Map<String, Object?> get sourceDiagnostics {
+    if (spk != null) {
+      return {
+        ...spk!.diagnostics(),
+        'sourceMode': 'spk-v3-workspace',
+        'mountedFiles': files.length,
+        'overlayRoot': spkOverlayRoot,
+        ..._spkMountReport,
       };
-  String get sourceLabel =>
-      archive == null ? 'Carpeta DATA' : 'Par SAH + SAF · lectura por rangos';
+    }
+    return archive?.diagnostics() ??
+        {
+          'sourceMode': saf ? 'carpeta Android' : 'carpeta local',
+          'files': files.length,
+        };
+  }
+
+  String get sourceLabel {
+    if (spk != null) {
+      return 'DATA.SPK · lectura autenticada + overlay editable';
+    }
+    return archive == null
+        ? 'Carpeta DATA'
+        : 'Par SAH + SAF · lectura por rangos';
+  }
+
+  bool get isSpkWorkspace => spk != null;
+
   void dispose() {
     archive?.close();
   }
@@ -83,9 +112,24 @@ class Library {
   final Map<String, String> files;
   int revision = 0;
   final Map<String, List<String>> _names = {};
-  Library(this.location, this.saf, this.files, {this.archive}) {
+  final Map<String, SpkRecord> _spkRecords = {};
+
+  Library(
+    this.location,
+    this.saf,
+    this.files, {
+    this.archive,
+    this.spk,
+    this.spkOverlayRoot,
+    Map<String, Object?> spkMountReport = const {},
+  }) : _spkMountReport = Map<String, Object?>.from(spkMountReport) {
     for (final p in files.keys) {
       _names.putIfAbsent(baseName(p), () => []).add(p);
+    }
+    if (spk != null) {
+      for (final record in spk!.index.resources) {
+        _spkRecords[record.idHex] = record;
+      }
     }
   }
   static Future<Library?> choose(void Function(String) progress) async {
@@ -244,6 +288,97 @@ class Library {
     }
   }
 
+  static Future<Library> fromSpk(
+    SpkArchiveSource source, {
+    void Function(String)? progress,
+    bool requireComplete = true,
+    String? overlayRoot,
+  }) async {
+    if (!source.canReadSimpleResources) {
+      throw const SpkFailure(
+        'SPK_WORKSPACE_PROFILE',
+        'El DATA.SPK necesita primero un perfil de payloads autenticado.',
+      );
+    }
+    if (requireComplete && !source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_WORKSPACE_FRAGMENT_PROFILE',
+        'Para montar el SPK en la herramienta 3D deben estar validados también los recursos fragmentados.',
+      );
+    }
+
+    final mounted = <String, String>{};
+    final confirmedByPath = <String, bool>{};
+    var unnamed = 0;
+    var unsupported = 0;
+    var unsafe = 0;
+    var collisions = 0;
+    var inferred = 0;
+    var confirmed = 0;
+
+    for (final record in source.index.resources) {
+      final raw = source.names[record.entryId];
+      if (raw == null) {
+        unnamed++;
+        continue;
+      }
+      String normalized;
+      try {
+        normalized = source.safeRelative(raw).replaceAll('\\', '/');
+        normalized = canon(normalized);
+      } catch (_) {
+        unsafe++;
+        continue;
+      }
+      if (!supportedPath(normalized)) {
+        unsupported++;
+        continue;
+      }
+      final isConfirmed = source.names.isConfirmed(record.entryId);
+      if (mounted.containsKey(normalized)) {
+        collisions++;
+        if (!(isConfirmed && confirmedByPath[normalized] != true)) {
+          continue;
+        }
+      }
+      mounted[normalized] = record.idHex;
+      confirmedByPath[normalized] = isConfirmed;
+      if (isConfirmed) {
+        confirmed++;
+      } else {
+        inferred++;
+      }
+    }
+
+    if (mounted.isEmpty) {
+      throw const FormatException(
+        'El SPK no tiene todavía rutas utilizables para montar una biblioteca.',
+      );
+    }
+
+    final root = overlayRoot ?? '${source.file.path}.studio-overlay';
+    final report = <String, Object?>{
+      'confirmedMounted': confirmed,
+      'inferredMounted': inferred,
+      'unresolvedSkipped': unnamed,
+      'unsupportedSkipped': unsupported,
+      'unsafeSkipped': unsafe,
+      'pathCollisions': collisions,
+      'completePayloadAccess': source.canExtractAll,
+    };
+    progress?.call(
+      'Montando SPK en Studio: ${mounted.length} recursos con ruta utilizable…',
+    );
+    return _normalise(
+      source.file.path,
+      false,
+      mounted,
+      spk: source,
+      spkOverlayRoot: root,
+      spkMountReport: report,
+    );
+  }
+
   static Future<Library> fromDirectory(
     String dir,
     void Function(String) progress,
@@ -287,6 +422,9 @@ class Library {
     bool saf,
     Map<String, String> source, {
     ArchiveSource? archive,
+    SpkArchiveSource? spk,
+    String? spkOverlayRoot,
+    Map<String, Object?> spkMountReport = const {},
   }) {
     final map = <String, String>{};
     for (final entry in source.entries) {
@@ -314,9 +452,25 @@ class Library {
           trimmed[e.key.substring(prefix.length)] = e.value;
         }
       }
-      return Library(location, saf, trimmed, archive: archive);
+      return Library(
+        location,
+        saf,
+        trimmed,
+        archive: archive,
+        spk: spk,
+        spkOverlayRoot: spkOverlayRoot,
+        spkMountReport: spkMountReport,
+      );
     }
-    return Library(location, saf, map, archive: archive);
+    return Library(
+      location,
+      saf,
+      map,
+      archive: archive,
+      spk: spk,
+      spkOverlayRoot: spkOverlayRoot,
+      spkMountReport: spkMountReport,
+    );
   }
 
   String? resolve(
@@ -353,9 +507,159 @@ class Library {
     return null;
   }
 
+  File _spkOverlayFile(String path) {
+    final root = spkOverlayRoot;
+    if (root == null) {
+      throw StateError('El workspace SPK no tiene overlay configurado.');
+    }
+    final relative = canon(path).replaceAll('/', Platform.pathSeparator);
+    return File('$root${Platform.pathSeparator}$relative');
+  }
+
+  Future<void> writeSpkOverlay(
+    Map<String, Uint8List> replacements, {
+    required Map<String, String> expectedHashes,
+    bool keepBackup = true,
+  }) async {
+    if (spk == null || spkOverlayRoot == null) {
+      throw const FormatException(
+        'La biblioteca abierta no es un workspace SPK.',
+      );
+    }
+    if (!spk!.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_OVERLAY_PROFILE',
+        'El overlay editable requiere lectura completa y autenticada del SPK.',
+      );
+    }
+    if (replacements.isEmpty) return;
+
+    final verified =
+        <String, ({String canonical, Uint8List bytes, String originalSha})>{};
+    for (final entry in replacements.entries) {
+      final canonical = canon(entry.key);
+      if (!files.containsKey(canonical)) {
+        throw FormatException(
+          'El recurso no pertenece al SPK montado: ${entry.key}',
+        );
+      }
+      final expected = expectedHashes[entry.key] ?? expectedHashes[canonical];
+      if (expected == null || expected.isEmpty) {
+        throw FormatException('Falta el hash esperado de ${entry.key}.');
+      }
+      final current = await read(canonical, limit: 128 * 1024 * 1024);
+      final actual = sha256.convert(current).toString();
+      if (actual != expected) {
+        throw FormatException(
+          'El recurso cambió desde que se abrió el editor: ${entry.key}. '
+          'Esperado $expected, actual $actual.',
+        );
+      }
+      verified[canonical] = (
+        canonical: canonical,
+        bytes: Uint8List.fromList(entry.value),
+        originalSha: actual,
+      );
+    }
+
+    final root = Directory(spkOverlayRoot!);
+    await root.create(recursive: true);
+    final stamp = DateTime.now().toUtc().toIso8601String();
+    final manifestFile = File(
+      '${root.path}${Platform.pathSeparator}_SPK_OVERLAY.json',
+    );
+    Map<String, dynamic> manifest = {
+      'schema': 1,
+      'sourceSpk': spk!.file.path,
+      'indexSha256': spk!.index.encryptedIndexSha256,
+      'entries': <String, dynamic>{},
+    };
+    if (await manifestFile.exists()) {
+      try {
+        final raw = jsonDecode(await manifestFile.readAsString());
+        if (raw is Map &&
+            raw['indexSha256']?.toString().toLowerCase() ==
+                spk!.index.encryptedIndexSha256.toLowerCase()) {
+          manifest = Map<String, dynamic>.from(raw);
+        }
+      } catch (_) {
+        // Un manifiesto viejo o incompleto no se usa como autoridad.
+      }
+    }
+    final entries = Map<String, dynamic>.from(
+      (manifest['entries'] as Map?) ?? const {},
+    );
+
+    for (final item in verified.values) {
+      final target = _spkOverlayFile(item.canonical);
+      await target.parent.create(recursive: true);
+      final temp = File(
+        '${target.path}.${DateTime.now().microsecondsSinceEpoch}.partial',
+      );
+      await temp.writeAsBytes(item.bytes, flush: true);
+      final writtenSha = sha256.convert(await temp.readAsBytes()).toString();
+      final expectedWritten = sha256.convert(item.bytes).toString();
+      if (writtenSha != expectedWritten) {
+        await temp.delete();
+        throw FormatException(
+          'La verificación del overlay falló para ${item.canonical}.',
+        );
+      }
+      if (await target.exists()) {
+        if (keepBackup) {
+          final backup = File('${target.path}.bak');
+          if (await backup.exists()) await backup.delete();
+          await target.rename(backup.path);
+        } else {
+          await target.delete();
+        }
+      }
+      await temp.rename(target.path);
+      entries[item.canonical] = {
+        'entryId': files[item.canonical],
+        'originalSha256': item.originalSha,
+        'overlaySha256': expectedWritten,
+        'bytes': item.bytes.length,
+        'updatedAt': stamp,
+      };
+    }
+
+    manifest = {
+      ...manifest,
+      'schema': 1,
+      'sourceSpk': spk!.file.path,
+      'indexSha256': spk!.index.encryptedIndexSha256,
+      'updatedAt': stamp,
+      'entries': entries,
+    };
+    final manifestTemp = File('${manifestFile.path}.partial');
+    await manifestTemp.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(manifest),
+      flush: true,
+    );
+    if (await manifestFile.exists()) await manifestFile.delete();
+    await manifestTemp.rename(manifestFile.path);
+  }
+
   Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
-    final id = files[canon(path)];
+    final canonical = canon(path);
+    final id = files[canonical];
     if (id == null) throw FormatException('Recurso ausente: $path');
+    if (spk != null) {
+      final overlay = _spkOverlayFile(canonical);
+      if (await overlay.exists()) {
+        final length = await overlay.length();
+        if (length > limit) {
+          throw FormatException('$path supera el límite de lectura.');
+        }
+        return overlay.readAsBytes();
+      }
+      final record = _spkRecords[id];
+      if (record == null) {
+        throw FormatException('Registro SPK ausente para $path.');
+      }
+      return (await spk!.readEntry(record, limit: limit)).bytes;
+    }
     if (archive != null) return archive!.read(id, limit: limit);
     if (saf) {
       final b = await channel.invokeMethod<Uint8List>('read', {
