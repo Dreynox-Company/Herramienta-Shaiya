@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:three_js/three_js.dart' as three;
 import '../data/library.dart';
 import '../data/catalog.dart';
+import '../core/formats.dart';
 import '../render/studio_scene.dart';
 import '../input/viewport_movement_input.dart';
 import 'ui_texture_cache.dart';
