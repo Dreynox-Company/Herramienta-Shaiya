@@ -476,30 +476,33 @@ class SpkNameHint {
   };
 }
 
-class SpkNameHint {
-  final String path;
-  final String confidence;
-  final String evidence;
-
-  const SpkNameHint({
-    required this.path,
-    required this.confidence,
-    required this.evidence,
-  });
-
-  Map<String, Object?> toJson() => {
-    'path': path,
-    'confidence': confidence,
-    'evidence': evidence,
-  };
-}
-
 class SpkNameMap {
   final Map<int, String> paths;
   final Map<int, SpkNameHint> hints;
 
-  SpkNameMap(this.paths, [Map<int, SpkNameHint>? hints])
-    : hints = hints ?? <int, SpkNameHint>{};
+  SpkNameMap(
+    Map<int, String> confirmed, [
+    Map<int, Object?>? inferred,
+  ]) : paths = Map<int, String>.from(confirmed),
+       hints = _normalizeHints(inferred);
+
+  static Map<int, SpkNameHint> _normalizeHints(Map<int, Object?>? raw) {
+    final out = <int, SpkNameHint>{};
+    if (raw == null) return out;
+    for (final entry in raw.entries) {
+      final value = entry.value;
+      if (value is SpkNameHint) {
+        out[entry.key] = value;
+      } else if (value is String) {
+        out[entry.key] = SpkNameHint(
+          path: value,
+          confidence: 'inferred',
+          evidence: 'constructor-hint',
+        );
+      }
+    }
+    return out;
+  }
 
   static SpkNameMap empty() => SpkNameMap({});
 
@@ -534,10 +537,13 @@ class SpkNameMap {
     final confirmedRaw = raw['paths'] is Map ? raw['paths'] as Map : raw;
     final hintsRaw = raw['hints'] is Map ? raw['hints'] as Map : const {};
     final confirmed = <int, String>{};
-    final inferred = <int, SpkNameHint>{};
+    final inferred = <int, Object?>{};
 
     for (final entry in confirmedRaw.entries) {
-      if (entry.key == 'schema' || entry.key == 'hints' || entry.key == 'stats') {
+      if (entry.key == 'schema' ||
+          entry.key == 'hints' ||
+          entry.key == 'stats' ||
+          entry.key == 'spkIndexSha256') {
         continue;
       }
       final id = _id(entry.key);
@@ -571,11 +577,15 @@ class SpkNameMap {
   }
 
   String? operator [](int id) => paths[id] ?? hints[id]?.path;
+  String? confirmedPath(int id) => paths[id];
+  String? inferredPath(int id) => paths.containsKey(id) ? null : hints[id]?.path;
   bool isConfirmed(int id) => paths.containsKey(id);
   bool isInferred(int id) => !paths.containsKey(id) && hints.containsKey(id);
+
   String confidence(int id) => isConfirmed(id)
       ? 'confirmed'
       : hints[id]?.confidence ?? 'unresolved';
+
   String evidence(int id) => isConfirmed(id)
       ? 'confirmed-path'
       : hints[id]?.evidence ?? 'none';
