@@ -34,6 +34,7 @@ void main() {
     );
     expect(paths, contains(r'C:\\Games\\Shaiya\\data.spk.names.json'));
   });
+
   test('SPK resource profile discovery includes V7 and packaged locations', () {
     final paths = spkResourceProfileCandidatePaths(
       r'C:\\Games\\Shaiya\\data.spk',
@@ -56,5 +57,4 @@ void main() {
       contains(r'C:\\Games\\Shaiya\\data.spk.resources.json'),
     );
   });
-
 }
