@@ -5,6 +5,7 @@ import 'package:herramienta_shaiya/core/textures.dart';
 import 'package:herramienta_shaiya/core/combat.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/data/library.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 Matcher closeToList(List<double> expected,double epsilon)=>predicate<List<double>>(
   (actual)=>actual.length==expected.length&&List.generate(actual.length,(i)=>(actual[i]-expected[i]).abs()<=epsilon).every((x)=>x),
@@ -174,6 +175,25 @@ void main() {
       final look=Appearance.initial(a);
       expect(look.selected[Slot.upper]!.key,'001');
       expect(look.selected[Slot.lower]!.key,'001');
+    });
+  });
+
+  group('Transformación WLD', () {
+    test('preserva basis completo y convierte LH a RH', () {
+      final obj=WorldInstance(
+        'Building',
+        'test.smod',
+        Vector3(10,2,20),
+        Vector3(0,0,1),
+        Vector3(0,1,0),
+      );
+      final m=worldInstanceMatrix(obj,5,15).storage;
+      expect(m[0],closeTo(1,1e-6));
+      expect(m[5],closeTo(1,1e-6));
+      expect(m[10],closeTo(-1,1e-6));
+      expect(m[12],closeTo(5,1e-6));
+      expect(m[13],closeTo(2,1e-6));
+      expect(m[14],closeTo(-5,1e-6));
     });
   });
 
