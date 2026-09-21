@@ -9,9 +9,7 @@ import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
 
 String _spkParentPath(String value, String separator) {
-  final normalized = value
-      .replaceAll('\\', separator)
-      .replaceAll('/', separator);
+  final normalized = value.replaceAll(RegExp(r'[\\/]+'), separator);
   final index = normalized.lastIndexOf(separator);
   if (index < 0) return '.';
   if (index == 0) return separator;
@@ -50,7 +48,7 @@ List<String> spkNameMapCandidatePaths(
 }) {
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
-      : separatorOverride.substring(0, 1);
+      : separatorOverride;
   final spkDir = _spkParentPath(spkPath, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
