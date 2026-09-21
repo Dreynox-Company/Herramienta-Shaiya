@@ -131,6 +131,34 @@ void main() {
       expect(map[3], 'Item/niño.dds');
     });
 
+    test('name map keeps inferred names separate from confirmed paths', () {
+      final map = SpkNameMap.fromJson({
+        'schema': 2,
+        'paths': {'0000000000000001': 'Character/Human/body.dds'},
+        'hints': {
+          '0000000000000002': {
+            'path': 'Monster/3DC/monster.3DC',
+            'confidence': 'inferred',
+          },
+          '-7ffe15b9c5fb90a0': 'Item/negative-id.dds',
+        },
+      });
+      expect(map.confirmedPath(1), 'Character/Human/body.dds');
+      expect(map.inferredPath(2), 'Monster/3DC/monster.3DC');
+      expect(map.isConfirmed(1), isTrue);
+      expect(map.isInferred(2), isTrue);
+      expect(map.paths.length, 1);
+      expect(map.hints.length, 2);
+    });
+
+    test('confirmed names replace inference for the same resource', () {
+      final map = SpkNameMap({}, {7: 'Guess/a.bin'});
+      map.mergeConfirmed({7: 'Character/Human/a.dds'});
+      expect(map[7], 'Character/Human/a.dds');
+      expect(map.isConfirmed(7), isTrue);
+      expect(map.isInferred(7), isFalse);
+    });
+
     test('index and resource secrets remain separate', () {
       final p = SpkCryptoProfile.fromJson({
         'profileId': 'fixture',
