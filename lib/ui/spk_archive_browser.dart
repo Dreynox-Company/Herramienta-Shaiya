@@ -109,7 +109,7 @@ String spkResourceProbeExecutablePath({
     executablePath ?? Platform.resolvedExecutable,
     separator,
   );
-  return '$exeDir${separator}Extras${separator}SPK${separator}'
+  return '$exeDir${separator}Extras${separator}SPK$separator'
       'Shaiya_SPK_ResourceProbe.exe';
 }
 
