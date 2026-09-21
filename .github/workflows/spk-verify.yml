@@ -7,10 +7,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[spk-format]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -23,13 +24,34 @@ jobs:
       - run: flutter pub get
       - name: Format changed Dart sources
         run: |
-          dart format             lib/core/spk_archive.dart             lib/data/spk_source.dart             lib/ui/spk_archive_browser.dart             lib/main.dart             test/spk_archive_test.dart
+          dart format \
+            lib/core/spk_archive.dart \
+            lib/data/spk_source.dart \
+            lib/ui/spk_archive_browser.dart \
+            lib/main.dart \
+            test/spk_archive_test.dart
       - name: Analyze project
-        continue-on-error: true
         run: flutter analyze 2>&1 | tee spk-analyze.txt
       - name: Run focused SPK tests
-        continue-on-error: true
         run: flutter test test/spk_archive_test.dart --reporter expanded 2>&1 | tee spk-tests.txt
+      - name: Commit deterministic formatting and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add pubspec.lock \
+            lib/core/spk_archive.dart \
+            lib/data/spk_source.dart \
+            lib/ui/spk_archive_browser.dart \
+            lib/main.dart \
+            test/spk_archive_test.dart
+          if git diff --cached --quiet; then
+            echo "No deterministic changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: format SPK integration and lock dependencies [spk-format]"
+          git push origin HEAD:feat/studio-063-spk-archive-browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:
