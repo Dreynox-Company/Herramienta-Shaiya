@@ -8,7 +8,7 @@ import '../ui_asset.dart';
 class WorldHud extends StatelessWidget {
   final StudioScene scene;
   final Catalog catalog;
-  final String characterName;
+  final String characterName,locale;
   final UiAssetCache ui;
   final List<String> messages;
   final bool questOpen;
@@ -21,6 +21,7 @@ class WorldHud extends StatelessWidget {
     required this.scene,
     required this.catalog,
     required this.characterName,
+    required this.locale,
     required this.ui,
     required this.messages,
     required this.questOpen,
@@ -324,7 +325,7 @@ class WorldHud extends StatelessWidget {
   ]);
 
   Widget _questWindow() {
-    final text=catalog.spanishText?.quest(questId);
+    final text=catalog.questText(locale)?.quest(questId);
     final title=text!=null&&text.name.isNotEmpty?text.name:'Operación básica de la interfaz';
     final body=text!=null&&text.initialDescription.isNotEmpty
       ?text.initialDescription
@@ -370,7 +371,7 @@ class WorldHud extends StatelessWidget {
       const Positioned(
         left:18,top:333,
         child:Text(
-          'Objeto de recompensa',
+          locale=='spn'?'Objeto de recompensa':'Reward item',
           style:TextStyle(
             color:Color(0xff321d11),
             fontSize:10,
@@ -404,8 +405,8 @@ class WorldHud extends StatelessWidget {
         child:Row(
           mainAxisAlignment:MainAxisAlignment.spaceBetween,
           children:[
-            shaiyaRedButton('Aceptar',onAcceptQuest,width:65,height:28,fontSize:10),
-            shaiyaRedButton('Cancelar',onCancelQuest,width:65,height:28,fontSize:10),
+            shaiyaRedButton(locale=='spn'?'Aceptar':'Accept',onAcceptQuest,width:65,height:28,fontSize:10),
+            shaiyaRedButton(locale=='spn'?'Cancelar':'Cancel',onCancelQuest,width:65,height:28,fontSize:10),
           ],
         ),
       ),
