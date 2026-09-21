@@ -14,6 +14,7 @@ import '../core/locomotion.dart';
 import '../core/attachment_pose.dart';
 import '../data/library.dart';
 import '../data/catalog.dart';
+import '../game/ps0032_protocol.dart';
 
 class RenderPart {
   final MeshData data;final t.Mesh mesh;final t.Float32BufferAttribute position;final t.Texture texture;
@@ -235,6 +236,69 @@ class StudioScene extends ChangeNotifier {
     }
     return out;
   }
+
+  Future<void> spawnGameActorsFromNetwork(
+    PsWorldSnapshot snapshot,{
+    Map<String,int>? npcModels,
+    Map<int,int>? mobModels,
+    Set<String>? questNpcKeys,
+    String locale='spn',
+    int npcLimit=80,
+    int mobLimit=120,
+  }) async {
+    for(final a in gameActors){a.dispose();}
+    gameActors.clear();gameLabels.clear();
+    if(view==null||catalog==null)return;
+
+    final npcRecords={for(final n in catalog!.npcs)n.id:n};
+    var npcsLoaded=0;
+    for(final p in snapshot.npcs){
+      if(npcsLoaded>=npcLimit)break;
+      final model=npcModels?[p.type.toString()+':'+p.typeId.toString()]??p.typeId;
+      final record=npcRecords[model];
+      if(record==null){
+        report('NET NPC ${p.type}:${p.typeId}: modelo $model no existe en npc.mon.');
+        continue;
+      }
+      try{
+        final a=await loadCreature(record);
+        final x=p.x-originX,z=-(p.z-originZ);
+        a.root.position.setValues(x,p.y,z);
+        a.root.rotation.y=-(p.angle/65535.0)*(math.pi*2);
+        gameActors.add(a);view!.scene.add(a.root);npcsLoaded++;
+        final key='${p.type}:${p.typeId}';
+        final localized=catalog!.questText(locale)?.npc(p.type,p.typeId);
+        gameLabels.add(GameActorLabel(
+          a,
+          (localized?.name.isNotEmpty??false)?localized!.name:'NPC $key',
+          quest:questNpcKeys?.contains(key)??false,
+        ));
+      }catch(e){report('NET NPC ${p.type}:${p.typeId}: $e');}
+    }
+
+    final mobRecords={for(final m in catalog!.creatures)m.id:m};
+    var mobsLoaded=0;
+    for(final p in snapshot.mobs){
+      if(mobsLoaded>=mobLimit)break;
+      final model=mobModels?[p.mobId]??p.mobId;
+      final record=mobRecords[model];
+      if(record==null){
+        report('NET mob ${p.mobId}: modelo $model no existe en monster.mon.');
+        continue;
+      }
+      try{
+        final a=await loadCreature(record);
+        final x=p.x-originX,z=-(p.z-originZ);
+        final y=world==null?groundY:world!.heightAt(p.x,p.z,scale:.02,offset:-200);
+        a.root.position.setValues(x,y,z);
+        gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
+        gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
+      }catch(e){report('NET mob ${p.mobId}: $e');}
+    }
+
+    say('$npcsLoaded NPC y $mobsLoaded criaturas renderizados desde paquetes World.');
+  }
+
   Future<void> selectCreature(CreatureRecord? c,String kind) async {
     final revision=kind=='enemy'?++_creatureRevision:kind=='mount'?++_mountRevision:++_wingRevision;
     if(kind=='mount'&&mountRecord!=null){_seats['${mountRecord!.source}#${mountRecord!.id}']=(height:riderHeight,forward:riderForward);}
