@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/spk_archive.dart';
+import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/data/spk_source.dart';
 
 void _put32(Uint8List bytes, int offset, int value) =>
@@ -161,6 +163,65 @@ void main() {
       }
     },
   );
+
+  test('validated SPK mounts as Library and overlay never mutates source', () async {
+    final root = await Directory.systemTemp.createTemp('spk-workspace-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      source.names.mergeConfirmed({
+        0x1000: 'Character/Human/humf_upper.mlt',
+        0x1001: 'Item/Item.SData',
+        0x1002: 'BinarySData/DBMonsterData.SData',
+      });
+      await source.validateSimpleResourceProfile();
+      expect(source.canExtractAll, isTrue);
+
+      final beforeSource = sha256.convert(await fixture.file.readAsBytes());
+      final library = await Library.fromSpk(
+        source,
+        overlayRoot: '${root.path}/overlay',
+      );
+      expect(library.isSpkWorkspace, isTrue);
+      expect(library.files, contains('item/item.sdata'));
+      expect(
+        library.sourceDiagnostics['sourceMode'],
+        'spk-v3-workspace',
+      );
+
+      final original = await library.read('item/item.sdata');
+      final originalHash = sha256.convert(original).toString();
+      final replacement = Uint8List.fromList(<int>[
+        0x44,
+        0x44,
+        0x53,
+        0x20,
+        0x7a,
+        0x7b,
+        0x7c,
+        0x7d,
+      ]);
+      await library.writeSpkOverlay(
+        {'item/item.sdata': replacement},
+        expectedHashes: {'item/item.sdata': originalHash},
+      );
+
+      expect(
+        await library.read('item/item.sdata'),
+        orderedEquals(replacement),
+      );
+      expect(
+        sha256.convert(await fixture.file.readAsBytes()).toString(),
+        beforeSource.toString(),
+      );
+      expect(
+        await File('${root.path}/overlay/_SPK_OVERLAY.json').exists(),
+        isTrue,
+      );
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
 
   test('SPK simple payload validation rejects a wrong resource key', () async {
     final root = await Directory.systemTemp.createTemp('spk-bad-key-');
