@@ -166,9 +166,9 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     BuildContext context,
     String spkPath,
   ) async {
-    final candidates = spkProfileCandidatePaths(spkPath)
-        .map(File.new)
-        .toList(growable: false);
+    final candidates = spkProfileCandidatePaths(
+      spkPath,
+    ).map(File.new).toList(growable: false);
     for (final file in candidates) {
       if (!await file.exists()) continue;
       try {
