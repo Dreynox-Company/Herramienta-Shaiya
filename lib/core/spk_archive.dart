@@ -460,43 +460,93 @@ class SpkCryptoProfile {
 
 class SpkNameMap {
   final Map<int, String> paths;
-  SpkNameMap(this.paths);
+  final Map<int, String> hints;
 
-  static SpkNameMap empty() => SpkNameMap({});
+  SpkNameMap(this.paths, [Map<int, String>? hints])
+    : hints = hints ?? <int, String>{};
+
+  static SpkNameMap empty() => SpkNameMap({}, {});
+
+  static int? _parseId(Object value) {
+    var key = value.toString().toLowerCase().replaceFirst('0x', '');
+    if (key.contains('-')) {
+      final negative = int.tryParse(key.split('-').last, radix: 16);
+      if (negative == null) return null;
+      return (-negative) & 0xffffffffffffffff;
+    }
+    return int.tryParse(key, radix: 16);
+  }
+
+  static String? _safePath(Object? raw) {
+    if (raw == null) return null;
+    final value = raw.toString().replaceAll('\\', '/');
+    if (value.isEmpty || value.startsWith('/')) return null;
+    final components = value.split('/');
+    if (components.any(
+      (p) =>
+          p.isEmpty ||
+          p == '.' ||
+          p == '..' ||
+          RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(p),
+    )) {
+      return null;
+    }
+    return value;
+  }
+
+  static Map<int, String> _readPaths(Object? raw) {
+    if (raw is! Map) return <int, String>{};
+    final out = <int, String>{};
+    for (final entry in raw.entries) {
+      final id = _parseId(entry.key);
+      final value = entry.value is Map
+          ? _safePath((entry.value as Map)['path'])
+          : _safePath(entry.value);
+      if (id != null && value != null) out[id] = value;
+    }
+    return out;
+  }
 
   static SpkNameMap fromJson(Object? raw) {
-    if (raw is Map && raw['paths'] is Map) raw = raw['paths'];
     if (raw is! Map) {
       throw const FormatException('Mapa de nombres SPK inválido.');
     }
-    final out = <int, String>{};
-    for (final entry in raw.entries) {
-      final key = entry.key.toString().toLowerCase().replaceFirst('0x', '');
-      final id = int.tryParse(key, radix: 16);
-      final value = entry.value.toString().replaceAll('\\', '/');
-      if (id == null || value.isEmpty || value.startsWith('/')) continue;
-      final components = value.split('/');
-      if (components.any(
-        (p) =>
-            p.isEmpty ||
-            p == '.' ||
-            p == '..' ||
-            RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(p),
-      )) {
-        continue;
-      }
-      out[id] = value;
+    if (raw['paths'] is Map || raw['hints'] is Map) {
+      return SpkNameMap(_readPaths(raw['paths']), _readPaths(raw['hints']));
     }
-    return SpkNameMap(out);
+    return SpkNameMap(_readPaths(raw), {});
   }
 
-  String? operator [](int id) => paths[id];
+  String? confirmedPath(int id) => paths[id];
+  String? inferredPath(int id) => hints[id];
+  String? operator [](int id) => paths[id] ?? hints[id];
+
+  bool isConfirmed(int id) => paths.containsKey(id);
+  bool isInferred(int id) => !paths.containsKey(id) && hints.containsKey(id);
+
+  void mergeConfirmed(Map<int, String> values) {
+    paths.addAll(values);
+    for (final id in values.keys) hints.remove(id);
+  }
+
+  void mergeHints(Map<int, String> values) {
+    for (final entry in values.entries) {
+      if (!paths.containsKey(entry.key)) hints[entry.key] = entry.value;
+    }
+  }
 
   Map<String, Object?> toJson() => {
-    'schema': 1,
+    'schema': 2,
     'paths': {
       for (final e in paths.entries)
         e.key.toRadixString(16).padLeft(16, '0'): e.value,
+    },
+    'hints': {
+      for (final e in hints.entries)
+        e.key.toRadixString(16).padLeft(16, '0'): {
+          'path': e.value,
+          'confidence': 'inferred',
+        },
     },
   };
 }
