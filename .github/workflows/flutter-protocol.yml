@@ -20,6 +20,6 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart format lib/protocol test/ps0032_packet_test.dart
-      - run: flutter analyze --no-fatal-infos --no-fatal-warnings lib/protocol test/ps0032_packet_test.dart
-      - run: flutter test test/ps0032_packet_test.dart --reporter expanded
+      - run: dart format lib/protocol test/ps0032_packet_test.dart test/ps0032_crypto_test.dart
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings lib/protocol test/ps0032_packet_test.dart test/ps0032_crypto_test.dart
+      - run: flutter test test/ps0032_packet_test.dart test/ps0032_crypto_test.dart --reporter expanded
