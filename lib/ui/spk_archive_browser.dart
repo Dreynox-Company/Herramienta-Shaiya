@@ -801,14 +801,20 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       Icon(
                         source.names.isConfirmed(record.entryId)
                             ? Icons.verified_outlined
-                            : source.names.isInferred(record.entryId)
+                            : source.names.confidence(record.entryId) ==
+                                  'strong-inferred'
                             ? Icons.auto_awesome_outlined
+                            : source.names.isInferred(record.entryId)
+                            ? Icons.lightbulb_outline
                             : Icons.insert_drive_file_outlined,
                         size: 15,
                         color: source.names.isConfirmed(record.entryId)
                             ? const Color(0xff83c69d)
-                            : source.names.isInferred(record.entryId)
+                            : source.names.confidence(record.entryId) ==
+                                  'strong-inferred'
                             ? const Color(0xffd9b66f)
+                            : source.names.isInferred(record.entryId)
+                            ? const Color(0xff88a9d8)
                             : null,
                       ),
                       const SizedBox(width: 7),
@@ -890,6 +896,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         property('Fragmentos', record.chunkCount.toString()),
         property('Ruta', source.technicalPath(record)),
         property('Nombre', source.nameConfidence(record)),
+        property('Evidencia', source.nameEvidence(record)),
         const Divider(height: 26),
         FilledButton.tonalIcon(
           onPressed: busy ? null : () => inspectResource(record),
@@ -931,6 +938,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   @override
   Widget build(BuildContext context) {
     final summary = source.index.summary();
+    final strongInferred = source.names.hints.values
+        .where((hint) => hint.confidence == 'strong-inferred')
+        .length;
+    final weakInferred = source.names.hints.length - strongInferred;
     return Scaffold(
       backgroundColor: const Color(0xff101722),
       appBar: AppBar(
@@ -1143,7 +1154,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       Text(
                         '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · '
                         '${source.names.paths.length} confirmados · '
-                        '${source.names.hints.length} inferidos · '
+                        '$strongInferred inferidos fuertes · '
+                        '$weakInferred aproximados · '
                         '${(summary['resources'] as int) - source.names.paths.length - source.names.hints.length} sin resolver',
                         style: const TextStyle(
                           fontSize: 10,
