@@ -242,8 +242,9 @@ class PsConnection {
     for(final listener in List<bool Function(PsPacket)>.from(_listeners)){
       try{consumed=listener(packet)||consumed;}catch(_){}
     }
+    if(consumed)return;
     if(_waiters.isNotEmpty)_waiters.removeAt(0).complete(packet);
-    else if(!consumed)_queued.add(packet);
+    else _queued.add(packet);
   }
   void _onError(Object e)=>_fail(e);
   void _onDone()=>_fail(StateError('Socket ps0032 cerrado por el servidor.'));
