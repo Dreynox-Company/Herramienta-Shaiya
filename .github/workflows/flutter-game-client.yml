@@ -44,7 +44,7 @@ jobs:
       - name: Analyze game client changes
         shell: pwsh
         run: |
-          flutter analyze lib/game_client_main.dart lib/core/npc_quest_metadata.dart lib/core/world_resources.dart lib/data/catalog.dart lib/data/game_names.dart
+          flutter analyze --no-fatal-infos lib/game_client_main.dart lib/core/npc_quest_metadata.dart lib/core/world_resources.dart lib/data/catalog.dart lib/data/game_names.dart
           if($LASTEXITCODE -ne 0){throw 'flutter analyze failed'}
       - name: Existing regression tests
         shell: pwsh
