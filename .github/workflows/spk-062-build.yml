@@ -13,6 +13,10 @@ on:
       - .github/workflows/build.yml
       - pubspec.yaml
 
+concurrency:
+  group: studio-062-spk-browser
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
