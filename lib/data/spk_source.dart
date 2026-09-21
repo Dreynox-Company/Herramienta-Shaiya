@@ -234,57 +234,108 @@ class SpkArchiveSource {
   Future<Map<String, Object?>> inferNamesFromDirectory(
     Directory reference, {
     required SpkProgress progress,
+    int maxCompressionBytes = 192 * 1024 * 1024,
   }) async {
     if (!await reference.exists()) {
       throw const FormatException('La carpeta DATA de referencia no existe.');
     }
-    final bySize = <int, List<String>>{};
+
+    final resources = index.resources.toList(growable: false);
+    final wantedSizes = <int>{
+      for (final record in resources) record.decodedBytes,
+    };
+    final wantedPairs = <String, List<SpkRecord>>{};
+    for (final record in resources) {
+      wantedPairs
+          .putIfAbsent(
+            '${record.decodedBytes}:${record.storedBytes}',
+            () => <SpkRecord>[],
+          )
+          .add(record);
+    }
+
+    final pathsBySize = <int, List<String>>{};
+    final pathsByPair = <String, List<String>>{};
     var scanned = 0;
+    var compressed = 0;
+    var skippedLarge = 0;
+    final codec = Zstandard();
+
     await for (final entity in reference.list(
       recursive: true,
       followLinks: false,
     )) {
       if (entity is! File) continue;
       final size = await entity.length();
+      if (!wantedSizes.contains(size)) continue;
       final relative = p
           .relative(entity.path, from: reference.path)
           .replaceAll('\\', '/');
       if (relative.isEmpty || relative.startsWith('../')) continue;
-      bySize.putIfAbsent(size, () => <String>[]).add(relative);
+      pathsBySize.putIfAbsent(size, () => <String>[]).add(relative);
       scanned++;
-      if (scanned % 1000 == 0) {
-        progress('Indexando DATA de referencia…', scanned, 0);
-      }
-    }
 
-    final hints = <int, String>{};
-    var checked = 0;
-    final resources = index.resources.toList(growable: false);
-    for (final record in resources) {
-      final candidates = bySize[record.decodedBytes];
-      if (candidates != null && candidates.length == 1) {
-        hints[record.entryId] = candidates.single;
+      if (size <= maxCompressionBytes) {
+        final packed = await codec.compress(await entity.readAsBytes(), 3);
+        if (packed != null) {
+          final key = '$size:${packed.length}';
+          if (wantedPairs.containsKey(key)) {
+            pathsByPair.putIfAbsent(key, () => <String>[]).add(relative);
+          }
+          compressed++;
+        }
+      } else {
+        skippedLarge++;
       }
-      checked++;
-      if (checked % 1000 == 0) {
+      if (scanned % 250 == 0) {
         progress(
-          'Relacionando rutas por tamaño único…',
-          checked,
-          resources.length,
+          'Correlacionando DATA por tamaño y Zstandard nivel 3…',
+          scanned,
+          0,
         );
       }
     }
-    names.mergeHints(hints);
+
+    final strong = <int, String>{};
+    final fallback = <int, String>{};
+    for (final record in resources) {
+      final pair = '${record.decodedBytes}:${record.storedBytes}';
+      final exact = pathsByPair[pair];
+      if (exact != null && exact.length == 1) {
+        strong[record.entryId] = exact.single;
+        continue;
+      }
+      final sameSize = pathsBySize[record.decodedBytes];
+      if (sameSize != null && sameSize.length == 1) {
+        fallback[record.entryId] = sameSize.single;
+      }
+    }
+    names.mergeHints(
+      fallback,
+      confidence: 'inferred',
+      evidence: 'unique-decoded-size',
+    );
+    names.mergeHints(
+      strong,
+      confidence: 'strong-inferred',
+      evidence: 'decoded-size+zstd3-size',
+    );
     progress(
-      'Nombres inferidos: ${hints.length}.',
+      'Rutas inferidas: ${strong.length} fuertes + '
+      '${fallback.length} por tamaño.',
       resources.length,
       resources.length,
     );
     return {
-      'scannedFiles': scanned,
-      'inferred': hints.length,
+      'scannedCandidateFiles': scanned,
+      'compressedCandidateFiles': compressed,
+      'skippedLargeFiles': skippedLarge,
+      'strongInferred': strong.length,
+      'sizeOnlyInferred': fallback.length,
+      'inferredTotal': names.hints.length,
       'confirmed': names.paths.length,
-      'method': 'unique-decoded-size-reference',
+      'unresolved': resources.length - names.paths.length - names.hints.length,
+      'method': 'decoded-size+zstd3-size, fallback unique-decoded-size',
     };
   }
 
