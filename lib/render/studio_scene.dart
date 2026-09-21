@@ -383,7 +383,7 @@ class StudioScene extends ChangeNotifier {
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
       for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
       if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');var loaded=0;
-      final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
+      final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree','Object'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
       for(final obj in nearby.take(80)){
         final model=lib.resolve(obj.asset,['entity/${obj.category}']);
         if(model==null||!model.endsWith('.smod')){
@@ -433,7 +433,13 @@ class StudioScene extends ChangeNotifier {
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
-      if(sky==null&&catalog!.skies.isNotEmpty){final choice=lib.resolve('sky_a1.bmp',['sky'])??lib.resolve('sky.bmp',['sky'])??catalog!.skies.first;try{await setSky(choice);}catch(e){report('Cielo: $e');}}
+      if(sky==null&&catalog!.skies.isNotEmpty){
+        final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
+          ??lib.resolve('sky_a1.bmp',['sky'])
+          ??lib.resolve('sky.bmp',['sky'])
+          ??catalog!.skies.first;
+        try{await setSky(choice);}catch(e){report('Cielo: $e');}
+      }
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
