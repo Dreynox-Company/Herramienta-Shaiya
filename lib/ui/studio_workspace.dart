@@ -231,7 +231,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             const Spacer(),
             if (width > 1100)
               const Text(
-                '0.6.6 · SPK AutoProfile',
+                '0.6.7 · SPK Resource Explorer',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),
