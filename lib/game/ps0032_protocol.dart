@@ -19,10 +19,12 @@ class PsPacketType {
   static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
+  static const characterSkills=0x0108;
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
+  static const useMobTargetSkill=0x0517;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
   static const mobEnter=0x0601;
@@ -521,6 +523,60 @@ class PsAdditionalStats {
   }
 }
 
+class PsLearnedSkill {
+  final int skillId,level,number,cooldownSeconds;
+  const PsLearnedSkill(this.skillId,this.level,this.number,this.cooldownSeconds);
+}
+
+class PsSkillBook {
+  final int skillPoints;
+  final List<PsLearnedSkill> skills;
+  const PsSkillBook(this.skillPoints,this.skills);
+  PsLearnedSkill? byNumber(int number)=>skills.where((s)=>s.number==number).firstOrNull;
+  static PsSkillBook parse(PsPacket p){
+    if(p.type!=PsPacketType.characterSkills||p.body.length<3){
+      throw FormatException('CHARACTER_SKILLS truncado: ${p.body.length}');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    final points=d.getUint16(0,Endian.little),count=b[2];
+    if(b.length<3+count*8)throw FormatException('CHARACTER_SKILLS count truncado: $count.');
+    final skills=<PsLearnedSkill>[];
+    var o=3;
+    for(var i=0;i<count;i++,o+=8){
+      skills.add(PsLearnedSkill(
+        d.getUint16(o,Endian.little),b[o+2],b[o+3],d.getInt32(o+4,Endian.little),
+      ));
+    }
+    return PsSkillBook(points,List.unmodifiable(skills));
+  }
+}
+
+class PsQuickSlot {
+  final int bar,slot,bag,number,cooldown;
+  const PsQuickSlot(this.bar,this.slot,this.bag,this.number,this.cooldown);
+  bool get isSkill=>bag==100;
+}
+
+class PsSkillBar {
+  final List<PsQuickSlot> slots;
+  const PsSkillBar(this.slots);
+  static PsSkillBar parse(PsPacket p){
+    if(p.type!=PsPacketType.characterSkillBar||p.body.length<5){
+      throw FormatException('CHARACTER_SKILL_BAR truncado: ${p.body.length}');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    final count=b[0],items=count==0?0:count-1;
+    if(b.length<5+items*9)throw FormatException('CHARACTER_SKILL_BAR count truncado: $count.');
+    final out=<PsQuickSlot>[];
+    var o=5;
+    for(var i=0;i<items;i++,o+=9){
+      out.add(PsQuickSlot(b[o],b[o+1],b[o+2],d.getUint16(o+3,Endian.little),d.getInt32(o+5,Endian.little)));
+    }
+    out.sort((a,b){final byBar=a.bar.compareTo(b.bar);return byBar!=0?byBar:a.slot.compareTo(b.slot);});
+    return PsSkillBar(List.unmodifiable(out));
+  }
+}
+
 class WorldBootstrap {
   final int faction,maxMode;
   final List<PsPacket> packets;
@@ -685,6 +741,13 @@ class PsWorldSession {
   Future<void> quitQuest(int questId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de abandonar una misión.');
     await connection.send(PsPacketType.questQuit,_i16Bytes(questId));
+  }
+
+  Future<void> useMobSkill(int skillNumber,int targetGlobalId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar skills.');
+    await connection.send(PsPacketType.useMobTargetSkill,[
+      skillNumber&0xff,..._u32Bytes(targetGlobalId),
+    ]);
   }
 
   Future<void> close()=>connection.close();
