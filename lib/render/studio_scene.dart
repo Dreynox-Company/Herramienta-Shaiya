@@ -79,7 +79,8 @@ class StudioScene extends ChangeNotifier {
   int _appearanceRevision=0,_creatureRevision=0,_mountRevision=0,_wingRevision=0,_worldRevision=0,_weaponRevision=0,_clipRevision=0,_effectRevision=0,_skyRevision=0;
   double yaw=.25,pitch=.18,distance=5.2,targetY=1.05,panX=0,panZ=0;
   double riderHeight=1.0,riderForward=0,wingHeight=1.3,wingDepth=.25,wingSize=1;
-  double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0;
+  double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0,_networkAccumulator=0;
+  void Function(double x,double y,double z,double yaw,bool running)? onPlayerMoved;
   String status='Selecciona la carpeta DATA.';
   List<String> get animations=>appearance?.archetype.animations??[];
   Future<void> setup(t.ThreeJS three) async {
@@ -222,6 +223,50 @@ class StudioScene extends ChangeNotifier {
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas colocados desde SVMAP.');
   }
+  Future<bool> addLiveNpc({
+    required int globalId,required int type,required int typeId,
+    required double x,required double y,required double z,required int angle,
+    Map<String,int>? npcModels,Set<String>? questNpcKeys,String locale='spn',
+  }) async {
+    if(view==null||catalog==null)return false;
+    removeLiveActor(globalId);
+    final model=npcModels?[type.toString()+':'+typeId.toString()]??typeId;
+    final record={for(final n in catalog!.npcs)n.id:n}[model];
+    if(record==null){report('LIVE NPC $type:$typeId: modelo $model ausente.');return false;}
+    try{
+      final a=await loadCreature(record);
+      a.root.position.setValues(x-originX,y,-(z-originZ));
+      a.root.rotation.y=-angle.toDouble();
+      gameActors.add(a);gameActorById[globalId]=a;view!.scene.add(a.root);
+      final key=type.toString()+':'+typeId.toString();
+      final localized=catalog!.questText(locale)?.npc(type,typeId);
+      gameLabels.add(GameActorLabel(
+        a,(localized?.name.isNotEmpty??false)?localized!.name:'NPC '+key,
+        quest:questNpcKeys?.contains(key)??false,
+      ));
+      return true;
+    }catch(e){report('LIVE NPC $type:$typeId: $e');return false;}
+  }
+
+  Future<bool> addLiveMob({
+    required int globalId,required int mobId,required double x,required double z,
+    Map<int,int>? mobModels,String locale='spn',
+  }) async {
+    if(view==null||catalog==null)return false;
+    removeLiveActor(globalId);
+    final model=mobModels?[mobId]??mobId;
+    final record={for(final m in catalog!.creatures)m.id:m}[model];
+    if(record==null){report('LIVE mob $mobId: modelo $model ausente.');return false;}
+    try{
+      final a=await loadCreature(record);
+      final localX=x-originX,localZ=-(z-originZ);
+      final y=world==null?0.0:world!.heightAt(x,z,scale:.02,offset:-200);
+      a.root.position.setValues(localX,y,localZ);
+      gameActors.add(a);gameActorById[globalId]=a;view!.scene.add(a.root);
+      gameLabels.add(GameActorLabel(a,catalog!.monsterName(mobId,locale),mob:true));
+      return true;
+    }catch(e){report('LIVE mob $mobId: $e');return false;}
+  }
   Future<void> spawnGameActorsFromLive({
     required Iterable<({int globalId,int type,int typeId,double x,double y,double z,int angle})> npcs,
     required Iterable<({int globalId,int mobId,double x,double z})> mobs,
@@ -235,46 +280,24 @@ class StudioScene extends ChangeNotifier {
     for(final a in gameActors){a.dispose();}
     gameActors.clear();gameLabels.clear();gameActorById.clear();
     if(view==null||catalog==null)return;
-    final npcRecords={for(final n in catalog!.npcs)n.id:n};
-    final mobRecords={for(final m in catalog!.creatures)m.id:m};
     var npcsLoaded=0,mobsLoaded=0;
     for(final p in npcs){
       if(npcsLoaded>=npcLimit)break;
-      final model=npcModels?[p.type.toString()+':'+p.typeId.toString()]??p.typeId;
-      final record=npcRecords[model];
-      if(record==null){report('LIVE NPC ${p.type}:${p.typeId}: modelo $model ausente.');continue;}
-      try{
-        final a=await loadCreature(record);
-        final x=p.x-originX,z=-(p.z-originZ);
-        a.root.position.setValues(x,p.y,z);
-        a.root.rotation.y=-p.angle.toDouble();
-        gameActors.add(a);gameActorById[p.globalId]=a;view!.scene.add(a.root);npcsLoaded++;
-        final key=p.type.toString()+':'+p.typeId.toString();
-        final localized=catalog!.questText(locale)?.npc(p.type,p.typeId);
-        gameLabels.add(GameActorLabel(
-          a,
-          (localized?.name.isNotEmpty??false)?localized!.name:'NPC '+key,
-          quest:questNpcKeys?.contains(key)??false,
-        ));
-      }catch(e){report('LIVE NPC ${p.type}:${p.typeId}: $e');}
+      if(await addLiveNpc(
+        globalId:p.globalId,type:p.type,typeId:p.typeId,
+        x:p.x,y:p.y,z:p.z,angle:p.angle,
+        npcModels:npcModels,questNpcKeys:questNpcKeys,locale:locale,
+      ))npcsLoaded++;
     }
     for(final p in mobs){
       if(mobsLoaded>=mobLimit)break;
-      final model=mobModels?[p.mobId]??p.mobId;
-      final record=mobRecords[model];
-      if(record==null){report('LIVE mob ${p.mobId}: modelo $model ausente.');continue;}
-      try{
-        final a=await loadCreature(record);
-        final x=p.x-originX,z=-(p.z-originZ);
-        final y=world==null?0.0:world!.heightAt(p.x,p.z,scale:.02,offset:-200);
-        a.root.position.setValues(x,y,z);
-        gameActors.add(a);gameActorById[p.globalId]=a;view!.scene.add(a.root);mobsLoaded++;
-        gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
-      }catch(e){report('LIVE mob ${p.mobId}: $e');}
+      if(await addLiveMob(
+        globalId:p.globalId,mobId:p.mobId,x:p.x,z:p.z,
+        mobModels:mobModels,locale:locale,
+      ))mobsLoaded++;
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas recibidos del World real.');
   }
-
   void moveLiveNpc(int globalId,double x,double y,double z){
     final a=gameActorById[globalId];if(a==null)return;
     a.root.position.setValues(x-originX,y,-(z-originZ));
@@ -398,6 +421,17 @@ class StudioScene extends ChangeNotifier {
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final norm=math.max(1,math.sqrt(walkX*walkX+walkZ*walkZ)),speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);final x=character!.root.position.x+walkX/norm*delta*speed,z=character!.root.position.z+walkZ/norm*delta*speed;
       if(world==null||(x.abs()<55&&z.abs()<55)){character!.root.position.x=x;character!.root.position.z=z;if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);}character!.root.rotation.y=math.atan2(walkX,walkZ);
+      _networkAccumulator+=delta;
+      if(_networkAccumulator>=.20){
+        _networkAccumulator=0;
+        onPlayerMoved?.call(
+          originX+character!.root.position.x,
+          groundY,
+          originZ-character!.root.position.z,
+          character!.root.rotation.y,
+          running,
+        );
+      }
     }
     updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
   }
