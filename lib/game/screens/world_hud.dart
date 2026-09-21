@@ -13,7 +13,7 @@ class WorldHud extends StatelessWidget {
   final List<String> messages;
   final bool questOpen;
   final int questId;
-  final int hp,mp,sp;
+  final int hp,mp,sp,maxHp,maxMp,maxSp;
   final VoidCallback onAcceptQuest;
   final VoidCallback onCancelQuest;
 
@@ -30,6 +30,9 @@ class WorldHud extends StatelessWidget {
     required this.hp,
     required this.mp,
     required this.sp,
+    required this.maxHp,
+    required this.maxMp,
+    required this.maxSp,
     required this.onAcceptQuest,
     required this.onCancelQuest,
   });
@@ -141,15 +144,15 @@ class WorldHud extends StatelessWidget {
     ),
     Positioned(
       left:83,top:28,
-      child:Text('$hp / $hp',style:const TextStyle(fontSize:8,color:Colors.white)),
+      child:Text('$hp / $maxHp',style:const TextStyle(fontSize:8,color:Colors.white)),
     ),
     Positioned(
       left:84,top:42,
-      child:Text('$mp / $mp',style:const TextStyle(fontSize:8,color:Colors.white)),
+      child:Text('$mp / $maxMp',style:const TextStyle(fontSize:8,color:Colors.white)),
     ),
     Positioned(
       left:82,top:57,
-      child:Text('$sp / $sp',style:const TextStyle(fontSize:8,color:Colors.white)),
+      child:Text('$sp / $maxSp',style:const TextStyle(fontSize:8,color:Colors.white)),
     ),
   ]);
 
