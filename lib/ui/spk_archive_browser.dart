@@ -308,6 +308,91 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   }
 
+  Future<void> resolveNamesWithReferenceData() => runAction(() async {
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Usar DATA como referencia',
+    );
+    if (folder == null) return;
+    final result = await source.inferNamesFromDirectory(
+      Directory(folder),
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    if (!mounted) return;
+    setState(() {
+      currentFolder = '';
+      selected = null;
+    });
+    final message = 'Rutas: ' +
+        result['strongInferred'].toString() +
+        ' fuertes + ' +
+        result['sizeOnlyInferred'].toString() +
+        ' por tamaño; ' +
+        result['unresolved'].toString() +
+        ' aún sin resolver.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 7)),
+    );
+  });
+
+  Future<void> exportNameMap() => runAction(() async {
+    final location = await getSaveLocation(
+      suggestedName: 'spk-name-map.json',
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Mapa de nombres SPK', extensions: ['json']),
+      ],
+    );
+    if (location == null) return;
+    final body = <String, Object?>{
+      ...source.names.toJson(),
+      'spkIndexSha256': source.index.encryptedIndexSha256,
+    };
+    await File(location.path).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(body),
+      flush: true,
+    );
+  });
+
+  Future<void> extractCurrentFolder() => runAction(() async {
+    if (currentFolder.isEmpty) {
+      throw const FormatException(
+        'Selecciona una carpeta concreta o usa Extraer todo.',
+      );
+    }
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Extraer carpeta aquí',
+    );
+    if (folder == null) return;
+    final list = source.entriesInFolder(currentFolder, recursive: true);
+    if (list.isEmpty) {
+      throw const FormatException('La carpeta no contiene recursos.');
+    }
+    final result = await source.extract(
+      Directory(folder),
+      selection: list,
+      requireComplete: false,
+      control: extractControl,
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Carpeta extraída: ' + result['folder'].toString())),
+      );
+    }
+  });
   Future<void> importNameMap() => runAction(() async {
     final picked = await openFile(
       acceptedTypeGroups: const [
