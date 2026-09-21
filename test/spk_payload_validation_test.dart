@@ -199,6 +199,49 @@ void main() {
     }
   });
 
+  test('full audit accepts zero decodedBytes as unspecified length', () async {
+    final root = await Directory.systemTemp.createTemp('spk-zero-declared-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final original = fixture.index.records.first;
+      final records = <SpkRecord>[
+        SpkRecord(
+          ordinal: original.ordinal,
+          entryId: original.entryId,
+          dataOffset: original.dataOffset,
+          storedBytes: original.storedBytes,
+          decodedBytes: 0,
+          recordType: original.recordType,
+          auxiliaryStart: original.auxiliaryStart,
+          chunkCount: original.chunkCount,
+          metadata: original.metadata,
+        ),
+        ...fixture.index.records.skip(1),
+      ];
+      final index = SpkIndex(
+        header: fixture.index.header,
+        records: records,
+        auxiliary: fixture.index.auxiliary,
+        encryptedIndexSha256: fixture.index.encryptedIndexSha256,
+        decodedIndexSha256: fixture.index.decodedIndexSha256,
+      );
+      final source = await SpkArchiveSource.fromValidatedIndexForTesting(
+        file: fixture.file,
+        index: index,
+        profile: fixture.profile,
+      );
+      await source.validateSimpleResourceProfile();
+      final result = await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, _, _) {},
+      );
+      expect(result['validatedResources'], 3);
+      expect(source.fullyValidatedResources, isTrue);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test('validated SPK mounts as Library and overlay never mutates source', () async {
     final root = await Directory.systemTemp.createTemp('spk-workspace-');
     try {
