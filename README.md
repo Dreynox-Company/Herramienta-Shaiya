@@ -63,3 +63,8 @@ Consulta `docs/REVISION_0_4.md` y los artefactos de la ejecución del commit exa
 No están implementados el agua avanzada, el cliente multijugador ni la correspondencia oficial completa de cada receta EFT/lapisia. La asociación de una DDS a una malla no prueba por sí sola la compatibilidad visual de sus UV. La calibración de alas/jinete y los casos de recursos dañados disponen de diagnóstico y controles de inspección. No se promete abrir cualquier archivo cifrado sin conocer su formato o clave.
 
 Licencias: ver `THIRD_PARTY_NOTICES.md`. No se incluyen modelos/texturas/sonidos originales del juego en GitHub.
+
+
+## 0.6.5 — acceso SPK visible
+
+La barra superior incluye un botón **SPK** independiente junto a **DATA**. El menú **DATA** conserva también `Archivo DATA.SPK`. La cabecera muestra la versión 0.6.5 para evitar confundir la compilación actual con una versión anterior.
