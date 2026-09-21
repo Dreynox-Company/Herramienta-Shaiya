@@ -810,6 +810,7 @@ class SpkArchiveSource {
     required SpkExtractControl control,
     required SpkProgress progress,
     bool requireComplete = true,
+    bool continueOnError = false,
   }) async {
     if (!await parent.exists()) {
       throw const FormatException('La carpeta de destino no existe.');
@@ -835,32 +836,49 @@ class SpkArchiveSource {
     }
     await stage.create();
     final manifest = <Map<String, Object?>>[];
+    final exportFailures = <Map<String, Object?>>[];
     var bytes = 0;
     try {
       for (var i = 0; i < list.length; i++) {
         control.check();
         final record = list[i];
-        final result = await readEntry(record);
-        var relative = names[record.entryId];
-        relative ??=
-            '_SPK_SinNombre/${record.idHex}${extensionFor(result.format)}';
-        final safe = safeRelative(relative);
-        final target = File('${stage.path}/$safe');
-        await target.parent.create(recursive: true);
-        await target.writeAsBytes(result.bytes, flush: true);
-        manifest.add({
-          'entryId': record.idHex,
-          'path': relative.replaceAll('\\', '/'),
-          'format': result.format,
-          'storedBytes': record.storedBytes,
-          'decodedBytes': result.bytes.length,
-          'sha256': sha256.convert(result.bytes).toString(),
-          'resolvedName': names.isConfirmed(record.entryId),
-          'inferredName': names.isInferred(record.entryId),
-          'nameConfidence': nameConfidence(record),
-        });
-        bytes += result.bytes.length;
-        progress('Extrayendo $relative', i + 1, list.length);
+        try {
+          final result = await readEntry(record);
+          var relative = names[record.entryId];
+          relative ??=
+              '_SPK_SinNombre/${record.idHex}${extensionFor(result.format)}';
+          final safe = safeRelative(relative);
+          final target = File('${stage.path}/$safe');
+          await target.parent.create(recursive: true);
+          await target.writeAsBytes(result.bytes, flush: true);
+          manifest.add({
+            'entryId': record.idHex,
+            'path': relative.replaceAll('\\', '/'),
+            'format': result.format,
+            'storedBytes': record.storedBytes,
+            'decodedBytes': result.bytes.length,
+            'sha256': sha256.convert(result.bytes).toString(),
+            'resolvedName': names.isConfirmed(record.entryId),
+            'inferredName': names.isInferred(record.entryId),
+            'nameConfidence': nameConfidence(record),
+          });
+          bytes += result.bytes.length;
+          progress('Extrayendo $relative', i + 1, list.length);
+        } catch (error) {
+          if (!continueOnError) rethrow;
+          exportFailures.add({
+            'entryId': record.idHex,
+            'path': technicalPath(record),
+            'storedBytes': record.storedBytes,
+            'decodedBytes': record.decodedBytes,
+            'error': error.toString(),
+          });
+          progress(
+            'Omitido ${technicalPath(record)}: no pudo decodificarse',
+            i + 1,
+            list.length,
+          );
+        }
       }
       await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
         const JsonEncoder.withIndent('  ').convert({
@@ -869,6 +887,8 @@ class SpkArchiveSource {
           'index': index.summary(),
           'profile': profile.publicJson(),
           'files': manifest,
+          'failures': exportFailures,
+          'complete': exportFailures.isEmpty,
         }),
         flush: true,
       );
@@ -876,7 +896,9 @@ class SpkArchiveSource {
       return {
         'folder': published.path,
         'files': manifest.length,
+        'failures': exportFailures.length,
         'bytes': bytes,
+        'complete': exportFailures.isEmpty,
       };
     } catch (_) {
       if (await stage.exists()) await stage.delete(recursive: true);
