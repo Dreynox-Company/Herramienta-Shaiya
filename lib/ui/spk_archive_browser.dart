@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
@@ -48,7 +50,7 @@ List<String> spkNameMapCandidatePaths(
 }) {
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
-      : separatorOverride;
+      : separatorOverride.substring(0, 1);
   final spkDir = _spkParentPath(spkPath, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
@@ -94,6 +96,21 @@ List<String> spkResourceProfileCandidatePaths(
     '$exeDir${separator}profiles${separator}spk-resource-profile.json',
     '$exeDir${separator}profiles${separator}derived-resource-profile.json',
   ];
+}
+
+String spkResourceProbeExecutablePath({
+  String? executablePath,
+  String? separatorOverride,
+}) {
+  final separator = separatorOverride == null || separatorOverride.isEmpty
+      ? Platform.pathSeparator
+      : separatorOverride.substring(0, 1);
+  final exeDir = _spkParentPath(
+    executablePath ?? Platform.resolvedExecutable,
+    separator,
+  );
+  return '$exeDir${separator}Extras${separator}SPK${separator}'
+      'Shaiya_SPK_ResourceProbe.exe';
 }
 
 SpkCryptoProfile mergeSpkResourceProfile(
@@ -183,6 +200,50 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
   return source;
 }
 
+Future<SpkArchiveSource> deriveAutomaticFragmentProfile(
+  SpkArchiveSource source,
+  String spkPath, {
+  bool persist = true,
+}) async {
+  if (!source.canReadSimpleResources ||
+      source.canReadFragmentedResources ||
+      source.index.fragmentedResources.isEmpty) {
+    return source;
+  }
+  final rule = await source.deriveChunkNonceRuleOffline();
+  if (rule == 'unsupported') return source;
+
+  final profile = source.profile.withChunkNonceRule(rule);
+  final next = await SpkArchiveSource.open(
+    spkPath,
+    profile,
+    names: source.names,
+  );
+  if (persist) {
+    final sidecar = File('$spkPath.resources.json');
+    await sidecar.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'schema': 4,
+        'profileId': profile.profileId,
+        'indexSha256': profile.indexSha256,
+        'readyForSimple': true,
+        'readyForFragmented': true,
+        'readyForAll': true,
+        'resourceSecretHex': spkHex(profile.effectiveResourceSecret!),
+        'resourceSecretBytes': profile.effectiveResourceSecret!.length,
+        'algorithm': 'AES-GCM',
+        'aadRule': profile.resourceAad.isEmpty ? 'none' : 'constant',
+        if (profile.resourceAad.isNotEmpty)
+          'aadHex': spkHex(profile.resourceAad),
+        'chunkNonceRule': rule,
+        'fragmentRuleEvidence': 'offline-aes-gcm-authentication',
+      }),
+      flush: true,
+    );
+  }
+  return next;
+}
+
 Future<void> loadAutomaticSpkNameMap(
   SpkArchiveSource source,
   String spkPath,
@@ -258,6 +319,8 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       );
       progress.value = 'Buscando perfil validado de recursos…';
       source = await loadAutomaticSpkResourceProfile(source, picked.path);
+      progress.value = 'Validando fragmentación AES-GCM offline…';
+      source = await deriveAutomaticFragmentProfile(source, picked.path);
       progress.value = 'Resolviendo nombres y rutas conocidas…';
       await loadAutomaticSpkNameMap(source, picked.path);
       if (!context.mounted) return;
@@ -577,6 +640,179 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   });
 
+  Future<void> captureResourceProfile() => runAction(() async {
+    if (!Platform.isWindows) {
+      throw const SpkFailure(
+        'SPK_PROBE_WINDOWS_ONLY',
+        'La captura automática del perfil de payloads requiere Windows x64.',
+      );
+    }
+    final helper = File(spkResourceProbeExecutablePath());
+    if (!await helper.exists()) {
+      throw SpkFailure(
+        'SPK_PROBE_MISSING',
+        'Esta compilación no incluye Shaiya_SPK_ResourceProbe.exe.',
+        {'expected': helper.path},
+      );
+    }
+
+    var game = File(p.join(source.file.parent.path, 'game.exe'));
+    if (!await game.exists()) {
+      final picked = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Cliente Shaiya', extensions: ['exe']),
+        ],
+        confirmButtonText: 'Usar game.exe',
+      );
+      if (picked == null) return;
+      game = File(picked.path);
+    }
+    if (!await game.exists()) {
+      throw const FileSystemException('No se encontró game.exe.');
+    }
+    final siblingSpk = File(p.join(game.parent.path, 'data.spk'));
+    if (!await siblingSpk.exists()) {
+      throw const SpkFailure(
+        'SPK_PROBE_PAIR',
+        'game.exe y data.spk deben pertenecer a la misma instalación.',
+      );
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Capturar perfil de recursos SPK'),
+        content: const SizedBox(
+          width: 520,
+          child: Text(
+            'Shaiya Studio abrirá una copia de game.exe e instrumentará solo '
+            'ese proceso para observar las llamadas AES-GCM que corresponden '
+            'exactamente a recursos del DATA.SPK ya validado.\n\n'
+            'Desconecta Internet antes de continuar. No inicies sesión ni '
+            'escribas credenciales. El aviso de servidor sin conexión es '
+            'esperado. DATA.SPK y game.exe no se modifican.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(c, true),
+            icon: const Icon(Icons.security_outlined),
+            label: const Text('Capturar offline'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final support = await getApplicationSupportDirectory();
+    final output = Directory(
+      p.join(
+        support.path,
+        'spk_probe',
+        DateTime.now().millisecondsSinceEpoch.toString(),
+      ),
+    );
+    operation = 'Preparando ResourceProbe V8…';
+    if (mounted) setState(() {});
+
+    final process = await Process.start(
+      helper.path,
+      [
+        '--client',
+        game.path,
+        '--out',
+        output.path,
+        '--seconds',
+        '150',
+        '--noninteractive',
+      ],
+      workingDirectory: game.parent.path,
+      runInShell: false,
+    );
+    final recent = <String>[];
+    void reportLine(String line) {
+      final clean = line.trim();
+      if (clean.isEmpty) return;
+      recent.add(clean);
+      if (recent.length > 12) recent.removeAt(0);
+      if (mounted) {
+        setState(() => operation = clean);
+      }
+    }
+
+    final stdoutDone = process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach(reportLine);
+    final stderrDone = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach(reportLine);
+    final exitCode = await process.exitCode;
+    await Future.wait([stdoutDone, stderrDone]);
+
+    final profileFile = File(p.join(output.path, 'derived-resource-profile.json'));
+    if (!await profileFile.exists()) {
+      throw SpkFailure(
+        'SPK_PROBE_NO_PROFILE',
+        'El helper terminó sin producir un perfil criptográfico validado.',
+        {
+          'exitCode': exitCode,
+          'output': output.path,
+          'logTail': recent,
+        },
+      );
+    }
+    final raw = jsonDecode(await profileFile.readAsString());
+    if (raw is! Map) {
+      throw const FormatException('ResourceProbe produjo un JSON inválido.');
+    }
+    final data = Map<String, dynamic>.from(raw);
+    final declared = data['indexSha256']?.toString().toLowerCase();
+    if (declared != source.index.encryptedIndexSha256.toLowerCase()) {
+      throw const SpkFailure(
+        'SPK_PROBE_HASH',
+        'El perfil capturado no corresponde al SPK abierto.',
+      );
+    }
+    final nextProfile = mergeSpkResourceProfile(source, data);
+    final persistent = File('${source.file.path}.resources.json');
+    await persistent.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(data),
+      flush: true,
+    );
+    var next = await SpkArchiveSource.open(
+      source.file.path,
+      nextProfile,
+      names: source.names,
+    );
+    operation = 'Validando nonces de fragmentos contra AES-GCM…';
+    if (mounted) setState(() {});
+    next = await deriveAutomaticFragmentProfile(next, source.file.path);
+    await loadAutomaticSpkNameMap(next, source.file.path);
+
+    if (!mounted) return;
+    final full = next.canExtractAll;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          full
+              ? 'Perfil validado: simples + fragmentados. Extraer todo habilitado.'
+              : 'Perfil simple validado. Los fragmentados siguen bloqueados hasta validarlos.',
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
+    await Navigator.of(context).pushReplacement<void, void>(
+      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
+    );
+  });
+
   Future<void> loadResourceProfile() => runAction(() async {
     final picked = await openFile(
       acceptedTypeGroups: const [
@@ -592,11 +828,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final data = Map<String, dynamic>.from(raw);
     final nextProfile = mergeSpkResourceProfile(source, data);
 
-    final next = await SpkArchiveSource.open(
+    var next = await SpkArchiveSource.open(
       source.file.path,
       nextProfile,
       names: source.names,
     );
+    next = await deriveAutomaticFragmentProfile(next, source.file.path);
 
     final persistent = File('${source.file.path}.profile.json');
     await persistent.writeAsString(
@@ -760,8 +997,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       builder: (c) => AlertDialog(
         title: Text(fileName(record)),
         content: SizedBox(
-          width: 590,
-          child: SelectableText(
+          width: 590,          child: SelectableText(
             'ID: ${record.idHex}\nFormato: ${result.format}\nOffset: ${record.dataOffset}\nAlmacenado: ${bytesLabel(record.storedBytes)}\nDecodificado: ${bytesLabel(result.bytes.length)}\nSHA-256: ${sha256.convert(result.bytes)}\n\nPrimeros 64 bytes:\n${spkHex(result.bytes.take(64))}',
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           ),
@@ -1079,6 +1315,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ],
         ),
         actions: [
+          if (Platform.isWindows && !source.canExtractAll)
+            TextButton.icon(
+              onPressed: busy ? null : captureResourceProfile,
+              icon: const Icon(Icons.security_outlined, size: 17),
+              label: const Text('AutoPerfil SPK'),
+            ),
           TextButton.icon(
             onPressed: busy ? null : loadResourceProfile,
             icon: const Icon(Icons.key_outlined, size: 17),

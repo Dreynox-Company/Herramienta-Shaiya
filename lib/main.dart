@@ -434,7 +434,7 @@ class _StudioState extends State<StudioPage> {
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.6.9',
+        'version': '0.6.11',
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -997,8 +997,7 @@ class _StudioState extends State<StudioPage> {
                   2,
                   (v) => setState(() => scene.wingDepth = v),
                 ),
-                slider(
-                  'Escala',
+                slider(                  'Escala',
                   scene.wingSize,
                   .1,
                   3,
@@ -1997,8 +1996,7 @@ class _StudioState extends State<StudioPage> {
                     child: Text(
                       scene.lastImpact,
                       style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 16,                        fontWeight: FontWeight.bold,
                         color: Color(0xffffd6a1),
                         shadows: [Shadow(blurRadius: 5, color: Colors.black)],
                       ),
@@ -2446,7 +2444,7 @@ class _StudioState extends State<StudioPage> {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.6.9',
+        'version': '0.6.11',
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,

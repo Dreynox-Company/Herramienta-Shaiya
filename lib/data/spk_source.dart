@@ -657,6 +657,74 @@ class SpkArchiveSource {
     return 'unsupported';
   }
 
+  Future<String> deriveChunkNonceRuleOffline({
+    int maxSamples = 12,
+    int minimumAuthenticatedSamples = 2,
+  }) async {
+    final key = profile.effectiveResourceSecret;
+    if (key == null || index.fragmentedResources.isEmpty) {
+      return 'unsupported';
+    }
+    if (maxSamples < 1 || minimumAuthenticatedSamples < 1) {
+      throw const ArgumentError('Los límites de derivación deben ser positivos.');
+    }
+
+    var candidates = supportedChunkNonceRules.toSet();
+    final successes = <String, int>{
+      for (final rule in supportedChunkNonceRules) rule: 0,
+    };
+    var sampled = 0;
+
+    for (final record in index.fragmentedResources) {
+      final parts = index.auxiliary.sublist(
+        record.auxiliaryStart,
+        record.auxiliaryStart + record.chunkCount,
+      );
+      for (var local = 0; local < parts.length; local++) {
+        if (sampled >= maxSamples) break;
+        final part = parts[local];
+        final cipher = await readRange(
+          file,
+          part.dataOffset,
+          part.storedBytes,
+          fileBytes,
+        );
+        final surviving = <String>{};
+        for (final rule in candidates) {
+          try {
+            await decryptGcm(
+              cipher,
+              key,
+              _fragmentNonceForRule(rule, record, part, local),
+              part.metadata,
+              aad: profile.resourceAad.isEmpty ? null : profile.resourceAad,
+            );
+            surviving.add(rule);
+            successes[rule] = (successes[rule] ?? 0) + 1;
+          } catch (_) {
+            // Un nonce/AAD incorrecto falla la autenticación GCM.
+          }
+        }
+        candidates = surviving;
+        sampled++;
+        if (candidates.isEmpty) return 'unsupported';
+        if (candidates.length == 1) {
+          final rule = candidates.single;
+          if ((successes[rule] ?? 0) >= minimumAuthenticatedSamples) {
+            return rule;
+          }
+        }
+      }
+      if (sampled >= maxSamples) break;
+    }
+
+    if (candidates.length == 1) {
+      final rule = candidates.single;
+      if ((successes[rule] ?? 0) >= minimumAuthenticatedSamples) return rule;
+    }
+    return 'unsupported';
+  }
+
   static Future<Uint8List> decodePayload(
     Uint8List plain,
     int expectedBytes,
@@ -929,8 +997,7 @@ class SpkArchiveSource {
           RegExp(
             r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)',
             caseSensitive: false,
-          ).hasMatch(p)) {
-        throw FormatException('Ruta no segura: $path');
+          ).hasMatch(p)) {        throw FormatException('Ruta no segura: $path');
       }
     }
     return parts.join(Platform.pathSeparator);
