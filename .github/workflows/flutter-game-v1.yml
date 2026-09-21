@@ -221,7 +221,7 @@ jobs:
           native=pathlib.Path('native-reference')
           mapping={
             'faction':'03-faction-selected.png',
-            'characterSelect':'07-character-created.png',
+            'characterSelect':'08-character-selected.png',
             'characterCreate':'05-character-editor.png',
             'characterMode':'06c-mode-selected.png',
             'world':'09-world-entry.png',
