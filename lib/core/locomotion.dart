@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 enum GroundMotion { idle, walk, run }
 
 /// Explicit identities: swnormal must never match standing normal.
@@ -26,4 +28,15 @@ class LocomotionTransitions {
     final apply=changed||_wasBlocked||_invalidated;_wasBlocked=false;_invalidated=false;
     return apply?next:null;
   }
+}
+
+
+({double x,double z}) cameraRelativeMovement(double inputX,double inputZ,double yaw){
+  final length=math.sqrt(inputX*inputX+inputZ*inputZ);
+  if(length<=1e-9)return (x:0,z:0);
+  final x=inputX/length,z=inputZ/length;
+  return (
+    x:x*math.cos(yaw)+z*math.sin(yaw),
+    z:-x*math.sin(yaw)+z*math.cos(yaw),
+  );
 }
