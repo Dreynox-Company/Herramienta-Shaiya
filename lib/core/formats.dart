@@ -209,6 +209,10 @@ class MeshData {
       if (version == 444) {
         w[1] = r.f32();
         w[2] = r.f32();
+        // EP6 stores three explicit weights for four bone groups.
+        // The fourth group receives the remainder; dropping it deforms
+        // faces, hair and later armor meshes that actually use joint #4.
+        w[3] = 1.0 - w[0] - w[1] - w[2];
       } else {
         w[1] = 1 - w[0];
       }
