@@ -270,7 +270,7 @@ class CharacterCreateScreen extends StatelessWidget {
   );
 
   Widget leftPanel()=>Positioned(
-    left:8,top:293,width:330,height:473,
+    left:8,top:267,width:330,height:473,
     child:Stack(children:[
       Positioned.fill(child:DataRegion(
         cache:ui,
@@ -306,7 +306,7 @@ class CharacterCreateScreen extends StatelessWidget {
 
   @override Widget build(BuildContext context)=>Stack(children:[
     Positioned(
-      left:8,top:48,width:330,height:210,
+      left:8,top:22,width:330,height:210,
       child:Container(
         padding:const EdgeInsets.fromLTRB(24,18,22,18),
         decoration:BoxDecoration(
@@ -329,7 +329,7 @@ class CharacterCreateScreen extends StatelessWidget {
 
     // Panel de armas y perfil de clase con las texturas originales.
     Positioned(
-      right:6,top:60,width:280,height:435,
+      right:6,top:34,width:280,height:435,
       child:Stack(children:[
         Positioned.fill(
           child:DataRegion(
@@ -396,7 +396,7 @@ class CharacterCreateScreen extends StatelessWidget {
     ),
 
     Positioned(
-      left:711,top:582,
+      left:711,top:556,
       child:Row(children:[
         navButton('interface/charactermake/button/navi_zoomin.tga',onZoomIn),
         const SizedBox(width:5),
