@@ -376,7 +376,68 @@ class StudioScene extends ChangeNotifier {
     final rev=++_worldRevision;
     if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
-    final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);if(w.size==0)throw const FormatException('Este WLD es una mazmorra DG; su geometría aún no se interpreta. Selecciona un mapa exterior FLD.');if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
+    final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
+
+    if(w.size==0){
+      final layout=lib.resolve(w.layout,['world/dungeon'],uniqueFallback:true);
+      if(layout==null)throw FormatException('No se encuentra la geometría DG: ${w.layout}.');
+      final dg=DgData.parse(await lib.read(layout),layout);
+      final ox=dg.center.x,oz=dg.center.z,stage=t.Group(),parts=<RenderPart>[];
+      try{
+        var loaded=0;
+        for(final piece in dg.parts){
+          final requested=piece.texture.trim();
+          if(requested.isEmpty)continue;
+          final dds=requested.toLowerCase().endsWith('.tga')
+            ?requested.substring(0,requested.length-4)+'.dds'
+            :requested;
+          final tex=lib.resolve(
+            dds,
+            [
+              'entity/texture',
+              'world/dungeon',
+              'world/dungeon/texture',
+              'world/dungeon/dds',
+              'effect/dds',
+            ],
+            uniqueFallback:true,
+          )??lib.resolve(
+            requested,
+            ['entity/texture','world/dungeon','effect/dds'],
+            uniqueFallback:true,
+          );
+          if(tex==null){
+            missingWorldAssets.add('dg-texture:${piece.texture}');
+            continue;
+          }
+          final p=await makePart(piece.mesh,tex,opaque:true);
+          parts.add(p);stage.add(p.mesh);loaded++;
+          if(disposed||rev!=_worldRevision){for(final q in parts){q.dispose();}return;}
+        }
+        if(parts.isEmpty)throw const FormatException('La mazmorra DG no produjo geometría renderizable.');
+
+        // DG vertices use Shaiya's left-handed world coordinates.
+        stage.scale.z=-1;
+        stage.position.setValues(-ox,0,oz);
+
+        for(final p in environmentParts){p.dispose();}
+        environmentParts..clear()..addAll(parts);
+        environment.removeFromParent();environment=stage;view!.scene.add(stage);
+        world=w;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);
+        character?.root.position.setValues(0,groundY,0);
+        enemy?.root.position.setValues(1.8,groundY,0);
+        distance=6;updateCamera();
+        view!.scene.background=t.Color.fromHex32(0x090806);
+        say('Mazmorra ${w.layout} · $loaded submallas · ${dg.parts.fold<int>(0,(n,p)=>n+p.mesh.triangles)} triángulos.');
+        notifyListeners();
+        return;
+      }catch(_){
+        for(final p in parts){p.dispose();}
+        rethrow;
+      }
+    }
+
+    if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
     final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[];
     try{
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
