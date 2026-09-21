@@ -60,6 +60,8 @@ class ProjectedGameLabel {
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
   t.ThreeJS? view;Catalog? catalog;
+  t.LineSegments? grid;
+  bool gridVisible=true;
   Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
@@ -81,13 +83,14 @@ class StudioScene extends ChangeNotifier {
   Future<void> setup(t.ThreeJS three) async {
     view=three;three.scene=t.Scene();three.camera=t.PerspectiveCamera(45,three.width/three.height,.02,2500);three.scene.background=t.Color.fromHex32(0x11151e);three.scene.add(environment);
     final points=<double>[];for(var i=-15;i<=15;i++){points.addAll([i.toDouble(),-.02,-15,i.toDouble(),-.02,15,-15,-.02,i.toDouble(),15,-.02,i.toDouble()]);}
-    final gridGeometry=t.BufferGeometry()..setAttributeFromString('position',t.Float32BufferAttribute.fromList(points,3));three.scene.add(t.LineSegments(gridGeometry,t.LineBasicMaterial.fromMap({'color':0x323b4d})));
+    final gridGeometry=t.BufferGeometry()..setAttributeFromString('position',t.Float32BufferAttribute.fromList(points,3));grid=t.LineSegments(gridGeometry,t.LineBasicMaterial.fromMap({'color':0x323b4d}));grid!.visible=gridVisible;three.scene.add(grid!);
     combat.onEvent=(actor,event){unawaited(_combatEvent(actor,event));};three.addAnimationEvent(tick);ready=true;updateCamera();notifyListeners();
   }
   void say(String value){status=value;report(value);if(!disposed)notifyListeners();}
+  void setGridVisible(bool value){gridVisible=value;if(grid!=null)grid!.visible=value;notifyListeners();}
   Future<RenderPart> makePart(MeshData data,String texturePath,{bool opaque=false}) async {
     final bytes=await catalog!.library.read(texturePath);final png=await compute(_decodeTexture,{'bytes':bytes,'path':texturePath,'opaque':opaque});
-    final texture=await t.TextureLoader(flipY:false).fromBytes(png);if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
+    final texture=await t.TextureLoader(flipY:true).fromBytes(png);if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
     texture.colorSpace=t.SRGBColorSpace;texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
     final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3);
     geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',t.Float32BufferAttribute.fromList(data.normals.toList(),3));geometry.setAttributeFromString('uv',t.Float32BufferAttribute.fromList(data.uv.toList(),2));geometry.setIndex(data.indices.toList());
