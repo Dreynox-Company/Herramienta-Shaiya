@@ -38,6 +38,7 @@ class _GameClientPageState extends State<GameClientPage> {
   LoginSession? liveLogin;
   PsWorldSession? liveWorld;
   PsWorldSnapshot? liveSnapshot;
+  PsCharacterDetails? liveDetails;
   List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
   PsCharacterSlot? liveCharacter;
   final focus=FocusNode();
@@ -459,7 +460,6 @@ class _GameClientPageState extends State<GameClientPage> {
     final c=catalog!;
 
     PsWorldSnapshot? networkSnapshot;
-    PsCharacterDetails? liveDetails;
     var mapId=0;
     double? x,z;
 
@@ -808,6 +808,9 @@ class _GameClientPageState extends State<GameClientPage> {
             messages:messages,
             questOpen:questOpen,
             questId:questId,
+            hp:liveDetails?.maxHp??255,
+            mp:liveDetails?.maxMp??95,
+            sp:liveDetails?.maxSp??180,
             onAcceptQuest:(){
               setState(()=>questOpen=false);
               final q=catalog!.questText(uiLocale)?.quest(questId);
