@@ -1434,10 +1434,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   @override
   Widget build(BuildContext context) {
     final summary = source.index.summary();
+    final validatedInferred = source.names.hints.values
+        .where((hint) => hint.confidence == 'validated-inferred')
+        .length;
     final strongInferred = source.names.hints.values
         .where((hint) => hint.confidence == 'strong-inferred')
         .length;
-    final weakInferred = source.names.hints.length - strongInferred;
+    final weakInferred =
+        source.names.hints.length - strongInferred - validatedInferred;
     return Scaffold(
       backgroundColor: const Color(0xff101722),
       appBar: AppBar(
@@ -1678,6 +1682,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       Text(
                         '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · '
                         '${source.names.paths.length} confirmados · '
+                        '$validatedInferred inferidos validados · '
                         '$strongInferred inferidos fuertes · '
                         '$weakInferred aproximados · '
                         '${(summary['resources'] as int) - source.names.paths.length - source.names.hints.length} sin resolver',
