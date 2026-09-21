@@ -151,6 +151,9 @@ class SpkCoreTableDiscovery {
 
     final confirmed = <int, String>{};
     final binaryRows = <String, int>{};
+    final binaryCandidates =
+        <String, List<({int id, int rows})>>{};
+    final ambiguousBinaryTables = <String>{};
     final itemCandidates = <({int id, int rows, String profile})>[];
     final monsterCandidates = <({int id, int rows, String profile})>[];
     final skillCandidates = <({int id, int rows, String profile})>[];
@@ -195,13 +198,12 @@ class SpkCoreTableDiscovery {
           forceProfile: 'binary',
         );
         if (doc.complete && doc.profile == 'binary') {
-          confirmed[record.entryId] = binaryPath;
-          binaryRows[binaryPath] = doc.rows.length;
-          progress(
-            'Tabla confirmada: $binaryPath',
-            i + 1,
-            candidates.length,
-          );
+          binaryCandidates
+              .putIfAbsent(
+                binaryPath,
+                () => <({int id, int rows})>[],
+              )
+              .add((id: record.entryId, rows: doc.rows.length));
           continue;
         }
       }
@@ -257,6 +259,21 @@ class SpkCoreTableDiscovery {
       }
     }
 
+    for (final entry in binaryCandidates.entries) {
+      if (entry.value.length != 1) {
+        ambiguousBinaryTables.add(entry.key);
+        continue;
+      }
+      final match = entry.value.single;
+      confirmed[match.id] = entry.key;
+      binaryRows[entry.key] = match.rows;
+      progress(
+        'Tabla confirmada: ${entry.key}',
+        candidates.length,
+        candidates.length,
+      );
+    }
+
     void confirmSingleOrRowMatched(
       List<({int id, int rows, String profile})> values,
       String path,
@@ -264,10 +281,13 @@ class SpkCoreTableDiscovery {
     ) {
       if (values.isEmpty) return;
       final expectedRows = binaryRows[binaryPath];
+      final available = values
+          .where((value) => !confirmed.containsKey(value.id))
+          .toList();
       final matching = expectedRows == null
-          ? values
-          : values.where((value) => value.rows == expectedRows).toList();
-      if (matching.length == 1) {
+          ? available
+          : available.where((value) => value.rows == expectedRows).toList();
+      if (matching.length == 1 && !confirmed.containsValue(path)) {
         confirmed[matching.single.id] = path;
       }
     }
@@ -290,9 +310,12 @@ class SpkCoreTableDiscovery {
     void assignSkill(String path, int? rows) {
       if (rows == null) return;
       final matches = unassignedSkills
-          .where((value) => value.rows == rows)
+          .where(
+            (value) =>
+                value.rows == rows && !confirmed.containsKey(value.id),
+          )
           .toList();
-      if (matches.length != 1) return;
+      if (matches.length != 1 || confirmed.containsValue(path)) return;
       confirmed[matches.single.id] = path;
       unassignedSkills.remove(matches.single);
     }
@@ -300,7 +323,8 @@ class SpkCoreTableDiscovery {
     assignSkill('Skill/Skill.SData', dbSkillRows);
     assignSkill('Skill/NpcSkill.SData', dbNpcRows);
     if (skillCandidates.length == 1 &&
-        !confirmed.containsKey(skillCandidates.single.id)) {
+        !confirmed.containsKey(skillCandidates.single.id) &&
+        !confirmed.containsValue('Skill/Skill.SData')) {
       confirmed[skillCandidates.single.id] = 'Skill/Skill.SData';
     }
 
@@ -321,6 +345,11 @@ class SpkCoreTableDiscovery {
           spkU64Hex(entry.key): entry.value,
       },
       'binaryRows': binaryRows,
+      'ambiguousBinaryTables': ambiguousBinaryTables.toList()..sort(),
+      'binaryCandidateCounts': {
+        for (final entry in binaryCandidates.entries)
+          entry.key: entry.value.length,
+      },
       'itemCandidates': itemCandidates
           .map(
             (e) => {
