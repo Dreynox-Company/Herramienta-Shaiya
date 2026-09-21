@@ -50,7 +50,7 @@ class FactionScreen extends StatelessWidget {
       ),
 
       const Positioned(
-        left:31,top:452,
+        left:31,top:438,
         child:Text(
           'Union of Fury',
           style:TextStyle(
@@ -60,7 +60,7 @@ class FactionScreen extends StatelessWidget {
         ),
       ),
       const Positioned(
-        right:31,top:216,
+        right:31,top:202,
         child:Text(
           'Alliance of Light',
           style:TextStyle(
@@ -72,7 +72,7 @@ class FactionScreen extends StatelessWidget {
 
       if(faction=='light')
         const Positioned(
-          left:355,top:528,width:320,
+          left:355,top:513,width:320,
           child:Text(
             'Seek you the Path of light?\n'
             'To give your life for the sake of another is the noblest of deeds.\n'
@@ -100,8 +100,8 @@ class FactionScreen extends StatelessWidget {
           ),
         ),
 
-      Positioned(left:763,top:706,child:shaiyaRedButton('Back',null)),
-      Positioned(left:898,top:706,child:shaiyaRedButton('Next',onNext)),
+      Positioned(left:763,top:680,child:shaiyaRedButton('Back',null)),
+      Positioned(left:898,top:680,child:shaiyaRedButton('Next',onNext)),
     ]),
   );
 }
