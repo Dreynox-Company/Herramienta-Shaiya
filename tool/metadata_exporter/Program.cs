@@ -3,6 +3,8 @@ using Parsec;
 using Parsec.Common;
 using Parsec.Shaiya.NpcQuest;
 using Parsec.Shaiya.Monster;
+using Parsec.Shaiya.Item;
+using Parsec.Shaiya.Skill;
 
 if (args.Length != 2)
     throw new ArgumentException("usage: metadata_exporter <NpcQuest.SData> <out.json>");
@@ -11,6 +13,14 @@ var parsed = Reader.ReadFromFile<NpcQuest>(args[0], Episode.EP8);
 var monsterPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "DBMonsterData.SData");
 var monsterData = File.Exists(monsterPath)
     ? Reader.ReadFromFile<DBMonsterData>(monsterPath, Episode.EP8)
+    : null;
+var itemPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "DBItemData.SData");
+var itemData = File.Exists(itemPath)
+    ? Reader.ReadFromFile<DBItemData>(itemPath, Episode.EP8)
+    : null;
+var skillPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "DBSkillData.SData");
+var skillData = File.Exists(skillPath)
+    ? Reader.ReadFromFile<DBSkillData>(skillPath, Episode.EP8)
     : null;
 
 var npc = new List<object>();
@@ -93,18 +103,56 @@ var mobs = monsterData?.Records.Select(m => new {
     ai = (int)m.Ai,
 }).ToArray() ?? Array.Empty<object>();
 
+var items = itemData?.Records.Select(i => new {
+    type = (int)i.ItemType,
+    id = (int)i.ItemTypeId,
+    image = (int)i.Image,
+    icon = (int)i.Icon,
+    level = (int)i.Level,
+    quality = (int)i.Quality,
+    slot = (int)i.Slot,
+    count = (int)i.Count,
+    duration = (int)i.Duration,
+    grade = (int)i.Grade,
+    buy = i.Buy,
+    sell = i.Sell,
+}).ToArray() ?? Array.Empty<object>();
+
+var skills = skillData?.Records.Select(s => new {
+    id = (int)s.Id,
+    level = (int)s.SkillLevel,
+    image = (int)s.Image,
+    animation = (int)s.Ani,
+    effect = (int)s.Effect,
+    sound = (int)s.Sound,
+    requiredLevel = (int)s.Level,
+    sp = (int)s.SP,
+    mp = (int)s.MP,
+    castTime = (int)s.ReadyTime,
+    cooldown = (int)s.ResetTime,
+    attackRange = (int)s.AttackRange,
+    targetType = (int)s.TargetType,
+    applyRange = (int)s.ApplyRange,
+    typeAttack = (int)s.TypeAttack,
+    typeEffect = (int)s.TypeEffect,
+}).ToArray() ?? Array.Empty<object>();
+
 var doc = new {
     schema = 2,
     source = "NpcQuest.SData + DBMonsterData.SData parsed with backend Parsec EP8",
     npcCount = npc.Count,
     questCount = parsed.Quests.Count,
     mobCount = mobs.Length,
+    itemCount = items.Length,
+    skillCount = skills.Length,
     npcs = npc,
     quests,
     mobs,
+    items,
+    skills,
 };
 
 var json = JsonSerializer.Serialize(doc,new JsonSerializerOptions{WriteIndented=false});
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[1]))!);
 File.WriteAllText(args[1],json);
-Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" -> "+args[1]);
+Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" Items="+items.Length+" Skills="+skills.Length+" -> "+args[1]);
