@@ -28,7 +28,7 @@ jobs:
       - name: Format parity sources
         run: dart format lib
       - name: Analyze
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: dart analyze lib
       - name: Core regression tests
         run: flutter test test/core_test.dart test/locomotion_test.dart test/movement_input_test.dart test/palette_test.dart test/recovery_test.dart --reporter expanded
   windows:
