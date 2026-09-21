@@ -39,6 +39,9 @@ class _GameClientPageState extends State<GameClientPage> {
   LoginSession? liveLogin;
   PsWorldSession? liveWorld;
   PsWorldSnapshot? liveSnapshot;
+  PsCharacterDetails? liveDetails;
+  PsHitpoints? liveHitpoints;
+  PsAdditionalStats? liveAdditionalStats;
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
   bool movementSending=false;
@@ -482,6 +485,11 @@ class _GameClientPageState extends State<GameClientPage> {
       }
       try{
         final selected=await session.selectCharacter(current.id);
+        liveDetails=selected.details;
+        final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
+        final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
+        if(hpPacket!=null)liveHitpoints=PsHitpoints.parse(hpPacket);
+        if(statsPacket!=null)liveAdditionalStats=PsAdditionalStats.parse(statsPacket);
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
@@ -602,7 +610,11 @@ class _GameClientPageState extends State<GameClientPage> {
 
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
-    if(packet.type==PsPacketType.questStart&&packet.body.length>=6){
+    if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
+      liveHitpoints=PsHitpoints.parse(packet);
+    }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
+      liveAdditionalStats=PsAdditionalStats.parse(packet);
+    }else if(packet.type==PsPacketType.questStart&&packet.body.length>=6){
       final d=ByteData.sublistView(packet.body);
       final id=d.getInt16(4,Endian.little);
       messages.insert(0,'[Misión] World confirmó QUEST_START '+id.toString()+'.');
@@ -930,6 +942,9 @@ class _GameClientPageState extends State<GameClientPage> {
             scene:scene,
             catalog:catalog!,
             characterName:nameController.text,
+            level:liveCharacter?.level??1,
+            details:liveDetails,
+            hitpoints:liveHitpoints,
             locale:uiLocale,
             ui:ui!,
             messages:messages,
