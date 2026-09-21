@@ -384,13 +384,15 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   void _applyCreationCamera(){
-    // Native CharacterMake centers the avatar on the DUN_LOGIN circular dais.
-    // The reference framebuffer gives ~560 px character height at 742 px.
-    scene.panX=0;
+    // Measured against the native 1024x742 CharacterMake proof:
+    // the clean client was ~1.28x too small and ~170 px too far right.
+    // Shifting the look target +X moves the avatar left without changing
+    // its actual DUN_LOGIN world position.
+    scene.panX=.44;
     scene.panZ=0;
     scene.yaw=0;
     scene.pitch=.025;
-    scene.distance=2.90;
+    scene.distance=2.27;
     scene.targetY=1.06;
     if(scene.character!=null){scene.character!.root.rotation.y=0;}
     scene.updateCamera();
