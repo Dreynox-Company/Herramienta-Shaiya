@@ -25,6 +25,7 @@ import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
+import 'ui/spk_archive_browser.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
@@ -285,6 +286,14 @@ class _StudioState extends State<StudioPage> {
                 ),
                 onTap: () => Navigator.pop(ctx, 'archive'),
               ),
+              ListTile(
+                leading: const Icon(Icons.folder_zip_outlined),
+                title: const Text('Archivo DATA.SPK'),
+                subtitle: const Text(
+                  'Explorar carpetas, archivos, buscar y extraer recursos',
+                ),
+                onTap: () => Navigator.pop(ctx, 'spk'),
+              ),
               if (catalog?.library.archive != null)
                 ListTile(
                   leading: const Icon(Icons.drive_file_move_outlined),
@@ -320,7 +329,10 @@ class _StudioState extends State<StudioPage> {
       ),
     );
     if (!mounted) return;
-    if (mode == 'editor') {
+    if (mode == 'spk') {
+      await SpkArchiveBrowserPage.pickAndOpen(context);
+      if (mounted) focus.requestFocus();
+    } else if (mode == 'editor') {
       await openDataEditor();
     } else if (mode == 'encoding') {
       await chooseNameEncoding();
@@ -416,7 +428,7 @@ class _StudioState extends State<StudioPage> {
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.6.1',
+        'version': '0.6.3',
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -2428,7 +2440,7 @@ class _StudioState extends State<StudioPage> {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.6.1',
+        'version': '0.6.3',
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,
