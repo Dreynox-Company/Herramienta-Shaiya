@@ -7,6 +7,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:zstandard/zstandard.dart';
 import 'package:path/path.dart' as p;
 
+import '../core/formats.dart';
 import '../core/spk_archive.dart';
 
 typedef SpkProgress = void Function(String message, int done, int total);
@@ -668,31 +669,76 @@ class SpkArchiveSource {
     if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46])) return 'RIFF';
     if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04])) return 'ZIP';
     if (startsWith(bytes, [0x4d, 0x5a])) return 'PE';
-    if (bytes.length >= 18) {
-      final type = bytes[2];
-      final depth = bytes[16];
-      if ((type == 1 ||
-              type == 2 ||
-              type == 3 ||
-              type == 9 ||
-              type == 10 ||
-              type == 11) &&
-          (depth == 8 || depth == 16 || depth == 24 || depth == 32)) {
-        return 'TGA';
+    if (startsWith(bytes, [0x45, 0x46, 0x54])) return 'EFT';
+    if (startsWith(bytes, [0x46, 0x4c, 0x44]) ||
+        startsWith(bytes, [0x44, 0x55, 0x4e])) {
+      return 'WLD';
+    }
+    if (_looksLikeTga(bytes)) return 'TGA';
+
+    if (bytes.length >= 8) {
+      final first = ByteData.sublistView(bytes, 0, 4).getUint32(
+        0,
+        Endian.little,
+      );
+      if (first == 0 || first == 444) {
+        try {
+          MeshData.skinned(bytes, 'SPK:3DC');
+          return '3DC';
+        } catch (_) {}
+        try {
+          ClipData.parse(bytes, 'SPK:ANI');
+          return 'ANI';
+        } catch (_) {}
+      }
+      if (first > 0 && first <= 260 && bytes.length >= 4 + first) {
+        try {
+          MeshData.object(bytes, 'SPK:3DO');
+          return '3DO';
+        } catch (_) {}
       }
     }
-    if (bytes.length >= 4) {
-      final head = latin1.decode(bytes.take(4).toList(), allowInvalid: true);
-      if (RegExp(r'^[A-Z0-9]{3,4}$').hasMatch(head)) return head;
-    }
-    final probe = latin1
-        .decode(
-          bytes.take(bytes.length > 512 ? 512 : bytes.length).toList(),
-          allowInvalid: true,
-        )
-        .trimLeft();
-    if (probe.startsWith('<?xml') || probe.startsWith('<')) return 'XML/TEXT';
+
+    final text = _textFormat(bytes);
+    if (text != null) return text;
     return 'BIN';
+  }
+
+  static bool _looksLikeTga(Uint8List bytes) {
+    if (bytes.length < 18) return false;
+    final colorMap = bytes[1];
+    final imageType = bytes[2];
+    final width = bytes[12] | (bytes[13] << 8);
+    final height = bytes[14] | (bytes[15] << 8);
+    final bits = bytes[16];
+    return (colorMap == 0 || colorMap == 1) &&
+        const {1, 2, 3, 9, 10, 11}.contains(imageType) &&
+        width > 0 &&
+        height > 0 &&
+        const {8, 16, 24, 32}.contains(bits);
+  }
+
+  static String? _textFormat(Uint8List bytes) {
+    if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) return null;
+    final sample = bytes.take(bytes.length.clamp(0, 4096)).toList();
+    var printable = 0;
+    for (final value in sample) {
+      if (value == 9 ||
+          value == 10 ||
+          value == 13 ||
+          (value >= 32 && value <= 126) ||
+          value >= 0x80) {
+        printable++;
+      }
+    }
+    if (sample.isEmpty || printable / sample.length < 0.92) return null;
+    final text = utf8.decode(sample, allowMalformed: true).trimLeft();
+    if (text.startsWith('<?xml') || text.startsWith('<')) return 'XML';
+    if (text.startsWith('{') || text.startsWith('[')) return 'JSON';
+    if (RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(text)) {
+      return 'INI';
+    }
+    return 'TXT';
   }
 
   static String extensionFor(String format) {
@@ -715,7 +761,25 @@ class SpkArchiveSource {
         return '.wav';
       case 'ZIP':
         return '.zip';
-      case 'XML/TEXT':
+      case 'PE':
+        return '.exe';
+      case 'EFT':
+        return '.eft';
+      case 'WLD':
+        return '.wld';
+      case '3DC':
+        return '.3dc';
+      case '3DO':
+        return '.3do';
+      case 'ANI':
+        return '.ani';
+      case 'XML':
+        return '.xml';
+      case 'JSON':
+        return '.json';
+      case 'INI':
+        return '.ini';
+      case 'TXT':
         return '.txt';
       default:
         return '.bin';
