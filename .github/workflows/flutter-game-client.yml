@@ -1,0 +1,94 @@
+name: Flutter Shaiya Game Client - Windows
+on:
+  push:
+    branches: [work/flutter-game-client-001]
+    paths:
+      - 'game-client-src/**'
+      - 'lib/core/**'
+      - 'lib/data/**'
+      - 'lib/render/**'
+      - '.github/workflows/flutter-game-client.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Rebuild dedicated game entrypoint
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem game-client-src/*.part | Sort-Object Name
+          if($parts.Count -ne 6){throw "Expected 6 source chunks, got $($parts.Count)"}
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          $writer = New-Object System.IO.StreamWriter("$PWD/lib/game_client_main.dart",$false,$utf8)
+          try { foreach($part in $parts){ $writer.Write([IO.File]::ReadAllText($part.FullName)) } } finally { $writer.Dispose() }
+          dart format lib/game_client_main.dart lib/core/npc_quest_metadata.dart lib/core/world_resources.dart lib/data/catalog.dart lib/data/game_names.dart
+          Get-FileHash lib/game_client_main.dart -Algorithm SHA256 | Format-List | Out-File game-client-source-sha256.txt
+      - name: Prepare Windows project and dependencies
+        shell: pwsh
+        run: |
+          python tool/prepare.py
+          if($LASTEXITCODE -ne 0){throw 'prepare.py failed'}
+          flutter pub get --enforce-lockfile
+          if($LASTEXITCODE -ne 0){throw 'pub get failed'}
+      - name: Analyze game client changes
+        shell: pwsh
+        run: |
+          flutter analyze lib/game_client_main.dart lib/core/npc_quest_metadata.dart lib/core/world_resources.dart lib/data/catalog.dart lib/data/game_names.dart
+          if($LASTEXITCODE -ne 0){throw 'flutter analyze failed'}
+      - name: Existing regression tests
+        shell: pwsh
+        run: |
+          flutter test --reporter expanded
+          if($LASTEXITCODE -ne 0){throw 'flutter test failed'}
+      - name: Build dedicated Windows game target
+        shell: pwsh
+        run: |
+          flutter build windows --release --target=lib/game_client_main.dart
+          if($LASTEXITCODE -ne 0){throw 'Flutter Windows build failed'}
+          $release='build/windows/x64/runner/Release'
+          if(!(Test-Path "$release/herramienta_shaiya.exe")) {
+            $exe=Get-ChildItem $release -Filter *.exe | Select-Object -First 1
+            if(!$exe){throw 'Windows executable missing'}
+          } else { $exe=Get-Item "$release/herramienta_shaiya.exe" }
+          Copy-Item $exe.FullName "$release/Dreynox_Shaiya_Flutter_Game.exe"
+          @'
+          DREYNOX SHAIYA FLUTTER GAME CLIENT - PARITY BUILD 0.1
+          ====================================================
+          Este ejecutable es una reimplementacion Flutter del cliente.
+          No ejecuta ni modifica game.exe y no contiene VMProtect.
+
+          Primera ejecucion:
+          1. Abre Dreynox_Shaiya_Flutter_Game.exe
+          2. Selecciona DATA_Español cuando se solicite.
+          3. Elige Partida local -> faccion -> personaje -> Iniciar partida.
+
+          Controles en mundo:
+          WASD = movimiento
+          Shift = correr
+          Espacio = saltar
+          Raton = orbitar camara
+          Rueda = zoom
+          Tab = cambiar objetivo
+
+          El objetivo de esta rama es paridad visual/funcional progresiva con
+          el cliente ps0032 usado como oraculo de pruebas.
+          '@ | Set-Content -Encoding utf8 "$release/LEEME_CLIENTE_FLUTTER.txt"
+          Copy-Item game-client-source-sha256.txt "$release/SOURCE_SHA256.txt"
+          Get-FileHash "$release/Dreynox_Shaiya_Flutter_Game.exe" -Algorithm SHA256 | Format-List | Out-File "$release/EXE_SHA256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dreynox-Shaiya-Flutter-Game-0.1-win64
+          path: build/windows/x64/runner/Release/
+          retention-days: 7
+          compression-level: 0
