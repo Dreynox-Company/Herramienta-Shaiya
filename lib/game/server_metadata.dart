@@ -29,6 +29,21 @@ class NpcRule {
   );
 }
 
+class MobRule {
+  final int id,image,level,ai;
+  final int hp;
+  final double size;
+  const MobRule({required this.id,required this.image,required this.level,required this.ai,required this.hp,required this.size});
+  factory MobRule.fromJson(Map<String,dynamic> j)=>MobRule(
+    id:(j['id'] as num).toInt(),
+    image:(j['image'] as num).toInt(),
+    level:(j['level'] as num).toInt(),
+    ai:(j['ai'] as num).toInt(),
+    hp:(j['hp'] as num).toInt(),
+    size:(j['size'] as num).toDouble(),
+  );
+}
+
 class QuestRule {
   final int id,minLevel,maxLevel,startNpcType,startNpcId,endNpcType,endNpcId;
   final int requiredMobId1,requiredMobCount1,requiredMobId2,requiredMobCount2;
@@ -64,9 +79,11 @@ class QuestRule {
 class ServerMetadata {
   final Map<String,NpcRule> npcs;
   final Map<int,QuestRule> quests;
-  const ServerMetadata(this.npcs,this.quests);
+  final Map<int,MobRule> mobs;
+  const ServerMetadata(this.npcs,this.quests,this.mobs);
 
   Map<String,int> get npcModels=>{for(final e in npcs.entries)e.key:e.value.model};
+  Map<int,int> get mobModels=>{for(final e in mobs.entries)e.key:e.value.image};
 
   static Future<ServerMetadata?> load() async {
     final exe=File(Platform.resolvedExecutable).parent.path;
@@ -86,9 +103,14 @@ class ServerMetadata {
         .cast<Map>()
         .map((x)=>QuestRule.fromJson(Map<String,dynamic>.from(x)))
         .toList();
+      final mobList=(raw['mobs'] as List? ?? const [])
+        .cast<Map>()
+        .map((x)=>MobRule.fromJson(Map<String,dynamic>.from(x)))
+        .toList();
       return ServerMetadata(
         {for(final n in npcList)n.key:n},
         {for(final q in questList)q.id:q},
+        {for(final m in mobList)m.id:m},
       );
     }
     return null;
