@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:zstandard/zstandard.dart';
+import 'package:path/path.dart' as p;
 
 import '../core/spk_archive.dart';
 
@@ -217,6 +218,126 @@ class SpkArchiveSource {
     return '$group/${record.idHex}.bin';
   }
 
+  String nameConfidence(SpkRecord record) {
+    if (names.isConfirmed(record.entryId)) return 'confirmado';
+    if (names.isInferred(record.entryId)) return 'inferido';
+    return 'sin-resolver';
+  }
+
+  String displayType(SpkRecord record) {
+    final path = technicalPath(record);
+    final ext = p.extension(path).replaceFirst('.', '').toUpperCase();
+    if (ext.isNotEmpty && ext != 'BIN') return ext;
+    return record.simple ? 'Simple' : 'Fragmentado';
+  }
+
+  Future<Map<String, Object?>> inferNamesFromDirectory(
+    Directory reference, {
+    required SpkProgress progress,
+  }) async {
+    if (!await reference.exists()) {
+      throw const FormatException('La carpeta DATA de referencia no existe.');
+    }
+    final bySize = <int, List<String>>{};
+    var scanned = 0;
+    await for (final entity in reference.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final size = await entity.length();
+      final relative = p
+          .relative(entity.path, from: reference.path)
+          .replaceAll('\\', '/');
+      if (relative.isEmpty || relative.startsWith('../')) continue;
+      bySize.putIfAbsent(size, () => <String>[]).add(relative);
+      scanned++;
+      if (scanned % 1000 == 0) {
+        progress('Indexando DATA de referencia…', scanned, 0);
+      }
+    }
+
+    final hints = <int, String>{};
+    var checked = 0;
+    final resources = index.resources.toList(growable: false);
+    for (final record in resources) {
+      final candidates = bySize[record.decodedBytes];
+      if (candidates != null && candidates.length == 1) {
+        hints[record.entryId] = candidates.single;
+      }
+      checked++;
+      if (checked % 1000 == 0) {
+        progress('Relacionando rutas por tamaño único…', checked, resources.length);
+      }
+    }
+    names.mergeHints(hints);
+    progress('Nombres inferidos: ${hints.length}.', resources.length, resources.length);
+    return {
+      'scannedFiles': scanned,
+      'inferred': hints.length,
+      'confirmed': names.paths.length,
+      'method': 'unique-decoded-size-reference',
+    };
+  }
+
+  Future<Map<String, Object?>> verifyNamesFromDirectory(
+    Directory reference, {
+    required SpkExtractControl control,
+    required SpkProgress progress,
+  }) async {
+    if (!canReadSimpleResources) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_PROFILE_REQUIRED',
+        'Se necesita primero el perfil de recursos para confirmar nombres por contenido.',
+      );
+    }
+    if (!await reference.exists()) {
+      throw const FormatException('La carpeta DATA de referencia no existe.');
+    }
+    final bySize = <int, List<File>>{};
+    var scanned = 0;
+    await for (final entity in reference.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final size = await entity.length();
+      bySize.putIfAbsent(size, () => <File>[]).add(entity);
+      scanned++;
+      if (scanned % 1000 == 0) {
+        progress('Indexando archivos para verificación…', scanned, 0);
+      }
+    }
+
+    final fileHashes = <String, String>{};
+    final confirmed = <int, String>{};
+    final resources = index.simpleResources.toList(growable: false);
+    for (var i = 0; i < resources.length; i++) {
+      control.check();
+      final record = resources[i];
+      final candidates = bySize[record.decodedBytes];
+      if (candidates == null || candidates.isEmpty) continue;
+      final result = await readEntry(record);
+      final digest = sha256.convert(result.bytes).toString();
+      for (final candidate in candidates) {
+        control.check();
+        final candidateHash = fileHashes[candidate.path] ??=
+            sha256.convert(await candidate.readAsBytes()).toString();
+        if (candidateHash != digest) continue;
+        final relative = p
+            .relative(candidate.path, from: reference.path)
+            .replaceAll('\\', '/');
+        confirmed[record.entryId] = relative;
+        break;
+      }
+      if ((i + 1) % 100 == 0) {
+        progress('Confirmando rutas por SHA-256…', i + 1, resources.length);
+      }
+    }
+    names.mergeConfirmed(confirmed);
+    progress('Rutas confirmadas: ${confirmed.length}.', resources.length, resources.length);
+    return {
+      'scannedFiles': scanned,
+      'confirmed': confirmed.length,
+      'remainingHints': names.hints.length,
+      'method': 'decoded-sha256-reference',
+    };
+  }
+
   List<String> folders() {
     final out = <String>{''};
     for (final record in index.resources) {
@@ -370,6 +491,22 @@ class SpkArchiveSource {
         data.setUint64(0, record.entryId, Endian.little);
         data.setUint32(8, ordinal, Endian.little);
         return data.buffer.asUint8List();
+      case 'offset_aux_le96':
+        data.setUint64(0, part.dataOffset, Endian.little);
+        data.setUint32(8, part.ordinal, Endian.little);
+        return data.buffer.asUint8List();
+      case 'entry_id_aux_le':
+        data.setUint64(0, record.entryId, Endian.little);
+        data.setUint32(8, part.ordinal, Endian.little);
+        return data.buffer.asUint8List();
+      case 'offset_chunk1_le96':
+        data.setUint64(0, part.dataOffset, Endian.little);
+        data.setUint32(8, ordinal + 1, Endian.little);
+        return data.buffer.asUint8List();
+      case 'entry_id_chunk1_le':
+        data.setUint64(0, record.entryId, Endian.little);
+        data.setUint32(8, ordinal + 1, Endian.little);
+        return data.buffer.asUint8List();
       default:
         throw const SpkFailure(
           'SPK_FRAGMENT_NONCE',
@@ -484,7 +621,9 @@ class SpkArchiveSource {
           'storedBytes': record.storedBytes,
           'decodedBytes': result.bytes.length,
           'sha256': sha256.convert(result.bytes).toString(),
-          'resolvedName': names[record.entryId] != null,
+          'resolvedName': names.isConfirmed(record.entryId),
+          'inferredName': names.isInferred(record.entryId),
+          'nameConfidence': nameConfidence(record),
         });
         bytes += result.bytes.length;
         progress('Extrayendo $relative', i + 1, list.length);
@@ -541,7 +680,9 @@ class SpkArchiveSource {
     'profile': profile.publicJson(),
     'index': index.summary(),
     'resolvedNames': names.paths.length,
-    'unresolvedNames': index.resources.length - names.paths.length,
+    'inferredNames': names.hints.length,
+    'unresolvedNames':
+        index.resources.length - names.paths.length - names.hints.length,
     'canReadSimpleResources': canReadSimpleResources,
     'canReadFragmentedResources': canReadFragmentedResources,
     'canExtractAll': canExtractAll,
