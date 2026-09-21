@@ -8,6 +8,24 @@ import 'package:flutter/material.dart';
 import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
 
+List<String> spkProfileCandidatePaths(
+  String spkPath, {
+  String? executablePath,
+}) {
+  final spk = File(spkPath);
+  final separator = Platform.pathSeparator;
+  final exe = File(executablePath ?? Platform.resolvedExecutable);
+  final exeDir = exe.parent.path;
+  return <String>[
+    '$spkPath.profile.json',
+    '${spk.parent.path}${separator}data.spk.profile.json',
+    '${spk.parent.path}${separator}spk-crypto-profile.json',
+    '${exeDir}${separator}profiles${separator}data.spk.profile.json',
+    '${exeDir}${separator}profiles${separator}spk-crypto-profile.json',
+    '${exeDir}${separator}data.spk.profile.json',
+    '${exeDir}${separator}spk-crypto-profile.json',
+  ];
+}
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   const SpkArchiveBrowserPage({super.key, required this.source});
@@ -79,12 +97,9 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     BuildContext context,
     String spkPath,
   ) async {
-    final spk = File(spkPath);
-    final candidates = [
-      File('$spkPath.profile.json'),
-      File('${spk.parent.path}/data.spk.profile.json'),
-      File('${spk.parent.path}/spk-crypto-profile.json'),
-    ];
+    final candidates = spkProfileCandidatePaths(
+      spkPath,
+    ).map(File.new).toList(growable: false);
     for (final file in candidates) {
       if (!await file.exists()) continue;
       try {
@@ -103,10 +118,10 @@ class SpkArchiveBrowserPage extends StatefulWidget {
         content: const SizedBox(
           width: 470,
           child: Text(
-            'El índice del SPK está cifrado. Shaiya Studio no incorpora '
-            'claves propietarias dentro del repositorio. Selecciona el perfil '
-            'JSON validado para este DATA.SPK. Puedes guardarlo junto al '
-            'archivo como data.spk.profile.json para que se detecte solo.',
+            'No se encontró un perfil compatible junto a DATA.SPK ni junto a '
+            'Shaiya Studio. Selecciona el perfil JSON validado para este '
+            'archivo. Si lo guardas como data.spk.profile.json o dentro de '
+            'la carpeta profiles del programa, se detectará automáticamente.',
           ),
         ),
         actions: [
