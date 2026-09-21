@@ -905,6 +905,53 @@ class _DataEditorPageState extends State<DataEditorPage> {
       progress = null;
     }
   });
+  Future<void> _exportSpkWorkspace() => _job(() async {
+    final library = widget.library;
+    if (!library.isSpkWorkspace) {
+      throw const FormatException('Abre primero un DATA.SPK en Studio.');
+    }
+    if (dirty || hasDrafts) {
+      throw const FormatException(
+        'Guarda primero los cambios pendientes en el overlay SPK antes de '
+        'materializar una DATA completa.',
+      );
+    }
+    if (library.spk?.fullyValidatedResources != true) {
+      throw const FormatException(
+        'La DATA completa solo se exporta después de auditar todos los '
+        'payloads del SPK.',
+      );
+    }
+    if (!await _confirm(
+      'Materializar DATA completa',
+      'Se descifrarán y extraerán todos los recursos del DATA.SPK a una '
+          'carpeta nueva y después se aplicarán, con verificación SHA-256, '
+          'todos los cambios guardados en el overlay. El DATA.SPK original '
+          'permanece intacto.',
+    )) {
+      return;
+    }
+    final parent = await getDirectoryPath(
+      confirmButtonText: 'Exportar DATA completa aquí',
+    );
+    if (parent == null) return;
+
+    final result = await library.exportSpkWorkspace(
+      Directory(parent),
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          status = total > 0 ? '$message · $done/$total' : message;
+        });
+      },
+    );
+    _note(
+      'DATA completa verificada: ${result['folder']} · '
+      '${result['files']} recursos · '
+      '${result['overlayFiles']} cambios de overlay aplicados.',
+    );
+  });
+
   Future<void> _recoverArchive() => _job(() async {
     final s = widget.library.archive;
     if (s?.sahPath == null) {
@@ -1999,6 +2046,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
                             _importTable();
                           case 'audit':
                             _exportReport();
+                          case 'spkData':
+                            _exportSpkWorkspace();
                           case 'extract':
                             _exportArchive(false);
                           case 'pack':
@@ -2028,6 +2077,14 @@ class _DataEditorPageState extends State<DataEditorPage> {
                             child: Text('Exportar vista a CSV UTF-8'),
                           ),
                         ],
+                        if (widget.library.isSpkWorkspace &&
+                            !Platform.isAndroid)
+                          const PopupMenuItem(
+                            value: 'spkData',
+                            child: Text(
+                              'Materializar DATA completa + overlay',
+                            ),
+                          ),
                         if (widget.library.archive != null &&
                             !Platform.isAndroid) ...[
                           const PopupMenuItem(
