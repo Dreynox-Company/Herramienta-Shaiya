@@ -335,15 +335,22 @@ class _GameClientPageState extends State<GameClientPage> {
       :c.worlds.where((p)=>baseName(p).toLowerCase()==(faction=='light'?'select_a.wld':'select_b.wld')).firstOrNull;
     if(path!=null){
       try{
-        await scene.setWorld(path,x:235.2,z:157.0);
+        // ps0032 native selection/create camera, recovered from the
+        // select_A/select_B load routine:
+        // target = (271.096985, 1.606000, 178.515000)
+        // eye    = (275.030000, 1.957000, 180.196000)
+        await scene.setWorld(path,x:271.09698486328125,z:178.51499938964844);
       }catch(e){messages.insert(0,'[Creación] '+e.toString());}
     }else{
       await scene.setWorld(null);
     }
-    scene.yaw=0;
-    scene.pitch=.02;
-    scene.distance=3.15;
-    scene.targetY=1.12;
+    // Reproduce the native camera vector instead of a hand-tuned orbit.
+    scene.yaw=1.9747044036310164;
+    scene.pitch=.08187975646056456;
+    scene.distance=4.29156844199336;
+    // WLD terrain at the native target is ~0.74635, target Y is 1.606.
+    scene.targetY=.85965;
+    if(scene.character!=null){scene.character!.root.rotation.y=scene.yaw;}
     scene.updateCamera();
   }
 
@@ -448,8 +455,11 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld(creation:true);
-    scene.distance=3.15;
-    scene.targetY=1.12;
+    scene.yaw=1.9747044036310164;
+    scene.pitch=.08187975646056456;
+    scene.distance=4.29156844199336;
+    scene.targetY=.85965;
+    if(scene.character!=null){scene.character!.root.rotation.y=scene.yaw;}
     scene.updateCamera();
     if(mounted)setState((){stage=GameStage.characterCreate;loading=false;});
   }
@@ -465,8 +475,11 @@ class _GameClientPageState extends State<GameClientPage> {
     genderIndex=value;
     if(mounted)setState((){});
     await _applyDefaultAppearance();
-    scene.distance=3.15;
-    scene.targetY=1.12;
+    scene.yaw=1.9747044036310164;
+    scene.pitch=.08187975646056456;
+    scene.distance=4.29156844199336;
+    scene.targetY=.85965;
+    if(scene.character!=null){scene.character!.root.rotation.y=scene.yaw;}
     scene.updateCamera();
   }
 
