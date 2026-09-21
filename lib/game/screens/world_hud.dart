@@ -172,10 +172,21 @@ class WorldHud extends StatelessWidget {
             child: Column(
               children: [
                 Expanded(
-                  child: CustomPaint(
-                    painter: _MiniMapPainter(scene),
-                    child: const SizedBox.expand(),
-                  ),
+                  child: Stack(children:[
+                    Positioned.fill(
+                      child:DataImage(
+                        cache:ui,
+                        path:'interface/minimap/1.tga',
+                        fit:BoxFit.fill,
+                      ),
+                    ),
+                    Positioned.fill(
+                      child:CustomPaint(
+                        painter:_MiniMapPainter(scene),
+                        child:const SizedBox.expand(),
+                      ),
+                    ),
+                  ]),
                 ),
                 Row(
                   children: [
