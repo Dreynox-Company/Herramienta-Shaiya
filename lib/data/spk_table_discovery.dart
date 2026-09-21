@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../core/game_text_codec.dart';
+import '../core/spk_archive.dart';
 import '../core/seed_data.dart';
 import '../editor/primitive_schemas.dart';
 import '../editor/schema_reader.dart';
