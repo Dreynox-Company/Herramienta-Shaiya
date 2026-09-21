@@ -71,30 +71,52 @@ jobs:
           python tool/make_native_fixture.py $fixture
           if($LASTEXITCODE -ne 0){throw 'fixture failed'}
           "SHAIYA_FIXTURE=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Native game-mode smoke and screenshot
+      - name: Native parity smoke - faction, selection, creation and world
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           New-Item -ItemType Directory -Force qa-game | Out-Null
           $exe=(Resolve-Path build/windows/x64/runner/Release/herramienta_shaiya.exe).Path
-          $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_FIXTURE") -PassThru
-          try{
-            Start-Sleep 20
-            $p.Refresh()
-            if($p.HasExited){throw "game client exited $($p.ExitCode)"}
-            if($p.MainWindowHandle -eq 0){throw 'no visible game window'}
-            Add-Type -AssemblyName System.Drawing
-            Add-Type -AssemblyName System.Windows.Forms
-            $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $im=New-Object System.Drawing.Bitmap $b.Width,$b.Height
-            $g=[System.Drawing.Graphics]::FromImage($im)
-            $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size)
-            $im.Save((Resolve-Path qa-game).Path+'\flutter-game.png',[System.Drawing.Imaging.ImageFormat]::Png)
-            $g.Dispose();$im.Dispose()
-            @{alive=$true;title=$p.MainWindowTitle;mode='game';flutter=$true;vmProtect=$false;antiVm=$false} | ConvertTo-Json | Set-Content qa-game/result.json
-          }finally{
-            if(!$p.HasExited){$p.CloseMainWindow()|Out-Null;Start-Sleep 2;$p.Refresh();if(!$p.HasExited){$p.Kill()}}
+          Add-Type -AssemblyName System.Drawing
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class WindowRect {
+            [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left,Top,Right,Bottom; }
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd,out RECT rect);
           }
+          '@
+          function Capture-Window($p,[string]$name){
+            $p.Refresh()
+            if($p.HasExited){throw "game client exited during $name"}
+            if($p.MainWindowHandle -eq 0){throw "no visible window during $name"}
+            $r=New-Object WindowRect+RECT
+            [WindowRect]::GetWindowRect($p.MainWindowHandle,[ref]$r)|Out-Null
+            $w=$r.Right-$r.Left;$h=$r.Bottom-$r.Top
+            $im=New-Object System.Drawing.Bitmap $w,$h
+            $g=[System.Drawing.Graphics]::FromImage($im)
+            $g.CopyFromScreen($r.Left,$r.Top,0,0,$im.Size)
+            $im.Save((Join-Path (Resolve-Path qa-game) ($name+'.png')),[System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose();$im.Dispose()
+          }
+          $results=@()
+          foreach($stage in @('faction','characterSelect','characterCreate','world')){
+            $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_FIXTURE","--qa-stage=$stage") -PassThru
+            try{
+              Start-Sleep 18
+              Capture-Window $p $stage
+              $results+=@{stage=$stage;alive=$true;title=$p.MainWindowTitle}
+            }finally{
+              $p.Refresh()
+              if(!$p.HasExited){
+                $p.CloseMainWindow()|Out-Null
+                Start-Sleep 4
+                $p.Refresh()
+                if(!$p.HasExited){$p.Kill();Start-Sleep 2}
+              }
+            }
+          }
+          @{flutter=$true;vmProtect=$false;antiVm=$false;stages=$results} | ConvertTo-Json -Depth 5 | Set-Content qa-game/result.json
       - name: Include launch scripts
         shell: pwsh
         run: |
