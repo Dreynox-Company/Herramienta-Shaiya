@@ -12,6 +12,12 @@ class UiAssetCache {
   final Map<String,Future<Uint8List?>> _cache={};
   UiAssetCache(this.library);
 
+  Future<void> preload(Iterable<String> paths) async {
+    for(final path in paths){
+      await load(path);
+    }
+  }
+
   Future<Uint8List?> load(String path)=>_cache.putIfAbsent(path,() async {
     try {
       final key=canon(path);
