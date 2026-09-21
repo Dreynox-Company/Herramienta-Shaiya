@@ -77,7 +77,7 @@ class _GameClientPageState extends State<GameClientPage> {
     final svmap=await _loadSvmap();
     if(svmap!=null){await scene.spawnGameActorsFromSvmap(svmap);}else{await scene.spawnGameNpcs(count:10);}
     catalog=c;
-    messages.insert(0,'[Sistema] \${c.npcs.length} NPC · \${c.creatures.length} criaturas · \${c.worlds.length} mapas indexados.');
+    messages.insert(0,'[Sistema] ${c.npcs.length} NPC · ${c.creatures.length} criaturas · ${c.worlds.length} mapas indexados.');
     setState(()=>loading=false);
     focus.requestFocus();
   }
@@ -143,18 +143,18 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Widget topHotbar()=>Positioned(top:8,left:230,right:310,child:Align(alignment:Alignment.topLeft,child:Row(mainAxisSize:MainAxisSize.min,children:List.generate(10,(i)=>Container(
     width:42,height:42,margin:const EdgeInsets.only(right:2),decoration:BoxDecoration(color:const Color(0xb5201d18),border:Border.all(color:i<2?const Color(0xffc9ab67):const Color(0xff615749))),
-    child:Stack(children:[Center(child:Icon(i==0?Icons.auto_fix_high:i==1?Icons.healing:Icons.circle_outlined,size:24,color:i<2?const Color(0xffffd98a):const Color(0xff8e8578))),Positioned(top:1,left:3,child:Text('\${(i+1)%10}',style:const TextStyle(fontSize:9,color:Colors.white70)))]),
+    child:Stack(children:[Center(child:Icon(i==0?Icons.auto_fix_high:i==1?Icons.healing:Icons.circle_outlined,size:24,color:i<2?const Color(0xffffd98a):const Color(0xff8e8578))),Positioned(top:1,left:3,child:Text('${(i+1)%10}',style:const TextStyle(fontSize:9,color:Colors.white70)))]),
   )))));
 
   Widget minimap()=>Positioned(top:8,right:8,child:Container(width:250,height:238,decoration:panel(.88),padding:const EdgeInsets.all(4),child:Column(children:[
     Expanded(child:ClipRect(child:CustomPaint(painter:_MiniMapPainter(scene),child:const SizedBox.expand()))),const SizedBox(height:3),
-    Row(children:[_squareIcon(Icons.add),const SizedBox(width:3),_squareIcon(Icons.remove),const Spacer(),const Icon(Icons.place,color:Color(0xffffdd55),size:18),const SizedBox(width:4),Text('\${scene.originX.round()} · \${scene.originZ.round()}',style:const TextStyle(fontSize:11,color:Color(0xffded7bd)))])
+    Row(children:[_squareIcon(Icons.add),const SizedBox(width:3),_squareIcon(Icons.remove),const Spacer(),const Icon(Icons.place,color:Color(0xffffdd55),size:18),const SizedBox(width:4),Text('${scene.originX.round()} · ${scene.originZ.round()}',style:const TextStyle(fontSize:11,color:Color(0xffded7bd)))])
   ])));
   Widget _squareIcon(IconData i)=>Container(width:22,height:20,decoration:BoxDecoration(color:const Color(0xff4d4a3e),border:Border.all(color:const Color(0xffa49670))),child:Icon(i,size:15,color:Colors.white70));
 
   Widget chat()=>Positioned(left:7,bottom:45,child:Container(width:365,height:170,decoration:const BoxDecoration(color:Color(0x22000000)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:5),decoration:BoxDecoration(color:const Color(0x99150f0b),border:Border.all(color:const Color(0xff7a6545))),child:const Text('World',style:TextStyle(fontSize:13,color:Colors.white))),
-    Expanded(child:ListView(padding:const EdgeInsets.fromLTRB(8,8,8,4),reverse:true,children:messages.take(8).map((m)=>Padding(padding:const EdgeInsets.only(bottom:4),child:Text(m,style:const TextStyle(fontSize:11,color:Color(0xfff0e8d6),shadows:[Shadow(color:Colors.black,blurRadius:2)]))).toList()))
+    Expanded(child:ListView(padding:const EdgeInsets.fromLTRB(8,8,8,4),reverse:true,children:messages.take(8).map((m)=>Padding(padding:const EdgeInsets.only(bottom:4),child:Text(m,style:const TextStyle(fontSize:11,color:Color(0xfff0e8d6),shadows:[Shadow(color:Colors.black,blurRadius:2)])))).toList()))
   ])));
 
   Widget questWindow()=>Positioned(top:145,right:270,child:Container(width:310,height:500,decoration:BoxDecoration(border:Border.all(color:const Color(0xff2d1a10),width:3),boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:12)],gradient:const LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[Color(0xffc69a67),Color(0xff8b6039)])),child:Column(children:[
@@ -162,7 +162,7 @@ class _GameClientPageState extends State<GameClientPage> {
     Expanded(child:Padding(padding:const EdgeInsets.all(15),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('¿Nos hemos visto antes? En tiempos difíciles, aprender a moverte y reconocer tu interfaz puede salvarte la vida. Camina con W A S D, gira la cámara y acércate a los habitantes de la zona.',style:TextStyle(color:Color(0xff27180f),fontSize:12,height:1.55)),
       const SizedBox(height:20),const Divider(color:Color(0xff624326)),const Text('Objetivo',style:TextStyle(color:Color(0xff3b2113),fontWeight:FontWeight.bold)),const SizedBox(height:8),
-      Text('Explora el mapa local y localiza los \${scene.gameActors.length} NPC/criaturas cargados desde DATA.',style:const TextStyle(color:Color(0xff29180f),fontSize:12)),
+      Text('Explora el mapa local y localiza los ${scene.gameActors.length} NPC/criaturas cargados desde DATA.',style:const TextStyle(color:Color(0xff29180f),fontSize:12)),
       const Spacer(),const Text('Recompensa',style:TextStyle(color:Color(0xff3b2113),fontWeight:FontWeight.bold)),const SizedBox(height:8),
       Container(width:36,height:36,decoration:BoxDecoration(color:const Color(0xffd9d0ba),border:Border.all(color:const Color(0xff49311e))),child:const Icon(Icons.auto_awesome,color:Color(0xff6c5ac7))),
     ]))),
