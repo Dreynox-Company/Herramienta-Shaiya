@@ -476,9 +476,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     final keyInfo = data['keyInfo'];
     if (keyInfo is Map && keyInfo['secretHex'] is String) {
-      final resourceSecret = spkHexBytes(
+      final resourceSecret = spkAesResourceSecret(
         keyInfo['secretHex'].toString(),
-        expectedBytes: 16,
       );
       var chunkRule = source.profile.chunkNonceRule;
       final target = data['target'];
