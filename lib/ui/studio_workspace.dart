@@ -231,7 +231,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             const Spacer(),
             if (width > 1100)
               const Text(
-                '0.6.9 · SPK Payload Explorer',
+                '0.6.12 · SPK Payload Explorer',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),
