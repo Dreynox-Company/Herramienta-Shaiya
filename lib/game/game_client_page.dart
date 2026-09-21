@@ -398,7 +398,7 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.panZ=0;
     scene.yaw=0;
     scene.pitch=.025;
-    scene.distance=2.90;
+    scene.distance=2.72;
     scene.targetY=1.06;
     if(scene.character!=null){scene.character!.root.rotation.y=0;}
     scene.updateCamera();
@@ -414,7 +414,7 @@ class _GameClientPageState extends State<GameClientPage> {
       scene.panZ=0;
       scene.yaw=0;
       scene.pitch=.01;
-      scene.distance=3.55;
+      scene.distance=3.25;
       scene.targetY=1.16;
       scene.updateCamera();
       return;
