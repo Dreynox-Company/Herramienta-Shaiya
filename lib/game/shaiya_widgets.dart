@@ -7,7 +7,7 @@ Widget shaiyaRedButton(
   double height=38,
   double fontSize=12,
 }) => Opacity(
-  opacity:onTap==null?.55:1,
+  opacity:onTap==null ? .55 : 1,
   child:GestureDetector(
     onTap:onTap,
     child:Container(
