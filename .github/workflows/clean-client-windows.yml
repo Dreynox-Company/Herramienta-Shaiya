@@ -1,0 +1,48 @@
+name: Dreynox Shaiya Clean Client - Windows
+on:
+  push:
+    branches: [work/clean-client-001]
+    paths:
+      - 'clean-client/**'
+      - '.github/workflows/clean-client-windows.yml'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish clean client host
+        shell: pwsh
+        run: |
+          dotnet restore clean-client/Dreynox.Shaiya.CleanClient.csproj
+          if($LASTEXITCODE -ne 0){throw 'restore failed'}
+          dotnet publish clean-client/Dreynox.Shaiya.CleanClient.csproj -c Release -r win-x64 --self-contained true -o publish
+          if($LASTEXITCODE -ne 0){throw 'publish failed'}
+          if(!(Test-Path publish/Dreynox.Shaiya.CleanClient.exe)){throw 'exe missing'}
+          Get-FileHash publish/Dreynox.Shaiya.CleanClient.exe -Algorithm SHA256 | Format-List | Out-File publish/HOST_SHA256.txt
+          @'
+          <!doctype html><html><body style="background:#111;color:white;font:20px Segoe UI"><h1>Dreynox Shaiya Clean Client</h1><p>Smoke test del host WebView2.</p><script>chrome.webview?.postMessage({type:"ready"});</script></body></html>
+          '@ | Set-Content publish/app/index.html
+      - name: Smoke launch
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force publish/DATA_Español/character,publish/DATA_Español/world,publish/DATA_Español/interface | Out-Null
+          $p=Start-Process publish/Dreynox.Shaiya.CleanClient.exe -ArgumentList '--data=DATA_Español' -WorkingDirectory publish -PassThru
+          Start-Sleep 12
+          $p.Refresh()
+          @{running=!$p.HasExited;title=$p.MainWindowTitle;processId=$p.Id} | ConvertTo-Json | Set-Content publish/HOST_SMOKE.json
+          if($p.HasExited){throw "host exited early"}
+          Stop-Process -Id $p.Id -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dreynox-Shaiya-CleanClient-Host-win-x64
+          path: publish/
+          retention-days: 7
+          compression-level: 0
