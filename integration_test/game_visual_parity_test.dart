@@ -41,7 +41,10 @@ void main(){
       expect(state.catalog,isNotNull,reason:'$stage catalog: ${state.progress}');
       expect(state.loading,isFalse,reason:'$stage loading: ${state.progress}');
       expect(state.scene.character,isNotNull,reason:'$stage character: ${state.progress}');
-      if(requireReal&&(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode)){
+      if(requireReal&&stage==GameStage.characterSelect){
+        expect(state.scene.backdropTexture,isNotNull,reason:'characterSelect must render the native selectbg backdrop.');
+      }
+      if(requireReal&&(stage==GameStage.characterCreate||stage==GameStage.characterMode)){
         expect(state.scene.world,isNotNull,reason:'$stage must render select_A/select_B world.');
       }
       if(requireReal&&stage==GameStage.world){
@@ -80,6 +83,7 @@ void main(){
         'creatures':state.catalog.creatures.length,
         'worlds':state.catalog.worlds.length,
         'world':state.scene.worldPath,
+        'backdrop':state.scene.backdropTexture!=null,
         'actors':state.scene.gameActors.length,
         'originX':state.scene.originX,
         'originZ':state.scene.originZ,
