@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -69,13 +70,35 @@ class _GameClientPageState extends State<GameClientPage> {
     world??=c.worlds.isEmpty?null:c.worlds.first;
     if(world!=null){try{await scene.setWorld(world);}catch(e){messages.insert(0,'[Mapa] $e');}}
     scene.yaw=math.pi;scene.pitch=.12;scene.distance=7.8;scene.targetY=1.2;scene.updateCamera();
-    await scene.spawnGameNpcs(count:10);
+    final svmap=await _loadSvmap();
+    if(svmap!=null){await scene.spawnGameActorsFromSvmap(svmap);}else{await scene.spawnGameNpcs(count:10);}
     catalog=c;
     messages.insert(0,'[Sistema] \${c.npcs.length} NPC · \${c.creatures.length} criaturas · \${c.worlds.length} mapas indexados.');
     setState(()=>loading=false);
     focus.requestFocus();
   }
 
+  Future<SvmapData?> _loadSvmap() async {
+    final exe=File(Platform.resolvedExecutable).parent.path;
+    final cwd=Directory.current.path;
+    final candidates=<String>[
+      '$exe/server/maps/1.svmap',
+      '$exe/servicios/world/config/maps/1.svmap',
+      '$cwd/server/maps/1.svmap',
+      '$cwd/servicios/world/config/maps/1.svmap',
+    ];
+    for(final path in candidates){
+      final file=File(path);
+      if(!await file.exists())continue;
+      try{
+        final data=SvmapData.parse(await file.readAsBytes(),path);
+        messages.insert(0,'[Mapa] SVMAP real: ${data.npcs.length} NPC · ${data.mobAreas.length} áreas de criaturas.');
+        return data;
+      }catch(e){messages.insert(0,'[SVMAP] $e');}
+    }
+    messages.insert(0,'[Mapa] Sin 1.svmap del backend; usando población visual de respaldo.');
+    return null;
+  }
   Future<void> attack(int index) async {
     if(index<scene.attackClips.length){
       try{await scene.attack();}catch(e){messages.insert(0,'[Combate] $e');setState((){});}
