@@ -159,6 +159,7 @@ class SpkSource {
   int get specialCount => records.length - simpleCount - chunkedCount;
   int get decodedBytesTotal =>
       resources.fold(0, (sum, r) => sum + r.decodedBytes);
+  String get fileName => _fileBaseName(path);
 
   static Future<SpkSource> open(
     String path, {
@@ -293,6 +294,39 @@ class SpkSource {
     }
   }
 
+  Future<Uint8List> readRaw(
+    SpkRecord record, {
+    int limit = 64 * 1024 * 1024,
+  }) async {
+    if (record.type != 1 && record.type != 3) {
+      throw SpkFailure(
+        'SPK_RAW_SPECIAL',
+        'El registro especial no representa un rango de payload.',
+        {'entryId': record.entryId, 'type': record.type},
+      );
+    }
+    if (record.storedBytes > limit || limit < 0) {
+      throw SpkFailure(
+        'SPK_RAW_LIMIT',
+        'El payload cifrado supera el límite de lectura.',
+        {'storedBytes': record.storedBytes, 'limit': limit},
+      );
+    }
+    final handle = await File(path).open(mode: FileMode.read);
+    try {
+      final bytes = await _readExact(
+        handle,
+        record.dataOffset,
+        record.storedBytes,
+      );
+      reads++;
+      bytesRead += bytes.length;
+      return bytes;
+    } finally {
+      await handle.close();
+    }
+  }
+
   Future<Uint8List> _decodeSimple(SpkRecord record, Uint8List cipher) async {
     if (record.metadata32.length != 32) {
       throw const SpkFailure('SPK_METADATA', 'Metadatos AES-GCM incompletos.');
@@ -353,9 +387,28 @@ class SpkSource {
         }
         String status = 'extracted';
         String? relative, error;
-        if (record.type != 1) {
-          skipped++;
-          status = 'chunked_pending';
+        if (record.type == 3) {
+          try {
+            final raw =
+                await _readExact(handle, record.dataOffset, record.storedBytes);
+            final bucket = record.entryId.substring(0, 2);
+            relative =
+                'Fragmentados_RAW/${bucket}/${record.technicalName}.spkraw';
+            final target = File(
+              '${destination.path}${Platform.pathSeparator}'
+              '${relative.replaceAll('/', Platform.pathSeparator)}',
+            );
+            await target.parent.create(recursive: true);
+            await target.writeAsBytes(raw, flush: false);
+            skipped++;
+            status = 'raw_fragmented';
+            reads++;
+            bytesRead += raw.length;
+          } catch (e) {
+            failed++;
+            status = 'failed';
+            error = e.toString();
+          }
         } else {
           try {
             final cipher =
@@ -413,7 +466,7 @@ class SpkSource {
         'total': rows.length,
         'completed': completed,
         'extracted': extracted,
-        'skippedChunked': skipped,
+        'rawFragmented': skipped,
         'failed': failed,
       },
       'entries': manifest,
@@ -445,8 +498,9 @@ class SpkSource {
     'failures': failures,
     'limitations': [
       if (chunkedCount > 0)
-        'Los recursos tipo 3 se enumeran y preservan en el manifiesto, '
-        'pero requieren validar su nonce implícito antes de extraerlos.',
+        'Los recursos tipo 3 se enumeran y se pueden exportar completos como '
+        'SPKRAW. Su decodificación lógica sigue bloqueada hasta validar el nonce '
+        'implícito de cada fragmento.',
       'El índice observado contiene IDs técnicos de 64 bits, no rutas '
         'originales en claro. Se usan nombres técnicos hasta disponer de un '
         'resolvedor de nombres validado.',
