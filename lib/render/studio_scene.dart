@@ -285,8 +285,16 @@ class StudioScene extends ChangeNotifier {
   void zoom(double amount){distance=(distance*amount).clamp(.4,250);updateCamera();}
   void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));if(sky!=null)sky!.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}
   Future<void> setSky(String? path) async {
-    final revision=++_skyRevision;if(path==null){sky?.dispose();sky=null;skyPath=null;notifyListeners();return;}
+    final revision=++_skyRevision;
+    if(path==null){
+      sky?.dispose();sky=null;skyPath=null;
+      if(view!=null)view!.scene.background=t.Color.fromHex32(0x11151e);
+      notifyListeners();return;
+    }
     final lib=catalog!.library,model=catalog!.library.resolve('sky.3do',['sky']);if(model==null)throw const FormatException('No se encuentra la cúpula original Sky/sky.3DO.');
+    final skyBytes=await lib.read(path);
+    final background=await compute(_averageTextureColor,{'bytes':skyBytes,'path':path});
+    if(view!=null)view!.scene.background=t.Color.fromHex32(background);
     final binary=Bin(await lib.read(model),model);binary.str();final data=MeshData.rigid(binary);binary.end();final part=await makePart(data,path,opaque:true);
     if(disposed||revision!=_skyRevision){part.dispose();return;}
     var radius=0.0;for(final coordinate in data.positions){radius=math.max(radius,coordinate.abs());}if(radius<1e-6){part.dispose();throw const FormatException('Cúpula de cielo vacía.');}
@@ -315,5 +323,20 @@ class StudioScene extends ChangeNotifier {
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
   @override void dispose(){disposed=true;++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+}
+int _averageTextureColor(Map<String,Object> args){
+  final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
+  final b=p.rgba;
+  if(b.isEmpty)return 0x11151e;
+  var r=0,g=0,bl=0,n=0;
+  final pixels=b.length~/4;
+  final stride=math.max(1,pixels~/4096);
+  for(var i=0;i<pixels;i+=stride){
+    final k=i*4,alpha=b[k+3];
+    if(alpha<8)continue;
+    r+=b[k];g+=b[k+1];bl+=b[k+2];n++;
+  }
+  if(n==0)return 0x11151e;
+  return ((r~/n)<<16)|((g~/n)<<8)|(bl~/n);
 }
 Uint8List _decodeTexture(Map<String,Object> args)=>Pixels.decode(args['bytes'] as Uint8List,args['path'] as String).png(opaque:args['opaque'] as bool);
