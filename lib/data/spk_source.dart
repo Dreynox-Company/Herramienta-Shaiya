@@ -9,6 +9,7 @@ import 'package:zstandard/zstandard.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/formats.dart';
+import '../core/seed_data.dart';
 import '../core/spk_archive.dart';
 
 typedef SpkProgress = void Function(String message, int done, int total);
@@ -1205,6 +1206,13 @@ class SpkArchiveSource {
     }
     if (_looksLikeTga(bytes)) return 'TGA';
 
+    if (SeedData.isEncoded(bytes)) {
+      try {
+        SeedData.decode(bytes, verifyChecksum: true);
+        return 'SDATA';
+      } catch (_) {}
+    }
+
     if (bytes.length >= 3) {
       final signature = ascii.decode(
         bytes.sublist(0, bytes.length < 8 ? bytes.length : 8),
@@ -1318,6 +1326,8 @@ class SpkArchiveSource {
         return '.itm';
       case 'MON':
         return '.mon';
+      case 'SDATA':
+        return '.sdata';
       case 'OGG':
         return '.ogg';
       case 'RIFF':
