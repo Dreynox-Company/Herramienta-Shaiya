@@ -15,6 +15,12 @@ def main():
         raise RuntimeError('Expected native Windows AMD64 PE executable')
     native=json.loads((ROOT/'qa-native/result.json').read_text())
     startup=json.loads((ROOT/'qa-windows/resultado.json').read_text(encoding='utf-8-sig'))
+    profiles=ROOT/'profiles'
+    if profiles.is_dir():
+        import shutil
+        target=release/'profiles'
+        if target.exists(): shutil.rmtree(target)
+        shutil.copytree(profiles,target)
     if native.get('native_render') is not True: raise RuntimeError('Native integration did not report rendering')
     # The smoke script already fails on a missing or closed window. Preserve its
     # raw result; do not invent field names or reinterpret it as gameplay testing.
