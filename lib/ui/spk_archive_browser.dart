@@ -20,10 +20,10 @@ List<String> spkProfileCandidatePaths(
     '$spkPath.profile.json',
     '${spk.parent.path}${separator}data.spk.profile.json',
     '${spk.parent.path}${separator}spk-crypto-profile.json',
-    '${exeDir}${separator}profiles${separator}data.spk.profile.json',
-    '${exeDir}${separator}profiles${separator}spk-crypto-profile.json',
-    '${exeDir}${separator}data.spk.profile.json',
-    '${exeDir}${separator}spk-crypto-profile.json',
+    '$exeDir${separator}profiles${separator}data.spk.profile.json',
+    '$exeDir${separator}profiles${separator}spk-crypto-profile.json',
+    '$exeDir${separator}data.spk.profile.json',
+    '$exeDir${separator}spk-crypto-profile.json',
   ];
 }
 
