@@ -38,7 +38,7 @@ void main() {
     } finally {
       await temp.delete(recursive: true);
     }
-  });
+  }, skip: Platform.isLinux ? 'Zstandard FFI is exercised by the Windows native integration gate.' : false);
 
   test('SPK refuses an authenticated index with a damaged tag', () async {
     final temp = await Directory.systemTemp.createTemp('spk-auth-test-');
@@ -63,7 +63,7 @@ void main() {
     } finally {
       await temp.delete(recursive: true);
     }
-  });
+  }, skip: Platform.isLinux ? 'Zstandard FFI is exercised by the Windows native integration gate.' : false);
 }
 
 Future<Uint8List> _buildSyntheticSpk(Uint8List decodedResource) async {
