@@ -221,7 +221,7 @@ class PsConnection {
   void _emit(PsPacket packet){
     if(!_packets.isClosed)_packets.add(packet);
     if(_waiters.isNotEmpty)_waiters.removeAt(0).complete(packet);
-    else _queued.add(packet);
+    else if(!_packets.hasListener)_queued.add(packet);
   }
   void _onError(Object e)=>_fail(e);
   void _onDone()=>_fail(StateError('Socket ps0032 cerrado por el servidor.'));
