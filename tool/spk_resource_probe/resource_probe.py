@@ -226,15 +226,18 @@ def main():
       print('Escribe CAPTURAR para continuar:',flush=True)
       if input().strip()!='CAPTURAR':print('Cancelado');return 2
     cfg={'prefixes':prefix};agent=AGENT_FILE.read_text(encoding='utf-8').replace('__CONFIG__',json.dumps(cfg,separators=(',',':')))
-    sink=Sink(out,spk,details);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None
+    sink=Sink(out,spk,details);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None;grace_started=False
     def onmsg(m,d):
-      nonlocal failure
+      nonlocal failure,grace_started
       try:
        sink.accept(m,d)
-       # Cuatro recursos simples autenticados bastan para recuperar la clave/AAD.
-       # Studio valida de nuevo esa clave contra muestras distribuidas del SPK y
-       # deriva después la regla de chunks offline usando los tags auxiliares.
-       if len(sink.valid_simple)>=4:done.set()
+       # Si ya hay clave/AAD reproducibles, damos una ventana corta para capturar
+       # chunks nativos. Si no aparecen, Studio deriva la regla offline después.
+       if len(sink.valid_simple)>=4:
+        if len(sink.valid_chunks)>=2:done.set()
+        elif not grace_started:
+         grace_started=True
+         timer=threading.Timer(20.0,done.set);timer.daemon=True;timer.start()
       except Exception as e:failure=str(e);done.set()
     try:
       pid=dev.spawn([str(exe)],cwd=str(exe.parent));sess=dev.attach(pid);sess.on('detached',lambda *x:done.set());script=sess.create_script(agent);script.on('message',onmsg);script.load();dev.resume(pid)
