@@ -7,7 +7,7 @@ class StudioWorkspace extends StatefulWidget {
   final List<IconData> icons;
   final int selectedTab;
   final ValueChanged<int> onTab;
-  final VoidCallback? onOpenData, onOpenEditor, onExportScene;
+  final VoidCallback? onOpenData, onOpenSpk, onOpenEditor, onExportScene;
   final bool hasLibrary;
   const StudioWorkspace({
     super.key,
@@ -22,6 +22,7 @@ class StudioWorkspace extends StatefulWidget {
     required this.selectedTab,
     required this.onTab,
     required this.onOpenData,
+    this.onOpenSpk,
     this.onOpenEditor,
     this.onExportScene,
     this.hasLibrary = false,
@@ -230,7 +231,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             const Spacer(),
             if (width > 1100)
               const Text(
-                '0.6.1 · Laboratorio 3D',
+                '0.6.5 · SPK Explorer',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),
@@ -239,6 +240,13 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
               icon: const Icon(Icons.folder_open, size: 17),
               label: const Text('DATA', style: TextStyle(fontSize: 12)),
             ),
+            if (widget.onOpenSpk != null)
+              TextButton.icon(
+                key: const ValueKey('open-spk'),
+                onPressed: widget.onOpenSpk,
+                icon: const Icon(Icons.folder_zip_outlined, size: 17),
+                label: const Text('SPK', style: TextStyle(fontSize: 12)),
+              ),
             if (widget.onExportScene != null)
               IconButton(
                 key: const ValueKey('export-game-scene'),
