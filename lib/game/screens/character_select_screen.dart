@@ -5,7 +5,7 @@ import '../ui_asset.dart';
 class CharacterSelectScreen extends StatelessWidget {
   final UiAssetCache ui;
   final bool created;
-  final String name;
+  final String name,locale;
   final VoidCallback onCreate;
   final VoidCallback onDelete;
   final VoidCallback onStart;
@@ -16,6 +16,7 @@ class CharacterSelectScreen extends StatelessWidget {
     required this.ui,
     required this.created,
     required this.name,
+    required this.locale,
     required this.onCreate,
     required this.onDelete,
     required this.onStart,
@@ -51,18 +52,18 @@ class CharacterSelectScreen extends StatelessWidget {
               const Text('Lv. 1',style:TextStyle(fontSize:10,color:Colors.white)),
               const SizedBox(width:25),
               Expanded(child:Text(name,style:const TextStyle(fontSize:10,color:Color(0xff7cd7ff)))),
-              const Text('Guerrero',style:TextStyle(fontSize:10,color:Colors.white)),
+              Text(locale=='spn'?'Guerrero':'Fighter',style:const TextStyle(fontSize:10,color:Colors.white)),
             ]),
             const Spacer(),
-            const Text('Última ubicación : Erina',style:TextStyle(fontSize:9,color:Colors.white)),
+            Text(locale=='spn'?'Última ubicación : Erina':'Last Location : Erina',style:const TextStyle(fontSize:9,color:Colors.white)),
             const SizedBox(height:8),
-            const Text('Modo : BÁSICO',style:TextStyle(fontSize:9,color:Colors.white)),
+            Text(locale=='spn'?'Modo : BÁSICO':'Mode : BASIC',style:const TextStyle(fontSize:9,color:Colors.white)),
           ]),
         )
       else
-        const Center(
+        Center(
           child:Text(
-            'Por favor crea un personaje.',
+            locale=='spn'?'Por favor crea un personaje.':'Please create a character.',
             style:TextStyle(
               fontSize:18,
               color:Color(0xffc7c2bc),
@@ -79,14 +80,14 @@ class CharacterSelectScreen extends StatelessWidget {
       opacity:created?1:.78,
       child:DataRegion(
         cache:ui,
-        path:'interface/characterselect/button/select_start_spn.tga',
+        path:'interface/characterselect/button/select_start_${locale=='spn'?'spn':'usa'}.tga',
         sheetWidth:256,
         sheetHeight:256,
         source:Rect.fromLTWH(4,created?2:130,246,60),
         width:247,
         height:61,
         fallback:shaiyaRedButton(
-          'Inicio de Juego',
+          locale=='spn'?'Inicio de Juego':'Game Start',
           created?onStart:null,
           width:247,
           height:61,
@@ -111,18 +112,18 @@ class CharacterSelectScreen extends StatelessWidget {
     Positioned(
       left:94,top:642,
       child:shaiyaRedButton(
-        'Crear personaje',onCreate,width:114,height:36,fontSize:11,
+        locale=='spn'?'Crear personaje':'Create Character',onCreate,width:114,height:36,fontSize:11,
       ),
     ),
     Positioned(
       left:213,top:642,
       child:shaiyaRedButton(
-        'Eliminar',created?onDelete:null,width:114,height:36,fontSize:11,
+        locale=='spn'?'Eliminar':'Delete Character',created?onDelete:null,width:114,height:36,fontSize:11,
       ),
     ),
     Positioned(
       left:213,top:684,
-      child:shaiyaRedButton('Opciones',(){},width:114,height:36,fontSize:11),
+      child:shaiyaRedButton(locale=='spn'?'Opciones':'Option Setting',(){},width:114,height:36,fontSize:11),
     ),
     Positioned(left:598,top:652,child:_startButton()),
     Positioned(
