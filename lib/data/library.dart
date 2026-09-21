@@ -308,10 +308,12 @@ class Library {
 
     final mounted = <String, String>{};
     final confirmedByPath = <String, bool>{};
+    final ambiguousInferredPaths = <String>{};
     var unnamed = 0;
     var unsupported = 0;
     var unsafe = 0;
     var collisions = 0;
+    var ambiguousExcluded = 0;
     var inferred = 0;
     var confirmed = 0;
 
@@ -334,12 +336,25 @@ class Library {
         continue;
       }
       final isConfirmed = source.names.isConfirmed(record.entryId);
+      if (ambiguousInferredPaths.contains(normalized) && !isConfirmed) {
+        collisions++;
+        continue;
+      }
       if (mounted.containsKey(normalized)) {
         collisions++;
-        if (!(isConfirmed && confirmedByPath[normalized] != true)) {
+        final previousConfirmed = confirmedByPath[normalized] == true;
+        if (previousConfirmed) continue;
+        if (!isConfirmed) {
+          mounted.remove(normalized);
+          confirmedByPath.remove(normalized);
+          ambiguousInferredPaths.add(normalized);
+          ambiguousExcluded++;
+          if (inferred > 0) inferred--;
           continue;
         }
+        if (inferred > 0) inferred--;
       }
+      if (isConfirmed) ambiguousInferredPaths.remove(normalized);
       mounted[normalized] = record.idHex;
       confirmedByPath[normalized] = isConfirmed;
       if (isConfirmed) {
@@ -363,6 +378,7 @@ class Library {
       'unsupportedSkipped': unsupported,
       'unsafeSkipped': unsafe,
       'pathCollisions': collisions,
+      'ambiguousInferredPathsExcluded': ambiguousExcluded,
       'completePayloadAccess': source.canExtractAll,
     };
     progress?.call(
@@ -540,6 +556,13 @@ class Library {
       if (!files.containsKey(canonical)) {
         throw FormatException(
           'El recurso no pertenece al SPK montado: ${entry.key}',
+        );
+      }
+      final record = _spkRecords[files[canonical]];
+      if (record == null || !spk!.names.isConfirmed(record.entryId)) {
+        throw FormatException(
+          'La ruta ${entry.key} todavía es inferida. Antes de editarla, '
+          'confírmala por SHA-256 o con el descubrimiento estructural de tablas.',
         );
       }
       final expected = expectedHashes[entry.key] ?? expectedHashes[canonical];
