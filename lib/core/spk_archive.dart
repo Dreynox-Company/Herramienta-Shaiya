@@ -68,6 +68,15 @@ Uint8List spkResourceSecret(Object value) {
   return out;
 }
 
+Uint8List spkResourceAad(Object? value) {
+  if (value == null || value.toString().trim().isEmpty) return Uint8List(0);
+  final out = spkHexBytes(value.toString());
+  if (out.length > 8192) {
+    throw const FormatException('AAD SPK supera el límite de 8192 bytes.');
+  }
+  return out;
+}
+
 String spkNormalizeChunkNonceRule(Object? value) {
   switch ((value ?? 'unsupported').toString()) {
     case 'offset_chunk0_le96':
@@ -434,6 +443,7 @@ class SpkCryptoProfile {
   final String indexSha256;
   final Uint8List indexSecret;
   final Uint8List? resourceSecret;
+  final Uint8List resourceAad;
   final bool resourceKeyIsIndexKey;
   final String chunkNonceRule;
 
@@ -442,6 +452,7 @@ class SpkCryptoProfile {
     required this.indexSha256,
     required this.indexSecret,
     required this.resourceSecret,
+    required this.resourceAad,
     required this.resourceKeyIsIndexKey,
     required this.chunkNonceRule,
   });
@@ -461,6 +472,7 @@ class SpkCryptoProfile {
         resourceSecret: json['resourceSecretHex'] is String
             ? spkResourceSecret(json['resourceSecretHex'])
             : null,
+        resourceAad: spkResourceAad(json['resourceAadHex']),
         resourceKeyIsIndexKey: json['resourceKeyIsIndexKey'] == true,
         chunkNonceRule: spkNormalizeChunkNonceRule(json['chunkNonceRule']),
       );
@@ -481,6 +493,7 @@ class SpkCryptoProfile {
       resourceSecret: resources['secretHex'] == null
           ? null
           : spkResourceSecret(resources['secretHex']),
+      resourceAad: spkResourceAad(resources['aadHex']),
       resourceKeyIsIndexKey: resources['useIndexKey'] == true,
       chunkNonceRule: spkNormalizeChunkNonceRule(resources['chunkNonceRule']),
     );
@@ -494,6 +507,20 @@ class SpkCryptoProfile {
       );
     }
     final secret = spkResourceSecret(probe['resourceSecretHex']);
+    final aadRule = (probe['aadRule'] ?? 'none').toString();
+    if (aadRule != 'none' && aadRule != 'constant') {
+      throw const FormatException(
+        'El probe valida la clave, pero el AAD por recurso todavía no es reproducible.',
+      );
+    }
+    final aad = aadRule == 'constant'
+        ? spkResourceAad(probe['aadHex'])
+        : Uint8List(0);
+    if (aadRule == 'constant' && aad.isEmpty) {
+      throw const FormatException(
+        'El probe declara AAD constante pero no aporta aadHex.',
+      );
+    }
     final readyFragments = probe['readyForFragmented'] == true;
     final rule = readyFragments
         ? spkNormalizeChunkNonceRule(probe['chunkNonceRule'])
@@ -508,6 +535,7 @@ class SpkCryptoProfile {
       indexSha256: indexSha256,
       indexSecret: indexSecret,
       resourceSecret: secret,
+      resourceAad: aad,
       resourceKeyIsIndexKey: false,
       chunkNonceRule: rule,
     );
@@ -521,6 +549,7 @@ class SpkCryptoProfile {
       'algorithm': 'AES-GCM',
       'secretAvailable': effectiveResourceSecret != null,
       'secretBytes': effectiveResourceSecret?.length,
+      'aadBytes': resourceAad.length,
       'chunkNonceRule': chunkNonceRule,
     },
   };
