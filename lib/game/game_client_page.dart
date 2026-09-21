@@ -457,6 +457,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onNext:()=>unawaited(_goSelect()),
           ),
           GameStage.characterSelect=>CharacterSelectScreen(
+            ui:ui!,
             created:characterCreated,
             name:nameController.text,
             onCreate:()=>unawaited(_goCreate()),
