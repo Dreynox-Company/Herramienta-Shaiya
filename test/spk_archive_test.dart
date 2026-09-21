@@ -118,6 +118,13 @@ void main() {
   });
 
   group('SPK local profiles', () {
+    test('unsigned 64-bit IDs round-trip through signed Dart int', () {
+      expect(spkParseU64Hex('ffffffffffffffff'), -1);
+      expect(spkParseU64Hex('8000000000000000'), -9223372036854775808);
+      expect(spkU64Hex(-1), 'ffffffffffffffff');
+      expect(spkU64Hex(-9223372036854775808), '8000000000000000');
+    });
+
     test('name map preserves valid folders and rejects traversal', () {
       final map = SpkNameMap.fromJson({
         'paths': {
