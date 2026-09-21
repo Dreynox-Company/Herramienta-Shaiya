@@ -201,55 +201,66 @@ class WorldHud extends StatelessWidget {
   Widget _quickCell(int index){
     final slot=_quickSlot(index);
     final learned=slot!=null&&slot.isSkill?skillBook?.bySkillId(slot.number):null;
+    final skillName=learned==null?null:catalog.skillName(learned.skillId,learned.level,locale);
+    final skillText=learned==null?null:catalog.skillText(learned.skillId,learned.level,locale);
     final label=slot==null
       ?''
       :slot.isSkill
         ?(learned==null?'S${slot.number}':'S${learned.skillId}')
         :'I${slot.number}';
-    return GestureDetector(
-      onTap:()=>onHotbar(index),
-      child:SizedBox(
-        width:39,height:39,
-        child:Stack(children:[
-          Positioned.fill(
-            child:Center(
-              child:slot==null
-                ?const SizedBox.shrink()
-                :Icon(
-                    slot.isSkill?Icons.auto_fix_high:Icons.inventory_2,
-                    color:slot.isSkill?const Color(0xffffdfa0):const Color(0xffd7c18b),
-                    size:21,
-                  ),
-            ),
+    final tooltip=slot==null
+      ?''
+      :slot.isSkill
+        ?(skillName??(locale=='spn'?'Habilidad ${slot.number}':'Skill ${slot.number}'))+
+          (skillText?.text.trim().isNotEmpty==true?'\n\n${skillText!.text.trim()}':'')+
+          (learned==null?'':'\nLv. ${learned.level} · #${learned.number}')
+        :(locale=='spn'?'Objeto rápido ${slot.number}':'Quick item ${slot.number}');
+    final cell=SizedBox(
+      width:39,height:39,
+      child:Stack(children:[
+        Positioned.fill(
+          child:Center(
+            child:slot==null
+              ?const SizedBox.shrink()
+              :Icon(
+                  slot.isSkill?Icons.auto_fix_high:Icons.inventory_2,
+                  color:slot.isSkill?const Color(0xffffdfa0):const Color(0xffd7c18b),
+                  size:21,
+                ),
           ),
+        ),
+        Positioned(
+          left:2,top:1,
+          child:Text(
+            index==9?'0':'${index+1}',
+            style:const TextStyle(fontSize:8,color:Colors.white70,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+          ),
+        ),
+        if(label.isNotEmpty)
           Positioned(
-            left:2,top:1,
+            left:2,right:2,bottom:1,
             child:Text(
-              index==9?'0':'${index+1}',
-              style:const TextStyle(fontSize:8,color:Colors.white70,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+              label,
+              maxLines:1,
+              overflow:TextOverflow.clip,
+              textAlign:TextAlign.center,
+              style:const TextStyle(fontSize:7,color:Color(0xffffe4a3),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
             ),
           ),
-          if(label.isNotEmpty)
-            Positioned(
-              left:2,right:2,bottom:1,
-              child:Text(
-                label,
-                maxLines:1,
-                overflow:TextOverflow.clip,
-                textAlign:TextAlign.center,
-                style:const TextStyle(fontSize:7,color:Color(0xffffe4a3),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
-              ),
+        if(learned!=null)
+          Positioned(
+            right:1,top:1,
+            child:Text(
+              'L${learned.level}',
+              style:const TextStyle(fontSize:7,color:Color(0xff8dd8ff),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
             ),
-          if(learned!=null)
-            Positioned(
-              right:1,top:1,
-              child:Text(
-                'L${learned.level}',
-                style:const TextStyle(fontSize:7,color:Color(0xff8dd8ff),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
-              ),
-            ),
-        ]),
-      ),
+          ),
+      ]),
+    );
+    return Tooltip(
+      message:tooltip,
+      waitDuration:const Duration(milliseconds:250),
+      child:GestureDetector(onTap:()=>onHotbar(index),child:cell),
     );
   }
 
@@ -459,8 +470,17 @@ class WorldHud extends StatelessWidget {
               itemBuilder:(context,index){
                 final item=inventory[index];
                 final gems=item.gems.where((g)=>g>0).length;
+                final localized=catalog.itemText(item.type,item.typeId,locale);
+                final itemName=catalog.itemName(item.type,item.typeId,locale);
+                final description=localized?.text.trim()??'';
                 return Tooltip(
-                  message:'Bag ${item.bag} · Slot ${item.slot}\nTipo ${item.type}:${item.typeId}\nCalidad ${item.quality} · Cantidad ${item.count}\nLapis/Gemas: $gems${item.craftName.isEmpty?'':'\n'+item.craftName}${item.dyed?'\nTeñido':''}',
+                  waitDuration:const Duration(milliseconds:250),
+                  message:itemName+
+                    '\nBag ${item.bag} · Slot ${item.slot} · ${item.type}:${item.typeId}'+
+                    '\nCalidad ${item.quality} · Cantidad ${item.count} · Lapis/Gemas: $gems'+
+                    (description.isEmpty?'':'\n\n'+description)+
+                    (item.craftName.isEmpty?'':'\n'+item.craftName)+
+                    (item.dyed?'\nTeñido':''),
                   child:Container(
                     decoration:BoxDecoration(
                       color:const Color(0xff17120e),
