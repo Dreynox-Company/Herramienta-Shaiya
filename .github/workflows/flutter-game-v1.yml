@@ -313,7 +313,9 @@ jobs:
                 Start-Sleep -Milliseconds 500
               }
               $state=Get-Content $marker -Raw | ConvertFrom-Json
-              if(!$state.ready){throw "$stage did not become ready"}
+              if($state.loading){throw "$stage marker still reports loading"}
+              if(!$state.character){throw "$stage did not load a character"}
+              if($stage -eq 'world' -and [string]::IsNullOrWhiteSpace($state.world)){throw 'world stage did not load a WLD'}
               Start-Sleep -Seconds 3
               Capture-Client $p (Join-Path (Resolve-Path parity-report) ('os-'+$stage+'.png'))
             }finally{
