@@ -296,10 +296,11 @@ class _GameClientPageState extends State<GameClientPage> {
     }else{
       await scene.setWorld(null);
     }
-    scene.yaw=math.pi;
-    scene.pitch=.03;
-    scene.distance=5.4;
-    scene.targetY=1.25;
+    // Character selection/creation uses the front-facing presentation camera.
+    scene.yaw=0;
+    scene.pitch=.02;
+    scene.distance=3.65;
+    scene.targetY=1.18;
     scene.updateCamera();
   }
 
@@ -393,8 +394,8 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld();
-    scene.distance=4.4;
-    scene.targetY=1.15;
+    scene.distance=3.15;
+    scene.targetY=1.12;
     scene.updateCamera();
     if(mounted)setState((){stage=GameStage.characterCreate;loading=false;});
   }
@@ -410,8 +411,8 @@ class _GameClientPageState extends State<GameClientPage> {
     genderIndex=value;
     if(mounted)setState((){});
     await _applyDefaultAppearance();
-    scene.distance=4.4;
-    scene.targetY=1.15;
+    scene.distance=3.15;
+    scene.targetY=1.12;
     scene.updateCamera();
   }
 
