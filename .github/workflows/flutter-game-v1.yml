@@ -114,11 +114,24 @@ jobs:
           }
           $results=@()
           foreach($stage in @('faction','characterSelect','characterCreate','world')){
-            $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_FIXTURE","--qa-stage=$stage") -PassThru
+            $marker=(Join-Path (Resolve-Path qa-game) ($stage+'-ready.json'))
+            if(Test-Path $marker){Remove-Item $marker -Force}
+            $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_FIXTURE","--qa-stage=$stage","--qa-marker=$marker") -PassThru
             try{
-              Start-Sleep 18
+              $deadline=(Get-Date).AddSeconds(90)
+              while(!(Test-Path $marker)){
+                $p.Refresh()
+                if($p.HasExited){throw "game client exited before $stage became ready"}
+                if((Get-Date) -gt $deadline){throw "timeout waiting for $stage readiness marker"}
+                Start-Sleep -Milliseconds 500
+              }
+              Start-Sleep 2
               Capture-Window $p $stage
-              $results+=@{stage=$stage;alive=$true;title=$p.MainWindowTitle}
+              $state=Get-Content $marker -Raw | ConvertFrom-Json
+              if($state.loading){throw "$stage marker still reports loading"}
+              if(!$state.character){throw "$stage has no loaded character"}
+              if($stage -eq 'world' -and [string]::IsNullOrWhiteSpace($state.world)){throw 'world stage did not load a WLD'}
+              $results+=@{stage=$stage;alive=$true;title=$p.MainWindowTitle;state=$state}
             }finally{
               $p.Refresh()
               if(!$p.HasExited){
