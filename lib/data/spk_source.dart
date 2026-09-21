@@ -583,7 +583,7 @@ class SpkArchiveSource {
         'declaredDecodedBytes': record.decodedBytes,
         'plainBytes': plain.length,
         'format': format,
-        if (decodeError != null) 'decodeError': decodeError,
+        'decodeError': ?decodeError,
       });
     }
 
