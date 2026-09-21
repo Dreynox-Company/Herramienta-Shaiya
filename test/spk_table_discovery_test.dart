@@ -145,6 +145,39 @@ Future<SpkArchiveSource> _source(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('SPK format detection validates native MLT and ITM structures', () {
+    final mlt = SahWriter();
+    mlt.out.add(ascii.encode('MLT'));
+    mlt.u(1);
+    mlt.str('body.3dc');
+    mlt.u(1);
+    mlt.str('body.dds');
+    mlt.u(1);
+    mlt.u(0);
+    mlt.u(0);
+    mlt.u(0);
+    final mltBytes = mlt.out.takeBytes();
+    expect(SpkArchiveSource.detectFormat(mltBytes), 'MLT');
+    expect(SpkArchiveSource.extensionFor('MLT'), '.mlt');
+
+    final itm = SahWriter();
+    itm.out.add(ascii.encode('ITM'));
+    itm.u(1);
+    itm.str('blade.3do');
+    itm.u(1);
+    itm.str('blade.dds');
+    itm.u(1);
+    itm.u(0);
+    itm.u(0);
+    itm.i(0);
+    itm.i(0);
+    itm.i(0);
+    itm.i(0);
+    final itmBytes = itm.out.takeBytes();
+    expect(SpkArchiveSource.detectFormat(itmBytes), 'ITM');
+    expect(SpkArchiveSource.extensionFor('ITM'), '.itm');
+  });
+
   test('authenticated SPK payloads identify core DB tables structurally', () async {
     final root = await Directory.systemTemp.createTemp('spk-table-discovery-');
     try {
