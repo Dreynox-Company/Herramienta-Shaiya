@@ -770,11 +770,30 @@ class SvmapMobArea {
   SvmapMobArea(this.lower,this.upper,this.mobs);
   v.Vector3 get center=>(lower+upper)*.5;
 }
+class SvmapPortal {
+  final v.Vector3 position,target;
+  final int factionOrId,minLevel,maxLevel,targetMap;
+  SvmapPortal(this.position,this.factionOrId,this.minLevel,this.maxLevel,this.targetMap,this.target);
+}
+class SvmapSpawnArea {
+  final int faction;
+  final v.Vector3 lower,upper;
+  SvmapSpawnArea(this.faction,this.lower,this.upper);
+  v.Vector3 get center=>(lower+upper)*.5;
+}
+class SvmapNamedArea {
+  final v.Vector3 lower,upper;
+  final int name1,name2;
+  SvmapNamedArea(this.lower,this.upper,this.name1,this.name2);
+}
 class SvmapData {
   final int mapSize,cellSize;
   final List<SvmapNpcPlacement> npcs;
   final List<SvmapMobArea> mobAreas;
-  SvmapData(this.mapSize,this.cellSize,this.npcs,this.mobAreas);
+  final List<SvmapPortal> portals;
+  final List<SvmapSpawnArea> spawns;
+  final List<SvmapNamedArea> namedAreas;
+  SvmapData(this.mapSize,this.cellSize,this.npcs,this.mobAreas,this.portals,this.spawns,this.namedAreas);
   static SvmapData parse(Uint8List bytes,String source){
     final r=Bin(bytes,source);
     final mapSize=r.i32();
@@ -787,19 +806,37 @@ class SvmapData {
     for(var i=0;i<areaCount;i++){
       final lower=r.vec(),upper=r.vec(),mobs=<SvmapMobSpawn>[];
       final n=r.count(10000);
-      for(var j=0;j<n;j++)mobs.add(SvmapMobSpawn(r.u32(),r.u32()));
+      for(var j=0;j<n;j++){mobs.add(SvmapMobSpawn(r.u32(),r.u32()));}
       areas.add(SvmapMobArea(lower,upper,mobs));
     }
     final npcs=<SvmapNpcPlacement>[];
     final npcGroups=r.count(100000);
     for(var i=0;i<npcGroups;i++){
       final type=r.i32(),id=r.i32(),n=r.count(10000);
-      for(var j=0;j<n;j++)npcs.add(SvmapNpcPlacement(type,id,r.vec(),r.f32()));
+      for(var j=0;j<n;j++){npcs.add(SvmapNpcPlacement(type,id,r.vec(),r.f32()));}
     }
-    return SvmapData(mapSize,cellSize,npcs,areas);
+    final portals=<SvmapPortal>[];
+    final portalCount=r.count(100000);
+    for(var i=0;i<portalCount;i++){
+      final position=r.vec(),factionOrId=r.i32(),minLevel=r.u16(),maxLevel=r.u16(),targetMap=r.u32(),target=r.vec();
+      portals.add(SvmapPortal(position,factionOrId,minLevel,maxLevel,targetMap,target));
+    }
+    final spawns=<SvmapSpawnArea>[];
+    final spawnCount=r.count(100000);
+    for(var i=0;i<spawnCount;i++){
+      r.i32();final faction=r.i32();r.i32();final lower=r.vec(),upper=r.vec();
+      spawns.add(SvmapSpawnArea(faction,lower,upper));
+    }
+    final named=<SvmapNamedArea>[];
+    final namedCount=r.count(100000);
+    for(var i=0;i<namedCount;i++){
+      final lower=r.vec(),upper=r.vec(),name1=r.i32(),name2=r.i32();
+      named.add(SvmapNamedArea(lower,upper,name1,name2));
+    }
+    if(r.offset>bytes.length)r.fail('SVMAP truncado.');
+    return SvmapData(mapSize,cellSize,npcs,areas,portals,spawns,named);
   }
 }
-
 class StaticPart {
   final String texture;
   final MeshData mesh;
