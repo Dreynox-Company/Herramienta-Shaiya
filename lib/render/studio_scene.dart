@@ -70,6 +70,8 @@ class StudioScene extends ChangeNotifier {
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
   WorldData? world;String? worldPath,effectPath,skyPath;
+  final List<String> loadedWorldAssets=[];
+  final List<String> missingWorldAssets=[];
   final Map<String,({double height,double forward})> _seats={};
   String lastImpact='';t.Sprite? hitSprite;t.Texture? effectTexture;double hitLife=0;
   final Combat combat=Combat();AudioPlayer? _audio;AudioPlayer get audio=>_audio??=AudioPlayer();
@@ -364,7 +366,8 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);if(w.size==0)throw const FormatException('Este WLD es una mazmorra DG; su geometría aún no se interpreta. Selecciona un mapa exterior FLD.');if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
     final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[];
     try{
@@ -373,8 +376,26 @@ class StudioScene extends ChangeNotifier {
       for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
       if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');var loaded=0;
       final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
-      for(final obj in nearby.take(80)){final model=lib.resolve(obj.asset,['entity/${obj.category}']);if(model==null||!model.endsWith('.smod'))continue;
-        try{final objects=readSmod(await lib.read(model),model),group=t.Group();for(final piece in objects){final tex=lib.resolve(piece.texture,['entity/${obj.category}','entity/${obj.category}/texture','entity/${obj.category}/textures'],uniqueFallback:true);if(tex==null)continue;final p=await makePart(piece.mesh,tex);parts.add(p);group.add(p.mesh);}group.scale.z=-1;group.position.setValues(obj.position.x-ox,obj.position.y,-(obj.position.z-oz));group.rotation.y=-math.atan2(obj.forward.x,obj.forward.z);stage.add(group);loaded++;}catch(e){report('Objeto $model: $e');}
+      for(final obj in nearby.take(80)){
+        final model=lib.resolve(obj.asset,['entity/${obj.category}']);
+        if(model==null||!model.endsWith('.smod')){
+          missingWorldAssets.add('${obj.category}:${obj.asset}');
+          continue;
+        }
+        try{
+          final objects=readSmod(await lib.read(model),model),group=t.Group();
+          var pieceCount=0;
+          for(final piece in objects){
+            final tex=lib.resolve(piece.texture,['entity/${obj.category}','entity/${obj.category}/texture','entity/${obj.category}/textures'],uniqueFallback:true);
+            if(tex==null){missingWorldAssets.add('texture:${piece.texture} @ ${obj.asset}');continue;}
+            final p=await makePart(piece.mesh,tex);parts.add(p);group.add(p.mesh);pieceCount++;
+          }
+          if(pieceCount==0){missingWorldAssets.add('empty:${obj.asset}');continue;}
+          group.scale.z=-1;
+          group.position.setValues(obj.position.x-ox,obj.position.y,-(obj.position.z-oz));
+          group.rotation.y=-math.atan2(obj.forward.x,obj.forward.z);
+          stage.add(group);loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
+        }catch(e){missingWorldAssets.add('error:${obj.asset}');report('Objeto $model: $e');}
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
@@ -399,5 +420,13 @@ int _averageTextureColor(Map<String,Object> args){
   }
   if(n==0)return 0x11151e;
   return ((r~/n)<<16)|((g~/n)<<8)|(bl~/n);
+}
+Uint8List _decodeBackdropTexture(Map<String,Object> args){
+  final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
+  final row=p.width*4,out=Uint8List(p.rgba.length);
+  for(var y=0;y<p.height;y++){
+    out.setRange(y*row,(y+1)*row,p.rgba,(p.height-1-y)*row);
+  }
+  return Pixels(p.width,p.height,out).png(opaque:args['opaque'] as bool);
 }
 Uint8List _decodeTexture(Map<String,Object> args)=>Pixels.decode(args['bytes'] as Uint8List,args['path'] as String).png(opaque:args['opaque'] as bool);
