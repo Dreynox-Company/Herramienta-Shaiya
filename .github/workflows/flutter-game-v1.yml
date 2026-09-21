@@ -1,7 +1,7 @@
 name: Flutter game client v1
 on:
   push:
-    branches: [work/flutter-game-client-v1]
+    branches: [work/flutter-game-parity-v2]
   workflow_dispatch:
 permissions:
   contents: read
