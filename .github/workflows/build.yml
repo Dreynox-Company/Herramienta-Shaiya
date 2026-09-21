@@ -95,6 +95,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic fixture generation failed.' }
           "SHAIYA_FIXTURE_PATH=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append
           "SHAIYA_QA_PATH=$qa" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Native SPK codec integration
+        run: flutter test integration_test/spk_native_test.dart -d windows --reporter expanded
       - name: Native integration - editor, archives, flight, mounts and combat
         run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
       - name: Build Windows release
