@@ -12,11 +12,11 @@ target = root / 'android/app/src/main/kotlin/com/dreynox/herramienta_shaiya/Main
 target.parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(root / 'platform/android/MainActivity.kt', target)
 manifest = root / 'android/app/src/main/AndroidManifest.xml'
-text = manifest.read_text(encoding='utf-8').replace('android:label="herramienta_shaiya"', 'android:label="Shaiya Studio"')
+text = manifest.read_text(encoding='utf-8').replace('android:label="Shaiya"', 'android:label="Shaiya"')
 manifest.write_text(text, encoding='utf-8')
 runner = root / 'windows/runner/main.cpp'
 if runner.exists():
-    s = runner.read_text(encoding='utf-8').replace('L"herramienta_shaiya"', 'L"Shaiya Studio"').replace('1280, 720', '1440, 900')
+    s = runner.read_text(encoding='utf-8').replace('L"herramienta_shaiya"', 'L"Shaiya"').replace('1280, 720', '1024, 768')
     runner.write_text(s, encoding='utf-8')
 # La prueba del contador generada por flutter create no pertenece a este programa.
 generated_test = root / 'test/widget_test.dart'
