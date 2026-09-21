@@ -730,14 +730,24 @@ class WorldData {
   final List<WorldLayer> layers;
   final List<WorldInstance> objects;
   final String layout;
+  final String skyFile,primaryCloudFile,secondaryCloudFile;
+  final v.Vector3 fogColor;
+  final double fogStart,fogEnd;
   WorldData(
     this.size,
     this.heights,
     this.types,
     this.layers,
     this.objects,
-    this.layout,
-  );
+    this.layout,{
+    this.skyFile='',
+    this.primaryCloudFile='',
+    this.secondaryCloudFile='',
+    v.Vector3? fogColor,
+    this.fogStart=0,
+    this.fogEnd=0,
+  }):fogColor=fogColor??v.Vector3.zero();
+
   static WorldData parse(Uint8List bytes, String source) {
     final r = Bin(bytes, source), sig = r.str(4);
     if (sig != 'FLD' && sig != 'DUN') r.fail('Cabecera WLD desconocida.');
@@ -761,26 +771,97 @@ class WorldData {
         layers.add(WorldLayer(r.str(256), r.f32(), r.str(256)));
       }
     }
+
     final layout = r.str(256), objects = <WorldInstance>[];
-    for (final category in [
-      'Building',
-      'Shape',
-      'Tree',
-      'Grass',
-      'VAni',
-      'VAni',
-      'dungeon',
-    ]) {
+
+    void readCategory(String category,{bool keep=true}) {
       final names = List.generate(r.count(20000), (_) => r.str(256));
       final n = r.count(1000000);
       r.need(n * 40);
       for (var i = 0; i < n; i++) {
-        final id = r.u32(), p = r.vec(), f = r.vec(), u = r.vec();
-        if (id >= names.length) r.fail('Objeto WLD no definido.');
-        objects.add(WorldInstance(category, names[id], p, f, u));
+        final id = r.i32(), p = r.vec(), f = r.vec(), u = r.vec();
+        if (id < 0 || id >= names.length) r.fail('Objeto WLD no definido.');
+        if(keep)objects.add(WorldInstance(category, names[id], p, f, u));
       }
     }
-    return WorldData(size, heights, types, layers, objects, layout);
+    void skipNames(){
+      final n=r.count(20000);
+      for(var i=0;i<n;i++)r.str(256);
+    }
+    void skipBox()=>r.skip(24);
+
+    readCategory('Building');
+    readCategory('Shape');
+    readCategory('Tree');
+    readCategory('Grass',keep:false);
+    readCategory('VAni',keep:false);
+    readCategory('VAni',keep:false);
+    readCategory('dungeon',keep:false);
+
+    var skyFile='',primaryCloud='',secondaryCloud='';
+    var fog=v.Vector3.zero(),fogStart=0.0,fogEnd=0.0;
+
+    // Full WLD tail.  Older lab fixtures intentionally ended after the seven
+    // legacy categories, so keep that minimal form readable for unit tests.
+    if(r.offset < bytes.length){
+      skipNames(); // MAni asset names.
+      final mani=r.count(1000000);r.skip(mani*44);
+      r.str(256); // EFT file.
+      final effects=r.count(1000000);r.skip(effects*40);
+      r.skip(12); // Unknown1..3.
+
+      // Entity/Object is a real render category used by the native client.
+      readCategory('Object');
+
+      skipNames(); // music
+      final musicZones=r.count(1000000);r.skip(musicZones*36);
+      skipNames(); // sound effect assets
+
+      final zones=r.count(1000000);
+      for(var i=0;i<zones;i++){
+        skipBox();
+        final ids=r.count(1000000);r.skip(ids*4);
+      }
+
+      final soundEffects=r.count(1000000);r.skip(soundEffects*20);
+      final restricted=r.count(1000000);r.skip(restricted*28);
+      final portals=r.count(1000000);r.skip(portals*556);
+      final spawns=r.count(1000000);r.skip(spawns*40);
+      final named=r.count(1000000);r.skip(named*548);
+
+      var npcRows=r.i32();
+      if(npcRows<0)r.fail('Recuento de NPC WLD inválido.');
+      while(npcRows>0){
+        r.skip(4+4+12+4);
+        final patrol=r.count(1000000);
+        r.skip(patrol*12);
+        npcRows-=patrol+1;
+        if(npcRows<0)r.fail('Patrulla NPC WLD excede el recuento declarado.');
+      }
+
+      if(sig=='FLD'){
+        skyFile=r.str(256);
+        primaryCloud=r.str(256);
+        secondaryCloud=r.str(256);
+      }
+
+      // unusedColor1, unusedColor2, fogColor, fogStart, fogEnd.
+      r.skip(24);
+      fog=r.vec();
+      fogStart=r.f32();
+      fogEnd=r.f32();
+      r.end();
+    }
+
+    return WorldData(
+      size, heights, types, layers, objects, layout,
+      skyFile:skyFile,
+      primaryCloudFile:primaryCloud,
+      secondaryCloudFile:secondaryCloud,
+      fogColor:fog,
+      fogStart:fogStart,
+      fogEnd:fogEnd,
+    );
   }
 
   double heightAt(
@@ -802,7 +883,6 @@ class WorldData {
         (h(a, b + 1) * (1 - tx) + h(a + 1, b + 1) * tx) * tz;
   }
 }
-
 
 class SvmapNpcWaypoint {
   final v.Vector3 position;
