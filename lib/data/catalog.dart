@@ -289,7 +289,7 @@ class Catalog {
       final file = baseName(meshPath);
       final lower = file.toLowerCase();
       final code = archetypeCodes
-          .where((value) => lower.startsWith(value + '_'))
+          .where((value) => lower.startsWith('${value}_'))
           .firstOrNull;
       if (code == null || existing.contains(code)) continue;
 
@@ -300,8 +300,8 @@ class Catalog {
       final root = meshPath.substring(0, marker);
       final stem = file.substring(0, file.length - 4);
       final texture = library.resolve(
-        stem + '.dds',
-        [root + '/dds'],
+        '$stem.dds',
+        ['$root/dds'],
         uniqueFallback: false,
       );
       if (texture == null) continue;
@@ -332,7 +332,7 @@ class Catalog {
       final upper = entry.value[Slot.upper] ?? const <PartRecord>[];
       if (upper.isEmpty) continue;
       final root = roots[entry.key]!;
-      final animationPrefix = root + '/ani/' + entry.key + '_';
+      final animationPrefix = '$root/ani/${entry.key}_';
       final animations = paths
           .where(
             (value) =>
