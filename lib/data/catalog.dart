@@ -181,7 +181,7 @@ class Catalog {
   final GameNames names = GameNames();
   final List<Archetype> archetypes = [];
   final List<WeaponRecord> weapons = [];
-  final List<CreatureRecord> creatures = [], mounts = [], wings = [];
+  final List<CreatureRecord> creatures = [], npcs = [], mounts = [], wings = [];
   final List<String> worlds = [],
       sounds = [],
       effects = [],
@@ -313,6 +313,7 @@ class Catalog {
       (p) =>
           p.endsWith('.mon') &&
           (p.startsWith('monster/') ||
+              p.startsWith('npc/') ||
               p.startsWith('vehicle/') ||
               p.startsWith('character/wing/')),
     )) {
@@ -325,6 +326,8 @@ class Catalog {
           mounts.addAll(entries);
         } else if (p.startsWith('character/wing/')) {
           wings.addAll(entries);
+        } else if (p.startsWith('npc/')) {
+          npcs.addAll(entries);
         } else {
           creatures.addAll(entries);
         }
