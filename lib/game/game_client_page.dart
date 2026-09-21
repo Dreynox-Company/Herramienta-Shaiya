@@ -180,12 +180,13 @@ class _GameClientPageState extends State<GameClientPage> {
     ui=UiAssetCache(lib);
     metadata=await ServerMetadata.load();
     scene.catalog=c;
-    await _applyDefaultAppearance();
 
     stage=widget.initialStage??GameStage.faction;
+    if(stage==GameStage.characterMode)createTab=2;
+    await _preloadUi(stage);
+    await _applyDefaultAppearance();
     if(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode){
-      if(stage==GameStage.characterMode){createTab=2;stage=GameStage.characterMode;}
-      await _prepareSelectionWorld();
+      await _prepareSelectionWorld(creation:stage!=GameStage.characterSelect);
       characterCreated=stage==GameStage.characterSelect;
     }else if(stage==GameStage.world){
       characterCreated=true;
@@ -220,6 +221,74 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[QA] '+e.toString());}
   }
 
+  Future<void> _preloadUi(GameStage target) async {
+    final cache=ui;
+    if(cache==null)return;
+    final common=<String>[
+      'interface/main_button.tga',
+    ];
+    final paths=<String>[...common];
+    switch(target){
+      case GameStage.faction:
+        paths.addAll([
+          'interface/countryselect/bg.tga',
+          'interface/countryselect/light_select.tga',
+          'interface/countryselect/fury_select.tga',
+          'interface/countryselect/text/lightselect_spn.tga',
+          'interface/countryselect/text/furyselect_spn.tga',
+        ]);
+        break;
+      case GameStage.characterSelect:
+        paths.addAll([
+          'interface/characterselect/selectbg.tga',
+          'interface/characterselect/button/selectbtn_fi.tga',
+          'interface/characterselect/button/selectbtn_disable.tga',
+          'interface/characterselect/button/select_start_spn.tga',
+        ]);
+        break;
+      case GameStage.characterCreate:
+      case GameStage.characterMode:
+        paths.addAll([
+          'interface/charactermake/basicinfo_bg.tga',
+          'interface/charactermake/appearance_bg.tga',
+          'interface/charactermake/mode_bg.tga',
+          'interface/charactermake/classinfo/bg.tga',
+          'interface/charactermake/button/fighter_worrior.tga',
+          'interface/charactermake/button/defender_guardian.tga',
+          'interface/charactermake/button/priest_oracle.tga',
+          'interface/charactermake/button/ranger_assassin.tga',
+          'interface/charactermake/button/archer_hunter.tga',
+          'interface/charactermake/button/mage_pagan.tga',
+          'interface/charactermake/button/sexm.tga',
+          'interface/charactermake/button/sexw.tga',
+          'interface/charactermake/button/mode_basic.tga',
+          'interface/charactermake/button/mode_ultimate.tga',
+        ]);
+        break;
+      case GameStage.world:
+        paths.addAll([
+          'interface/main_bottom.tga',
+          'interface/main_map.tga',
+          'interface/main_stats_bar_bg.tga',
+          'interface/quest/quest.tga',
+          'interface/minimap/1.tga',
+          'interface/main_bottom_btn_status.tga',
+          'interface/main_bottom_btn_item.tga',
+          'interface/main_bottom_btn_quest.tga',
+          'interface/main_bottom_btn_skill.tga',
+          'interface/main_bottom_btn_option.tga',
+          'interface/main_bottom_btn_event.tga',
+          'interface/main_bottom_btn_guild.tga',
+          'interface/main_bottom_btn_helper.tga',
+          'interface/main_bottom_btn_shop.tga',
+          'interface/main_bottom_btn_sub.tga',
+        ]);
+        break;
+    }
+    progress='Precargando interfaz original…';
+    await cache.preload(paths);
+  }
+
   Future<void> _applyDefaultAppearance() async {
     final c=catalog!;
     final preferred=faction=='light'
@@ -238,22 +307,32 @@ class _GameClientPageState extends State<GameClientPage> {
     await scene.setAppearance(look);
   }
 
-  Future<void> _prepareSelectionWorld() async {
+  Future<void> _prepareSelectionWorld({bool creation=false}) async {
     final c=catalog!;
     final wanted=faction=='light'?'world/select_a.wld':'world/select_b.wld';
+    final fallback=faction=='light'?'select_a.wld':'select_b.wld';
     final path=c.library.files.containsKey(wanted)
       ?wanted
-      :c.worlds.where((p)=>baseName(p).toLowerCase()=='select_a.wld').firstOrNull;
+      :c.worlds.where((p)=>baseName(p).toLowerCase()==fallback).firstOrNull;
     if(path!=null){
-      try{await scene.setWorld(path);}
-      catch(e){messages.insert(0,'[Selección] '+e.toString());}
+      try{
+        // select_A places the pedestal/character scene around this authored cluster.
+        // Loading the WLD at its geometric center shows an unrelated grassy field.
+        final sx=faction=='light'?235.1:null;
+        final sz=faction=='light'?164.2:null;
+        await scene.setWorld(path,x:sx,z:sz);
+      }catch(e){messages.insert(0,'[Selección] '+e.toString());}
     }else{
       await scene.setWorld(null);
     }
+    // The original selection/creation camera faces the character.
+    scene.character?.root.rotation.y=math.pi;
     scene.yaw=math.pi;
     scene.pitch=.03;
-    scene.distance=5.4;
-    scene.targetY=1.25;
+    scene.panX=creation?0:-2.4;
+    scene.panZ=0;
+    scene.distance=creation?2.45:3.15;
+    scene.targetY=1.22;
     scene.updateCamera();
   }
 
@@ -277,6 +356,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _enterWorld() async {
     if(mounted)setState(()=>loading=true);
+    await _preloadUi(GameStage.world);
     final c=catalog!;
     svmap??=await _loadSvmap();
     var world=c.worlds.where((p)=>baseName(p).toLowerCase()=='1.wld').firstOrNull;
@@ -284,10 +364,12 @@ class _GameClientPageState extends State<GameClientPage> {
 
     double? x,z;
     final map=svmap;
-    if(map!=null){
-      final side=map.spawns.where((s)=>faction=='light'
-        ?(s.faction==0||s.faction==2)
-        :(s.faction==1||s.faction==2)).firstOrNull;
+    if(faction=='light'){
+      // Exact map-1 position observed from the validated native 0.1.2 character.
+      x=580.0;
+      z=1769.87744140625;
+    }else if(map!=null){
+      final side=map.spawns.where((s)=>s.faction==1||s.faction==2).firstOrNull;
       final spawn=side??map.spawns.firstOrNull;
       if(spawn!=null){x=spawn.center.x;z=spawn.center.z;}
     }
@@ -297,6 +379,9 @@ class _GameClientPageState extends State<GameClientPage> {
       catch(e){messages.insert(0,'[Mapa] '+e.toString());}
     }
 
+    scene.panX=0;
+    scene.panZ=0;
+    scene.character?.root.rotation.y=0;
     scene.yaw=math.pi;
     scene.pitch=.10;
     scene.distance=7.2;
@@ -338,6 +423,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _goSelect() async {
     if(mounted)setState(()=>loading=true);
+    await _preloadUi(GameStage.characterSelect);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld();
     if(mounted)setState((){stage=GameStage.characterSelect;loading=false;});
@@ -345,17 +431,16 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _goCreate() async {
     if(mounted)setState(()=>loading=true);
+    await _preloadUi(GameStage.characterCreate);
     await _applyDefaultAppearance();
-    await _prepareSelectionWorld();
-    scene.distance=4.4;
-    scene.targetY=1.15;
-    scene.updateCamera();
+    await _prepareSelectionWorld(creation:true);
     if(mounted)setState((){stage=GameStage.characterCreate;loading=false;});
   }
 
   Future<void> _finishCreate() async {
     if(nameController.text.trim().isEmpty)nameController.text='DreynoxLocal';
     characterCreated=true;
+    await _preloadUi(GameStage.characterSelect);
     await _prepareSelectionWorld();
     if(mounted)setState(()=>stage=GameStage.characterSelect);
   }
@@ -364,8 +449,9 @@ class _GameClientPageState extends State<GameClientPage> {
     genderIndex=value;
     if(mounted)setState((){});
     await _applyDefaultAppearance();
-    scene.distance=4.4;
-    scene.targetY=1.15;
+    scene.character?.root.rotation.y=math.pi;
+    scene.distance=2.45;
+    scene.targetY=1.22;
     scene.updateCamera();
   }
 
