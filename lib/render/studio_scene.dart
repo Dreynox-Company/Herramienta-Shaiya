@@ -452,11 +452,28 @@ class StudioScene extends ChangeNotifier {
     part.mesh.scale.setValues(850/radius,850/radius,-850/radius);part.mesh.renderOrder=-1000;part.mesh.material?.depthWrite=false;part.mesh.material?.depthTest=false;
     sky?.dispose();sky=part;skyPath=path;view!.scene.add(part.mesh);updateCamera();say('Cielo original: ${baseName(path)}');
   }
+  void applyWorldFog(WorldData? w){
+    final scene=view?.scene;
+    if(scene==null)return;
+    if(w==null||w.size==0||!w.fogStart.isFinite||!w.fogEnd.isFinite||w.fogEnd<=w.fogStart){
+      scene.fog=null;
+      return;
+    }
+    int component(double value){
+      final scaled=value<=1.0001?value*255:value;
+      return scaled.round().clamp(0,255);
+    }
+    final r=component(w.fogColor.x),g=component(w.fogColor.y),b=component(w.fogColor.z);
+    final color=(r<<16)|(g<<8)|b;
+    scene.fog=t.Fog(color,w.fogStart,w.fogEnd);
+  }
+
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    if(path==null){applyWorldFog(null);loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
+    applyWorldFog(w);
 
     if(w.size==0){
       final layout=lib.resolve(w.layout,['world/dungeon'],uniqueFallback:true);
