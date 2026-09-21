@@ -231,11 +231,63 @@ class LoginSession {
   });
 }
 
+class PsCharacterSlot {
+  final int slot,id,mapId;
+  final int level,race,mode,hair,face,height,profession,gender;
+  const PsCharacterSlot({
+    required this.slot,required this.id,required this.mapId,
+    required this.level,required this.race,required this.mode,
+    required this.hair,required this.face,required this.height,
+    required this.profession,required this.gender,
+  });
+  bool get exists=>id!=0;
+
+  static PsCharacterSlot parse(PsPacket packet){
+    if(packet.type!=PsPacketType.characterList||packet.body.length<5){
+      throw FormatException('CHARACTER_LIST inválido.');
+    }
+    final b=packet.body,slot=b[0],id=ByteData.sublistView(b).getUint32(1,Endian.little);
+    if(id==0){
+      return PsCharacterSlot(
+        slot:slot,id:0,mapId:0,level:0,race:0,mode:0,hair:0,face:0,height:0,profession:0,gender:0,
+      );
+    }
+    if(b.length<20)throw FormatException('CHARACTER_LIST existente truncado: ${b.length}');
+    return PsCharacterSlot(
+      slot:slot,id:id,level:_u16(b,9),race:b[11],mode:b[12],hair:b[13],
+      face:b[14],height:b[15],profession:b[16],gender:b[17],mapId:_u16(b,18),
+    );
+  }
+}
+
+class PsCharacterDetails {
+  final double x,y,z;
+  final int angle;
+  const PsCharacterDetails(this.x,this.y,this.z,this.angle);
+  static PsCharacterDetails parse(PsPacket p){
+    if(p.type!=PsPacketType.characterDetails||p.body.length<58){
+      throw FormatException('CHARACTER_DETAILS truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterDetails(
+      d.getFloat32(46,Endian.little),
+      d.getFloat32(50,Endian.little),
+      d.getFloat32(54,Endian.little),
+      d.getUint16(28,Endian.little),
+    );
+  }
+}
+
 class WorldBootstrap {
   final int faction,maxMode;
   final List<PsPacket> packets;
   const WorldBootstrap(this.faction,this.maxMode,this.packets);
   int get characterListPackets=>packets.where((p)=>p.type==PsPacketType.characterList).length;
+  List<PsCharacterSlot> get characters=>packets
+    .where((p)=>p.type==PsPacketType.characterList)
+    .map(PsCharacterSlot.parse)
+    .toList()
+    ..sort((a,b)=>a.slot.compareTo(b.slot));
 }
 
 class Ps0032Client {
