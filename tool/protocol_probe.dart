@@ -140,6 +140,8 @@ Future<void> main() async {
     }
     if(currentHp==null)throw StateError('CHARACTER_CURRENT_HITPOINTS missing.');
     if(currentHp.hp<=0||currentHp.mp<0||currentHp.sp<0)throw StateError('Current hitpoints invalid.');
+    if(skillBook==null)throw StateError('CHARACTER_SKILLS missing.');
+    if(quickbar==null)throw StateError('CHARACTER_SKILL_BAR missing.');
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
