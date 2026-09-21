@@ -23,6 +23,8 @@ class PsPacketType {
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
+  static const characterCurrentHitpoints=0x0521;
+  static const characterAdditionalStats=0x0526;
   static const mobEnter=0x0601;
   static const mobLeave=0x0602;
   static const mobMove=0x0603;
@@ -424,19 +426,97 @@ class PsCharacterSlot {
 }
 
 class PsCharacterDetails {
+  final int strength,dexterity,reaction,intelligence,wisdom,luck;
+  final int statPoint,skillPoint,maxHp,maxMp,maxSp,angle;
+  final int startExp,endExp,currentExp,gold,kills,deaths,victories,defeats;
   final double x,y,z;
-  final int angle;
-  const PsCharacterDetails(this.x,this.y,this.z,this.angle);
+  final String guildName;
+  const PsCharacterDetails({
+    required this.strength,required this.dexterity,required this.reaction,
+    required this.intelligence,required this.wisdom,required this.luck,
+    required this.statPoint,required this.skillPoint,
+    required this.maxHp,required this.maxMp,required this.maxSp,required this.angle,
+    required this.startExp,required this.endExp,required this.currentExp,required this.gold,
+    required this.x,required this.y,required this.z,
+    required this.kills,required this.deaths,required this.victories,required this.defeats,
+    required this.guildName,
+  });
+  double get experienceRatio {
+    final span=endExp-startExp;
+    if(span<=0)return 0;
+    return ((currentExp-startExp)/span).clamp(0.0,1.0);
+  }
   static PsCharacterDetails parse(PsPacket p){
-    if(p.type!=PsPacketType.characterDetails||p.body.length<58){
+    if(p.type!=PsPacketType.characterDetails||p.body.length<74){
       throw FormatException('CHARACTER_DETAILS truncado: ${p.body.length}');
     }
-    final d=ByteData.sublistView(p.body);
+    final b=p.body,d=ByteData.sublistView(b);
+    String guild='';
+    if(b.length>=99){
+      final raw=b.sublist(74,99),zero=raw.indexOf(0);
+      guild=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+    }
     return PsCharacterDetails(
-      d.getFloat32(46,Endian.little),
-      d.getFloat32(50,Endian.little),
-      d.getFloat32(54,Endian.little),
-      d.getUint16(28,Endian.little),
+      strength:d.getUint16(0,Endian.little),
+      dexterity:d.getUint16(2,Endian.little),
+      reaction:d.getUint16(4,Endian.little),
+      intelligence:d.getUint16(6,Endian.little),
+      wisdom:d.getUint16(8,Endian.little),
+      luck:d.getUint16(10,Endian.little),
+      statPoint:d.getUint16(12,Endian.little),
+      skillPoint:d.getUint16(14,Endian.little),
+      maxHp:d.getInt32(16,Endian.little),
+      maxMp:d.getInt32(20,Endian.little),
+      maxSp:d.getInt32(24,Endian.little),
+      angle:d.getUint16(28,Endian.little),
+      startExp:d.getUint32(30,Endian.little),
+      endExp:d.getUint32(34,Endian.little),
+      currentExp:d.getUint32(38,Endian.little),
+      gold:d.getUint32(42,Endian.little),
+      x:d.getFloat32(46,Endian.little),
+      y:d.getFloat32(50,Endian.little),
+      z:d.getFloat32(54,Endian.little),
+      kills:d.getUint32(58,Endian.little),
+      deaths:d.getUint32(62,Endian.little),
+      victories:d.getUint32(66,Endian.little),
+      defeats:d.getUint32(70,Endian.little),
+      guildName:guild,
+    );
+  }
+}
+
+class PsHitpoints {
+  final int hp,mp,sp;
+  const PsHitpoints(this.hp,this.mp,this.sp);
+  static PsHitpoints parse(PsPacket p){
+    if(p.type!=PsPacketType.characterCurrentHitpoints||p.body.length<12){
+      throw FormatException('CHARACTER_CURRENT_HITPOINTS truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsHitpoints(
+      d.getInt32(0,Endian.little),
+      d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),
+    );
+  }
+}
+
+class PsAdditionalStats {
+  final int strength,reaction,intelligence,wisdom,dexterity,luck;
+  final int minAttack,maxAttack,minMagicAttack,maxMagicAttack,defense,resistance;
+  const PsAdditionalStats(
+    this.strength,this.reaction,this.intelligence,this.wisdom,this.dexterity,this.luck,
+    this.minAttack,this.maxAttack,this.minMagicAttack,this.maxMagicAttack,this.defense,this.resistance,
+  );
+  static PsAdditionalStats parse(PsPacket p){
+    if(p.type!=PsPacketType.characterAdditionalStats||p.body.length<48){
+      throw FormatException('CHARACTER_ADDITIONAL_STATS truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    final values=List<int>.generate(12,(i)=>d.getInt32(i*4,Endian.little));
+    return PsAdditionalStats(
+      values[0],values[1],values[2],values[3],values[4],values[5],
+      values[6],values[7],values[8],values[9],values[10],values[11],
     );
   }
 }
