@@ -143,7 +143,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Native-Windows-Interaction-Proof
-          run-id: 35541302782
+          run-id: 35547109100
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: native-reference
       - name: Prepare Flutter Windows integration runner and packaged server metadata
@@ -166,7 +166,7 @@ jobs:
           @'
           import pathlib,tarfile,urllib.request,time
           target=pathlib.Path('public-client')
-          wanted={'data.sah','data.saf'}
+          wanted={'game.exe','data.sah','data.saf'}
           found=set();started=time.monotonic()
           url='https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz'
           with urllib.request.urlopen(url,timeout=180) as r:
@@ -186,7 +186,7 @@ jobs:
                 found.add(name)
                 print(name,dst.stat().st_size)
                 if found==wanted: break
-          if found!=wanted: raise RuntimeError('public ps0032 SAH/SAF not found: '+repr(found))
+          if found!=wanted: raise RuntimeError('public ps0032 game/SAH/SAF not found: '+repr(found))
           print('download seconds',round(time.monotonic()-started,1))
           '@ | Set-Content recover_public_data.py
           python recover_public_data.py
@@ -206,7 +206,7 @@ jobs:
           $env:SHAIYA_EXPECT_REAL_DATA='1'
           flutter test integration_test/game_visual_parity_test.dart -d windows --reporter expanded
           if($LASTEXITCODE -ne 0){throw 'real-DATA Flutter parity integration test failed'}
-          foreach($s in @('faction','characterSelect','characterCreate','world')){
+          foreach($s in @('faction','characterSelect','characterCreate','characterMode','world')){
             if(!(Test-Path ("parity-report/"+$s+".png"))){throw "missing framebuffer: $s"}
           }
       - name: Compare native and Flutter scenes
@@ -223,6 +223,7 @@ jobs:
             'faction':'03-faction-selected.png',
             'characterSelect':'07-character-created.png',
             'characterCreate':'05-character-editor.png',
+            'characterMode':'06c-mode-selected.png',
             'world':'09-world-entry.png',
           }
           def flutter_image(stage):
