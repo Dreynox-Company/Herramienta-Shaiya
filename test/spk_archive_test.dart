@@ -184,8 +184,8 @@ void main() {
     test('resource profile accepts AES-256 while index remains AES-128', () {
       final p = SpkCryptoProfile.fromJson({
         'profileId': 'aes256-resources',
-        'index': {'secretHex': '00' * 16},
-        'resources': {'secretHex': '11' * 32},
+        'index': {'secretHex': '00000000000000000000000000000000'},
+        'resources': {'secretHex': '1111111111111111111111111111111111111111111111111111111111111111'},
       });
       expect(p.indexSecret.length, 16);
       expect(p.effectiveResourceSecret?.length, 32);
