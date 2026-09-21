@@ -513,6 +513,7 @@ class SpkArchiveSource {
       (index.fragmentedResources.isEmpty || canReadFragmentedResources);
 
   bool get fullyValidatedResources =>
+      canExtractAll &&
       fullResourceValidation?['status'] == 'validated' &&
       fullResourceValidation?['validatedResources'] == index.resources.length &&
       _validatedFormats.length == index.resources.length;
@@ -526,6 +527,7 @@ class SpkArchiveSource {
   };
 
   bool restoreFullResourceValidation(Map<String, dynamic> evidence) {
+    if (!canExtractAll) return false;
     final declaredIndex = evidence['indexSha256']?.toString().toLowerCase();
     if (declaredIndex != index.encryptedIndexSha256.toLowerCase()) return false;
 
