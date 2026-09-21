@@ -92,7 +92,10 @@ class StudioScene extends ChangeNotifier {
   void setGridVisible(bool value){gridVisible=value;if(grid!=null)grid!.visible=value;notifyListeners();}
   Future<RenderPart> makePart(MeshData data,String texturePath,{bool opaque=false}) async {
     final bytes=await catalog!.library.read(texturePath);final png=await compute(_decodeTexture,{'bytes':bytes,'path':texturePath,'opaque':opaque});
-    final texture=await t.TextureLoader(flipY:true).fromBytes(png);if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
+    // Shaiya meshes were authored for Direct3D UVs (V=0 at the top).  Do not
+    // apply Three/OpenGL's image flip here; doing so maps skin/face regions to
+    // the wrong polygons.  2D scene backdrops use their own loading path.
+    final texture=await t.TextureLoader(flipY:false).fromBytes(png);if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
     texture.colorSpace=t.SRGBColorSpace;texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
     final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3);
     geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',t.Float32BufferAttribute.fromList(data.normals.toList(),3));geometry.setAttributeFromString('uv',t.Float32BufferAttribute.fromList(data.uv.toList(),2));geometry.setIndex(data.indices.toList());
