@@ -41,6 +41,7 @@ const supportedExtensions = {
   '.smod',
   '.dg',
   '.eft',
+  '.sdata',
 };
 bool supportedPath(String p) {
   final i = p.lastIndexOf('.');
