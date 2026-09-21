@@ -128,7 +128,9 @@ class ServerMetadata {
         .toList();
       final root=File(Platform.resolvedExecutable).parent.path;
       final configCandidates=<String>[
+        root+'/server/metadata/character.json',
         root+'/servicios/world/config/character.json',
+        Directory.current.path+'/server/metadata/character.json',
         Directory.current.path+'/servicios/world/config/character.json',
       ];
       final createRules=<String,CharacterCreateRule>{};
