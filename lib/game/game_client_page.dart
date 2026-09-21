@@ -311,6 +311,19 @@ class _GameClientPageState extends State<GameClientPage> {
     await scene.setAppearance(look);
   }
 
+  void _applyCreationCamera(){
+    // CharacterMake is rendered inside Login.wld -> DUN_LOGIN.dg.
+    // Keep the avatar front-facing and offset it away from the left UI panel.
+    scene.panX=-.72;
+    scene.panZ=0;
+    scene.yaw=0;
+    scene.pitch=.025;
+    scene.distance=3.85;
+    scene.targetY=1.18;
+    if(scene.character!=null){scene.character!.root.rotation.y=0;}
+    scene.updateCamera();
+  }
+
   Future<void> _prepareSelectionWorld({required bool creation}) async {
     final c=catalog!;
     if(!creation){
@@ -328,30 +341,24 @@ class _GameClientPageState extends State<GameClientPage> {
     }
 
     await scene.setBackdrop(null);
+    await scene.setSky(null);
     scene.panX=0;scene.panZ=0;
-    final wanted=faction=='light'?'world/select_a.wld':'world/select_b.wld';
+
+    // Static tracing of ps0032 separates the two presentation scenes:
+    // CharacterMake references Login.wld; CharacterSelect references select_A/B.
+    // Login.wld is a DUN world whose layout is DUN_LOGIN.dg.
+    const wanted='world/login.wld';
     final path=c.library.files.containsKey(wanted)
       ?wanted
-      :c.worlds.where((p)=>baseName(p).toLowerCase()==(faction=='light'?'select_a.wld':'select_b.wld')).firstOrNull;
+      :c.worlds.where((p)=>baseName(p).toLowerCase()=='login.wld').firstOrNull;
     if(path!=null){
-      try{
-        // ps0032 native selection/create camera, recovered from the
-        // select_A/select_B load routine:
-        // target = (271.096985, 1.606000, 178.515000)
-        // eye    = (275.030000, 1.957000, 180.196000)
-        await scene.setWorld(path,x:271.09698486328125,z:178.51499938964844);
-      }catch(e){messages.insert(0,'[Creación] '+e.toString());}
+      try{await scene.setWorld(path);}
+      catch(e){messages.insert(0,'[Creación] '+e.toString());}
     }else{
       await scene.setWorld(null);
+      messages.insert(0,'[Creación] Login.wld no existe en DATA.');
     }
-    // Reproduce the native camera vector instead of a hand-tuned orbit.
-    scene.yaw=1.9747044036310164;
-    scene.pitch=.08187975646056456;
-    scene.distance=4.29156844199336;
-    // WLD terrain at the native target is ~0.74635, target Y is 1.606.
-    scene.targetY=.85965;
-    if(scene.character!=null){scene.character!.root.rotation.y=scene.yaw;}
-    scene.updateCamera();
+    _applyCreationCamera();
   }
 
   Future<SvmapData?> _loadSvmap(int mapId) async {
@@ -455,12 +462,6 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld(creation:true);
-    scene.yaw=1.9747044036310164;
-    scene.pitch=.08187975646056456;
-    scene.distance=4.29156844199336;
-    scene.targetY=.85965;
-    if(scene.character!=null){scene.character!.root.rotation.y=scene.yaw;}
-    scene.updateCamera();
     if(mounted)setState((){stage=GameStage.characterCreate;loading=false;});
   }
 
@@ -475,12 +476,7 @@ class _GameClientPageState extends State<GameClientPage> {
     genderIndex=value;
     if(mounted)setState((){});
     await _applyDefaultAppearance();
-    scene.yaw=1.9747044036310164;
-    scene.pitch=.08187975646056456;
-    scene.distance=4.29156844199336;
-    scene.targetY=.85965;
-    if(scene.character!=null){scene.character!.root.rotation.y=scene.yaw;}
-    scene.updateCamera();
+    _applyCreationCamera();
   }
 
   Future<void> _changeFace(int value) async {
