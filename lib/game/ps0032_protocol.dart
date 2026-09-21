@@ -16,7 +16,9 @@ class PsPacketType {
   static const gameHandshake=0xA301;
   static const characterList=0x0101;
   static const createCharacter=0x0102;
+  static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
+  static const restoreCharacter=0x010F;
   static const characterDetails=0x0105;
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
