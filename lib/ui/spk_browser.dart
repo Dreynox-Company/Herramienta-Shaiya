@@ -99,8 +99,9 @@ class _SpkBrowserState extends State<SpkBrowserPage> {
           ],
         ),
       );
-      if (mounted)
+      if (mounted) {
         setState(() => status = 'Recurso autenticado y decodificado.');
+      }
     } catch (e) {
       _error(e);
     } finally {
@@ -309,8 +310,9 @@ class _SpkBrowserState extends State<SpkBrowserPage> {
         const JsonEncoder.withIndent('  ').convert(result),
         flush: true,
       );
-      if (mounted)
+      if (mounted) {
         setState(() => status = 'Extracción completa: ${output.path}');
+      }
     } catch (e) {
       _error(e);
     } finally {
@@ -347,8 +349,9 @@ class _SpkBrowserState extends State<SpkBrowserPage> {
       const JsonEncoder.withIndent('  ').convert(payload),
       flush: true,
     );
-    if (mounted)
+    if (mounted) {
       setState(() => status = 'Catálogo exportado: ${location.path}');
+    }
   }
 
   void _error(Object e) {
@@ -601,8 +604,9 @@ class _SpkBrowserState extends State<SpkBrowserPage> {
                       child: Checkbox(
                         value: checked,
                         onChanged: (_) => setState(() {
-                          if (!selected.add(r.entryId))
+                          if (!selected.add(r.entryId)) {
                             selected.remove(r.entryId);
+                          }
                         }),
                       ),
                     ),
@@ -707,7 +711,7 @@ class _SpkBrowserState extends State<SpkBrowserPage> {
   );
 
   Widget _footer() => Container(
-    minHeight: 36,
+    constraints: const BoxConstraints(minHeight: 36),
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
     color: const Color(0xff111925),
     child: Row(
