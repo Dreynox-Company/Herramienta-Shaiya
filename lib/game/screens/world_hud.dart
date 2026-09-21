@@ -336,138 +336,94 @@ class WorldHud extends StatelessWidget {
       );
 
   Widget _questWindow() {
-    final text = catalog.spanishText?.quest(questId);
-    final title = text != null && text.name.isNotEmpty
-        ? text.name
-        : 'Operación básica de la interfaz';
-    final body = text != null && text.initialDescription.isNotEmpty
-        ? text.initialDescription
-        : 'Aprende a moverte, reconocer la interfaz y hablar con los habitantes de la zona.';
+    final text=catalog.spanishText?.quest(questId);
+    final title=text!=null&&text.name.isNotEmpty?text.name:'Operación básica de la interfaz';
+    final body=text!=null&&text.initialDescription.isNotEmpty
+      ?text.initialDescription
+      :'Aprende a moverte, reconocer la interfaz y hablar con los habitantes de la zona.';
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: DataImage(
-            cache: ui,
-            path: 'interface/quest/quest.tga',
-            fit: BoxFit.fill,
+    return Stack(children:[
+      Positioned.fill(
+        child:DataImage(
+          cache:ui,
+          path:'interface/quest/take.tga',
+          fit:BoxFit.fill,
+          fallback:DataImage(cache:ui,path:'interface/quest/quest.tga',fit:BoxFit.fill),
+        ),
+      ),
+      Positioned(
+        left:29,top:28,right:24,
+        child:Text(
+          title,
+          maxLines:1,
+          overflow:TextOverflow.ellipsis,
+          style:const TextStyle(
+            color:Color(0xffffdf69),
+            fontSize:11,
+            fontWeight:FontWeight.bold,
+            shadows:[Shadow(color:Colors.black,blurRadius:2)],
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: const Color(0xff251710),
-              width: 2,
+      ),
+      Positioned(
+        left:18,top:62,right:18,height:254,
+        child:SingleChildScrollView(
+          child:Text(
+            body,
+            style:const TextStyle(
+              color:Color(0xff321d11),
+              fontSize:10,
+              height:1.44,
+              shadows:[Shadow(color:Color(0x22000000),blurRadius:1)],
             ),
-            color: const Color(0x339a7047),
-            boxShadow: const [
-              BoxShadow(color: Colors.black87, blurRadius: 8),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                height: 34,
-                color: const Color(0x9943251a),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.priority_high,
-                      color: Color(0xffffff42),
-                      size: 17,
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xffffdc63),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Text(
-                            body,
-                            style: const TextStyle(
-                              color: Color(0xff2d190f),
-                              fontSize: 10,
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const Divider(color: Color(0xff5d3c24)),
-                      const Text(
-                        'Objeto de recompensa',
-                        style: TextStyle(
-                          color: Color(0xff2d190f),
-                          fontSize: 10,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: const Color(0xffd9cfb6),
-                          border: Border.all(
-                            color: const Color(0xff47311e),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.auto_awesome,
-                          color: Color(0xff6e5ac8),
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    shaiyaRedButton(
-                      'Aceptar',
-                      onAcceptQuest,
-                      width: 64,
-                      height: 29,
-                      fontSize: 10,
-                    ),
-                    const SizedBox(width: 26),
-                    shaiyaRedButton(
-                      'Cancelar',
-                      onCancelQuest,
-                      width: 64,
-                      height: 29,
-                      fontSize: 10,
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
-      ],
-    );
+      ),
+      const Positioned(
+        left:18,top:333,
+        child:Text(
+          'Objeto de recompensa',
+          style:TextStyle(
+            color:Color(0xff321d11),
+            fontSize:10,
+            fontWeight:FontWeight.w600,
+          ),
+        ),
+      ),
+      Positioned(
+        left:19,top:356,width:39,height:39,
+        child:Stack(children:[
+          Positioned.fill(
+            child:DataImage(
+              cache:ui,
+              path:'interface/quest/itemslot.tga',
+              fit:BoxFit.fill,
+              fallback:DecoratedBox(
+                decoration:BoxDecoration(
+                  color:const Color(0x66d9cfb6),
+                  border:Border.all(color:const Color(0xff6a4b2d)),
+                ),
+              ),
+            ),
+          ),
+          const Center(
+            child:Icon(Icons.auto_awesome,color:Color(0xff6e5ac8),size:20),
+          ),
+        ]),
+      ),
+      Positioned(
+        left:35,right:35,bottom:18,
+        child:Row(
+          mainAxisAlignment:MainAxisAlignment.spaceBetween,
+          children:[
+            shaiyaRedButton('Aceptar',onAcceptQuest,width:65,height:28,fontSize:10),
+            shaiyaRedButton('Cancelar',onCancelQuest,width:65,height:28,fontSize:10),
+          ],
+        ),
+      ),
+    ]);
   }
+
 }
 
 class _MiniMapPainter extends CustomPainter {
