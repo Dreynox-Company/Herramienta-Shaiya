@@ -884,6 +884,66 @@ class WorldData {
   }
 }
 
+
+class DgPart {
+  final String texture;
+  final MeshData mesh;
+  const DgPart(this.texture,this.mesh);
+}
+
+class DgData {
+  final v.Vector3 lower,upper;
+  final int lightmapCount;
+  final List<DgPart> parts;
+  const DgData(this.lower,this.upper,this.lightmapCount,this.parts);
+
+  v.Vector3 get center=>(lower+upper)*.5;
+
+  static DgData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final lower=r.vec(),upper=r.vec();
+    final textureCount=r.count(4096);
+    final textures=List.generate(textureCount,(_)=>r.str(256));
+    final lightmapCount=r.count(65536);
+    final hasRoot=r.i32();
+    final parts=<DgPart>[];
+
+    void readNode(){
+      r.skip(12+24+24); // center, view box, collision box.
+      final groupCount=r.count(100000);
+      for(var g=0;g<groupCount;g++){
+        final textureIndex=r.i32();
+        if(textureIndex<0||textureIndex>=textures.length){
+          r.fail('DG referencia textura inexistente: $textureIndex.');
+        }
+        final meshCount=r.count(100000);
+        for(var m=0;m<meshCount;m++){
+          r.i32(); // lightmap index; geometry is still valid without lightmap.
+          final mesh=MeshData.rigid(r,boneField:true,lightUv:true);
+          parts.add(DgPart(textures[textureIndex],mesh));
+        }
+      }
+      final collisionType=r.i32();
+      if(collisionType==1){
+        final vertices=r.count(2000000);
+        r.skip(vertices*12);
+        final faces=r.count(2000000);
+        r.skip(faces*6);
+      }else if(collisionType!=0){
+        r.fail('Tipo de colisión DG desconocido: $collisionType.');
+      }
+      for(var i=0;i<8;i++){
+        if(r.i32()>0)readNode();
+      }
+    }
+
+    if(hasRoot>0)readNode();
+    r.end();
+    return DgData(lower,upper,lightmapCount,List.unmodifiable(parts));
+  }
+}
+
+
 class SvmapNpcWaypoint {
   final v.Vector3 position;
   final double yaw;
