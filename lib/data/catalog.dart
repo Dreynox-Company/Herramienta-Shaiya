@@ -26,7 +26,7 @@ class Archetype {
 }
 class Catalog {
   final Library library;final List<Archetype> archetypes=[];final List<WeaponRecord> weapons=[];
-  final List<CreatureRecord> creatures=[],mounts=[],wings=[];
+  final List<CreatureRecord> creatures=[],npcs=[],mounts=[],wings=[];
   final List<String> worlds=[],sounds=[],effects=[],skies=[],warnings=[];
   Catalog(this.library);
   Future<void> load(void Function(String) progress) async {
@@ -40,14 +40,14 @@ class Catalog {
     }
     final weaponIds=<String>{};
     for(final p in paths.where((p)=>p.startsWith('item/')&&p.endsWith('.itm')&&!p.contains('.bak.'))){try{for(final w in readItm(await library.read(p),p)){final key='${w.mesh.toLowerCase()}|${w.texture.toLowerCase()}';if(!w.mesh.toLowerCase().startsWith('null.')&&weaponIds.add(key))weapons.add(w);}}catch(e){warnings.add(e.toString());}}
-    for(final p in paths.where((p)=>p.endsWith('.mon')&&(p.startsWith('monster/')||p.startsWith('vehicle/')||p.startsWith('character/wing/')))){try{final entries=readMon(await library.read(p),p).where((c)=>c.parts.any((p)=>!p.isNull));if(p.startsWith('vehicle/')){mounts.addAll(entries);}else if(p.startsWith('character/wing/')){wings.addAll(entries);}else{creatures.addAll(entries);}}catch(e){warnings.add(e.toString());}}
+    for(final p in paths.where((p)=>p.endsWith('.mon')&&(p.startsWith('monster/')||p.startsWith('npc/')||p.startsWith('vehicle/')||p.startsWith('character/wing/')))){try{final entries=readMon(await library.read(p),p).where((c)=>c.parts.any((p)=>!p.isNull));if(p.startsWith('vehicle/')){mounts.addAll(entries);}else if(p.startsWith('character/wing/')){wings.addAll(entries);}else if(p.startsWith('npc/')){npcs.addAll(entries);}else{creatures.addAll(entries);}}catch(e){warnings.add(e.toString());}}
     worlds.addAll(paths.where((p)=>p.startsWith('world/')&&p.endsWith('.wld')&&!p.contains('.bak.')));
     skies.addAll(paths.where((p)=>p.startsWith('sky/')&&RegExp(r'\.(dds|tga|bmp|png)$').hasMatch(p)&&!p.contains('cloud')&&!p.contains('star')));
     sounds.addAll(paths.where((p)=>p.startsWith('sound/')&&RegExp(r'\.(wav|mp3|ogg)$').hasMatch(p)));
     effects.addAll(paths.where((p)=>p.startsWith('effect/')&&RegExp(r'\.(dds|tga|png)$').hasMatch(p)));
     if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
   }
-  String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
+  String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();if(c.source.startsWith('npc/'))kind='NPC';for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
 }
 class Appearance {
   final Archetype archetype;final Map<Slot,PartRecord?> selected;final bool fullCostume;
