@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p qa-sources/formatted
-          dart format lib/main.dart lib/data/catalog.dart lib/data/library.dart lib/core/spk_archive.dart lib/data/spk_source.dart lib/ui/spk_archive_browser.dart test/spk_archive_test.dart test/spk_profile_discovery_test.dart test/spk_fragment_payload_test.dart test/spk_payload_validation_test.dart test/spk_library_adapter_test.dart test/spk_catalog_fallback_test.dart tool/run_all_local.dart
+          dart format lib/main.dart lib/data/catalog.dart lib/data/library.dart lib/core/spk_archive.dart lib/data/spk_source.dart lib/ui/spk_archive_browser.dart test/spk_archive_test.dart test/spk_profile_discovery_test.dart test/spk_fragment_payload_test.dart test/spk_payload_validation_test.dart test/spk_library_adapter_test.dart test/spk_catalog_fallback_test.dart test/spk_name_verification_test.dart tool/run_all_local.dart
           cp lib/core/spk_archive.dart qa-sources/formatted/spk_archive.dart.txt
           cp lib/data/spk_source.dart qa-sources/formatted/spk_source.dart.txt
           cp lib/ui/spk_archive_browser.dart qa-sources/formatted/spk_archive_browser.dart.txt
