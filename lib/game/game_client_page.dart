@@ -16,6 +16,8 @@ import 'game_stage.dart';
 import 'offline_backend.dart';
 import 'server_metadata.dart';
 import 'screens/character_create_screen.dart';
+import 'screens/connecting_screen.dart';
+import 'screens/server_select_screen.dart';
 import 'screens/character_select_screen.dart';
 import 'screens/faction_screen.dart';
 import 'screens/world_hud.dart';
@@ -41,7 +43,7 @@ class _GameClientPageState extends State<GameClientPage> {
   SvmapData? svmap;
   ServerMetadata? metadata;
   int questId=1;
-  GameStage stage=GameStage.faction;
+  GameStage stage=GameStage.connecting;
   bool loading=true;
   bool characterCreated=false;
   bool questOpen=true;
@@ -173,23 +175,41 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _connectLibrary(Library lib) async {
-    await backend.start();
+    final requested=widget.initialStage;
     final c=Catalog(lib);
-    await c.load((s){if(mounted)setState(()=>progress=s);});
     catalog=c;
     ui=UiAssetCache(lib);
+
+    // En una partida normal mostramos el mismo estado "Connecting..." mientras
+    // se preparan backend y catálogo. Las pruebas directas de una etapa omiten
+    // esta transición.
+    if(requested==null&&mounted){
+      stage=GameStage.connecting;
+      loading=false;
+      setState((){});
+    }
+
+    final started=DateTime.now();
+    await backend.start();
+    await c.load((s){if(mounted)setState(()=>progress=s);});
     metadata=await ServerMetadata.load();
     scene.catalog=c;
     await _applyDefaultAppearance();
 
-    stage=widget.initialStage??GameStage.faction;
+    stage=requested??GameStage.serverSelect;
     if(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode){
-      if(stage==GameStage.characterMode){createTab=2;stage=GameStage.characterMode;}
+      if(stage==GameStage.characterMode){createTab=2;}
       await _prepareSelectionWorld();
       characterCreated=stage==GameStage.characterSelect;
     }else if(stage==GameStage.world){
       characterCreated=true;
       await _enterWorld();
+    }else if(requested==null){
+      final elapsed=DateTime.now().difference(started);
+      if(elapsed<const Duration(milliseconds:1300)){
+        await Future<void>.delayed(const Duration(milliseconds:1300)-elapsed);
+      }
+      stage=GameStage.serverSelect;
     }
 
     messages.insert(
@@ -330,6 +350,10 @@ class _GameClientPageState extends State<GameClientPage> {
     await _signalQaReady();
   }
 
+  void _goServerSelected(){
+    if(mounted)setState(()=>stage=GameStage.faction);
+  }
+
   Future<void> _goFaction() async {
     scene.clearMovement();
     await scene.setWorld(null);
@@ -464,16 +488,31 @@ class _GameClientPageState extends State<GameClientPage> {
   );
 
   @override Widget build(BuildContext context){
-    final active=catalog!=null&&ui!=null&&scene.character!=null;
+    final hasUi=catalog!=null&&ui!=null;
+    final active=hasUi&&scene.character!=null;
+    final usesRenderer=active&&![
+      GameStage.connecting,
+      GameStage.serverSelect,
+      GameStage.faction,
+    ].contains(stage);
     return Scaffold(
       backgroundColor:Colors.black,
       body:RepaintBoundary(key:captureKey,child:Stack(children:[
-        if(active&&stage!=GameStage.faction)
+        if(usesRenderer)
           Positioned.fill(child:renderer.build())
         else
           const Positioned.fill(child:ColoredBox(color:Colors.black)),
-        if(active&&stage!=GameStage.faction)_viewport(),
-        if(active)_designSurface(switch(stage){
+        if(usesRenderer)_viewport(),
+        if(hasUi)_designSurface(switch(stage){
+          GameStage.connecting=>ConnectingScreen(
+            ui:ui!,
+            onQuit:()=>exit(0),
+          ),
+          GameStage.serverSelect=>ServerSelectScreen(
+            ui:ui!,
+            onNext:_goServerSelected,
+            onQuit:()=>exit(0),
+          ),
           GameStage.faction=>FactionScreen(
             ui:ui!,
             faction:faction,
@@ -527,7 +566,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onCancelQuest:()=>setState(()=>questOpen=false),
           ),
         }),
-        if(!active||loading)_loadingOverlay(),
+        if(!hasUi||(loading&&widget.initialStage!=null))_loadingOverlay(),
       ])),
     );
   }
