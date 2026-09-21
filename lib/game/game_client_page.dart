@@ -543,9 +543,9 @@ class _GameClientPageState extends State<GameClientPage> {
     if(networkSnapshot!=null){
       await scene.spawnGameActorsFromNetwork(
         npcs:networkSnapshot.npcs.map((p)=>RuntimeNpcSpawn(
-          p.type,p.typeId,p.x,p.y,p.z,p.angle,
+          p.type,p.typeId,p.x,p.y,p.z,p.angle,p.globalId,
         )).toList(),
-        mobs:networkSnapshot.mobs.map((p)=>RuntimeMobSpawn(p.mobId,p.x,p.z)).toList(),
+        mobs:networkSnapshot.mobs.map((p)=>RuntimeMobSpawn(p.mobId,p.x,p.z,p.globalId)).toList(),
         npcModels:meta?.npcModels,
         mobModels:meta?.mobModels,
         questNpcKeys:questNpcKeys,
@@ -614,6 +614,27 @@ class _GameClientPageState extends State<GameClientPage> {
       final d=ByteData.sublistView(packet.body);
       final id=d.getInt16(4,Endian.little),ok=packet.body[6]!=0;
       messages.insert(0,'[Misión] '+id.toString()+(ok?' completada.':' aún no puede completarse.'));
+    }else if(packet.type==PsPacketType.mobMove&&packet.body.length>=13){
+      final d=ByteData.sublistView(packet.body);
+      scene.moveNetworkMob(
+        d.getUint32(0,Endian.little),d.getFloat32(5,Endian.little),
+        d.getFloat32(9,Endian.little),packet.body[4],
+      );
+    }else if(packet.type==PsPacketType.mapNpcMove&&packet.body.length>=17){
+      final d=ByteData.sublistView(packet.body);
+      scene.moveNetworkNpc(
+        d.getUint32(0,Endian.little),d.getFloat32(5,Endian.little),
+        d.getFloat32(9,Endian.little),d.getFloat32(13,Endian.little),packet.body[4],
+      );
+    }else if(packet.type==PsPacketType.mobLeave&&packet.body.length>=4){
+      final d=ByteData.sublistView(packet.body);
+      scene.removeNetworkActor(d.getUint32(0,Endian.little),mob:true);
+    }else if(packet.type==PsPacketType.mapNpcLeave&&packet.body.length>=4){
+      final d=ByteData.sublistView(packet.body);
+      scene.removeNetworkActor(d.getUint32(0,Endian.little),mob:false);
+    }else if(packet.type==PsPacketType.mobDeath&&packet.body.length>=4){
+      final d=ByteData.sublistView(packet.body);
+      unawaited(scene.killNetworkMob(d.getUint32(0,Endian.little)));
     }
     if(mounted)setState((){});
   }
