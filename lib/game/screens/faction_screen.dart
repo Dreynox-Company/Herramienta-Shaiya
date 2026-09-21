@@ -21,67 +21,75 @@ class FactionScreen extends StatelessWidget {
     fit:fit,
   );
 
-  @override Widget build(BuildContext context)=>Stack(children:[
-    Positioned.fill(child:image('interface/select_country_bg.jpg',fit:BoxFit.cover)),
-    Positioned(
-      left:8,top:192,width:505,height:320,
-      child:Opacity(opacity:faction=='fury'?1:.42,child:image('interface/choose_fury.tga')),
-    ),
-    Positioned(
-      left:510,top:192,width:505,height:320,
-      child:Opacity(opacity:faction=='light'?1:.42,child:image('interface/choose_light.tga')),
-    ),
-    Positioned(
-      left:0,top:178,width:1024,height:410,
-      child:Row(children:[
-        Expanded(child:GestureDetector(
+  @override Widget build(BuildContext context){
+    final light=faction=='light';
+    return Stack(children:[
+      const Positioned.fill(child:ColoredBox(color:Colors.black)),
+      // El cliente original compone un lado "over" con el lado seleccionado.
+      // Se reutilizan exactamente los fondos de 1920x1200 del DATA y se
+      // muestran a 1024x640, igual que el ps0032 a 1024x768.
+      Positioned(
+        left:0,top:0,width:1024,height:640,
+        child:image(
+          light?'interface/ta_2d_country_fury_over.tga':'interface/ta_2d_country_light_over.tga',
+          fit:BoxFit.fill,
+        ),
+      ),
+      Positioned(
+        left:0,top:0,width:1024,height:640,
+        child:image(
+          light?'interface/ta_2d_country_light_select.tga':'interface/ta_2d_country_fury_select.tga',
+          fit:BoxFit.fill,
+        ),
+      ),
+
+      // Cubrir el texto de idioma embebido en algunos fondos antiguos y
+      // superponer los rótulos españoles originales del mismo DATA.
+      Positioned(left:12,top:405,width:360,height:70,child:ColoredBox(color:Colors.black.withValues(alpha:.78))),
+      Positioned(right:10,top:175,width:360,height:70,child:ColoredBox(color:Colors.black.withValues(alpha:.78))),
+      Positioned(
+        left:18,top:418,width:300,height:38,
+        child:image(
+          light?'interface/countryselect/text/furynormal_spn.tga':'interface/countryselect/text/furyover_spn.tga',
+          fit:BoxFit.contain,
+        ),
+      ),
+      Positioned(
+        right:18,top:188,width:300,height:38,
+        child:image(
+          light?'interface/countryselect/text/lightover_spn.tga':'interface/countryselect/text/lightnormal_spn.tga',
+          fit:BoxFit.contain,
+        ),
+      ),
+      Positioned(left:265,top:493,width:500,height:105,child:ColoredBox(color:Colors.black.withValues(alpha:.88))),
+      Positioned(
+        left:0,top:430,width:1024,height:256,
+        child:image(
+          light?'interface/countryselect/text/lightselect_spn.tga':'interface/countryselect/text/furyselect_spn.tga',
+          fit:BoxFit.fill,
+        ),
+      ),
+
+      // Zonas interactivas coincidentes con las dos mitades del original.
+      Positioned(
+        left:0,top:170,width:512,height:330,
+        child:GestureDetector(
           behavior:HitTestBehavior.translucent,
           onTap:()=>onFaction('fury'),
           child:const SizedBox.expand(),
-        )),
-        Expanded(child:GestureDetector(
+        ),
+      ),
+      Positioned(
+        left:512,top:170,width:512,height:330,
+        child:GestureDetector(
           behavior:HitTestBehavior.translucent,
           onTap:()=>onFaction('light'),
           child:const SizedBox.expand(),
-        )),
-      ]),
-    ),
-    Positioned(
-      left:32,top:445,
-      child:Text(
-        'Unión de la Furia',
-        style:TextStyle(
-          color:faction=='fury'?Colors.white:Colors.white70,
-          fontSize:24,fontStyle:FontStyle.italic,
-          shadows:const [Shadow(color:Colors.black,blurRadius:5)],
         ),
       ),
-    ),
-    Positioned(
-      right:32,top:215,
-      child:Text(
-        'Alianza de la Luz',
-        style:TextStyle(
-          color:faction=='light'?Colors.white:Colors.white70,
-          fontSize:24,fontStyle:FontStyle.italic,
-          shadows:const [Shadow(color:Colors.black,blurRadius:5)],
-        ),
-      ),
-    ),
-    Positioned(
-      left:355,top:520,width:320,
-      child:Text(
-        faction=='light'
-          ?'¿Buscas el sendero de la luz? Entrega tu vida por el bien de los demás y avanza con honor.'
-          :'La Unión de la Furia camina por un sendero oscuro y feroz. ¿Tienes la fuerza necesaria?',
-        textAlign:TextAlign.center,
-        style:const TextStyle(
-          color:Colors.white,fontSize:10,height:1.35,
-          shadows:[Shadow(color:Colors.black,blurRadius:3)],
-        ),
-      ),
-    ),
-    Positioned(left:763,top:706,child:shaiyaRedButton('Atrás',null)),
-    Positioned(left:898,top:706,child:shaiyaRedButton('Siguiente',onNext)),
-  ]);
+
+      Positioned(left:763,top:706,child:shaiyaRedButton('Atrás',null)),
+      Positioned(left:898,top:706,child:shaiyaRedButton('Siguiente',onNext)),
+    ]);
+  }
 }
