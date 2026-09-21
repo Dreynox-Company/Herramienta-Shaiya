@@ -13,6 +13,7 @@ import '../input/viewport_movement_input.dart';
 import '../render/studio_scene.dart';
 import 'game_stage.dart';
 import 'offline_backend.dart';
+import 'ps0032_protocol.dart';
 import 'server_metadata.dart';
 import 'screens/character_create_screen.dart';
 import 'screens/character_select_screen.dart';
@@ -40,6 +41,11 @@ class _GameClientPageState extends State<GameClientPage> {
   UiAssetCache? ui;
   SvmapData? svmap;
   ServerMetadata? metadata;
+  Ps0032Client? protocol;
+  PsWorldSession? worldSession;
+  List<PsCharacterSlot> serverSlots=const [];
+  PsCharacterSlot? serverCharacter;
+  bool protocolReady=false;
   int questId=1;
   GameStage stage=GameStage.faction;
   bool loading=true;
@@ -142,6 +148,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _refresh(){if(mounted)setState((){});}
 
   @override void dispose(){
+    if(worldSession!=null)unawaited(worldSession!.close());
     unawaited(backend.stop());
     scene.removeListener(_refresh);
     scene.dispose();
@@ -186,12 +193,13 @@ class _GameClientPageState extends State<GameClientPage> {
     metadata=await ServerMetadata.load();
     scene.catalog=c;
     await _applyDefaultAppearance();
+    await _connectLiveWorld();
 
     stage=widget.initialStage??GameStage.faction;
     if(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode){
       if(stage==GameStage.characterMode){createTab=2;stage=GameStage.characterMode;}
       await _prepareSelectionWorld(creation:stage!=GameStage.characterSelect);
-      characterCreated=stage==GameStage.characterSelect;
+      characterCreated=protocolReady?serverCharacter!=null:stage==GameStage.characterSelect;
     }else if(stage==GameStage.world){
       characterCreated=true;
       await _enterWorld();
@@ -208,6 +216,51 @@ class _GameClientPageState extends State<GameClientPage> {
     await _signalQaReady();
     await _markQaReady();
     focus.requestFocus();
+  }
+
+  Future<void> _connectLiveWorld() async {
+    if(!backend.ready||backend.password==null)return;
+    try{
+      final client=Ps0032Client(trace:(s){
+        messages.insert(0,'[Red] '+s);
+        if(mounted)setState(()=>progress=s);
+      });
+      final login=await client.loginOffline(backend.password!);
+      final world=await client.openWorld(login);
+      protocol=client;
+      worldSession=world;
+      serverSlots=world.characters;
+      serverCharacter=serverSlots.where((s)=>s.exists).firstOrNull;
+      protocolReady=true;
+      faction=world.faction==1?'fury':'light';
+      characterCreated=serverCharacter!=null;
+      messages.insert(
+        0,
+        '[Red] World vivo · facción ${world.faction} · ${serverSlots.where((s)=>s.exists).length} personaje(s).',
+      );
+    }catch(e){
+      protocolReady=false;
+      messages.insert(0,'[Red] Se mantiene fallback local: $e');
+    }
+  }
+
+  int _networkRace(){
+    if(faction=='light'){
+      return classIndex<=2?0:1;
+    }
+    return (classIndex==3||classIndex==5||classIndex==2)?2:3;
+  }
+
+  int _networkProfession(){
+    return switch(classIndex){
+      0=>0, // Fighter/Warrior
+      1=>1, // Defender/Guardian
+      2=>5, // Priest/Oracle
+      3=>2, // Ranger/Assassin
+      4=>3, // Archer/Hunter
+      5=>4, // Mage/Pagan
+      _=>0,
+    };
   }
 
   Future<void> _preloadStageUi() async {
