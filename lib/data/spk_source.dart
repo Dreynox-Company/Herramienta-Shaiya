@@ -221,9 +221,13 @@ class SpkArchiveSource {
 
   String nameConfidence(SpkRecord record) {
     if (names.isConfirmed(record.entryId)) return 'confirmado';
-    if (names.isInferred(record.entryId)) return 'inferido';
+    if (names.isInferred(record.entryId)) {
+      return names.confidence(record.entryId);
+    }
     return 'sin-resolver';
   }
+
+  String nameEvidence(SpkRecord record) => names.evidence(record.entryId);
 
   String displayType(SpkRecord record) {
     final path = technicalPath(record);
