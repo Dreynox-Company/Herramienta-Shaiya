@@ -116,6 +116,9 @@ jobs:
               if($report.enteredMapPackets -lt 1){throw 'CHARACTER_ENTERED_MAP missing'}
               if($report.npcPackets -lt 1){throw 'MAP_NPC_ENTER missing'}
               if($report.mobPackets -lt 1){throw 'MOB_ENTER missing'}
+              if(!$report.movement.sent){throw 'CHARACTER_MOVE was not sent'}
+              if(!$report.tutorialQuest.npcFound){throw 'tutorial NPC 7:1167 missing'}
+              if(!$report.tutorialQuest.startConfirmed){throw 'QUEST_START 3781 was not confirmed'}
             }finally{
               if(!$world.HasExited){Stop-Process -Id $world.Id -Force}
             }
