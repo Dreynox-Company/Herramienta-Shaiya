@@ -92,6 +92,7 @@ jobs:
           $env:SHAIYA_FIXTURE_PATH=$env:SHAIYA_FIXTURE
           $env:SHAIYA_QA_PATH=(Resolve-Path qa-game).Path
           $env:SHAIYA_QA_DISABLE_BACKEND='1'
+          $env:SHAIYA_UI_LOCALE='usa'
           $env:SHAIYA_EXPECT_REAL_DATA='0'
           flutter test integration_test/game_visual_parity_test.dart -d windows --reporter expanded
           if($LASTEXITCODE -ne 0){throw 'Flutter framebuffer integration test failed'}
@@ -203,6 +204,7 @@ jobs:
           $env:SHAIYA_PARITY_DATA=$env:SHAIYA_REAL_DATA
           $env:SHAIYA_QA_PATH=(Resolve-Path parity-report).Path
           $env:SHAIYA_QA_DISABLE_BACKEND='1'
+          $env:SHAIYA_UI_LOCALE='usa'
           $env:SHAIYA_EXPECT_REAL_DATA='1'
           flutter test integration_test/game_visual_parity_test.dart -d windows --reporter expanded
           if($LASTEXITCODE -ne 0){throw 'real-DATA Flutter parity integration test failed'}
