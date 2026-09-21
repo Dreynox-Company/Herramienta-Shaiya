@@ -37,6 +37,7 @@ class WorldHud extends StatelessWidget {
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
+          ..._worldLabels(),
           if (questOpen)
             Positioned(
               left: 566,
@@ -47,6 +48,48 @@ class WorldHud extends StatelessWidget {
             ),
         ],
       );
+
+  List<Widget> _worldLabels(){
+    final labels=scene.projectGameLabels(1024,742);
+    return labels.map((label){
+      final color=label.mob?const Color(0xffffec3b):const Color(0xff58d7ff);
+      return Positioned(
+        left:(label.x-90).clamp(0.0,844.0),
+        top:(label.y-30).clamp(0.0,680.0),
+        width:180,
+        child:IgnorePointer(
+          child:Column(mainAxisSize:MainAxisSize.min,children:[
+            if(label.quest)
+              const Text(
+                '!',
+                style:TextStyle(
+                  color:Color(0xffffff26),
+                  fontSize:22,
+                  fontWeight:FontWeight.w900,
+                  height:.8,
+                  shadows:[Shadow(color:Colors.black,blurRadius:3)],
+                ),
+              ),
+            Text(
+              label.text,
+              maxLines:1,
+              overflow:TextOverflow.ellipsis,
+              textAlign:TextAlign.center,
+              style:TextStyle(
+                color:color,
+                fontSize:10,
+                fontWeight:FontWeight.w600,
+                shadows:const [
+                  Shadow(color:Colors.black,offset:Offset(1,1),blurRadius:2),
+                  Shadow(color:Colors.black,offset:Offset(-1,-1),blurRadius:2),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      );
+    }).toList();
+  }
 
   Widget _playerHud()=>Stack(children:[
     Positioned.fill(
