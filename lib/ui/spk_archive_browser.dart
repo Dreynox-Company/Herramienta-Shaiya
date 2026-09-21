@@ -40,6 +40,58 @@ List<String> spkProfileCandidatePaths(
   ];
 }
 
+List<String> spkNameMapCandidatePaths(
+  String spkPath,
+  String indexSha256, {
+  String? executablePath,
+  String? separatorOverride,
+}) {
+  final separator = separatorOverride ?? Platform.pathSeparator;
+  final spkDir = _spkParentPath(spkPath, separator);
+  final exeDir = _spkParentPath(
+    executablePath ?? Platform.resolvedExecutable,
+    separator,
+  );
+  final shortHash = indexSha256.length >= 8
+      ? indexSha256.substring(0, 8)
+      : indexSha256;
+  return <String>[
+    '$spkPath.names.json',
+    '$spkDir${separator}spk-name-map.json',
+    '$spkDir${separator}spk-name-map-$shortHash.json',
+    '$exeDir${separator}profiles${separator}spk-name-map.json',
+    '$exeDir${separator}profiles${separator}spk-name-map-$shortHash.json',
+    '$exeDir${separator}spk-name-map.json',
+  ];
+}
+
+Future<void> loadAutomaticSpkNameMap(
+  SpkArchiveSource source,
+  String spkPath,
+) async {
+  for (final candidate in spkNameMapCandidatePaths(
+    spkPath,
+    source.index.encryptedIndexSha256,
+  )) {
+    final file = File(candidate);
+    if (!await file.exists()) continue;
+    try {
+      final value = jsonDecode(await file.readAsString());
+      if (value is! Map) continue;
+      final map = Map<String, dynamic>.from(value);
+      final declared = map['spkIndexSha256']?.toString().toLowerCase();
+      if (declared != null &&
+          declared.isNotEmpty &&
+          declared != source.index.encryptedIndexSha256.toLowerCase()) {
+        continue;
+      }
+      source.names = SpkNameMap.fromJson(map);
+      return;
+    } catch (_) {
+      // Un mapa opcional dañado no impide abrir un SPK válido.
+    }
+  }
+}
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   const SpkArchiveBrowserPage({super.key, required this.source});
@@ -85,6 +137,8 @@ class SpkArchiveBrowserPage extends StatefulWidget {
         profile,
         progress: (message, done, total) => progress.value = message,
       );
+      progress.value = 'Resolviendo nombres y rutas conocidas…';
+      await loadAutomaticSpkNameMap(source, picked.path);
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       await Navigator.of(context).push<void>(
