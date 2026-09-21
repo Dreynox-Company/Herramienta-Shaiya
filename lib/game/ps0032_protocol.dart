@@ -37,6 +37,11 @@ class PsPacket {
 
 int _u16(Uint8List b,int o)=>b[o]|(b[o+1]<<8);
 int _i32(Uint8List b,int o)=>ByteData.sublistView(b).getInt32(o,Endian.little);
+String _fixedString(Uint8List b,int o,int n){
+  if(o<0||n<0||o+n>b.length)return '';
+  final raw=b.sublist(o,o+n),zero=raw.indexOf(0);
+  return utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+}
 
 Uint8List _u16Bytes(int value){
   final b=ByteData(2)..setUint16(0,value,Endian.little);
@@ -364,11 +369,14 @@ class LoginSession {
 class PsCharacterSlot {
   final int slot,id,mapId;
   final int level,race,mode,hair,face,height,profession,gender;
+  final String name;
+  final List<int> equipmentTypes,equipmentTypeIds;
   const PsCharacterSlot({
     required this.slot,required this.id,required this.mapId,
     required this.level,required this.race,required this.mode,
     required this.hair,required this.face,required this.height,
     required this.profession,required this.gender,
+    this.name='',this.equipmentTypes=const [],this.equipmentTypeIds=const [],
   });
   bool get exists=>id!=0;
 
@@ -380,12 +388,17 @@ class PsCharacterSlot {
     if(id==0){
       return PsCharacterSlot(
         slot:slot,id:0,mapId:0,level:0,race:0,mode:0,hair:0,face:0,height:0,profession:0,gender:0,
+        name:'',equipmentTypes:const [],equipmentTypeIds:const [],
       );
     }
     if(b.length<20)throw FormatException('CHARACTER_LIST existente truncado: ${b.length}');
+    final equipmentTypes=b.length>=55?List<int>.unmodifiable(b.sublist(38,55)):const <int>[];
+    final equipmentTypeIds=b.length>=72?List<int>.unmodifiable(b.sublist(55,72)):const <int>[];
+    final name=b.length>=631?_fixedString(b,612,19):'';
     return PsCharacterSlot(
       slot:slot,id:id,level:_u16(b,9),race:b[11],mode:b[12],hair:b[13],
       face:b[14],height:b[15],profession:b[16],gender:b[17],mapId:_u16(b,18),
+      name:name,equipmentTypes:equipmentTypes,equipmentTypeIds:equipmentTypeIds,
     );
   }
 }
