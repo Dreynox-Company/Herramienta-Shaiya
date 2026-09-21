@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:three_js/three_js.dart' as three;
+import '../core/formats.dart';
 import '../data/catalog.dart';
 import '../data/library.dart';
 import '../input/viewport_movement_input.dart';
