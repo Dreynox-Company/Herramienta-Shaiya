@@ -11,11 +11,22 @@ class WorldArea {
   v.Vector3 get center => (lower + upper) * .5;
 }
 
+/// NPC placement stored directly in the original WLD resource.
+/// Type/typeId are resolved against NpcQuest.SData by the game client.
+class WorldNpc {
+  final int type, typeId;
+  final v.Vector3 position;
+  final double orientation;
+  final List<v.Vector3> patrol;
+  const WorldNpc(this.type, this.typeId, this.position, this.orientation, this.patrol);
+}
+
 class WorldResource {
   final WorldData terrain;
   final List<WorldArea> areas = [], spawns = [];
   final List<String> music = [];
   final List<v.Vector3> portals = [];
+  final List<WorldNpc> npcs = [];
   String sky = '', cloud = '', secondCloud = '';
   int fogColor = 0x9ab5c6;
   double fogNear = 120, fogFar = 600;
@@ -120,10 +131,14 @@ class WorldResource {
     }
     var npc = r.count(1000000);
     while (npc > 0) {
-      r.skip(24);
-      final patrol = r.count(100000);
-      r.skip(patrol * 12);
-      npc -= 1 + patrol;
+      final type = r.i32(),
+          typeId = r.i32(),
+          position = r.vec(),
+          orientation = r.f32(),
+          patrolCount = r.count(100000),
+          patrol = List.generate(patrolCount, (_) => r.vec());
+      result.npcs.add(WorldNpc(type, typeId, position, orientation, patrol));
+      npc -= 1 + patrolCount;
       if (npc < 0) r.fail('Recuento NPC no coincide.');
     }
     if (size > 0) {
