@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           git config user.name 'Shaiya Studio CI'
           git config user.email 'studio-ci@users.noreply.github.com'
-          git add -A -- pubspec.lock lib/data/spk_source.dart lib/ui/spk_browser.dart lib/main.dart test/spk_source_test.dart ci/transfers/spk_browser.dart.xz.b64
+          git add -A
           if ! git diff --cached --quiet; then
             git commit -m 'feat: integrate Studio 0.6.2 SPK browser and extraction'
             git fetch origin feat/studio-062-spk-browser
