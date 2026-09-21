@@ -16,8 +16,9 @@ text = manifest.read_text(encoding='utf-8').replace('android:label="herramienta_
 manifest.write_text(text, encoding='utf-8')
 runner = root / 'windows/runner/main.cpp'
 if runner.exists():
-    s = runner.read_text(encoding='utf-8').replace('L"herramienta_shaiya"', 'L"Shaiya"').replace('1280, 720', '1024, 768')
+    s = runner.read_text(encoding='utf-8').replace('L"herramienta_shaiya"', 'L"Shaiya"').replace('1280, 720', '1024, 742')
     runner.write_text(s, encoding='utf-8')
+    print('Windows client area fixed to 1024x742 so the decorated window matches native ps0032 1024x768.')
 # La prueba del contador generada por flutter create no pertenece a este programa.
 generated_test = root / 'test/widget_test.dart'
 if generated_test.exists() and 'counter increments' in generated_test.read_text(encoding='utf-8'):
