@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,6 +52,57 @@ class _GameClientPageState extends State<GameClientPage> {
   double gestureScale=1;
   final messages=<String>['[Notice] Laboratorio local'];
 
+  Future<void> _signalQaReady() async {
+    final path=Platform.environment['SHAIYA_QA_READY_FILE'];
+    if(path==null||path.isEmpty)return;
+    try{
+      final payload={
+        'ready':true,
+        'stage':stage.name,
+        'loading':loading,
+        'catalog':{
+          'resources':catalog?.library.files.length??0,
+          'archetypes':catalog?.archetypes.length??0,
+          'npcs':catalog?.npcs.length??0,
+          'creatures':catalog?.creatures.length??0,
+          'worlds':catalog?.worlds.length??0,
+        },
+        'scene':{
+          'world':scene.worldPath,
+          'actors':scene.gameActors.length,
+          'character':scene.character!=null,
+          'originX':scene.originX,
+          'originZ':scene.originZ,
+        },
+        'metadata':{
+          'npcs':metadata?.npcs.length??0,
+          'quests':metadata?.quests.length??0,
+        },
+        'backendReady':backend.ready,
+        'questId':questId,
+      };
+      final file=File(path);
+      await file.parent.create(recursive:true);
+      await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload),flush:true);
+    }catch(e){
+      messages.insert(0,'[QA] No se pudo escribir READY: '+e.toString());
+    }
+  }
+
+  Future<void> _signalQaError(Object error) async {
+    final path=Platform.environment['SHAIYA_QA_READY_FILE'];
+    if(path==null||path.isEmpty)return;
+    try{
+      final file=File(path);
+      await file.parent.create(recursive:true);
+      await file.writeAsString(const JsonEncoder.withIndent('  ').convert({
+        'ready':false,
+        'stage':stage.name,
+        'error':error.toString(),
+      }),flush:true);
+    }catch(_){}
+  }
+
   @override void initState(){
     super.initState();
     backend=OfflineBackend((s){
@@ -96,6 +148,7 @@ class _GameClientPageState extends State<GameClientPage> {
       if(lib==null){setState(()=>loading=false);return;}
       await _connectLibrary(lib);
     }catch(e){
+      await _signalQaError(e);
       setState((){loading=false;progress=e.toString();});
     }
   }
@@ -109,6 +162,7 @@ class _GameClientPageState extends State<GameClientPage> {
       );
       await _connectLibrary(lib);
     }catch(e){
+      await _signalQaError(e);
       setState((){loading=false;progress=e.toString();});
     }
   }
@@ -260,6 +314,8 @@ class _GameClientPageState extends State<GameClientPage> {
     questOpen=true;
     if(mounted)setState(()=>loading=false);
     focus.requestFocus();
+    await Future<void>.delayed(const Duration(milliseconds:350));
+    await _signalQaReady();
   }
 
   Future<void> _goFaction() async {
