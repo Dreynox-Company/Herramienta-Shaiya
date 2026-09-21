@@ -1,7 +1,7 @@
 name: herramienta_shaiya
 description: Laboratorio nativo de recursos Shaiya para Windows y Android.
 publish_to: none
-version: 0.6.1+9
+version: 0.6.2+10
 environment:
   sdk: '>=3.10.0 <4.0.0'
 dependencies:
@@ -10,6 +10,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: ^3.0.7
+  pointycastle: ^4.0.0
+  zstandard: ^1.5.0
   path: ^1.9.1
   three_js: 0.3.0
   flutter_angle: 0.4.2
