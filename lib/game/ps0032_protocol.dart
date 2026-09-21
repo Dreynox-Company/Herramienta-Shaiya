@@ -533,6 +533,7 @@ class PsSkillBook {
   final List<PsLearnedSkill> skills;
   const PsSkillBook(this.skillPoints,this.skills);
   PsLearnedSkill? byNumber(int number)=>skills.where((s)=>s.number==number).firstOrNull;
+  PsLearnedSkill? bySkillId(int skillId)=>skills.where((s)=>s.skillId==skillId).firstOrNull;
   static PsSkillBook parse(PsPacket p){
     if(p.type!=PsPacketType.characterSkills||p.body.length<3){
       throw FormatException('CHARACTER_SKILLS truncado: ${p.body.length}');
