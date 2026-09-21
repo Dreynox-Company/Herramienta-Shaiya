@@ -356,10 +356,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       },
     );
     if (mounted) {
+      final extractedFolder = result['folder'];
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Carpeta extraída: ${result['folder']}'),
-        ),
+        SnackBar(content: Text('Carpeta extraída: $extractedFolder')),
       );
     }
   });
