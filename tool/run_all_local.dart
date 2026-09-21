@@ -28,6 +28,7 @@ import '../test/workspace_material_test.dart' as suite24;
 import '../test/local_game_test.dart' as suite25;
 
 import '../test/flight_key_input_test.dart' as suite26;
+import '../test/spk_source_test.dart' as suite27;
 
 void main() {
   suite0.main();
@@ -57,4 +58,5 @@ void main() {
   suite24.main();
   suite25.main();
   suite26.main();
+  suite27.main();
 }
