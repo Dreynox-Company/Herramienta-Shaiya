@@ -404,14 +404,26 @@ class SpkArchiveSource {
     if (!await reference.exists()) {
       throw const FormatException('La carpeta DATA de referencia no existe.');
     }
+
+    final readable = <SpkRecord>[
+      ...index.simpleResources,
+      if (canReadFragmentedResources) ...index.fragmentedResources,
+    ]..sort((a, b) => a.ordinal.compareTo(b.ordinal));
+    final fragmentedSkipped = canReadFragmentedResources
+        ? 0
+        : index.fragmentedResources.length;
+
+    final wantedSizes = <int>{for (final record in readable) record.decodedBytes};
     final bySize = <int, List<File>>{};
     var scanned = 0;
     await for (final entity in reference.list(
       recursive: true,
       followLinks: false,
     )) {
+      control.check();
       if (entity is! File) continue;
       final size = await entity.length();
+      if (!wantedSizes.contains(size)) continue;
       bySize.putIfAbsent(size, () => <File>[]).add(entity);
       scanned++;
       if (scanned % 1000 == 0) {
@@ -420,42 +432,93 @@ class SpkArchiveSource {
     }
 
     final fileHashes = <String, String>{};
+    Future<String> fileHash(File candidate) async {
+      final cached = fileHashes[candidate.path];
+      if (cached != null) return cached;
+      final digest = await sha256.bind(candidate.openRead()).first;
+      final value = digest.toString();
+      fileHashes[candidate.path] = value;
+      return value;
+    }
+
     final confirmed = <int, String>{};
-    final resources = index.simpleResources.toList(growable: false);
-    for (var i = 0; i < resources.length; i++) {
+    var hintPathMatches = 0;
+    var sizeScanMatches = 0;
+    var simpleVerified = 0;
+    var fragmentedVerified = 0;
+
+    for (var i = 0; i < readable.length; i++) {
       control.check();
-      final record = resources[i];
+      final record = readable[i];
       final candidates = bySize[record.decodedBytes];
-      if (candidates == null || candidates.isEmpty) continue;
+      if (candidates == null || candidates.isEmpty) {
+        if ((i + 1) % 100 == 0) {
+          progress('Confirmando rutas por SHA-256…', i + 1, readable.length);
+        }
+        continue;
+      }
+
       final result = await readEntry(record);
       final digest = sha256.convert(result.bytes).toString();
-      for (final candidate in candidates) {
-        control.check();
-        final candidateHash = fileHashes[candidate.path] ??= sha256
-            .convert(await candidate.readAsBytes())
-            .toString();
-        if (candidateHash != digest) continue;
+      final hinted = names[record.entryId];
+      File? match;
+
+      if (hinted != null) {
+        final hintedFile = File(p.join(reference.path, hinted));
+        if (await hintedFile.exists() &&
+            await hintedFile.length() == record.decodedBytes &&
+            await fileHash(hintedFile) == digest) {
+          match = hintedFile;
+          hintPathMatches++;
+        }
+      }
+
+      if (match == null) {
+        for (final candidate in candidates) {
+          control.check();
+          if (await fileHash(candidate) != digest) continue;
+          match = candidate;
+          sizeScanMatches++;
+          break;
+        }
+      }
+
+      if (match != null) {
         final relative = p
-            .relative(candidate.path, from: reference.path)
+            .relative(match.path, from: reference.path)
             .replaceAll('\\', '/');
         confirmed[record.entryId] = relative;
-        break;
+        if (record.simple) {
+          simpleVerified++;
+        } else {
+          fragmentedVerified++;
+        }
       }
+
       if ((i + 1) % 100 == 0) {
-        progress('Confirmando rutas por SHA-256…', i + 1, resources.length);
+        progress('Confirmando rutas por SHA-256…', i + 1, readable.length);
       }
     }
+
     names.mergeConfirmed(confirmed);
     progress(
       'Rutas confirmadas: ${confirmed.length}.',
-      resources.length,
-      resources.length,
+      readable.length,
+      readable.length,
     );
     return {
-      'scannedFiles': scanned,
+      'scannedCandidateFiles': scanned,
+      'readableResources': readable.length,
       'confirmed': confirmed.length,
+      'simpleVerified': simpleVerified,
+      'fragmentedVerified': fragmentedVerified,
+      'fragmentedSkipped': fragmentedSkipped,
+      'hintPathMatches': hintPathMatches,
+      'sizeScanMatches': sizeScanMatches,
       'remainingHints': names.hints.length,
-      'method': 'decoded-sha256-reference',
+      'unresolved':
+          index.resources.length - names.paths.length - names.hints.length,
+      'method': 'decoded-sha256-reference; hint-first',
     };
   }
 
