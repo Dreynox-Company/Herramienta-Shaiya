@@ -32,15 +32,15 @@ class WorldHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(
         children: [
-          Positioned(left: 8, top: 7, width: 216, height: 79, child: _playerHud()),
-          Positioned(left: 318, top: 8, width: 420, height: 48, child: _topHotbar()),
+          Positioned(left: 8, top: 3, width: 216, height: 79, child: _playerHud()),
+          Positioned(left: 318, top: 5, width: 420, height: 48, child: _topHotbar()),
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
-          Positioned(left: 4, top: 389, width: 360, height: 290, child: _chat()),
-          Positioned(left: 0, right: 0, bottom: 0, height: 43, child: _bottomHud()),
+          Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
+          Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           if (questOpen)
             Positioned(
               left: 566,
-              top: 145,
+              top: 118,
               width: 247,
               height: 505,
               child: _questWindow(),
