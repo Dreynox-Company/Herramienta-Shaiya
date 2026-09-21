@@ -157,7 +157,7 @@ class StudioScene extends ChangeNotifier {
 
   Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();
+    gameActors.clear();gameLabels.clear();
     if(view==null||catalog==null)return;
     final npcRecords={for(final n in catalog!.npcs)n.id:n};
     var npcsLoaded=0;
