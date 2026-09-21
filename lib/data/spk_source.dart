@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:zstandard/zstandard.dart';
 import 'package:path/path.dart' as p;
 
@@ -69,6 +70,25 @@ class SpkArchiveSource {
     this.profile,
     this.names,
   );
+
+  @visibleForTesting
+  static Future<SpkArchiveSource> fromValidatedIndexForTesting({
+    required File file,
+    required SpkIndex index,
+    required SpkCryptoProfile profile,
+    SpkNameMap? names,
+  }) async {
+    if (!await file.exists()) {
+      throw const FileSystemException('El fixture SPK de pruebas no existe.');
+    }
+    return SpkArchiveSource._(
+      file,
+      await file.length(),
+      index,
+      profile,
+      names ?? SpkNameMap.empty(),
+    );
+  }
 
   static Future<SpkArchiveSource> open(
     String path,
