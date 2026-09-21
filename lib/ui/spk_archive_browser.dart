@@ -183,6 +183,51 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
   return source;
 }
 
+Future<SpkArchiveSource> deriveAutomaticFragmentProfile(
+  SpkArchiveSource source,
+  String spkPath, {
+  bool persist = true,
+}) async {
+  if (!source.canReadSimpleResources ||
+      source.canReadFragmentedResources ||
+      source.index.fragmentedResources.isEmpty) {
+    return source;
+  }
+
+  final rule = await source.deriveChunkNonceRuleOffline();
+  if (rule == 'unsupported') return source;
+
+  final profile = source.profile.withChunkNonceRule(rule);
+  final next = await SpkArchiveSource.open(
+    spkPath,
+    profile,
+    names: source.names,
+  );
+  if (persist) {
+    final sidecar = File('$spkPath.resources.json');
+    await sidecar.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'schema': 4,
+        'profileId': profile.profileId,
+        'indexSha256': profile.indexSha256,
+        'readyForSimple': true,
+        'readyForFragmented': true,
+        'readyForAll': true,
+        'resourceSecretHex': spkHex(profile.effectiveResourceSecret!),
+        'resourceSecretBytes': profile.effectiveResourceSecret!.length,
+        'algorithm': 'AES-GCM',
+        'aadRule': profile.resourceAad.isEmpty ? 'none' : 'constant',
+        if (profile.resourceAad.isNotEmpty)
+          'aadHex': spkHex(profile.resourceAad),
+        'chunkNonceRule': rule,
+        'fragmentRuleEvidence': 'offline-aes-gcm-authentication',
+      }),
+      flush: true,
+    );
+  }
+  return next;
+}
+
 Future<void> loadAutomaticSpkNameMap(
   SpkArchiveSource source,
   String spkPath,
@@ -258,6 +303,10 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       );
       progress.value = 'Buscando perfil validado de recursos…';
       source = await loadAutomaticSpkResourceProfile(source, picked.path);
+      if (source.canReadSimpleResources && !source.canReadFragmentedResources) {
+        progress.value = 'Validando fragmentos AES-GCM sin ejecutar el juego…';
+        source = await deriveAutomaticFragmentProfile(source, picked.path);
+      }
       progress.value = 'Resolviendo nombres y rutas conocidas…';
       await loadAutomaticSpkNameMap(source, picked.path);
       if (!context.mounted) return;
@@ -592,11 +641,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final data = Map<String, dynamic>.from(raw);
     final nextProfile = mergeSpkResourceProfile(source, data);
 
-    final next = await SpkArchiveSource.open(
+    var next = await SpkArchiveSource.open(
       source.file.path,
       nextProfile,
       names: source.names,
     );
+    next = await deriveAutomaticFragmentProfile(next, source.file.path);
 
     final persistent = File('${source.file.path}.profile.json');
     await persistent.writeAsString(
