@@ -164,6 +164,41 @@ void main() {
     },
   );
 
+  test('full SPK audit validates every readable resource', () async {
+    final root = await Directory.systemTemp.createTemp('spk-full-audit-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      await source.validateSimpleResourceProfile();
+
+      final progress = <int>[];
+      final result = await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, done, total) {
+          expect(total, 3);
+          progress.add(done);
+        },
+      );
+
+      expect(result['status'], 'validated');
+      expect(result['validatedResources'], 3);
+      expect(result['simpleResources'], 3);
+      expect(result['fragmentedResources'], 0);
+      expect(
+        Map<String, dynamic>.from(result['formats'] as Map)['DDS'],
+        3,
+      );
+      expect(source.fullyValidatedResources, isTrue);
+      expect(
+        source.diagnostics()['fullyValidatedResources'],
+        isTrue,
+      );
+      expect(progress.last, 3);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test('validated SPK mounts as Library and overlay never mutates source', () async {
     final root = await Directory.systemTemp.createTemp('spk-workspace-');
     try {
