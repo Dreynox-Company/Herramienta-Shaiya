@@ -41,7 +41,7 @@ void main(){
       expect(state.catalog,isNotNull,reason:'$stage catalog: ${state.progress}');
       expect(state.loading,isFalse,reason:'$stage loading: ${state.progress}');
       expect(state.scene.character,isNotNull,reason:'$stage character: ${state.progress}');
-      if(requireReal&&(stage==GameStage.characterSelect||stage==GameStage.characterCreate)){
+      if(requireReal&&(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode)){
         expect(state.scene.world,isNotNull,reason:'$stage must render select_A/select_B world.');
       }
       if(requireReal&&stage==GameStage.world){
@@ -67,6 +67,7 @@ void main(){
       GameStage.faction,
       GameStage.characterSelect,
       GameStage.characterCreate,
+      GameStage.characterMode,
       GameStage.world,
     ]){
       final state=await load(stage);
