@@ -155,7 +155,7 @@ void main() {
       final result = await SpkCoreTableDiscovery.discover(
         source,
         control: SpkExtractControl(),
-        progress: (_, __, ___) {},
+        progress: (_, _, _) {},
       );
 
       expect(result['authenticatedResources'], 3);
@@ -188,7 +188,7 @@ void main() {
       final result = await SpkCoreTableDiscovery.discover(
         source,
         control: SpkExtractControl(),
-        progress: (_, __, ___) {},
+        progress: (_, _, _) {},
       );
 
       expect(
@@ -242,7 +242,7 @@ void main() {
       final result = await SpkCoreTableDiscovery.discover(
         source,
         control: SpkExtractControl(),
-        progress: (_, __, ___) {},
+        progress: (_, _, _) {},
       );
 
       expect(result['validatedManifestHints'], 1);
@@ -276,7 +276,7 @@ void main() {
         SpkCoreTableDiscovery.discover(
           closed,
           control: SpkExtractControl(),
-          progress: (_, __, ___) {},
+          progress: (_, _, _) {},
         ),
         throwsA(
           isA<SpkFailure>().having(
