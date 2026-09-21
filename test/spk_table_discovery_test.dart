@@ -9,6 +9,7 @@ import 'package:herramienta_shaiya/core/spk_archive.dart';
 import 'package:herramienta_shaiya/data/spk_source.dart';
 import 'package:herramienta_shaiya/data/spk_table_discovery.dart';
 import 'package:herramienta_shaiya/editor/primitive_schemas.dart';
+import 'package:herramienta_shaiya/editor/schema_reader.dart';
 
 import 'archive_test.dart' show SahWriter;
 import 'editor_document_test.dart' show binaryTable;
@@ -187,6 +188,26 @@ void main() {
     );
     expect(SpkArchiveSource.detectFormat(table), 'SDATA');
     expect(SpkArchiveSource.extensionFor('SDATA'), '.sdata');
+  });
+
+  test('unresolved audited SData can open through its binary header', () {
+    final bytes = SeedData.encode(
+      binaryTable(
+        const ['Id', 'Value'],
+        const [
+          [7, 42],
+        ],
+      ),
+    );
+    final document = EditorReader.open(
+      bytes,
+      '_SPK_SinNombre/0123456789abcdef.sdata',
+    );
+    expect(document.profile, 'binary');
+    expect(document.complete, isTrue);
+    expect(document.rows.length, 1);
+    expect(document.read(document.fields(0)[0]), '7');
+    expect(document.read(document.fields(0)[1]), '42');
   });
 
   test('authenticated SPK payloads identify core DB tables structurally', () async {
