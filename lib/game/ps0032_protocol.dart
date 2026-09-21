@@ -16,6 +16,7 @@ class PsPacketType {
   static const gameHandshake=0xA301;
   static const characterList=0x0101;
   static const createCharacter=0x0102;
+  static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
   static const characterSkillBar=0x010B;
@@ -435,6 +436,24 @@ class PsWorldSession {
     .map(PsCharacterSlot.parse)
     .toList()
     ..sort((a,b)=>a.slot.compareTo(b.slot));
+
+  Future<({int faction,int maxMode})> setFaction(int value) async {
+    if(value<0||value>1)throw ArgumentError('Facción ps0032 inválida: $value');
+    await connection.send(PsPacketType.accountFaction,[value]);
+    final result=await connection.nextType(PsPacketType.accountFaction);
+    if(result.body.length<2)throw FormatException('ACCOUNT_FACTION response truncado.');
+    return (faction:result.body[0],maxMode:result.body[1]);
+  }
+
+  Future<void> deleteCharacter(int characterId) async {
+    await connection.send(PsPacketType.deleteCharacter,_u32Bytes(characterId));
+    final result=await connection.nextType(PsPacketType.deleteCharacter);
+    if(result.body.length<5||result.body[0]!=0){
+      throw StateError('DELETE_CHARACTER falló.');
+    }
+    final returned=ByteData.sublistView(result.body).getUint32(1,Endian.little);
+    if(returned!=characterId)throw StateError('DELETE_CHARACTER devolvió id inesperado: $returned');
+  }
 
   Future<List<PsCharacterSlot>> createCharacter({
     int slot=0,int race=0,int mode=2,int hair=0,int face=0,
