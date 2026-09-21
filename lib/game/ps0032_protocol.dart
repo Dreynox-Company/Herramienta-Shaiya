@@ -20,6 +20,7 @@ class PsPacketType {
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
   static const characterSkillBar=0x010B;
+  static const characterCurrentHitpoints=0x0521;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
@@ -399,6 +400,21 @@ class PsCharacterSlot {
   }
 }
 
+class PsCharacterHitpoints {
+  final int hp,mp,sp;
+  const PsCharacterHitpoints(this.hp,this.mp,this.sp);
+  static PsCharacterHitpoints parse(PsPacket p){
+    if(p.type!=PsPacketType.characterCurrentHitpoints||p.body.length<12){
+      throw FormatException('CHARACTER_CURRENT_HITPOINTS truncado: '+p.body.length.toString());
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterHitpoints(
+      d.getInt32(0,Endian.little),
+      d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),
+    );
+  }
+}
 class PsCharacterDetails {
   final int strength,dexterity,reaction,intelligence,wisdom,luck;
   final int statPoints,skillPoints,maxHp,maxMp,maxSp,angle;
@@ -512,10 +528,11 @@ class PsWorldSession {
     return slots;
   }
 
-  Future<({PsCharacterDetails details,List<PsPacket> packets})> selectCharacter(int characterId) async {
+  Future<({PsCharacterDetails details,PsCharacterHitpoints hitpoints,List<PsPacket> packets})> selectCharacter(int characterId) async {
     await connection.send(PsPacketType.selectCharacter,_u32Bytes(characterId));
     final packets=<PsPacket>[];
     PsCharacterDetails? details;
+    PsCharacterHitpoints? hitpoints;
     final deadline=DateTime.now().add(const Duration(seconds:20));
     while(DateTime.now().isBefore(deadline)){
       final p=await connection.next(timeout:deadline.difference(DateTime.now()));
@@ -524,6 +541,8 @@ class PsWorldSession {
         if(p.body.length<5||p.body[0]!=0)throw StateError('SELECT_CHARACTER rechazado.');
       }else if(p.type==PsPacketType.characterDetails){
         details=PsCharacterDetails.parse(p);
+      }else if(p.type==PsPacketType.characterCurrentHitpoints){
+        hitpoints=PsCharacterHitpoints.parse(p);
       }else if(p.type==PsPacketType.characterSkillBar){
         connection.switchIncomingToExpanded(xorKey);
         _expanded=true;
@@ -531,8 +550,9 @@ class PsWorldSession {
       }
     }
     if(details==null)throw StateError('No llegó CHARACTER_DETAILS.');
+    if(hitpoints==null)throw StateError('No llegó CHARACTER_CURRENT_HITPOINTS.');
     if(!_expanded)throw StateError('No llegó CHARACTER_SKILL_BAR/cambio de cifrado.');
-    return (details:details,packets:packets);
+    return (details:details,hitpoints:hitpoints,packets:packets);
   }
 
   Future<List<PsPacket>> enterMap({Duration collect=const Duration(seconds:6)}) async {
