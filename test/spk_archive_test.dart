@@ -181,6 +181,45 @@ void main() {
       expect(p.chunkNonceRule, 'unsupported');
     });
 
+    test('V7 resource summary accepts AES-256 and canonicalizes nonce rule', () {
+      final base = SpkCryptoProfile.fromJson({
+        'profileId': 'fixture-index',
+        'indexSha256': 'abc',
+        'index': {'secretHex': '00000000000000000000000000000000'},
+      });
+      final merged = base.mergeResourceProbe({
+        'schema': 2,
+        'readyForSimple': true,
+        'readyForFragmented': true,
+        'resourceSecretHex':
+            '1111111111111111111111111111111111111111111111111111111111111111',
+        'chunkNonceRule': 'offset_chunk0_le96',
+      });
+      expect(merged.effectiveResourceSecret, isNotNull);
+      expect(merged.effectiveResourceSecret!.length, 32);
+      expect(merged.chunkNonceRule, 'offset_le96');
+      expect(merged.indexSecret.length, 16);
+    });
+
+    test('V7 resource summary rejects unvalidated simple resources', () {
+      final base = SpkCryptoProfile.fromJson({
+        'index': {'secretHex': '00000000000000000000000000000000'},
+      });
+      expect(
+        () => base.mergeResourceProbe({
+          'readyForSimple': false,
+          'resourceSecretHex': '11111111111111111111111111111111',
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('resource secret accepts 128 or 256 bits only', () {
+      expect(spkResourceSecret('00000000000000000000000000000000').length, 16);
+      expect(spkResourceSecret('1111111111111111111111111111111111111111111111111111111111111111').length, 32);
+      expect(() => spkResourceSecret('222222222222222222222222222222222222222222222222'), throwsFormatException);
+    });
+
     test('invalid secret size fails closed', () {
       expect(
         () => SpkCryptoProfile.fromJson({
