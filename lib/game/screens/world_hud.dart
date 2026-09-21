@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../data/catalog.dart';
 import '../../render/studio_scene.dart';
+import '../ui_asset.dart';
 import '../shaiya_widgets.dart';
 
 class WorldHud extends StatelessWidget {
   final StudioScene scene;
   final Catalog catalog;
   final String characterName;
+  final UiAssetCache ui;
   final List<String> messages;
   final bool questOpen;
   final int questId;
@@ -18,6 +20,7 @@ class WorldHud extends StatelessWidget {
     required this.scene,
     required this.catalog,
     required this.characterName,
+    required this.ui,
     required this.messages,
     required this.questOpen,
     required this.questId,
@@ -34,7 +37,9 @@ class WorldHud extends StatelessWidget {
     if(questOpen)Positioned(left:566,top:145,width:247,height:505,child:_questWindow()),
   ]);
 
-  Widget _playerHud()=>Container(
+  Widget _playerHud()=>Stack(children:[
+    Positioned.fill(child:DataImage(cache:ui,path:'interface/main_stats_bar_bg.tga',fit:BoxFit.fill)),
+    Container(
     padding:const EdgeInsets.all(4),
     decoration:BoxDecoration(
       color:const Color(0xaa15110d),
@@ -86,7 +91,9 @@ class WorldHud extends StatelessWidget {
     ]),
   )));
 
-  Widget _minimap()=>Container(
+  Widget _minimap()=>Stack(children:[
+    Positioned.fill(child:DataImage(cache:ui,path:'interface/main_map.tga',fit:BoxFit.fill)),
+    Container(
     decoration:BoxDecoration(
       color:const Color(0xdd201b15),
       border:Border.all(color:const Color(0xff8f8264)),
@@ -131,7 +138,9 @@ class WorldHud extends StatelessWidget {
     )),
   ]);
 
-  Widget _bottomHud()=>Column(children:[
+  Widget _bottomHud()=>Stack(children:[
+    Positioned.fill(child:DataImage(cache:ui,path:'interface/main_bottom.tga',fit:BoxFit.fill)),
+    Column(children:[
     Container(
       height:13,
       decoration:BoxDecoration(
@@ -166,6 +175,7 @@ class WorldHud extends StatelessWidget {
         ]),
       ),
     )),
+  ]),
   ]);
 
   Widget _questWindow(){
@@ -175,7 +185,9 @@ class WorldHud extends StatelessWidget {
       ?text.initialDescription
       :'Aprende a moverte, reconocer la interfaz y hablar con los habitantes de la zona.';
 
-    return Container(
+    return Stack(children:[
+      Positioned.fill(child:DataImage(cache:ui,path:'interface/quest/quest.tga',fit:BoxFit.fill)),
+      Container(
       decoration:BoxDecoration(
         border:Border.all(color:const Color(0xff251710),width:3),
         gradient:const LinearGradient(
@@ -226,7 +238,8 @@ class WorldHud extends StatelessWidget {
           ]),
         ),
       ]),
-    );
+      ),
+    ]);
   }
 }
 
