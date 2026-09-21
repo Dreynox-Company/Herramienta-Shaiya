@@ -60,7 +60,7 @@ jobs:
       - name: Resolve native codec dependencies
         run: flutter pub get
       - name: Format touched Dart sources
-        run: dart format lib/data/spk_source.dart lib/ui/spk_browser.dart lib/main.dart test/spk_source_test.dart
+        run: dart format lib/data/spk_source.dart lib/ui/spk_browser.dart lib/main.dart test/spk_source_test.dart integration_test/spk_native_test.dart
       - name: Focused SPK tests
         run: flutter test test/spk_source_test.dart --reporter expanded
       - name: Commit browser, deterministic lockfile and formatting
