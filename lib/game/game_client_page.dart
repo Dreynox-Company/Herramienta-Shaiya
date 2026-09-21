@@ -13,6 +13,7 @@ import '../input/viewport_movement_input.dart';
 import '../render/studio_scene.dart';
 import 'game_stage.dart';
 import 'offline_backend.dart';
+import 'ps0032_protocol.dart';
 import 'server_metadata.dart';
 import 'screens/character_create_screen.dart';
 import 'screens/character_select_screen.dart';
@@ -33,6 +34,12 @@ class _GameClientPageState extends State<GameClientPage> {
   late final three.ThreeJS renderer;
   late final OfflineBackend backend;
   late final String uiLocale;
+  Ps0032Client? protocolClient;
+  LoginSession? liveLogin;
+  PsWorldSession? liveWorld;
+  PsWorldSnapshot? liveSnapshot;
+  List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
+  PsCharacterSlot? liveCharacter;
   final focus=FocusNode();
   final nameController=TextEditingController(text:'DreynoxLocal');
 
@@ -142,6 +149,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _refresh(){if(mounted)setState((){});}
 
   @override void dispose(){
+    if(liveWorld!=null)unawaited(liveWorld!.close());
     unawaited(backend.stop());
     scene.removeListener(_refresh);
     scene.dispose();
@@ -178,13 +186,19 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _connectLibrary(Library lib) async {
-    await backend.start();
+    final backendStarted=await backend.start();
     final c=Catalog(lib);
     await c.load((s){if(mounted)setState(()=>progress=s);});
     catalog=c;
     ui=UiAssetCache(lib);
     metadata=await ServerMetadata.load();
     scene.catalog=c;
+    if(backendStarted&&backend.password!=null){
+      await _connectLiveProtocol(backend.password!);
+    }
+    if(liveCharacter!=null){
+      _syncUiFromLiveCharacter(liveCharacter!);
+    }
     await _applyDefaultAppearance();
 
     stage=widget.initialStage??GameStage.faction;
@@ -208,6 +222,64 @@ class _GameClientPageState extends State<GameClientPage> {
     await _signalQaReady();
     await _markQaReady();
     focus.requestFocus();
+  }
+
+  int _protocolProfession(int index)=>const [0,1,5,2,3,4][index.clamp(0,5)];
+  int _uiClassFromProfession(int profession){
+    const map=<int,int>{0:0,1:1,5:2,2:3,3:4,4:5};
+    return map[profession]??0;
+  }
+  int _protocolRace(){
+    final firstGroup=classIndex<=2;
+    if(faction=='light')return firstGroup?0:1;
+    return firstGroup?2:3;
+  }
+  int _protocolMode()=>modeIndex==0?2:3;
+
+  Future<void> _connectLiveProtocol(String password) async {
+    try{
+      protocolClient=Ps0032Client(trace:(s){
+        messages.insert(0,'[ps0032] '+s);
+        if(mounted)setState(()=>progress=s);
+      });
+      liveLogin=await protocolClient!.loginOffline(password);
+      liveWorld=await protocolClient!.openWorld(liveLogin!);
+      liveCharacters=liveWorld!.characters;
+      liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+      if(liveWorld!.faction==0)faction='light';
+      if(liveWorld!.faction==1)faction='fury';
+      characterCreated=liveCharacter!=null;
+      messages.insert(0,'[ps0032] Sesión World real lista · ${liveCharacters.where((c)=>c.exists).length} personaje(s).');
+    }catch(e){
+      messages.insert(0,'[ps0032] Fallback visual: '+e.toString());
+      try{await liveWorld?.close();}catch(_){}
+      liveWorld=null;liveLogin=null;protocolClient=null;liveCharacters=<PsCharacterSlot>[];liveCharacter=null;
+    }
+  }
+
+  void _syncUiFromLiveCharacter(PsCharacterSlot slot){
+    if(slot.race<=1)faction='light';else faction='fury';
+    genderIndex=slot.gender.clamp(0,1);
+    classIndex=_uiClassFromProfession(slot.profession);
+    faceIndex=slot.face.clamp(0,4);
+    hairIndex=slot.hair.clamp(0,4);
+    modeIndex=slot.mode>=3?1:0;
+    if(slot.name.isNotEmpty)nameController.text=slot.name;
+  }
+
+  Future<void> _selectFactionAndContinue() async {
+    if(mounted)setState(()=>loading=true);
+    try{
+      final session=liveWorld;
+      if(session!=null){
+        final selected=await session.setFaction(faction=='light'?0:1);
+        messages.insert(0,'[ps0032] Facción confirmada por World: ${selected.faction}.');
+      }
+      await _goSelect();
+    }catch(e){
+      messages.insert(0,'[ps0032] No se pudo seleccionar facción: '+e.toString());
+      if(mounted)setState(()=>loading=false);
+    }
   }
 
   Future<void> _preloadStageUi() async {
