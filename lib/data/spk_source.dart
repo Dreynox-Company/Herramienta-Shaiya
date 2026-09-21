@@ -720,7 +720,8 @@ class SpkArchiveSource {
 
   static String? _textFormat(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) return null;
-    final sample = bytes.take(bytes.length.clamp(0, 4096)).toList();
+    final sampleLength = bytes.length < 4096 ? bytes.length : 4096;
+    final sample = bytes.take(sampleLength).toList();
     var printable = 0;
     for (final value in sample) {
       if (value == 9 ||
