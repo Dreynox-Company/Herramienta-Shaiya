@@ -446,6 +446,12 @@ class PsCharacterSlot {
     this.equipmentTypes=const [],this.equipmentTypeIds=const [],
   });
   bool get exists=>id!=0;
+  PsCharacterSlot withDelete(bool value)=>PsCharacterSlot(
+    slot:slot,id:id,mapId:mapId,level:level,race:race,mode:mode,
+    hair:hair,face:face,height:height,profession:profession,gender:gender,
+    name:name,isDelete:value,isRename:isRename,
+    equipmentTypes:equipmentTypes,equipmentTypeIds:equipmentTypeIds,
+  );
 
   static PsCharacterSlot parse(PsPacket packet){
     if(packet.type!=PsPacketType.characterList||packet.body.length<5){
