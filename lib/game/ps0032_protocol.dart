@@ -222,6 +222,136 @@ class PsConnection {
   }
 }
 
+
+class PsNpcEnter {
+  final int globalId,type,typeId,angle;
+  final double x,y,z;
+  const PsNpcEnter(this.globalId,this.type,this.typeId,this.x,this.y,this.z,this.angle);
+  static PsNpcEnter parse(PsPacket p){
+    if(p.type!=PsPacketType.mapNpcEnter||p.body.length<21){
+      throw FormatException('MAP_NPC_ENTER truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsNpcEnter(
+      d.getUint32(0,Endian.little),
+      p.body[4],
+      d.getInt16(5,Endian.little),
+      d.getFloat32(7,Endian.little),
+      d.getFloat32(11,Endian.little),
+      d.getFloat32(15,Endian.little),
+      d.getUint16(19,Endian.little),
+    );
+  }
+}
+
+class PsMobEnter {
+  final int globalId,mobId;
+  final bool isNew;
+  final double x,z;
+  const PsMobEnter(this.globalId,this.isNew,this.mobId,this.x,this.z);
+  static PsMobEnter parse(PsPacket p){
+    if(p.type!=PsPacketType.mobEnter||p.body.length<15){
+      throw FormatException('MOB_ENTER truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMobEnter(
+      d.getUint32(0,Endian.little),
+      p.body[4]!=0,
+      d.getUint16(5,Endian.little),
+      d.getFloat32(7,Endian.little),
+      d.getFloat32(11,Endian.little),
+    );
+  }
+}
+
+class PsEnteredMap {
+  final int characterId,isAdmin,angle,guildId,vehicleId;
+  final double x,y,z;
+  const PsEnteredMap(this.characterId,this.isAdmin,this.angle,this.x,this.y,this.z,this.guildId,this.vehicleId);
+  static PsEnteredMap parse(PsPacket p){
+    if(p.type!=PsPacketType.characterEnteredMap||p.body.length<27){
+      throw FormatException('CHARACTER_ENTERED_MAP truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsEnteredMap(
+      d.getUint32(0,Endian.little),
+      p.body[4],
+      d.getUint16(5,Endian.little),
+      d.getFloat32(7,Endian.little),
+      d.getFloat32(11,Endian.little),
+      d.getFloat32(15,Endian.little),
+      d.getUint32(19,Endian.little),
+      d.getUint32(23,Endian.little),
+    );
+  }
+}
+
+class PsQuestProgress {
+  final int questId,remaining,count1,count2,count3;
+  const PsQuestProgress(this.questId,this.remaining,this.count1,this.count2,this.count3);
+}
+class PsFinishedQuest {
+  final int questId;
+  final bool success;
+  const PsFinishedQuest(this.questId,this.success);
+}
+
+List<PsQuestProgress> parseQuestList(PsPacket p){
+  if(p.type!=PsPacketType.questList||p.body.isEmpty)return const [];
+  final count=p.body[0];
+  if(p.body.length<1+count*7)throw FormatException('QUEST_LIST truncado.');
+  final d=ByteData.sublistView(p.body),out=<PsQuestProgress>[];
+  var o=1;
+  for(var i=0;i<count;i++,o+=7){
+    out.add(PsQuestProgress(
+      d.getInt16(o,Endian.little),
+      d.getUint16(o+2,Endian.little),
+      p.body[o+4],p.body[o+5],p.body[o+6],
+    ));
+  }
+  return out;
+}
+
+List<PsFinishedQuest> parseFinishedQuests(PsPacket p){
+  if(p.type!=PsPacketType.questFinishedList||p.body.isEmpty)return const [];
+  final count=p.body[0];
+  if(p.body.length<1+count*3)throw FormatException('QUEST_FINISHED_LIST truncado.');
+  final d=ByteData.sublistView(p.body),out=<PsFinishedQuest>[];
+  var o=1;
+  for(var i=0;i<count;i++,o+=3){
+    out.add(PsFinishedQuest(d.getInt16(o,Endian.little),p.body[o+2]!=0));
+  }
+  return out;
+}
+
+class PsWorldSnapshot {
+  final PsEnteredMap? self;
+  final List<PsNpcEnter> npcs;
+  final List<PsMobEnter> mobs;
+  final List<PsQuestProgress> quests;
+  final List<PsFinishedQuest> finishedQuests;
+  const PsWorldSnapshot({
+    required this.self,required this.npcs,required this.mobs,
+    required this.quests,required this.finishedQuests,
+  });
+
+  factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets){
+    PsEnteredMap? self;
+    final npcs=<PsNpcEnter>[],mobs=<PsMobEnter>[],quests=<PsQuestProgress>[],finished=<PsFinishedQuest>[];
+    for(final p in packets){
+      if(p.type==PsPacketType.characterEnteredMap)self=PsEnteredMap.parse(p);
+      else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
+      else if(p.type==PsPacketType.mobEnter)mobs.add(PsMobEnter.parse(p));
+      else if(p.type==PsPacketType.questList)quests.addAll(parseQuestList(p));
+      else if(p.type==PsPacketType.questFinishedList)finished.addAll(parseFinishedQuests(p));
+    }
+    return PsWorldSnapshot(
+      self:self,npcs:List.unmodifiable(npcs),mobs:List.unmodifiable(mobs),
+      quests:List.unmodifiable(quests),finishedQuests:List.unmodifiable(finished),
+    );
+  }
+}
+
 class LoginSession {
   final int userId;
   final Uint8List sessionId,key,iv;
