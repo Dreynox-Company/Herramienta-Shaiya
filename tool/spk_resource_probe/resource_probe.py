@@ -226,12 +226,18 @@ def main():
       print('Escribe CAPTURAR para continuar:',flush=True)
       if input().strip()!='CAPTURAR':print('Cancelado');return 2
     cfg={'prefixes':prefix};agent=AGENT_FILE.read_text(encoding='utf-8').replace('__CONFIG__',json.dumps(cfg,separators=(',',':')))
-    sink=Sink(out,spk,details);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None
+    sink=Sink(out,spk,details);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None;grace_started=False
     def onmsg(m,d):
-      nonlocal failure
+      nonlocal failure,grace_started
       try:
        sink.accept(m,d)
-       if len(sink.valid_simple)>=4 and len(sink.valid_chunks)>=2:done.set()
+       # Si ya hay clave/AAD reproducibles, damos una ventana corta para capturar
+       # chunks nativos. Si no aparecen, Studio deriva la regla offline después.
+       if len(sink.valid_simple)>=4:
+        if len(sink.valid_chunks)>=2:done.set()
+        elif not grace_started:
+         grace_started=True
+         timer=threading.Timer(20.0,done.set);timer.daemon=True;timer.start()
       except Exception as e:failure=str(e);done.set()
     try:
       pid=dev.spawn([str(exe)],cwd=str(exe.parent));sess=dev.attach(pid);sess.on('detached',lambda *x:done.set());script=sess.create_script(agent);script.on('message',onmsg);script.load();dev.resume(pid)
@@ -246,7 +252,7 @@ def main():
     prof=derive_profile(sink.rows);prof['failure']=failure;(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2));(out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2))
     print(json.dumps(prof,ensure_ascii=False,indent=2));
     if prof['readyForFragmented']:print('ÉXITO: simples + fragmentos reproducidos offline.');return 0
-    if prof['readyForSimple']:print('Simples resueltos; faltan chunks o regla de nonce.');return 4
+    if prof['readyForSimple']:print('Simples autenticados; Shaiya Studio revalidará la clave y derivará los chunks offline.');return 4
     print('No se capturó aún un perfil de recurso válido.');return 3
 if __name__=='__main__':
   try:raise SystemExit(main())
