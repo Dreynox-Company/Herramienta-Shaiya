@@ -1,91 +1,161 @@
-# Explorador DATA.SPK — integración 0.6.3
+# Explorador DATA.SPK — integración 0.6.13
 
-Esta rama añade a Shaiya Studio un explorador nativo de DATA.SPK con una
-experiencia similar a WinRAR/Explorador de Windows:
+Shaiya Studio trata DATA.SPK como una fuente de recursos real, no como un
+archivo plano. El explorador mantiene una experiencia similar a WinRAR o al
+Explorador de Windows y comparte la misma abstracción `Library` que usa el
+editor de datos y la herramienta 3D.
 
-- árbol de carpetas a la izquierda;
-- barra de dirección y navegación por niveles;
-- lista central de recursos con nombre, tipo, tamaño e ID;
-- búsqueda por nombre o ID y modo recursivo;
-- panel de propiedades;
+## Interfaz
+
+Incluye:
+
+- árbol de carpetas;
+- barra de dirección;
+- búsqueda por nombre o Entry ID;
+- búsqueda recursiva;
+- lista de recursos con tipo, tamaño almacenado, tamaño decodificado e ID;
+- propiedades técnicas y evidencia del nombre;
 - inspección individual;
 - extracción individual;
-- extracción completa transaccional;
+- extracción de carpeta;
+- extracción de recursos legibles;
+- extracción completa cuando todo el perfil está validado;
 - inventario JSON;
-- importación de un mapa ID -> ruta para nombres reales.
+- importación y persistencia de mapas de nombres;
+- AutoPerfil SPK;
+- descubrimiento estructural de tablas editables;
+- **Preparar Studio**, que identifica tablas núcleo antes del montaje cuando es
+  necesario.
+
+## Geometría SPK v3 observada
+
+El archivo de referencia:
+
+- 3.351.341.186 bytes;
+- 50.140 registros;
+- 50.135 recursos;
+- 48.668 simples;
+- 1.467 fragmentados;
+- 6.789 chunks auxiliares;
+- índice AES-GCM + Zstandard;
+- SHA-256 de índice cifrado
+  `a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f`.
+
+El índice está entendido. La capa de payloads tiene un gate independiente.
 
 ## Seguridad e integridad
 
-DATA.SPK se abre siempre en solo lectura. El lector usa rangos del archivo y
-nunca carga los 3+ GiB completos en RAM. Antes de montar el catálogo valida:
+DATA.SPK se abre siempre en solo lectura. El lector usa rangos y no carga los
+3+ GiB en memoria. Antes de aceptar el índice valida firma, versión, offsets,
+tamaños, hash del índice, AES-GCM, Zstandard, tamaño de registros, redundancias
+y relaciones con la tabla auxiliar.
 
-1. firma y versión;
-2. offsets/tamaños de cabecera;
-3. SHA-256 del índice contra el perfil local;
-4. AES-GCM del índice;
-5. frame Zstandard;
-6. 96 bytes exactos por registro;
-7. redundancia de tamaños;
-8. cobertura contigua de la región de datos;
-9. relaciones entre recursos fragmentados y la tabla auxiliar.
+Los payloads no se consideran legibles porque exista una clave en un JSON.
+Primero se autentican muestras reales. Los fragmentados solo se habilitan cuando
+la regla de nonce y la reconstrucción completa también pasan autenticación.
 
-Una extracción completa se escribe primero en una carpeta *.partial y solo se
-publica al final. Un fallo o cancelación elimina exclusivamente esa carpeta
-staging y nunca modifica DATA.SPK.
+Las extracciones usan staging transaccional. Un fallo o cancelación no modifica
+el SPK original.
 
-## Nombres
+## Nombres y confianza
 
-El índice observado usa identificadores de 64 bits en vez de guardar las rutas
-en claro. Shaiya Studio no inventa nombres. Un recurso sin ruta resuelta sigue
-visible bajo:
+El índice usa Entry IDs de 64 bits. Las rutas se separan en:
 
-    _SPK_SinNombre/Simples
-    _SPK_SinNombre/Fragmentados
+- **confirmadas**: autoridad para edición;
+- **inferidas fuertes**: útiles para navegación y lectura cuando el payload es
+  legible;
+- **inferidas aproximadas**;
+- **sin resolver**.
 
-Un spk-name-map.json puede resolver IDs a rutas como Character/..., Item/...,
-Terrain/..., etc. Los recursos no incluidos en el mapa permanecen visibles.
+Dos Entry IDs que intenten usar la misma ruta inferida no se montan
+arbitrariamente: la ruta ambigua se excluye hasta resolverla.
 
-## Perfil criptográfico
+Un nombre inferido no obtiene autoridad de escritura solo por coincidir en
+tamaño. La confirmación puede venir de SHA-256 contra una DATA de referencia o
+de un descubrimiento estructural suficientemente específico de las tablas
+núcleo.
 
-Las claves observadas no se publican en GitHub. El usuario selecciona un perfil
-JSON local, o lo coloca junto a DATA.SPK como:
+## Integración con el editor
 
-    data.spk.profile.json
-    spk-crypto-profile.json
+Cuando los payloads ya están autenticados, **Descubrir tablas** valida recursos
+SEED por checksum y aplica los contratos binarios existentes para localizar,
+entre otras:
 
-El perfil incluye el SHA-256 del índice y el material AES-GCM correspondiente.
-Si el perfil no trae material de recursos, el índice se puede explorar pero no
-se permite fingir que un payload fue extraído correctamente.
+- `BinarySData/DBItemData.SData`;
+- `BinarySData/DBMonsterData.SData`;
+- `BinarySData/DBSkillData.SData`;
+- `BinarySData/DBNpcSkillData.SData`;
+- tablas de textos;
+- set items;
+- ventas/tiendas;
+- transformaciones de modelos.
 
-La extracción completa también permanece deshabilitada mientras la regla
-criptográfica de los recursos fragmentados no esté validada.
+También intenta resolver las tablas clásicas `Item/Item.SData`,
+`Monster/Monster.SData` y `Skill/Skill.SData` mediante sus perfiles
+estructurales y correlación de filas.
 
-## Estado de esta rama
+Al pulsar **Preparar Studio**, si todavía no existen tablas núcleo confirmadas,
+el descubrimiento se ejecuta antes de montar el SPK.
 
-Se integra la capa de montaje/indexado y la interfaz de archivo. El siguiente
-gate es importar el perfil de recursos obtenido por la observación dirigida y
-validar el nonce/tag de los 1.467 recursos fragmentados; entonces el botón
-"Extraer todo" queda habilitado para el SPK observado y la misma fuente puede
-conectarse al catálogo 3D.
+## Edición SPK
 
+El editor no sobrescribe DATA.SPK. Guarda los cambios en un overlay asociado al
+hash exacto del índice. Cada entrada del overlay conserva:
 
-## CI gate
+- Entry ID;
+- SHA-256 original;
+- SHA-256 del contenido editado;
+- tamaño;
+- fecha de actualización.
 
-The focused SPK format/profile tests pass after deterministic Dart formatting.
-The branch is now ready for the repository-wide regression and Windows native
-build. Full archive extraction remains intentionally fail-closed until the
-fragmented-resource crypto profile is validated.
+Antes de guardar, el editor relee el recurso y exige que el hash original siga
+siendo el mismo. Una ruta inferida no se puede modificar hasta confirmarla.
 
+Esto permite editar con seguridad objetos, habilidades y tablas de monstruos
+sin fingir que el contenedor original ya fue reempaquetado.
 
-## 0.6.4 · explorador y extracción
+## Botín, objetos y skills
 
-La integración se publica desde Shaiya Studio mediante **Biblioteca de recursos
-→ Archivo DATA.SPK**. El explorador mantiene el patrón de un gestor de archivos:
-árbol de carpetas, barra de ruta, navegación hacia arriba, búsqueda, lista de
-archivos con tamaños/ID, propiedades, inspección, extracción individual,
-inventario JSON y **Extraer todo**.
+El editor conserva la semántica de los contratos conocidos:
 
-La extracción completa conserva el modelo transaccional: escribe en una carpeta
-temporal, valida cada recurso y publica la carpeta DATA_SPK_* únicamente cuando
-todo termina correctamente. Si el perfil criptográfico no cubre todavía un tipo
-de recurso, la operación se bloquea en lugar de exportar bytes falsos.
+- monstruos: `Item1..Item9` + `ItemDropRate1..ItemDropRate9`; las referencias
+  de drop se interpretan como Grade cuando corresponde y no como ItemID
+  inventado;
+- objetos: selector de `ReqOg/Og` para intercambiable, no intercambiable y el
+  estado de vinculación cuando el servidor lo soporte;
+- skills: niveles, daños, tiempos, efectos, requisitos y referencias tipadas;
+- valores desconocidos: se conservan sin reinterpretarlos.
+
+No se convierten tasas enteras de drop a porcentajes sin un contrato que lo
+demuestre.
+
+## Integración 3D
+
+El catálogo 3D lee desde la misma `Library` montada sobre SPK. La prioridad
+sigue siendo usar MLT/ITM/MON originales. Para archivos SPK con nombres aún
+incompletos existe un fallback conservador para personajes: solo se expone un
+arquetipo si hay cuerpo completo y cada parte tiene una pareja 3DC/DDS con
+nombre exacto.
+
+No se generan combinaciones aproximadas de malla/textura.
+
+## Estado real del inventario recibido
+
+El inventario actual sigue indicando:
+
+- 21.360 rutas inferidas;
+- 0 rutas confirmadas;
+- payload simple no legible;
+- payload fragmentado no legible;
+- `canExtractAll = false`.
+
+Por eso el siguiente paso real no es inventar más rutas: es ejecutar AutoPerfil
+SPK con el `game.exe` de la misma instalación, volver a exportar inventario y
+después usar **Preparar Studio**.
+
+## CI
+
+La rama mantiene gates de formato, análisis estático, regresión Flutter/Dart,
+pruebas Python, integración nativa y build Windows. Hay pruebas sintéticas
+específicas para validar que DBItemData, DBMonsterData y DBSkillData pueden ser
+identificadas por estructura una vez que el payload está autenticado.
