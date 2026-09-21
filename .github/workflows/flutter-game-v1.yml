@@ -35,6 +35,9 @@ jobs:
           flutter-version: '3.47.4'
           channel: stable
           cache: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
       - run: python tool/prepare.py
       - run: flutter pub get
       - run: flutter build windows --release
@@ -64,6 +67,16 @@ jobs:
           '@ | Set-Content bundle_backend.py
           python bundle_backend.py
           if($LASTEXITCODE -ne 0){throw 'backend bundle failed'}
+      - name: Export exact NPC and quest metadata used by the backend
+        shell: pwsh
+        run: |
+          $world=(Resolve-Path build/windows/x64/runner/Release/servicios/world).Path
+          $input=Join-Path $world 'config/SData/NpcQuest.SData'
+          $out='build/windows/x64/runner/Release/server/metadata/npc_quest.json'
+          dotnet run --project tool/metadata_exporter/MetadataExporter.csproj -c Release -p:ParsecDir="$world" -- "$input" "$out"
+          if($LASTEXITCODE -ne 0){throw 'metadata exporter failed'}
+          if(!(Test-Path $out)){throw 'metadata json missing'}
+          Get-Item $out | Select-Object FullName,Length
       - name: Build actual-format fixture
         shell: pwsh
         run: |
