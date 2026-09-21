@@ -80,6 +80,48 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'metadata exporter failed'}
           if(!(Test-Path $out)){throw 'metadata json missing'}
           Get-Item $out | Select-Object FullName,Length
+      - name: Live ps0032 protocol gate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force qa-game,protocol-slot | Out-Null
+          $secret='FlutterProtocol2026!'
+          $token='0123456789abcdef0123456789abcdef0123456789abcdef'
+          $env:SHAIYA_OFFLINE_SLOT=(Resolve-Path protocol-slot).Path
+          $env:SHAIYA_OFFLINE_FACTION='light'
+          $env:SHAIYA_OFFLINE_PASSWORD=$secret
+          $env:SHAIYA_OFFLINE_TOKEN=$token
+          $env:SHAIYA_PROTOCOL_REPORT=(Join-Path (Resolve-Path qa-game).Path 'protocol.json')
+          function Wait-Health([int]$port){
+            $deadline=(Get-Date).AddSeconds(60)
+            while((Get-Date) -lt $deadline){
+              try{
+                $r=Invoke-WebRequest -UseBasicParsing -Uri ("http://127.0.0.1:"+$port+"/offline/status") -Headers @{Authorization=("Bearer "+$token)} -TimeoutSec 2
+                if($r.StatusCode -eq 200){return}
+              }catch{}
+              Start-Sleep -Milliseconds 400
+            }
+            throw "health timeout $port"
+          }
+          $login=Start-Process (Resolve-Path build/windows/x64/runner/Release/servicios/login/Imgeneus.Login.exe) -WorkingDirectory (Resolve-Path build/windows/x64/runner/Release/servicios/login) -RedirectStandardOutput qa-game/protocol-login.log -RedirectStandardError qa-game/protocol-login.err -PassThru
+          try{
+            Wait-Health 5000
+            $world=Start-Process (Resolve-Path build/windows/x64/runner/Release/servicios/world/Imgeneus.World.exe) -WorkingDirectory (Resolve-Path build/windows/x64/runner/Release/servicios/world) -RedirectStandardOutput qa-game/protocol-world.log -RedirectStandardError qa-game/protocol-world.err -PassThru
+            try{
+              Wait-Health 5001
+              dart run tool/protocol_probe.dart
+              if($LASTEXITCODE -ne 0){throw 'protocol probe failed'}
+              $report=Get-Content qa-game/protocol.json -Raw | ConvertFrom-Json
+              if(!$report.ok){throw 'protocol report not ok'}
+              if($report.enteredMapPackets -lt 1){throw 'CHARACTER_ENTERED_MAP missing'}
+              if($report.npcPackets -lt 1){throw 'MAP_NPC_ENTER missing'}
+              if($report.mobPackets -lt 1){throw 'MOB_ENTER missing'}
+            }finally{
+              if(!$world.HasExited){Stop-Process -Id $world.Id -Force}
+            }
+          }finally{
+            if(!$login.HasExited){Stop-Process -Id $login.Id -Force}
+          }
       - name: Build actual-format fixture
         shell: pwsh
         run: |
