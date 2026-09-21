@@ -45,6 +45,8 @@ jobs:
           git add pubspec.lock lib/data/spk_source.dart lib/ui/spk_browser.dart lib/main.dart test/spk_source_test.dart
           if ! git diff --cached --quiet; then
             git commit -m 'build: lock and format Studio 0.6.2 SPK support'
+            git fetch origin feat/studio-062-spk-browser
+            git rebase origin/feat/studio-062-spk-browser
             git push origin HEAD:feat/studio-062-spk-browser
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
