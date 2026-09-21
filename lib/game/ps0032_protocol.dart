@@ -18,7 +18,9 @@ class PsPacketType {
   static const createCharacter=0x0102;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
+  static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
+  static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
   static const mobEnter=0x0601;
   static const questList=0x0901;
@@ -42,6 +44,10 @@ Uint8List _u16Bytes(int value){
 }
 Uint8List _i32Bytes(int value){
   final b=ByteData(4)..setInt32(0,value,Endian.little);
+  return b.buffer.asUint8List();
+}
+Uint8List _u32Bytes(int value){
+  final b=ByteData(4)..setUint32(0,value,Endian.little);
   return b.buffer.asUint8List();
 }
 
@@ -92,6 +98,33 @@ class _AesCtrLe {
   }
 }
 
+
+class _ExpandedXor {
+  final Uint8List table;
+  _ExpandedXor(Uint8List key):table=_expand(key);
+
+  static Uint8List _expand(Uint8List key){
+    if(key.length!=16)throw ArgumentError('XOR ps0032 requiere 16 bytes.');
+    final out=<int>[];
+    var digest=hash.sha256.convert(key).bytes;
+    out.addAll(digest);
+    for(var i=0;i<127;i++){
+      final nextKey=Uint8List.fromList(out.sublist(out.length-16));
+      digest=hash.sha256.convert(nextKey).bytes;
+      out.addAll(digest);
+    }
+    return Uint8List.fromList(out);
+  }
+
+  Uint8List apply(Uint8List input){
+    final n=input.length;
+    if(n*2>table.length)throw StateError('Paquete XOR ps0032 excede tabla expandida: $n');
+    final out=Uint8List(n);
+    for(var i=0;i<n;i++)out[i]=input[i]^table[i+n];
+    return out;
+  }
+}
+
 class PsConnection {
   final Socket socket;
   final List<int> _buffer=[];
@@ -99,6 +132,7 @@ class PsConnection {
   final List<Completer<PsPacket>> _waiters=[];
   StreamSubscription<Uint8List>? _subscription;
   _AesCtrLe? _recv,_send;
+  _ExpandedXor? _expandedRecv;
   bool _closed=false;
 
   PsConnection._(this.socket){
@@ -114,6 +148,11 @@ class PsConnection {
   void useCipher(Uint8List key,Uint8List counter){
     _recv=_AesCtrLe(key,counter);
     _send=_AesCtrLe(key,counter);
+    _expandedRecv=null;
+  }
+
+  void switchIncomingToExpanded(Uint8List xorKey){
+    _expandedRecv=_ExpandedXor(xorKey);
   }
 
   Future<void> send(int type,[List<int> body=const [],bool plain=false]) async {
@@ -156,7 +195,7 @@ class PsConnection {
       if(_buffer.length<length)return;
       final encrypted=Uint8List.fromList(_buffer.sublist(2,length));
       _buffer.removeRange(0,length);
-      final data=_recv==null?encrypted:_recv!.apply(encrypted);
+      final data=_expandedRecv!=null?_expandedRecv!.apply(encrypted):(_recv==null?encrypted:_recv!.apply(encrypted));
       if(data.length<2){_fail(StateError('Payload ps0032 truncado.'));return;}
       _emit(PsPacket(_u16(data,0),Uint8List.sublistView(data,2)));
     }
