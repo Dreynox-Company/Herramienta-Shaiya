@@ -997,4 +997,586 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             '${result['files']} recursos extraídos en ${result['folder']}',
           ),
           duration: const Duration(seconds: 8),
+        ),      );
+    }
+  });
+
+  Future<void> inspectResource(SpkRecord record) => runAction(() async {
+    final result = await source.readEntry(record);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(fileName(record)),
+        content: SizedBox(
+          width: 590,
+          child: SelectableText(
+            'ID: ${record.idHex}\nFormato: ${result.format}\nOffset: ${record.dataOffset}\nAlmacenado: ${bytesLabel(record.storedBytes)}\nDecodificado: ${bytesLabel(result.bytes.length)}\nSHA-256: ${sha256.convert(result.bytes)}\n\nPrimeros 64 bytes:\n${spkHex(result.bytes.take(64))}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  });
+
+  Widget folderTree() {
+    final all = source.folders();
+    final roots =
+        all.where((path) => path.isNotEmpty && !path.contains('/')).toList()
+          ..sort();
+
+    Widget node(String path, int depth) {
+      final children = all.where((candidate) {
+        if (!candidate.startsWith('$path/')) return false;
+        final rest = candidate.substring(path.length + 1);
+        return rest.isNotEmpty && !rest.contains('/');
+      }).toList()..sort();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() {
+              currentFolder = path;
+              selected = null;
+            }),
+            child: Container(
+              height: 31,
+              padding: EdgeInsets.only(left: 10 + depth * 14, right: 8),
+              color: currentFolder == path ? const Color(0xff29384f) : null,
+              child: Row(
+                children: [
+                  Icon(
+                    currentFolder == path
+                        ? Icons.folder_open
+                        : Icons.folder_outlined,
+                    size: 16,
+                    color: const Color(0xffd4b97f),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      path.split('/').last,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          for (final child in children) node(child, depth + 1),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() {
+            currentFolder = '';
+            selected = null;
+          }),
+          child: Container(
+            height: 35,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            color: currentFolder.isEmpty ? const Color(0xff29384f) : null,
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 17,
+                  color: Color(0xffa9c0ff),
+                ),
+                SizedBox(width: 7),
+                Text('data.spk', style: TextStyle(fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ),
+        for (final root in roots) node(root, 0),
+      ],
+    );
+  }
+
+  Widget resourceTable() {
+    final folders = search.isEmpty ? childFolders() : <String>[];
+    final entries = visibleEntries();
+    return Column(
+      children: [
+        Container(
+          height: 34,
+          color: const Color(0xff182231),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: const Row(
+            children: [
+              Expanded(flex: 5, child: Text('Nombre')),
+              SizedBox(width: 95, child: Text('Tipo')),
+              SizedBox(width: 105, child: Text('Almacenado')),
+              SizedBox(width: 105, child: Text('Decodificado')),
+              SizedBox(width: 145, child: Text('ID')),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemExtent: 32,
+            itemCount: folders.length + entries.length,
+            itemBuilder: (_, index) {
+              if (index < folders.length) {
+                final path = folders[index];
+                return InkWell(
+                  onTap: () => setState(() {
+                    currentFolder = path;
+                    selected = null;
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.folder,
+                          size: 16,
+                          color: Color(0xffd4b97f),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            path.split('/').last,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final record = entries[index - folders.length];
+              final active = identical(selected, record);
+              return InkWell(
+                onTap: () => setState(() => selected = record),
+                onDoubleTap: () => inspectResource(record),
+                child: Container(
+                  color: active ? const Color(0xff29384f) : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      Icon(
+                        source.names.isConfirmed(record.entryId)
+                            ? Icons.verified_outlined
+                            : source.names.confidence(record.entryId) ==
+                                  'strong-inferred'
+                            ? Icons.auto_awesome_outlined
+                            : source.names.isInferred(record.entryId)
+                            ? Icons.lightbulb_outline
+                            : Icons.insert_drive_file_outlined,
+                        size: 15,
+                        color: source.names.isConfirmed(record.entryId)
+                            ? const Color(0xff83c69d)
+                            : source.names.confidence(record.entryId) ==
+                                  'strong-inferred'
+                            ? const Color(0xffd9b66f)
+                            : source.names.isInferred(record.entryId)
+                            ? const Color(0xff88a9d8)
+                            : null,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        flex: 5,
+                        child: Text(
+                          fileName(record),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 95,
+                        child: Text(
+                          source.displayType(record),
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 105,
+                        child: Text(
+                          bytesLabel(record.storedBytes),
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 105,
+                        child: Text(
+                          bytesLabel(record.decodedBytes),
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 145,
+                        child: Text(
+                          record.idHex,
+                          style: const TextStyle(
+                            fontFamily: 'Consolas',
+                            fontSize: 10,
+                            color: Color(0xff9eb1cf),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget detailsPanel(SpkRecord record) => Material(
+    color: const Color(0xff151e2a),
+    child: ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        const Text(
+          'PROPIEDADES',
+          style: TextStyle(
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: Color(0xff9eadc5),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SelectableText(
+          fileName(record),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        property('ID', record.idHex),
+        property('Tipo', record.recordType.toString()),
+        property('Offset', record.dataOffset.toString()),
+        property('Almacenado', bytesLabel(record.storedBytes)),
+        property('Decodificado', bytesLabel(record.decodedBytes)),
+        property('Fragmentos', record.chunkCount.toString()),
+        property('Ruta', source.technicalPath(record)),
+        property('Nombre', source.nameConfidence(record)),
+        property('Evidencia', source.nameEvidence(record)),
+        const Divider(height: 26),
+        FilledButton.tonalIcon(
+          onPressed: busy ? null : () => inspectResource(record),
+          icon: const Icon(Icons.manage_search, size: 17),
+          label: const Text('Leer / inspeccionar'),
+        ),
+        const SizedBox(height: 7),
+        OutlinedButton.icon(
+          onPressed: busy ? null : extractSelected,
+          icon: const Icon(Icons.file_download_outlined, size: 17),
+          label: const Text('Extraer recurso'),
+        ),
+      ],
+    ),
+  );
+
+  Widget property(String name, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 78,
+          child: Text(
+            name,
+            style: const TextStyle(fontSize: 9, color: Color(0xff7f8ea6)),
+          ),
+        ),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = source.index.summary();
+    final strongInferred = source.names.hints.values
+        .where((hint) => hint.confidence == 'strong-inferred')
+        .length;
+    final weakInferred = source.names.hints.length - strongInferred;
+    return Scaffold(
+      backgroundColor: const Color(0xff101722),
+      appBar: AppBar(
+        titleSpacing: 12,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Explorador DATA.SPK', style: TextStyle(fontSize: 14)),
+            Text(
+              'Archivo montado en solo lectura',
+              style: TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
+            ),
+          ],
+        ),
+        actions: [
+          if (Platform.isWindows && !source.canExtractAll)
+            TextButton.icon(
+              onPressed: busy ? null : captureResourceProfile,
+              icon: const Icon(Icons.security_outlined, size: 17),
+              label: const Text('AutoPerfil SPK'),
+            ),
+          TextButton.icon(
+            onPressed: busy ? null : loadResourceProfile,
+            icon: const Icon(Icons.key_outlined, size: 17),
+            label: const Text('Perfil de recursos'),
+          ),
+          PopupMenuButton<String>(
+            enabled: !busy,
+            tooltip: 'Nombres y rutas',
+            icon: const Icon(Icons.drive_file_rename_outline, size: 18),
+            onSelected: (value) {
+              if (value == 'resolve') resolveNamesFromReferenceData();
+              if (value == 'import') importNameMap();
+              if (value == 'export') exportNameMap();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'resolve',
+                child: ListTile(
+                  leading: Icon(Icons.auto_awesome_outlined),
+                  title: Text('Resolver con DATA de referencia'),
+                  subtitle: Text('Tamaño + Zstandard nivel 3'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.file_open_outlined),
+                  title: Text('Importar mapa de nombres'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.save_alt_outlined),
+                  title: Text('Exportar mapa actual'),
+                ),
+              ),
+            ],
+          ),
+          TextButton.icon(
+            onPressed: busy ? null : exportInventory,
+            icon: const Icon(Icons.receipt_long_outlined, size: 17),
+            label: const Text('Inventario'),
+          ),
+          TextButton.icon(
+            onPressed: busy || selected == null ? null : extractSelected,
+            icon: const Icon(Icons.file_download_outlined, size: 17),
+            label: const Text('Extraer'),
+          ),
+          TextButton.icon(
+            onPressed: busy || currentFolder.isEmpty
+                ? null
+                : extractCurrentFolder,
+            icon: const Icon(Icons.drive_folder_upload_outlined, size: 17),
+            label: const Text('Extraer carpeta'),
+          ),
+          if (!source.canExtractAll)
+            TextButton.icon(
+              onPressed: busy || !source.canReadSimpleResources
+                  ? null
+                  : extractReadable,
+              icon: const Icon(Icons.rule_folder_outlined, size: 17),
+              label: const Text('Extraer legibles'),
+            ),
+          FilledButton.icon(
+            onPressed: busy || !source.canExtractAll ? null : extractAll,
+            icon: const Icon(Icons.folder_copy_outlined, size: 17),
+            label: const Text('Extraer todo'),
+          ),
+          const SizedBox(width: 10),
+        ],
+      ),
+      body: Column(
+        children: [
+          Container(
+            height: 54,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xff141d29),
+              border: Border(bottom: BorderSide(color: Color(0xff303a4b))),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Subir un nivel',
+                  onPressed: currentFolder.isEmpty
+                      ? null
+                      : () => setState(() {
+                          final i = currentFolder.lastIndexOf('/');
+                          currentFolder = i < 0
+                              ? ''
+                              : currentFolder.substring(0, i);
+                          selected = null;
+                        }),
+                  icon: const Icon(Icons.arrow_upward, size: 18),
+                ),
+                Expanded(
+                  child: Container(
+                    height: 34,
+                    alignment: Alignment.centerLeft,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xff0e1621),
+                      border: Border.all(color: const Color(0xff334056)),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      currentFolder.isEmpty
+                          ? 'data.spk:/'
+                          : 'data.spk:/$currentFolder',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 300,
+                  child: TextField(
+                    controller: searchController,
+                    decoration: const InputDecoration(
+                      hintText: 'Buscar nombre o ID…',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                    ),
+                    onChanged: (value) => setState(() => search = value),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text(
+                    'Recursivo',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                  selected: recursiveSearch,
+                  onSelected: (value) =>
+                      setState(() => recursiveSearch = value),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 255,
+                  child: Material(
+                    color: const Color(0xff131b26),
+                    child: SingleChildScrollView(child: folderTree()),
+                  ),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: resourceTable()),
+                if (selected != null) ...[
+                  const VerticalDivider(width: 1),
+                  SizedBox(width: 255, child: detailsPanel(selected!)),
+                ],
+              ],
+            ),
+          ),
+          Container(
+            height: busy ? 48 : 30,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: const BoxDecoration(
+              color: Color(0xff121a25),
+              border: Border(top: BorderSide(color: Color(0xff30394a))),
+            ),
+            child: busy
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      LinearProgressIndicator(
+                        value: operationTotal == 0
+                            ? null
+                            : operationDone / operationTotal,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              operation.isEmpty ? 'Procesando…' : operation,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 9),
+                            ),
+                          ),
+                          Text(
+                            operationTotal == 0
+                                ? ''
+                                : '$operationDone / $operationTotal',
+                            style: const TextStyle(fontSize: 9),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Text(
+                        '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · '
+                        '${source.names.paths.length} confirmados · '
+                        '$strongInferred inferidos fuertes · '
+                        '$weakInferred aproximados · '
+                        '${(summary['resources'] as int) - source.names.paths.length - source.names.hints.length} sin resolver',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xff92a0b7),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (source.canExtractAll)
+                        const Text(
+                          'Lectura SPK completa validada · Extraer todo habilitado',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xff83c69d),
+                          ),
+                        )
+                      else if (source.canReadSimpleResources)
+                        const Text(
+                          'Recursos simples legibles · fragmentados pendientes',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xffd3ac76),
+                          ),
+                        )
+                      else
+                        const Text(
+                          'Índice listo · falta perfil criptográfico de payloads',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xffd3ac76),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
