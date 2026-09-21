@@ -73,9 +73,18 @@ class _GameClientPageState extends State<GameClientPage> {
       if(n=='1.wld'||n=='01.wld'||n=='map1.wld'){world=p;break;}
     }
     world??=c.worlds.isEmpty?null:c.worlds.first;
-    if(world!=null){try{await scene.setWorld(world);}catch(e){messages.insert(0,'[Mapa] $e');}}
-    scene.yaw=math.pi;scene.pitch=.12;scene.distance=7.8;scene.targetY=1.2;scene.updateCamera();
     final svmap=await _loadSvmap();
+    double? spawnX,spawnZ;
+    if(svmap!=null){
+      final light=svmap.spawns.where((s)=>s.faction==0||s.faction==2).firstOrNull;
+      final spawn=light??svmap.spawns.firstOrNull;
+      if(spawn!=null){spawnX=spawn.center.x;spawnZ=spawn.center.z;}
+    }
+    if(world!=null){
+      try{await scene.setWorld(world,x:spawnX,z:spawnZ);}
+      catch(e){messages.insert(0,'[Mapa] $e');}
+    }
+    scene.yaw=math.pi;scene.pitch=.12;scene.distance=7.8;scene.targetY=1.2;scene.updateCamera();
     if(svmap!=null){await scene.spawnGameActorsFromSvmap(svmap);}else{await scene.spawnGameNpcs(count:10);}
     catalog=c;
     messages.insert(0,'[Sistema] ${c.npcs.length} NPC · ${c.creatures.length} criaturas · ${c.worlds.length} mapas indexados.');
