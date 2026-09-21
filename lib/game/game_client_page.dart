@@ -78,7 +78,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> attack(int index) async {
     if(index<scene.attackClips.length){
-      try{await scene.attack(index:index);}catch(e){messages.insert(0,'[Combate] $e');setState((){});}
+      try{await scene.attack();}catch(e){messages.insert(0,'[Combate] $e');setState((){});}
     }
   }
 
