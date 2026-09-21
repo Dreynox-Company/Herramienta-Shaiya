@@ -6,6 +6,11 @@ import 'package:herramienta_shaiya/core/combat.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/data/library.dart';
 
+Matcher closeToList(List<double> expected,double epsilon)=>predicate<List<double>>(
+  (actual)=>actual.length==expected.length&&List.generate(actual.length,(i)=>(actual[i]-expected[i]).abs()<=epsilon).every((x)=>x),
+  'close to $expected ± $epsilon',
+);
+
 Uint8List dds(String code, int c0, int c1, {int selectors = 0}) {
   final data = Uint8List(code == 'DXT1' ? 136 : 144),
       v = ByteData.sublistView(data);
@@ -26,6 +31,27 @@ Uint8List dds(String code, int c0, int c1, {int selectors = 0}) {
   v.setUint16(offset + 2, c1, Endian.little);
   v.setUint32(offset + 4, selectors, Endian.little);
   return data;
+}
+
+
+Uint8List ep6SkinFixture() {
+  final bytes=BytesBuilder(),out=ByteData(4);
+  void u32(int x){out.setUint32(0,x,Endian.little);bytes.add(out.buffer.asUint8List());}
+  void f32(double x){out.setFloat32(0,x,Endian.little);bytes.add(out.buffer.asUint8List());}
+  void u16(int x){final b=ByteData(2)..setUint16(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  u32(444);
+  u32(1);
+  for(var i=0;i<16;i++)f32(i%5==0?1:0);
+  u32(3);
+  for(var vertex=0;vertex<3;vertex++){
+    f32(vertex==1?1:0);f32(vertex==2?1:0);f32(0);
+    f32(.2);f32(.3);f32(.1);
+    bytes.add([0,0,0,0]);
+    f32(0);f32(1);f32(0);
+    f32(vertex==1?1:0);f32(vertex==2?1:0);
+  }
+  u32(1);u16(0);u16(1);u16(2);
+  return bytes.takeBytes();
 }
 
 PartRecord part(Slot s, int id, String texture) => PartRecord(
@@ -116,6 +142,14 @@ void main() {
       );
     });
   });
+  group('3DC EP6', () {
+    test('conserva el cuarto peso implicito', () {
+      final mesh=MeshData.skinned(ep6SkinFixture(),'fixture.3dc');
+      expect(mesh.weights.sublist(0,4),closeToList([.2,.3,.1,.4],1e-6));
+      expect(mesh.weights.sublist(0,4).reduce((a,b)=>a+b),closeTo(1,1e-6));
+    });
+  });
+
   group('Cambio de conjunto', () {
     test('identidad liga torso y piernas por recurso, no indice de tabla', () {
       expect(
