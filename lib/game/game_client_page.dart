@@ -100,10 +100,51 @@ class _FlutterGameClientPageState extends State<FlutterGameClientPage> {
       scene.yaw=3.08;scene.pitch=.24;scene.distance=7.4;scene.targetY=1.1;scene.updateCamera();
       final merchant=catalog!.creatures.where((c)=>c.id==491).toList();
       final guard=catalog!.creatures.where((c)=>c.id==92).toList();
+      final guard2=catalog!.creatures.where((c)=>c.id==93).toList();
       final dog=catalog!.creatures.where((c)=>c.id==798).toList();
-      if(merchant.isNotEmpty)await scene.spawnWorldNpc(merchant.first,name:'Guardfection Merchant',x:-16,z:-8,quest:true,rotation:1.55);
-      if(guard.isNotEmpty)await scene.spawnWorldNpc(guard.first,name:'Beika Security Trainer',x:-12,z:-10,quest:false,rotation:1.2);
-      if(dog.isNotEmpty)await scene.spawnWorldNpc(dog.first,name:'Dog',x:9,z:-3,quest:false,rotation:-1.0);
+      final visuals=<CreatureRecord>[
+        if(merchant.isNotEmpty)merchant.first,
+        if(guard.isNotEmpty)guard.first,
+        if(guard2.isNotEmpty)guard2.first,
+        if(dog.isNotEmpty)dog.first,
+      ];
+      final world=scene.world;
+      if(world!=null&&visuals.isNotEmpty){
+        final nearby=world.npcs.where((npc){
+          final dx=npc.position.x-scene.originX;
+          final dz=npc.position.z-scene.originZ;
+          return dx*dx+dz*dz<72*72;
+        }).toList()
+          ..sort((a,b){
+            final adx=a.position.x-scene.originX,adz=a.position.z-scene.originZ;
+            final bdx=b.position.x-scene.originX,bdz=b.position.z-scene.originZ;
+            return (adx*adx+adz*adz).compareTo(bdx*bdx+bdz*bdz);
+          });
+        for(var i=0;i<nearby.length&&i<12;i++){
+          final npc=nearby[i];
+          CreatureRecord visual;
+          if(npc.type==8&&dog.isNotEmpty){
+            visual=dog.first;
+          }else{
+            visual=visuals[i%visuals.length];
+          }
+          final key='${npc.type}:${npc.typeId}';
+          final names=<String,String>{
+            '7:1167':'Guardfection Merchant',
+            '7:1081':'Beika Security Trainer',
+            '7:1125':'Union Guard',
+            '8:20':'Dog',
+          };
+          await scene.spawnWorldNpc(
+            visual,
+            name:names[key]??'NPC ${npc.typeId}',
+            x:npc.position.x-scene.originX,
+            z:-(npc.position.z-scene.originZ),
+            quest:npc.type==7,
+            rotation:npc.orientation,
+          );
+        }
+      }
       if(mounted)setState((){busy=false;phase=GamePhase.world;questOpen=true;status='Mapa 1 cargado';});
       focus.requestFocus();
     }catch(e,st){
