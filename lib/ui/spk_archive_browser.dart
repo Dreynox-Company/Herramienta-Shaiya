@@ -26,13 +26,14 @@ List<String> spkProfileCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final spkDir = _spkParentPath(spkPath, separator);
+  final normalizedSpk = spkPath.replaceAll(RegExp(r'[\\/]+'), separator);
+  final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
     separator,
   );
   return <String>[
-    '$spkPath.profile.json',
+    '$normalizedSpk.profile.json',
     '$spkDir${separator}data.spk.profile.json',
     '$spkDir${separator}spk-crypto-profile.json',
     '$exeDir${separator}profiles${separator}data.spk.profile.json',
@@ -51,7 +52,8 @@ List<String> spkNameMapCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final spkDir = _spkParentPath(spkPath, separator);
+  final normalizedSpk = spkPath.replaceAll(RegExp(r'[\\/]+'), separator);
+  final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
     separator,
@@ -60,7 +62,7 @@ List<String> spkNameMapCandidatePaths(
       ? indexSha256.substring(0, 8)
       : indexSha256;
   return <String>[
-    '$spkPath.names.json',
+    '$normalizedSpk.names.json',
     '$spkDir${separator}spk-name-map.json',
     '$spkDir${separator}spk-name-map-$shortHash.json',
     '$exeDir${separator}profiles${separator}spk-name-map.json',
@@ -79,7 +81,8 @@ List<String> spkResourceProfileCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final spkDir = _spkParentPath(spkPath, separator);
+  final normalizedSpk = spkPath.replaceAll(RegExp(r'[\\/]+'), separator);
+  final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
     separator,
@@ -88,7 +91,7 @@ List<String> spkResourceProfileCandidatePaths(
       ? indexSha256.substring(0, 8)
       : indexSha256;
   return <String>[
-    '$spkPath.resources.json',
+    '$normalizedSpk.resources.json',
     '$spkDir${separator}data.spk.resources.json',
     '$spkDir${separator}derived-resource-profile.json',
     '$spkDir${separator}spk-resource-profile.json',
@@ -994,10 +997,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(fileName(record)),
+      builder: (c) => AlertDialog(        title: Text(fileName(record)),
         content: SizedBox(
-          width: 590,          child: SelectableText(
+          width: 590,
+          child: SelectableText(
             'ID: ${record.idHex}\nFormato: ${result.format}\nOffset: ${record.dataOffset}\nAlmacenado: ${bytesLabel(record.storedBytes)}\nDecodificado: ${bytesLabel(result.bytes.length)}\nSHA-256: ${sha256.convert(result.bytes)}\n\nPrimeros 64 bytes:\n${spkHex(result.bytes.take(64))}',
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           ),
