@@ -18,7 +18,7 @@ class SpkFailure implements Exception {
   final Map<String, Object?> details;
   const SpkFailure(this.code, this.message, [this.details = const {}]);
   @override
-  String toString() => '${code}: ${message}';
+  String toString() => '$code: $message';
 }
 
 class SpkCryptoProfile {
@@ -70,7 +70,7 @@ class SpkRecord {
   bool get extractable => type == 1;
   bool get chunked => type == 3;
   String get technicalName =>
-      'resource_${ordinal.toString().padLeft(5, '0')}_${entryId}';
+      'resource_${ordinal.toString().padLeft(5, '0')}_$entryId';
   Map<String, Object?> toJson() => {
     'ordinal': ordinal,
     'entryId': entryId,
@@ -254,7 +254,7 @@ class SpkSource {
   Future<Uint8List> read(String entryId, {int limit = 64 * 1024 * 1024}) async {
     final record = byId[entryId.toLowerCase()];
     if (record == null) {
-      throw SpkFailure('SPK_ENTRY_MISSING', 'No existe el recurso ${entryId}.');
+      throw SpkFailure('SPK_ENTRY_MISSING', 'No existe el recurso $entryId.');
     }
     if (record.decodedBytes > limit || limit < 0) {
       throw SpkFailure(
@@ -266,7 +266,7 @@ class SpkSource {
     if (record.type != 1) {
       throw SpkFailure(
         'SPK_CHUNK_PROFILE_PENDING',
-        'El recurso ${entryId} está fragmentado. Se enumera sin ocultarlo, '
+        'El recurso $entryId está fragmentado. Se enumera sin ocultarlo, '
             'pero aún falta validar el nonce implícito de sus fragmentos.',
         {'chunks': record.chunks.length},
       );
@@ -400,7 +400,7 @@ class SpkSource {
             );
             final bucket = record.entryId.substring(0, 2);
             relative =
-                'Fragmentados_RAW/${bucket}/${record.technicalName}.spkraw';
+                'Fragmentados_RAW/$bucket/${record.technicalName}.spkraw';
             final target = File(
               '${destination.path}${Platform.pathSeparator}'
               '${relative.replaceAll('/', Platform.pathSeparator)}',
@@ -426,7 +426,7 @@ class SpkSource {
             final decoded = await _decodeSimple(record, cipher);
             final ext = detectSpkExtension(decoded);
             final bucket = record.entryId.substring(0, 2);
-            relative = 'Recursos/${bucket}/${record.technicalName}${ext}';
+            relative = 'Recursos/$bucket/${record.technicalName}$ext';
             final target = File(
               '${destination.path}${Platform.pathSeparator}'
               '${relative.replaceAll('/', Platform.pathSeparator)}',
