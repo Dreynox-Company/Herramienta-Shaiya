@@ -64,6 +64,14 @@ Uint8List _f32Bytes(double value){
   return b.buffer.asUint8List();
 }
 
+Uint8List encodeCharacterMoveBody({
+  required int angle,required bool run,
+  required double x,required double y,required double z,
+})=>Uint8List.fromList([
+  ..._u16Bytes(angle&0xffff),
+  run?1:0,
+  ..._f32Bytes(x),..._f32Bytes(y),..._f32Bytes(z),
+]);
 BigInt _bigIntLe(Uint8List bytes){
   var n=BigInt.zero;
   for(var i=0;i<bytes.length;i++)n|=BigInt.from(bytes[i])<<(8*i);
@@ -512,11 +520,10 @@ class PsWorldSession {
   Future<void> sendCharacterMove({
     required double x,required double y,required double z,
     required int angle,bool run=false,
-  })=>connection.send(PsPacketType.characterMove,[
-    ..._u16Bytes(angle&0xffff),
-    run?1:0,
-    ..._f32Bytes(x),..._f32Bytes(y),..._f32Bytes(z),
-  ]);
+  })=>connection.send(
+    PsPacketType.characterMove,
+    encodeCharacterMoveBody(angle:angle,run:run,x:x,y:y,z:z),
+  );
   Future<List<PsCharacterSlot>> createCharacter({
     int slot=0,int race=0,int mode=2,int hair=0,int face=0,
     int height=2,int profession=0,int gender=0,String name='FlutterLocal',
