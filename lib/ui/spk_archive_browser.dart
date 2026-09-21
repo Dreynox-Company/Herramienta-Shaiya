@@ -201,11 +201,13 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
       }
       final profile = mergeSpkResourceProfile(source, data);
       if (profile.effectiveResourceSecret == null) continue;
-      return await SpkArchiveSource.open(
+      final candidate = await SpkArchiveSource.open(
         spkPath,
         profile,
         names: source.names,
       );
+      await candidate.validateSimpleResourceProfile();
+      return candidate;
     } catch (_) {
       // Un perfil opcional incompatible no debe impedir abrir el índice.
     }
@@ -232,6 +234,8 @@ Future<SpkArchiveSource> deriveAutomaticFragmentProfile(
     profile,
     names: source.names,
   );
+  await next.validateSimpleResourceProfile();
+  await next.validateFragmentedResourceProfile();
   if (persist) {
     final sidecar = File('$spkPath.resources.json');
     await sidecar.writeAsString(
@@ -330,6 +334,10 @@ class SpkArchiveBrowserPage extends StatefulWidget {
         profile,
         progress: (message, done, total) => progress.value = message,
       );
+      if (source.profile.effectiveResourceSecret != null) {
+        progress.value = 'Autenticando perfil de payloads contra muestras reales…';
+        await source.validateSimpleResourceProfile();
+      }
       progress.value = 'Buscando perfil validado de recursos…';
       source = await loadAutomaticSpkResourceProfile(source, picked.path);
       progress.value = 'Validando fragmentación AES-GCM offline…';
@@ -794,19 +802,29 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       );
     }
     final nextProfile = mergeSpkResourceProfile(source, data);
-    final persistent = File('${source.file.path}.resources.json');
-    await persistent.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(data),
-      flush: true,
-    );
     var next = await SpkArchiveSource.open(
       source.file.path,
       nextProfile,
       names: source.names,
     );
-    operation = 'Validando nonces de fragmentos contra AES-GCM…';
+    operation = 'Revalidando payloads simples contra DATA.SPK…';
+    if (mounted) setState(() {});
+    final simpleValidation = await next.validateSimpleResourceProfile();
+
+    operation = 'Validando nonces y reconstrucción de fragmentos…';
     if (mounted) setState(() {});
     next = await deriveAutomaticFragmentProfile(next, source.file.path);
+
+    if (!next.canExtractAll) {
+      final persistent = File('${source.file.path}.resources.json');
+      await persistent.writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          ...data,
+          'studioValidation': simpleValidation,
+        }),
+        flush: true,
+      );
+    }
     await loadAutomaticSpkNameMap(next, source.file.path);
 
     if (!mounted) return;
@@ -846,25 +864,28 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       nextProfile,
       names: source.names,
     );
+    final simpleValidation = await next.validateSimpleResourceProfile();
     next = await deriveAutomaticFragmentProfile(next, source.file.path);
 
+    final finalProfile = next.profile;
     final persistent = File('${source.file.path}.profile.json');
     await persistent.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
-        'profileId': nextProfile.profileId,
-        'indexSha256': nextProfile.indexSha256,
+        'profileId': finalProfile.profileId,
+        'indexSha256': finalProfile.indexSha256,
         'index': {
           'algorithm': 'AES-GCM',
-          'secretHex': spkHex(nextProfile.indexSecret),
+          'secretHex': spkHex(finalProfile.indexSecret),
         },
         'resources': {
           'algorithm': 'AES-GCM',
-          if (nextProfile.effectiveResourceSecret != null)
-            'secretHex': spkHex(nextProfile.effectiveResourceSecret!),
-          if (nextProfile.resourceAad.isNotEmpty)
-            'aadHex': spkHex(nextProfile.resourceAad),
-          'useIndexKey': nextProfile.resourceKeyIsIndexKey,
-          'chunkNonceRule': nextProfile.chunkNonceRule,
+          if (finalProfile.effectiveResourceSecret != null)
+            'secretHex': spkHex(finalProfile.effectiveResourceSecret!),
+          if (finalProfile.resourceAad.isNotEmpty)
+            'aadHex': spkHex(finalProfile.resourceAad),
+          'useIndexKey': finalProfile.resourceKeyIsIndexKey,
+          'chunkNonceRule': finalProfile.chunkNonceRule,
+          'validation': simpleValidation,
         },
       }),
       flush: true,
