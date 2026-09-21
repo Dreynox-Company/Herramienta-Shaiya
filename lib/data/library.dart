@@ -324,7 +324,7 @@ class Library {
       }
       String normalized;
       try {
-        normalized = source.safeRelative(raw).replaceAll('\\', '/');
+        normalized = SpkArchiveSource.safeRelative(raw).replaceAll('\\', '/');
         normalized = canon(normalized);
       } catch (_) {
         unsafe++;
