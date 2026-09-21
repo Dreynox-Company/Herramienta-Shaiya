@@ -340,7 +340,7 @@ class StudioScene extends ChangeNotifier {
       'path':path,
       'opaque':true,
     });
-    final texture=await t.TextureLoader(flipY:false).fromBytes(png);
+    final texture=await t.TextureLoader(flipY:true).fromBytes(png);
     if(texture==null)throw FormatException('No se pudo cargar el fondo $path');
     texture.colorSpace=t.SRGBColorSpace;
     backdropTexture=texture;
