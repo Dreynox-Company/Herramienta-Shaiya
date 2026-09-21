@@ -291,9 +291,17 @@ Future<void> loadAutomaticSpkNameMap(
 
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
-  const SpkArchiveBrowserPage({super.key, required this.source});
+  final Future<void> Function(SpkArchiveSource source)? onMount;
+  const SpkArchiveBrowserPage({
+    super.key,
+    required this.source,
+    this.onMount,
+  });
 
-  static Future<void> pickAndOpen(BuildContext context) async {
+  static Future<void> pickAndOpen(
+    BuildContext context, {
+    Future<void> Function(SpkArchiveSource source)? onMount,
+  }) async {
     final picked = await openFile(
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Archivo DATA.SPK', extensions: ['spk']),
@@ -348,7 +356,8 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       Navigator.of(context, rootNavigator: true).pop();
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => SpkArchiveBrowserPage(source: source),
+          builder: (_) =>
+              SpkArchiveBrowserPage(source: source, onMount: onMount),
         ),
       );
     } catch (error) {
@@ -661,6 +670,22 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   });
 
+  Future<void> mountInStudio() => runAction(() async {
+    final callback = widget.onMount;
+    if (callback == null) return;
+    if (!source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_STUDIO_MOUNT_PROFILE',
+        'Para usar DATA.SPK en el editor y la herramienta 3D deben estar '
+            'autenticados los recursos simples y fragmentados.',
+      );
+    }
+    operation = 'Montando DATA.SPK como biblioteca de Studio…';
+    if (mounted) setState(() {});
+    await callback(source);
+    if (mounted) Navigator.of(context).pop();
+  });
+
   Future<void> captureResourceProfile() => runAction(() async {
     if (!Platform.isWindows) {
       throw const SpkFailure(
@@ -840,7 +865,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       ),
     );
     await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
+      MaterialPageRoute(
+        builder: (_) =>
+            SpkArchiveBrowserPage(source: next, onMount: widget.onMount),
+      ),
     );
   });
 
@@ -893,7 +921,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     if (!mounted) return;
     await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
+      MaterialPageRoute(
+        builder: (_) =>
+            SpkArchiveBrowserPage(source: next, onMount: widget.onMount),
+      ),
     );
   });
 
@@ -1360,6 +1391,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.key_outlined, size: 17),
             label: const Text('Perfil de recursos'),
           ),
+          if (widget.onMount != null)
+            TextButton.icon(
+              onPressed: busy || !source.canExtractAll ? null : mountInStudio,
+              icon: const Icon(Icons.view_in_ar_outlined, size: 17),
+              label: const Text('Usar en Studio'),
+            ),
           PopupMenuButton<String>(
             enabled: !busy,
             tooltip: 'Nombres y rutas',
