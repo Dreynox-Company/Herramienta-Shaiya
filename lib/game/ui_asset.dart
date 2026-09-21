@@ -110,3 +110,60 @@ class DataSprite extends StatelessWidget {
     },
   );
 }
+
+
+class DataRegion extends StatelessWidget {
+  final UiAssetCache cache;
+  final String path;
+  final double sheetWidth,sheetHeight;
+  final Rect source;
+  final double width,height;
+  final Widget? fallback;
+  final FilterQuality filterQuality;
+  const DataRegion({
+    super.key,
+    required this.cache,
+    required this.path,
+    required this.sheetWidth,
+    required this.sheetHeight,
+    required this.source,
+    required this.width,
+    required this.height,
+    this.fallback,
+    this.filterQuality=FilterQuality.medium,
+  });
+
+  @override Widget build(BuildContext context)=>FutureBuilder<Uint8List?>(
+    future:cache.load(path),
+    builder:(context,snapshot){
+      final data=snapshot.data;
+      if(data==null)return fallback??SizedBox(width:width,height:height);
+      final sx=width/source.width;
+      final sy=height/source.height;
+      return SizedBox(
+        width:width,
+        height:height,
+        child:ClipRect(
+          child:OverflowBox(
+            alignment:Alignment.topLeft,
+            minWidth:sheetWidth*sx,
+            maxWidth:sheetWidth*sx,
+            minHeight:sheetHeight*sy,
+            maxHeight:sheetHeight*sy,
+            child:Transform.translate(
+              offset:Offset(-source.left*sx,-source.top*sy),
+              child:Image.memory(
+                data,
+                width:sheetWidth*sx,
+                height:sheetHeight*sy,
+                fit:BoxFit.fill,
+                filterQuality:filterQuality,
+                gaplessPlayback:true,
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
