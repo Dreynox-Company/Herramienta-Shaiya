@@ -143,9 +143,10 @@ void main() {
     });
   });
   group('3DC EP6', () {
-    test('conserva el cuarto peso implicito', () {
+    test('usa tres grupos de hueso y deja el byte unknown sin peso', () {
       final mesh=MeshData.skinned(ep6SkinFixture(),'fixture.3dc');
-      expect(mesh.weights.sublist(0,4),closeToList([.2,.3,.1,.4],1e-6));
+      expect(mesh.weights.sublist(0,4),closeToList([1/3,.5,1/6,0],1e-6));
+      expect(mesh.joints.sublist(0,4),[0,0,0,0]);
       expect(mesh.weights.sublist(0,4).reduce((a,b)=>a+b),closeTo(1,1e-6));
     });
   });
