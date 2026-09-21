@@ -14,7 +14,8 @@ enum GamePhase { connecting, faction, character, world }
 
 class FlutterGameClientPage extends StatefulWidget {
   final String? initialData;
-  const FlutterGameClientPage({super.key,this.initialData});
+  final bool autoWorld;
+  const FlutterGameClientPage({super.key,this.initialData,this.autoWorld=false});
   @override State<FlutterGameClientPage> createState()=>_FlutterGameClientPageState();
 }
 
@@ -71,7 +72,11 @@ class _FlutterGameClientPageState extends State<FlutterGameClientPage> {
       if(!mounted)return;
       setState(()=>status='Conectando con la partida local…');
       await Future.delayed(const Duration(milliseconds:700));
-      if(mounted)setState((){busy=false;phase=GamePhase.faction;});
+      if(widget.autoWorld){
+        await _enterWorld();
+      } else if(mounted) {
+        setState((){busy=false;phase=GamePhase.faction;});
+      }
     }catch(e,st){
       _log(e.toString()+'\n'+st.toString());
       if(mounted){setState((){busy=false;status='Error: '+e.toString();});ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString())));}
@@ -255,7 +260,7 @@ class _FlutterGameClientPageState extends State<FlutterGameClientPage> {
 
   Widget _npcLabel(int index,WorldNpcActor npc){
     final positions=<Offset>[const Offset(88,214),const Offset(118,232),const Offset(364,238)];
-    final p=positions[index.clamp(0,positions.length-1)];
+    final p=positions[index.clamp(0,positions.length-1).toInt()];
     return Positioned(left:p.dx,top:p.dy,child:IgnorePointer(child:Column(children:[
       if(npc.quest)const Text('!',style:TextStyle(color:Color(0xffffff31),fontSize:28,fontWeight:FontWeight.bold,shadows:[Shadow(color:Colors.black,blurRadius:3)])),
       Text(npc.name,style:TextStyle(color:npc.quest?const Color(0xff62d5ff):const Color(0xffffff7a),fontSize:10,shadows:const [Shadow(color:Colors.black,blurRadius:3),Shadow(color:Colors.black,offset:Offset(1,1))])),
