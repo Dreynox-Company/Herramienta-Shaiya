@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -328,6 +329,77 @@ void main() {
       expect(
         await File('${root.path}/overlay/_SPK_OVERLAY.json').exists(),
         isTrue,
+      );
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('SPK workspace export applies verified overlay to decoded DATA', () async {
+    final root = await Directory.systemTemp.createTemp('spk-workspace-export-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      source.names.mergeConfirmed({
+        0x1000: 'Character/Human/humf_upper.mlt',
+        0x1001: 'Item/Item.SData',
+        0x1002: 'BinarySData/DBMonsterData.SData',
+      });
+      await source.validateSimpleResourceProfile();
+      await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, _, _) {},
+      );
+
+      final before = sha256.convert(await fixture.file.readAsBytes()).toString();
+      final library = await Library.fromSpk(
+        source,
+        overlayRoot: '${root.path}/overlay',
+      );
+      final original = await library.read('item/item.sdata');
+      final replacement = Uint8List.fromList([
+        ...original.take(16),
+        0xaa,
+        0xbb,
+        0xcc,
+        0xdd,
+      ]);
+      await library.writeSpkOverlay(
+        {'item/item.sdata': replacement},
+        expectedHashes: {
+          'item/item.sdata': sha256.convert(original).toString(),
+        },
+      );
+
+      final output = Directory('${root.path}/exports')..createSync();
+      final result = await library.exportSpkWorkspace(
+        output,
+        progress: (_, _, _) {},
+      );
+      expect(result['files'], 3);
+      expect(result['overlayFiles'], 1);
+
+      final folder = Directory(result['folder']! as String);
+      expect(
+        await File(
+          '${folder.path}${Platform.pathSeparator}Item'
+          '${Platform.pathSeparator}Item.SData',
+        ).readAsBytes(),
+        orderedEquals(replacement),
+      );
+      final manifest = jsonDecode(
+        await File(
+          '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
+        ).readAsString(),
+      ) as Map<String, dynamic>;
+      expect(manifest['workspaceOverlayApplied'], 1);
+      expect(
+        manifest['workspaceIndexSha256'],
+        source.index.encryptedIndexSha256,
+      );
+      expect(
+        sha256.convert(await fixture.file.readAsBytes()).toString(),
+        before,
       );
     } finally {
       await root.delete(recursive: true);
