@@ -1678,7 +1678,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         )
                       else
                         const Text(
-                          'Índice listo · falta perfil criptográfico de payloads',
+                          'Índice y rutas listos · contenido aún cifrado · ejecuta AutoPerfil SPK',
                           style: TextStyle(
                             fontSize: 9,
                             color: Color(0xffd3ac76),
