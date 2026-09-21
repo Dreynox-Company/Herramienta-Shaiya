@@ -82,3 +82,12 @@ El explorador DATA.SPK distingue rutas confirmadas, inferidas y pendientes. Pued
 **Nombres y rutas → Resolver con DATA de referencia** correlaciona el tamaño real y el tamaño Zstandard nivel 3 con la biblioteca conocida y conserva una inferencia separada de los nombres confirmados. Los recursos con ruta recuperada muestran su extensión/tipo real en vez de `.bin`.
 
 También se puede exportar el mapa actual y extraer una carpeta completa. La lectura de payloads sigue fail-closed cuando el perfil criptográfico de recursos o la regla de fragmentación no están validados: nunca se escribe ciphertext haciéndolo pasar por un recurso real.
+
+
+## 0.6.9 — perfiles V7 y extracción legible
+
+El explorador DATA.SPK carga automáticamente resultados validados de ResourceProbe V7 desde el propio SPK o desde `profiles` junto al ejecutable. La importación conserva separadas la clave del índice y la clave de payloads, acepta AES-GCM de 128/256 bits y normaliza las reglas de nonce de fragmentos observadas por el probe.
+
+Cuando existe clave de recursos simples pero todavía falta validar la fragmentación, **Extraer legibles** exporta los recursos que se pueden reconstruir de forma criptográficamente válida y registra los omitidos en `_SPK_MANIFEST.json`; **Extraer todo** continúa bloqueado hasta que simples y fragmentados estén validados.
+
+El paquete sigue incluyendo el mapa ligado al índice `a3ea7e3b…`, actualmente con 21.360 rutas inferidas y sin convertirlas en nombres confirmados hasta comparar contenido real.
