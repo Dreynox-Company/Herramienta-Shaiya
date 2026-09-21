@@ -2,6 +2,7 @@ export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
 import '../core/npc_quest_text.dart';
+import '../core/monster_text.dart';
 import 'library.dart';
 enum Slot {upper,lower,hand,foot,helmet,face,hair}
 const slotLabels={Slot.upper:'Torso y hombreras',Slot.lower:'Piernas y faldones',Slot.hand:'Guantes',Slot.foot:'Botas',Slot.helmet:'Casco',Slot.face:'Rostro',Slot.hair:'Cabello'};
@@ -30,6 +31,7 @@ class Catalog {
   final List<CreatureRecord> creatures=[],npcs=[],mounts=[],wings=[];
   final List<String> worlds=[],sounds=[],effects=[],skies=[],warnings=[];
   SpanishNpcQuestText? spanishText;
+  final Map<int,String> monsterNames={};
   Catalog(this.library);
   Future<void> load(void Function(String) progress) async {
     final paths=library.files.keys.toList()..sort();
@@ -47,6 +49,11 @@ class Catalog {
     skies.addAll(paths.where((p)=>p.startsWith('sky/')&&RegExp(r'\.(dds|tga|bmp|png)$').hasMatch(p)&&!p.contains('cloud')&&!p.contains('star')));
     sounds.addAll(paths.where((p)=>p.startsWith('sound/')&&RegExp(r'\.(wav|mp3|ogg)$').hasMatch(p)));
     effects.addAll(paths.where((p)=>p.startsWith('effect/')&&RegExp(r'\.(dds|tga|png)$').hasMatch(p)));
+    final monsterTextPath=paths.where((p)=>p.endsWith('dbmonstertext_spn.sdata')).firstOrNull;
+    if(monsterTextPath!=null){
+      try{monsterNames.addAll(MonsterTextData.parse(await library.read(monsterTextPath,limit:16*1024*1024),monsterTextPath).names);}
+      catch(e){warnings.add('DBMonsterText Spain: $e');}
+    }
     final spanishPath=paths.where((p)=>p.endsWith('npcquesttrans_spain.sdata')).firstOrNull;
     if(spanishPath!=null){try{spanishText=SpanishNpcQuestText.parse(await library.read(spanishPath,limit:16*1024*1024),spanishPath);}catch(e){warnings.add('NpcQuestTrans Spain: $e');}}
     if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
