@@ -44,10 +44,23 @@ class Actor {
   void dispose(){root.removeFromParent();for(final p in parts){p.dispose();}parts.clear();}
 }
 
+class GameActorLabel {
+  final Actor actor;
+  final String text;
+  final bool quest,mob;
+  const GameActorLabel(this.actor,this.text,{this.quest=false,this.mob=false});
+}
+
+class ProjectedGameLabel {
+  final double x,y;
+  final String text;
+  final bool quest,mob;
+  const ProjectedGameLabel(this.x,this.y,this.text,this.quest,this.mob);
+}
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
   t.ThreeJS? view;Catalog? catalog;
-  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -122,7 +135,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> spawnGameNpcs({int count=8}) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();
+    gameActors.clear();gameLabels.clear();
     final source=(catalog?.npcs.isNotEmpty??false)?catalog!.npcs:catalog?.creatures??const <CreatureRecord>[];
     if(source.isEmpty||view==null)return;
     final limit=math.min(count,source.length);
@@ -135,12 +148,14 @@ class StudioScene extends ChangeNotifier {
         a.root.position.setValues(x,world==null?0:world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200),z);
         a.root.rotation.y=-angle+math.pi/2;
         gameActors.add(a);view!.scene.add(a.root);
+        final name=catalog!.creatureLabel(source[i]);
+        gameLabels.add(GameActorLabel(a,name,mob:!source[i].source.startsWith('npc/')));
       }catch(e){report('NPC ${source[i].id}: $e');}
     }
     say('${gameActors.length} NPC/criaturas locales cargados.');
   }
 
-  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,int npcLimit=28,int mobLimit=18}) async {
+  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
     gameActors.clear();
     if(view==null||catalog==null)return;
@@ -158,6 +173,13 @@ class StudioScene extends ChangeNotifier {
         a.root.position.setValues(x,p.position.y,z);
         a.root.rotation.y=-p.yaw;
         gameActors.add(a);view!.scene.add(a.root);npcsLoaded++;
+        final key='${p.type}:${p.id}';
+        final localized=catalog!.spanishText?.npc(p.type,p.id);
+        gameLabels.add(GameActorLabel(
+          a,
+          (localized?.name.isNotEmpty??false)?localized!.name:'NPC ${p.type}:${p.id}',
+          quest:questNpcKeys?.contains(key)??false,
+        ));
       }catch(e){report('SVMAP NPC ${p.type}:${p.id}: $e');}
     }
     final mobRecords={for(final m in catalog!.creatures)m.id:m};
@@ -180,10 +202,25 @@ class StudioScene extends ChangeNotifier {
           a.root.position.setValues(x,world==null?center.y:world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200),z);
           a.root.rotation.y=-angle;
           gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
+          final mobName=catalog!.monsterNames[spawn.id]??'Criatura ${spawn.id}';
+          gameLabels.add(GameActorLabel(a,mobName,mob:true));
         }catch(e){report('SVMAP mob ${spawn.id}: $e');}
       }
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas colocados desde SVMAP.');
+  }
+  List<ProjectedGameLabel> projectGameLabels(double width,double height){
+    final camera=view?.camera;
+    if(camera==null||width<=0||height<=0)return const [];
+    final out=<ProjectedGameLabel>[];
+    for(final label in gameLabels){
+      final a=label.actor;
+      final p=t.Vector3(a.root.position.x,a.root.position.y+a.height+0.28,a.root.position.z);
+      p.project(camera);
+      if(p.z<-1||p.z>1||p.x<-1.25||p.x>1.25||p.y<-1.25||p.y>1.25)continue;
+      out.add(ProjectedGameLabel((p.x+1)*.5*width,(1-p.y)*.5*height,label.text,label.quest,label.mob));
+    }
+    return out;
   }
   Future<void> selectCreature(CreatureRecord? c,String kind) async {
     final revision=kind=='enemy'?++_creatureRevision:kind=='mount'?++_mountRevision:++_wingRevision;
@@ -343,7 +380,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
