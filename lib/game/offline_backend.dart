@@ -54,7 +54,9 @@ class OfflineBackend {
   }
 
   Future<bool> _status(int port) async {
-    final client=HttpClient()..findProxy=(_)=>'DIRECT'..connectionTimeout=const Duration(seconds:1);
+    final client=HttpClient();
+    client.findProxy=(_)=>'DIRECT';
+    client.connectionTimeout=const Duration(seconds:1);
     try{
       final req=await client.getUrl(Uri.parse('http://127.0.0.1:$port/offline/status'));
       req.headers.set(HttpHeaders.authorizationHeader,'Bearer $token');
