@@ -98,3 +98,17 @@ El paquete sigue incluyendo el mapa ligado al índice `a3ea7e3b…`, actualmente
 El paquete Windows incluye `Extras/SPK/Shaiya_SPK_ResourceProbe.exe`. Desde el explorador DATA.SPK, **AutoPerfil SPK** abre únicamente el `game.exe` de la misma instalación, con confirmación explícita y recomendación de trabajar sin Internet, y observa llamadas AES-GCM que coinciden con ciphertexts del catálogo SPK validado. El helper produce un perfil únicamente cuando puede reproducir el descifrado offline.
 
 Cuando la clave de recursos simples queda validada, Studio intenta derivar la regla de nonce de fragmentos mediante autenticación AES-GCM contra chunks reales. **Extraer todo** solo se habilita cuando simples y fragmentados pasan esa validación; en caso contrario permanece fail-closed. El mapa empaquetado del índice `a3ea7e3b…` conserva 21.360 rutas inferidas separadas de las confirmadas.
+
+## 0.6.11 — validación de payloads en dos etapas
+
+La presencia de una clave en un JSON ya no habilita lectura ni extracción. Shaiya Studio vuelve a autenticar el perfil contra muestras distribuidas del DATA.SPK real y conserva el lector cerrado si alguna muestra falla GCM. La regla de nonce de fragmentos se deriva por autenticación contra los tags auxiliares y se valida reconstruyendo recursos fragmentados completos antes de habilitar **Extraer todo**.
+
+ResourceProbe conserva una ventana breve para observar chunks nativos, pero no depende de que el cliente alcance una escena concreta: cuando la clave de recursos simples ya fue reproducida, Studio puede probar las reglas de fragmentación offline contra ciphertexts reales del mismo SPK.
+
+
+## 0.6.12 — DATA.SPK como biblioteca nativa del Studio
+
+Cuando simples y fragmentados están autenticados, el explorador habilita **Usar en Studio**. El SPK se monta directamente detrás de la misma abstracción `Library` usada por carpeta DATA y SAH/SAF; los modelos, texturas, animaciones y demás lectores consumen rangos del SPK sin exigir una extracción previa.
+
+El montaje es deliberadamente conservador: usa rutas confirmadas y rutas `strong-inferred`; las inferencias aproximadas por tamaño quedan excluidas por defecto. Si el perfil criptográfico no está completamente validado, el montaje falla cerrado y el catálogo activo no se reemplaza.
+
