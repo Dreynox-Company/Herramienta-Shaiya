@@ -105,7 +105,7 @@ class CharacterSelectScreen extends StatelessWidget {
       ),
     ),
     Positioned(
-      left:48,top:48,width:330,height:620,
+      left:48,top:22,width:330,height:620,
       child:Column(
         children:[
           for(var i=0;i<5;i++)...[
@@ -116,24 +116,24 @@ class CharacterSelectScreen extends StatelessWidget {
       ),
     ),
     Positioned(
-      left:94,top:668,
+      left:94,top:642,
       child:shaiyaRedButton(
         'Crear personaje',onCreate,width:114,height:36,fontSize:11,
       ),
     ),
     Positioned(
-      left:213,top:668,
+      left:213,top:642,
       child:shaiyaRedButton(
         'Eliminar',created?onDelete:null,width:114,height:36,fontSize:11,
       ),
     ),
     Positioned(
-      left:213,top:710,
+      left:213,top:684,
       child:shaiyaRedButton('Opciones',(){},width:114,height:36,fontSize:11),
     ),
-    Positioned(left:598,top:678,child:_startButton()),
+    Positioned(left:598,top:652,child:_startButton()),
     Positioned(
-      left:10,top:706,
+      left:10,top:680,
       child:IconButton(
         onPressed:onBack,
         icon:const Icon(Icons.arrow_back,color:Colors.white),
