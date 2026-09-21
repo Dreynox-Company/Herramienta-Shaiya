@@ -1,0 +1,193 @@
+7, child: Text('N', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+        const Positioned(right: 15, bottom: 20, child: Text('09.21 00:19', style: TextStyle(fontSize: 11))),
+      ],
+    ),
+  );
+
+  List<Widget> _minimapDots() {
+    final out = <Widget>[];
+    const radius = 80.0;
+    for (final n in _npcVisuals.take(80)) {
+      final dx = n.placement.position.x - character.x, dz = n.placement.position.z - character.z;
+      if (dx.abs() > radius || dz.abs() > radius) continue;
+      final x = 102 + dx / radius * 72, y = 109 + dz / radius * 72;
+      out.add(
+        Positioned(
+          left: x,
+          top: y,
+          child: Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: n.definition.startQuestIds.isNotEmpty ? const Color(0xffffff2b) : const Color(0xffff6945),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.black, width: .5),
+            ),
+          ),
+        ),
+      );
+    }
+    out.add(
+      Positioned(
+        left: 100,
+        top: 107,
+        child: Transform.rotate(
+          angle: scene.character?.root.rotation.y ?? 0,
+          child: const Icon(Icons.navigation, size: 10, color: Colors.white),
+        ),
+      ),
+    );
+    return out;
+  }
+
+  Widget _hudChat() => Positioned(
+    left: 2,
+    bottom: 76,
+    width: 410,
+    height: 296,
+    child: Stack(
+      children: [
+        Positioned.fill(child: _dataImage('interface/chat.tga', opacity: .72)),
+        const Positioned(left: 24, top: 91, child: Text('World', style: TextStyle(fontSize: 17))),
+        const Positioned(
+          left: 28,
+          bottom: 58,
+          child: Text('[Notice] Laboratorio local', style: TextStyle(fontSize: 10, color: Color(0xfffff3d2))),
+        ),
+      ],
+    ),
+  );
+
+  Widget _hudBottom() => Positioned(
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 65,
+    child: Stack(
+      children: [
+        Positioned.fill(child: _dataImage('interface/main_bottom.tga')),
+        const Positioned(
+          left: 250,
+          right: 250,
+          bottom: 7,
+          child: Text('0,0%', textAlign: TextAlign.center, style: TextStyle(fontSize: 11)),
+        ),
+        Positioned(
+          right: 14,
+          top: 4,
+          child: Row(
+            children: [
+              for (final name in ['status', 'inventory', 'skill', 'quest', 'community', 'option'])
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: _dataImage('interface/main_bottom_btn_$name.tga', fit: BoxFit.contain),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _questWindow(QuestDefinition q) => Positioned(
+    left: 565,
+    top: 136,
+    width: 250,
+    height: 510,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        _dataImage('interface/quest/quest.tga', fit: BoxFit.fill),
+        Positioned(
+          left: 24,
+          right: 22,
+          top: 28,
+          child: Text(
+            q.name.isNotEmpty ? q.name : 'Misión ${q.id}',
+            style: const TextStyle(color: Color(0xffffff4b), fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Positioned(
+          left: 24,
+          right: 25,
+          top: 74,
+          bottom: 110,
+          child: SingleChildScrollView(
+            child: Text(
+              q.initialDescription.isNotEmpty
+                  ? q.initialDescription
+                  : q.summary.isNotEmpty
+                  ? q.summary
+                  : 'Habla con ${activeQuestNpc?.name.isNotEmpty == true ? activeQuestNpc!.name : 'el NPC'} para comenzar esta misión.',
+              style: const TextStyle(color: Color(0xfff1e7d1), fontSize: 11, height: 1.7),
+            ),
+          ),
+        ),
+        const Positioned(left: 24, bottom: 93, child: Text('Recompensa', style: TextStyle(fontSize: 10))),
+        Positioned(left: 48, bottom: 20, width: 68, height: 28, child: _nativeButton('Aceptar', _acceptQuest, width: 68)),
+        Positioned(
+          right: 36,
+          bottom: 20,
+          width: 68,
+          height: 28,
+          child: _nativeButton(
+            'Cancelar',
+            () => setState(() {
+              activeQuest = null;
+              activeQuestNpc = null;
+            }),
+            width: 68,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  List<Widget> _npcLabels() {
+    final result = <Widget>[];
+    for (var i = 0; i < _npcVisuals.length && i < 14; i++) {
+      final n = _npcVisuals[i],
+          dx = n.placement.position.x - character.x,
+          dz = n.placement.position.z - character.z,
+          distance = math.sqrt(dx * dx + dz * dz);
+      if (distance > 65) continue;
+      final x = 510 + dx * 3.2, y = 310 + dz * 1.25;
+      if (x < 10 || x > 940 || y < 90 || y > 650) continue;
+      result.add(
+        Positioned(
+          left: x,
+          top: y,
+          child: IgnorePointer(
+            child: Column(
+              children: [
+                Text(
+                  n.definition.name.isNotEmpty ? n.definition.name : 'NPC ${n.placement.type}:${n.placement.typeId}',
+                  style: TextStyle(
+                    color: n.definition.startQuestIds.isNotEmpty ? const Color(0xffffff2e) : const Color(0xff4ee7ff),
+                    fontSize: 9,
+                    shadows: const [Shadow(blurRadius: 3, color: Colors.black)],
+                  ),
+                ),
+                if (n.definition.startQuestIds.isNotEmpty)
+                  const Text(
+                    '!',
+                    style: TextStyle(
+                      color: Color(0xffffff31),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      shadows: [Shadow(blurRadius: 3, color: Colors.black)],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return result;
+  }
+}
