@@ -9,6 +9,7 @@ import '../data/catalog.dart';
 import '../data/library.dart';
 import '../input/viewport_movement_input.dart';
 import '../render/studio_scene.dart';
+import 'offline_backend.dart';
 
 class GameClientPage extends StatefulWidget {
   final String? initialData;
@@ -21,6 +22,7 @@ class _GameClientPageState extends State<GameClientPage> {
   late final three.ThreeJS renderer;
   final focus=FocusNode();
   Catalog? catalog;
+  late final OfflineBackend backend;
   bool loading=true,questOpen=true;
   String progress='Inicializando cliente Flutter…';
   final messages=<String>['[Notice] Laboratorio local','Bienvenido a Dreynox Shaiya Flutter Client.'];
@@ -28,6 +30,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
   @override void initState(){
     super.initState();
+    backend=OfflineBackend((s){messages.insert(0,'[Backend] $s');if(mounted)setState(()=>progress=s);});
     scene=StudioScene((s){if(mounted)setState(()=>progress=s);});
     renderer=three.ThreeJS(
       settings:three.Settings(clearColor:0x000000,antialias:true,enableShadowMap:false,toneMapping:three.NoToneMapping),
@@ -37,7 +40,7 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.addListener(_refresh);
   }
   void _refresh(){if(mounted)setState((){});}
-  @override void dispose(){scene.removeListener(_refresh);scene.dispose();renderer.dispose();focus.dispose();super.dispose();}
+  @override void dispose(){unawaited(backend.stop());scene.removeListener(_refresh);scene.dispose();renderer.dispose();focus.dispose();super.dispose();}
 
   Future<void> chooseData() async {
     setState(()=>loading=true);
@@ -57,6 +60,7 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _connectLibrary(Library lib) async {
+    await backend.start();
     final c=Catalog(lib);
     await c.load((s){if(mounted)setState(()=>progress=s);});
     scene.catalog=c;
