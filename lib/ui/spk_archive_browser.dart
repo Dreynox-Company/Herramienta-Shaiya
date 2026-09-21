@@ -9,7 +9,9 @@ import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
 
 String _spkParentPath(String value, String separator) {
-  final normalized = value.replaceAll('\\', separator).replaceAll('/', separator);
+  final normalized = value
+      .replaceAll('\\', separator)
+      .replaceAll('/', separator);
   final index = normalized.lastIndexOf(separator);
   if (index < 0) return '.';
   if (index == 0) return separator;
