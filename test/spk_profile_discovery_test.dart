@@ -6,6 +6,7 @@ void main() {
     final paths = spkProfileCandidatePaths(
       r'C:\Games\Shaiya\data.spk',
       executablePath: r'C:\Tools\ShaiyaStudio\herramienta_shaiya.exe',
+      separatorOverride: r'\',
     );
     expect(
       paths,
