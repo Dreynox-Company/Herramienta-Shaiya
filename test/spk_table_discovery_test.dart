@@ -227,10 +227,17 @@ void main() {
         manifestFiles: {
           'Character/Elf/elmm_hand.MLT': writer.out.takeBytes(),
           'Item/99.itm': Uint8List.fromList([1, 2, 3, 4]),
+          'BinarySData/LegacyUnknown.SData': Uint8List.fromList([
+            1,
+            2,
+            3,
+            4,
+          ]),
         },
       );
       final mltId = 0x2000 + 3;
       final badItmId = 0x2000 + 4;
+      final legacySDataId = 0x2000 + 5;
 
       final result = await SpkCoreTableDiscovery.discover(
         source,
@@ -240,11 +247,17 @@ void main() {
 
       expect(result['validatedManifestHints'], 1);
       expect(result['rejectedManifestHints'], 1);
+      expect(result['unverifiedManifestHints'], 1);
       expect(source.names.isConfirmed(mltId), isFalse);
       expect(source.names.confidence(mltId), 'validated-inferred');
       expect(source.names.evidence(mltId), contains('payload-structure'));
       expect(source.names[mltId], 'Character/Elf/elmm_hand.MLT');
       expect(source.names[badItmId], isNull);
+      expect(
+        source.names[legacySDataId],
+        'BinarySData/LegacyUnknown.SData',
+      );
+      expect(source.names.confidence(legacySDataId), 'inferred');
     } finally {
       await root.delete(recursive: true);
     }
