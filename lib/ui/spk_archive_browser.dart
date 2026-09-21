@@ -271,6 +271,109 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  Future<void> resolveNamesFromReferenceData() => runAction(() async {
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Usar DATA como referencia',
+    );
+    if (folder == null) return;
+
+    final verify = source.canReadSimpleResources
+        ? await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: const Text('Reconstruir nombres SPK'),
+              content: const SizedBox(
+                width: 500,
+                child: Text(
+                  'Puedes inferir rápidamente rutas cuando el tamaño decodificado '
+                  'es único, o confirmar rutas leyendo el recurso SPK y comparando '
+                  'SHA-256 byte por byte contra la DATA de referencia.\n\n'
+                  'La verificación es más lenta, pero produce nombres confirmados.',
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(c, false),
+                  child: const Text('Inferir por tamaño'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(c, true),
+                  child: const Text('Confirmar por SHA-256'),
+                ),
+              ],
+            ),
+          )
+        : false;
+    if (!mounted) return;
+
+    final result = verify == true
+        ? await source.verifyNamesFromDirectory(
+            Directory(folder),
+            control: extractControl,
+            progress: (message, done, total) {
+              if (!mounted) return;
+              setState(() {
+                operation = message;
+                operationDone = done;
+                operationTotal = total;
+              });
+            },
+          )
+        : await source.inferNamesFromDirectory(
+            Directory(folder),
+            progress: (message, done, total) {
+              if (!mounted) return;
+              setState(() {
+                operation = message;
+                operationDone = done;
+                operationTotal = total;
+              });
+            },
+          );
+    if (!mounted) return;
+    setState(() {
+      currentFolder = '';
+      selected = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          verify == true
+              ? '${result['confirmed']} rutas confirmadas por SHA-256.'
+              : '${result['inferred']} rutas inferidas por tamaño único. '
+                    'Se muestran como inferidas hasta confirmarlas.',
+        ),
+        duration: const Duration(seconds: 7),
+      ),
+    );
+  });
+
+  Future<void> loadResourceProfile() => runAction(() async {
+    final picked = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Perfil criptográfico SPK', extensions: ['json']),
+      ],
+      confirmButtonText: 'Aplicar perfil de recursos',
+    );
+    if (picked == null) return;
+    final raw = jsonDecode(await File(picked.path).readAsString());
+    if (raw is! Map) {
+      throw const FormatException('Perfil SPK JSON inválido.');
+    }
+    final nextProfile = SpkCryptoProfile.fromJson(
+      Map<String, dynamic>.from(raw),
+    );
+    final next = await SpkArchiveSource.open(
+      source.file.path,
+      nextProfile,
+      names: source.names,
+    );
+    if (!context.mounted) return;
+    await Navigator.of(context).pushReplacement<void, void>(
+      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
+    );
+  });
+
   Future<void> exportInventory() => runAction(() async {
     final location = await getSaveLocation(
       suggestedName: 'spk-inventario.json',
@@ -534,7 +637,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       SizedBox(
                         width: 95,
                         child: Text(
-                          record.simple ? 'Simple' : 'Fragmentado',
+                          source.displayType(record),
                           style: const TextStyle(fontSize: 10),
                         ),
                       ),
@@ -600,6 +703,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         property('Decodificado', bytesLabel(record.decodedBytes)),
         property('Fragmentos', record.chunkCount.toString()),
         property('Ruta', source.technicalPath(record)),
+        property('Nombre', source.nameConfidence(record)),
         const Divider(height: 26),
         FilledButton.tonalIcon(
           onPressed: busy ? null : () => inspectResource(record),
@@ -656,6 +760,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ],
         ),
         actions: [
+          TextButton.icon(
+            onPressed: busy ? null : resolveNamesFromReferenceData,
+            icon: const Icon(Icons.account_tree_outlined, size: 17),
+            label: const Text('Reconstruir nombres'),
+          ),
+          TextButton.icon(
+            onPressed: busy ? null : loadResourceProfile,
+            icon: const Icon(Icons.key_outlined, size: 17),
+            label: const Text('Perfil de recursos'),
+          ),
           TextButton.icon(
             onPressed: busy ? null : importNameMap,
             icon: const Icon(Icons.drive_file_rename_outline, size: 17),
@@ -810,7 +924,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 : Row(
                     children: [
                       Text(
-                        '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · ${source.names.paths.length} nombres resueltos',
+                        '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · '
+                        '${source.names.paths.length} confirmados · '
+                        '${source.names.hints.length} inferidos · '
+                        '${summary['resources'] as int - source.names.paths.length - source.names.hints.length} sin resolver',
                         style: const TextStyle(
                           fontSize: 10,
                           color: Color(0xff92a0b7),
@@ -819,7 +936,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       const Spacer(),
                       if (!source.canExtractAll)
                         const Text(
-                          'Extraer todo requiere perfil de recursos y fragmentación validada',
+                          'Extraer todo requiere clave de recursos y regla de fragmentación validadas',
                           style: TextStyle(
                             fontSize: 9,
                             color: Color(0xffd3ac76),
