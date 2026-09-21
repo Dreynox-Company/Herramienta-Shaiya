@@ -382,7 +382,8 @@ class StudioScene extends ChangeNotifier {
       final layout=lib.resolve(w.layout,['world/dungeon'],uniqueFallback:true);
       if(layout==null)throw FormatException('No se encuentra la geometría DG: ${w.layout}.');
       final dg=DgData.parse(await lib.read(layout),layout);
-      final ox=dg.center.x,oz=dg.center.z,stage=t.Group(),parts=<RenderPart>[];
+      final anchor=w.layout.toLowerCase().contains('dun_login')?dg.presentationAnchor:dg.center;
+      final ox=x??anchor.x,oz=z??anchor.z,stage=t.Group(),parts=<RenderPart>[];
       try{
         var loaded=0;
         for(final piece in dg.parts){
