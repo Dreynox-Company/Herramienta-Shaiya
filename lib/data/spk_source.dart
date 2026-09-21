@@ -59,6 +59,7 @@ class SpkArchiveSource {
   Map<String, Object?>? resourceProfileValidation;
   Map<String, Object?>? fragmentProfileValidation;
   Map<String, Object?>? fullResourceValidation;
+  final Map<int, String> _validatedFormats = <int, String>{};
   bool _simpleProfileValidated = false;
   bool _fragmentProfileValidated = false;
   int reads = 0;
@@ -513,7 +514,16 @@ class SpkArchiveSource {
 
   bool get fullyValidatedResources =>
       fullResourceValidation?['status'] == 'validated' &&
-      fullResourceValidation?['validatedResources'] == index.resources.length;
+      fullResourceValidation?['validatedResources'] == index.resources.length &&
+      _validatedFormats.length == index.resources.length;
+
+  String? validatedFormat(int entryId) =>
+      fullyValidatedResources ? _validatedFormats[entryId] : null;
+
+  Map<String, String> get validatedFormatsJson => {
+    for (final entry in _validatedFormats.entries)
+      spkU64Hex(entry.key): entry.value,
+  };
 
   bool restoreFullResourceValidation(Map<String, dynamic> evidence) {
     final declaredIndex = evidence['indexSha256']?.toString().toLowerCase();
@@ -535,7 +545,8 @@ class SpkArchiveSource {
     }
 
     final raw = evidence['validation'];
-    if (raw is! Map) return false;
+    final rawFormats = evidence['resourceFormats'];
+    if (raw is! Map || rawFormats is! Map) return false;
     final validation = Map<String, Object?>.from(raw);
     if (validation['status'] != 'validated' ||
         validation['validatedResources'] != index.resources.length ||
@@ -543,6 +554,26 @@ class SpkArchiveSource {
         validation['failures'] != 0) {
       return false;
     }
+
+    final knownIds = index.resources.map((record) => record.entryId).toSet();
+    final restored = <int, String>{};
+    for (final entry in rawFormats.entries) {
+      final id = spkParseU64Hex(entry.key);
+      final format = entry.value?.toString().trim();
+      if (id == null ||
+          format == null ||
+          format.isEmpty ||
+          !knownIds.contains(id) ||
+          restored.containsKey(id)) {
+        return false;
+      }
+      restored[id] = format;
+    }
+    if (restored.length != index.resources.length) return false;
+
+    _validatedFormats
+      ..clear()
+      ..addAll(restored);
     fullResourceValidation = validation;
     return true;
   }
@@ -760,6 +791,7 @@ class SpkArchiveSource {
     }
 
     final resources = index.resources.toList(growable: false);
+    _validatedFormats.clear();
     final formats = <String, int>{};
     var decodedBytes = 0;
     var simple = 0;
@@ -779,12 +811,14 @@ class SpkArchiveSource {
         }
         decodedBytes += result.bytes.length;
         formats[result.format] = (formats[result.format] ?? 0) + 1;
+        _validatedFormats[record.entryId] = result.format;
         if (record.simple) {
           simple++;
         } else if (record.fragmented) {
           fragmented++;
         }
       } catch (error) {
+        _validatedFormats.clear();
         fullResourceValidation = {
           'status': 'failed',
           'validatedResources': i,
