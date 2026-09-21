@@ -240,7 +240,7 @@ class StudioScene extends ChangeNotifier {
     sky?.dispose();sky=part;skyPath=path;view!.scene.add(part.mesh);updateCamera();say('Cielo original: ${baseName(path)}');
   }
   Future<WorldNpcActor> spawnWorldNpc(CreatureRecord record,{required String name,required double x,required double z,bool quest=false,double rotation=0}) async {
-    if(world==null)throw const StateError('Carga un mundo antes de crear NPC.');
+    if(world==null)throw StateError('Carga un mundo antes de crear NPC.');
     final actor=await loadCreature(record);
     final y=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
     actor.root.position.setValues(x,y,z);
