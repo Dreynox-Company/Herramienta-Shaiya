@@ -1169,6 +1169,33 @@ class SpkArchiveSource {
     }
     if (_looksLikeTga(bytes)) return 'TGA';
 
+    if (bytes.length >= 3) {
+      final signature = ascii.decode(
+        bytes.sublist(0, bytes.length < 8 ? bytes.length : 8),
+        allowInvalid: true,
+      );
+      if (signature.startsWith('ML')) {
+        try {
+          readMlt(bytes, 'SPK:MLT');
+          return 'MLT';
+        } catch (_) {}
+      }
+      if (signature.startsWith('ITM') ||
+          signature.startsWith('IT2') ||
+          signature.startsWith('pandaIT2')) {
+        try {
+          readItm(bytes, 'SPK:ITM');
+          return 'ITM';
+        } catch (_) {}
+      }
+      if (signature.startsWith('MO2') || signature.startsWith('MO4')) {
+        try {
+          readMon(bytes, 'SPK:MON');
+          return 'MON';
+        } catch (_) {}
+      }
+    }
+
     if (bytes.length >= 8) {
       final first = ByteData.sublistView(bytes, 0, 4).getUint32(
         0,
@@ -1249,6 +1276,12 @@ class SpkArchiveSource {
         return '.gif';
       case 'TGA':
         return '.tga';
+      case 'MLT':
+        return '.mlt';
+      case 'ITM':
+        return '.itm';
+      case 'MON':
+        return '.mon';
       case 'OGG':
         return '.ogg';
       case 'RIFF':
