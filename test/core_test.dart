@@ -150,6 +150,32 @@ void main() {
     });
   });
 
+  group('Conjunto inicial nativo', () {
+    test('prefiere el set 001 de la primera fila MLT', () {
+      final slots={for(final s in Slot.values)s:<PartRecord>[]};
+      slots[Slot.upper]!.addAll([
+        part(Slot.upper,0,'humf_torso001.dds'),
+        part(Slot.upper,15,'humf_upper016.dds'),
+      ]);
+      slots[Slot.lower]!.addAll([
+        part(Slot.lower,0,'humf_lower001.dds'),
+        part(Slot.lower,15,'humf_lower016.dds'),
+      ]);
+      slots[Slot.hand]!.addAll([
+        part(Slot.hand,0,'humf_hand001.dds'),
+        part(Slot.hand,15,'humf_hand016.dds'),
+      ]);
+      slots[Slot.foot]!.addAll([
+        part(Slot.foot,0,'humf_boots001.dds'),
+        part(Slot.foot,15,'humf_boots016.dds'),
+      ]);
+      final a=Archetype('humf','human','character/human',slots,[]);
+      final look=Appearance.initial(a);
+      expect(look.selected[Slot.upper]!.key,'001');
+      expect(look.selected[Slot.lower]!.key,'001');
+    });
+  });
+
   group('Cambio de conjunto', () {
     test('identidad liga torso y piernas por recurso, no indice de tabla', () {
       expect(
