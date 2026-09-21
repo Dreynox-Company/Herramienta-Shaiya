@@ -826,7 +826,19 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Row(
                     children: [
-                      const Icon(Icons.insert_drive_file_outlined, size: 15),
+                      Icon(
+                        source.names.isConfirmed(record.entryId)
+                            ? Icons.verified_outlined
+                            : source.names.isInferred(record.entryId)
+                            ? Icons.auto_awesome_outlined
+                            : Icons.insert_drive_file_outlined,
+                        size: 15,
+                        color: source.names.isConfirmed(record.entryId)
+                            ? const Color(0xff83c69d)
+                            : source.names.isInferred(record.entryId)
+                            ? const Color(0xffd9b66f)
+                            : null,
+                      ),
                       const SizedBox(width: 7),
                       Expanded(
                         flex: 5,
@@ -972,10 +984,39 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.key_outlined, size: 17),
             label: const Text('Perfil de recursos'),
           ),
-          TextButton.icon(
-            onPressed: busy ? null : importNameMap,
-            icon: const Icon(Icons.drive_file_rename_outline, size: 17),
-            label: const Text('Mapa de nombres'),
+          PopupMenuButton<String>(
+            enabled: !busy,
+            tooltip: 'Nombres y rutas',
+            icon: const Icon(Icons.drive_file_rename_outline, size: 18),
+            onSelected: (value) {
+              if (value == 'resolve') resolveNamesWithReferenceData();
+              if (value == 'import') importNameMap();
+              if (value == 'export') exportNameMap();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'resolve',
+                child: ListTile(
+                  leading: Icon(Icons.auto_awesome_outlined),
+                  title: Text('Resolver con DATA de referencia'),
+                  subtitle: Text('Tamaño + Zstandard nivel 3'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.file_open_outlined),
+                  title: Text('Importar mapa de nombres'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.save_alt_outlined),
+                  title: Text('Exportar mapa actual'),
+                ),
+              ),
+            ],
           ),
           TextButton.icon(
             onPressed: busy ? null : exportInventory,
@@ -986,6 +1027,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             onPressed: busy || selected == null ? null : extractSelected,
             icon: const Icon(Icons.file_download_outlined, size: 17),
             label: const Text('Extraer'),
+          ),
+          TextButton.icon(
+            onPressed: busy || currentFolder.isEmpty
+                ? null
+                : extractCurrentFolder,
+            icon: const Icon(Icons.drive_folder_upload_outlined, size: 17),
+            label: const Text('Extraer carpeta'),
           ),
           FilledButton.icon(
             onPressed: busy || !source.canExtractAll ? null : extractAll,
