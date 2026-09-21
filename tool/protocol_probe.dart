@@ -42,6 +42,9 @@ Future<void> main() async {
     final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
     final skillBook=skillsPacket==null?null:PsSkillBook.parse(skillsPacket);
     final quickbar=barPacket==null?null:PsSkillBar.parse(barPacket);
+    final inventoryPackets=selected.packets.where((p)=>p.type==PsPacketType.characterItems).toList();
+    final inventory=inventoryPackets.expand(parseInventoryItems).toList();
+    stdout.writeln('Inventory packets='+inventoryPackets.length.toString()+' items='+inventory.length.toString());
     stdout.writeln(
       'Vitals hp=${currentHp?.hp}/${selected.details.maxHp} '
       'mp=${currentHp?.mp}/${selected.details.maxMp} '
@@ -142,6 +145,7 @@ Future<void> main() async {
     if(currentHp.hp<=0||currentHp.mp<0||currentHp.sp<0)throw StateError('Current hitpoints invalid.');
     if(skillBook==null)throw StateError('CHARACTER_SKILLS missing.');
     if(quickbar==null)throw StateError('CHARACTER_SKILL_BAR missing.');
+    if(inventoryPackets.isEmpty)throw StateError('CHARACTER_ITEMS missing.');
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
