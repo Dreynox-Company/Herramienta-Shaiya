@@ -23,6 +23,7 @@ void main(List<String> args){
   WidgetsFlutterBinding.ensureInitialized();
   final data=args.where((x)=>x.startsWith('--data=')).firstOrNull;
   final qa=args.where((x)=>x.startsWith('--qa-stage=')).firstOrNull;
+  final qaMarker=args.where((x)=>x.startsWith('--qa-marker=')).firstOrNull;
   GameStage? stage;
   final value=qa?.substring('--qa-stage='.length);
   if(value!=null){
@@ -32,13 +33,14 @@ void main(List<String> args){
     initialData:data?.substring(7),
     studio:args.contains('--studio'),
     initialStage:stage,
+    qaMarker:qaMarker?.substring('--qa-marker='.length),
   ));
 }
 class ShaiyaApp extends StatelessWidget {
-  final String? initialData;final bool studio;final GameStage? initialStage;
-  const ShaiyaApp({super.key,this.initialData,this.studio=false,this.initialStage});
+  final String? initialData;final bool studio;final GameStage? initialStage;final String? qaMarker;
+  const ShaiyaApp({super.key,this.initialData,this.studio=false,this.initialStage,this.qaMarker});
   @override Widget build(BuildContext context)=>MaterialApp(debugShowCheckedModeBanner:false,title:'Shaiya Studio',locale:const Locale('es'),supportedLocales:const [Locale('es')],localizationsDelegates:GlobalMaterialLocalizations.delegates,
-    theme:ThemeData(brightness:Brightness.dark,useMaterial3:true,visualDensity:VisualDensity.compact,colorScheme:ColorScheme.fromSeed(seedColor:const Color(0xffa5bcff),brightness:Brightness.dark),scaffoldBackgroundColor:const Color(0xff101722),inputDecorationTheme:const InputDecorationTheme(isDense:true,border:OutlineInputBorder(),contentPadding:EdgeInsets.symmetric(horizontal:10,vertical:10)),textTheme:const TextTheme(bodyMedium:TextStyle(fontSize:12),bodySmall:TextStyle(fontSize:10)),sliderTheme:const SliderThemeData(trackHeight:2,thumbShape:RoundSliderThumbShape(enabledThumbRadius:5),overlayShape:RoundSliderOverlayShape(overlayRadius:12)),cardTheme:const CardThemeData(color:Color(0xff192331),elevation:0,margin:EdgeInsets.zero)),home:studio?StudioPage(initialData:initialData):GameClientPage(initialData:initialData,initialStage:initialStage));
+    theme:ThemeData(brightness:Brightness.dark,useMaterial3:true,visualDensity:VisualDensity.compact,colorScheme:ColorScheme.fromSeed(seedColor:const Color(0xffa5bcff),brightness:Brightness.dark),scaffoldBackgroundColor:const Color(0xff101722),inputDecorationTheme:const InputDecorationTheme(isDense:true,border:OutlineInputBorder(),contentPadding:EdgeInsets.symmetric(horizontal:10,vertical:10)),textTheme:const TextTheme(bodyMedium:TextStyle(fontSize:12),bodySmall:TextStyle(fontSize:10)),sliderTheme:const SliderThemeData(trackHeight:2,thumbShape:RoundSliderThumbShape(enabledThumbRadius:5),overlayShape:RoundSliderOverlayShape(overlayRadius:12)),cardTheme:const CardThemeData(color:Color(0xff192331),elevation:0,margin:EdgeInsets.zero)),home:studio?StudioPage(initialData:initialData):GameClientPage(initialData:initialData,initialStage:initialStage,qaMarker:qaMarker));
 }
 class StudioPage extends StatefulWidget {
   final String? initialData;const StudioPage({super.key,this.initialData});
