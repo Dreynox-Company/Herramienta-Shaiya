@@ -28,9 +28,10 @@ class FactionScreen extends StatelessWidget {
   );
 
   Widget nameTexture(String side)=>Positioned(
-    left:side=='fury'?0:512,
-    top:side=='fury'?406:170,
-    width:512,height:64,
+    // Native ps0032 draws these 512×64 source textures at half scale.
+    left:side=='fury'?31:746,
+    top:side=='fury'?462:224,
+    width:256,height:32,
     child:image(
       'interface/countryselect/text/${side}normal_$lang.tga',
       fit:BoxFit.fill,
@@ -53,7 +54,8 @@ class FactionScreen extends StatelessWidget {
   );
 
   Widget descriptionTexture(String side)=>Positioned(
-    left:0,top:455,width:1024,height:256,
+    // 1024×256 source sheet is presented as a 512×128 native text plate.
+    left:256,top:505,width:512,height:128,
     child:image(
       'interface/countryselect/text/${side}select_$lang.tga',
       fit:BoxFit.fill,
