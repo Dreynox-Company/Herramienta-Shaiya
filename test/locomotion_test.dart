@@ -4,7 +4,7 @@ import 'package:herramienta_shaiya/core/formats.dart';
 import 'package:herramienta_shaiya/core/locomotion.dart';
 import 'package:herramienta_shaiya/render/studio_scene.dart';
 ClipData motion(String name,double lift)=>ClipData(name,1,[BoneTrack(-1,v.Matrix4.identity(),[0],[v.Quaternion.identity()],[0,1],[v.Vector3.zero(),v.Vector3(0,lift,0)])]);
-StudioScene exampleScene(){final s=StudioScene((_){ }),a=Actor();a.normal=motion('humf_000_normal.ANI',.01);a.idle=a.normal;a.walk=motion('humf_001_walk.ANI',1);a.run=motion('humf_002_run.ANI',2);a.play(a.normal!);s.character=a;return s;}
+StudioScene exampleScene(){final s=StudioScene((_){ })..yaw=0,a=Actor();a.normal=motion('humf_000_normal.ANI',.01);a.idle=a.normal;a.walk=motion('humf_001_walk.ANI',1);a.run=motion('humf_002_run.ANI',2);a.play(a.normal!);s.character=a;return s;}
 void main(){TestWidgetsFlutterBinding.ensureInitialized();
   group('Ground clip identity',(){
     final paths=['human/humf_006_swnormal.ANI','human/humf_007_swim.ANI','human/humf_021_veh_br.ani','human/humf_016_idle1.ani','human/humf_002_run.ANI','human/humf_001_walk.ANI','human/humf_000_normal.ANI'];
@@ -20,6 +20,20 @@ void main(){TestWidgetsFlutterBinding.ensureInitialized();
     test('100 repeats do not rewind',(){final s=LocomotionTransitions();s.update(x:0,z:-1,running:false,blocked:false);for(var i=0;i<100;i++){expect(s.update(x:0,z:-1,running:false,blocked:false),isNull);}});
     test('unlock and appearance changes reapply held key',(){final s=LocomotionTransitions();s.update(x:0,z:-1,running:false,blocked:false);s.update(x:0,z:-1,running:false,blocked:true);expect(s.update(x:0,z:-1,running:false,blocked:false),GroundMotion.walk);s.invalidate();expect(s.update(x:0,z:-1,running:false,blocked:false),GroundMotion.walk);});
     test('release during load returns to rest',(){final s=LocomotionTransitions();s.update(x:0,z:-1,running:true,blocked:true);s.update(x:0,z:0,running:true,blocked:true);expect(s.update(x:0,z:0,running:true,blocked:false),GroundMotion.idle);});
+  });
+  group('Camera relative movement',(){
+    test('forward follows camera yaw',(){
+      final d0=cameraRelativeMovement(0,-1,0);
+      expect(d0.x,closeTo(0,1e-9));expect(d0.z,closeTo(-1,1e-9));
+      final d90=cameraRelativeMovement(0,-1,3.141592653589793/2);
+      expect(d90.x,closeTo(-1,1e-9));expect(d90.z,closeTo(0,1e-9));
+    });
+    test('right stays perpendicular and diagonals normalize',(){
+      final right=cameraRelativeMovement(1,0,3.141592653589793/2);
+      expect(right.x,closeTo(0,1e-9));expect(right.z,closeTo(-1,1e-9));
+      final d=cameraRelativeMovement(1,-1,.73);
+      expect(d.x*d.x+d.z*d.z,closeTo(1,1e-9));
+    });
   });
   group('Scene pose and translation',(){late StudioScene s;setUp(()=>s=exampleScene());tearDown(()=>s.dispose());
     test('W changes bone pose as well as position',(){expect(s.character!.clip,same(s.character!.normal));s.setMovement(0,-1);s.tick(.1);expect(s.character!.clip,same(s.character!.walk));expect(s.character!.root.position.z,closeTo(-.2,1e-6));expect(s.character!.world.first.storage[13],closeTo(.1,1e-6));s.tick(.1);expect(s.character!.time,closeTo(.2,1e-6));});
