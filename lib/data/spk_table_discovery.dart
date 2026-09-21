@@ -133,6 +133,7 @@ class SpkCoreTableDiscovery {
     };
     var validatedManifestHints = 0;
     var rejectedManifestHints = 0;
+    var unverifiedManifestHints = 0;
     final hintUpdates = <int, SpkNameHint>{};
     final hintRemovals = <int>[];
 
@@ -152,7 +153,7 @@ class SpkCoreTableDiscovery {
         rejectedManifestHints++;
         continue;
       }
-      var valid = false;
+      bool? valid;
       try {
         final bytes = (await source.readEntry(record)).bytes;
         if (lower.endsWith('.mlt')) {
@@ -162,24 +163,31 @@ class SpkCoreTableDiscovery {
         } else if (lower.endsWith('.mon')) {
           valid = readMon(bytes, path).isNotEmpty;
         } else if (lower.endsWith('.sdata')) {
-          valid = SeedData.isEncoded(bytes);
-          if (valid) {
+          if (SeedData.isEncoded(bytes)) {
             SeedData.decode(bytes, verifyChecksum: true);
+            valid = true;
+          } else {
+            // SData has several generations and not all are wrapped in SEED.
+            // An unsupported wrapper is not evidence that the inferred path is
+            // wrong, so preserve the hint but do not promote its confidence.
+            valid = null;
           }
         }
       } catch (_) {
         valid = false;
       }
-      if (valid) {
+      if (valid == true) {
         hintUpdates[entry.key] = SpkNameHint(
           path: path,
           confidence: 'validated-inferred',
           evidence: '${entry.value.evidence}+payload-structure',
         );
         validatedManifestHints++;
-      } else {
+      } else if (valid == false) {
         hintRemovals.add(entry.key);
         rejectedManifestHints++;
+      } else {
+        unverifiedManifestHints++;
       }
     }
     source.names.mergeHintRecords(hintUpdates);
@@ -402,6 +410,7 @@ class SpkCoreTableDiscovery {
       'rejectedResources': rejected,
       'validatedManifestHints': validatedManifestHints,
       'rejectedManifestHints': rejectedManifestHints,
+      'unverifiedManifestHints': unverifiedManifestHints,
       'confirmedTables': {
         for (final entry in confirmed.entries)
           spkU64Hex(entry.key): entry.value,
