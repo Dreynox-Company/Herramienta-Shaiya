@@ -12,6 +12,7 @@ import '../input/viewport_movement_input.dart';
 import '../render/studio_scene.dart';
 import 'game_stage.dart';
 import 'offline_backend.dart';
+import 'server_metadata.dart';
 import 'screens/character_create_screen.dart';
 import 'screens/character_select_screen.dart';
 import 'screens/faction_screen.dart';
@@ -36,6 +37,8 @@ class _GameClientPageState extends State<GameClientPage> {
   Catalog? catalog;
   UiAssetCache? ui;
   SvmapData? svmap;
+  ServerMetadata? metadata;
+  int questId=1;
   GameStage stage=GameStage.faction;
   bool loading=true;
   bool characterCreated=false;
@@ -115,6 +118,7 @@ class _GameClientPageState extends State<GameClientPage> {
     await c.load((s){if(mounted)setState(()=>progress=s);});
     catalog=c;
     ui=UiAssetCache(lib);
+    metadata=await ServerMetadata.load();
     scene.catalog=c;
     await _applyDefaultAppearance();
 
@@ -216,7 +220,14 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.updateCamera();
 
     if(map!=null){
-      await scene.spawnGameActorsFromSvmap(map);
+      final meta=metadata;
+      if(meta!=null){
+        for(final p in map.npcs){
+          final rule=meta.npcs[p.type.toString()+':'+p.id.toString()];
+          if(rule!=null&&rule.outQuests.isNotEmpty){questId=rule.outQuests.first;break;}
+        }
+      }
+      await scene.spawnGameActorsFromSvmap(map,npcModels:meta?.npcModels);
       messages.insert(
         0,
         '[Mapa] '+map.npcs.length.toString()+
@@ -399,9 +410,10 @@ class _GameClientPageState extends State<GameClientPage> {
             characterName:nameController.text,
             messages:messages,
             questOpen:questOpen,
+            questId:questId,
             onAcceptQuest:(){
               setState(()=>questOpen=false);
-              final q=catalog!.spanishText?.quest(1);
+              final q=catalog!.spanishText?.quest(questId);
               messages.insert(0,'[Misión] '+(q?.name??'Misión aceptada'));
             },
             onCancelQuest:()=>setState(()=>questOpen=false),
