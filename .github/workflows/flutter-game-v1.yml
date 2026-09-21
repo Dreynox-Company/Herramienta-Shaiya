@@ -187,7 +187,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Native-Windows-Interaction-Proof
-          run-id: 35541302782
+          run-id: 35547109100
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: native-reference
       - name: Recover exact public ps0032 DATA used by native reference
@@ -198,7 +198,7 @@ jobs:
           @'
           import pathlib,tarfile,urllib.request,time
           target=pathlib.Path('public-client')
-          wanted={'data.sah','data.saf'}
+          wanted={'game.exe','data.sah','data.saf'}
           found=set();started=time.monotonic()
           url='https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz'
           with urllib.request.urlopen(url,timeout=180) as r:
@@ -218,7 +218,7 @@ jobs:
                 found.add(name)
                 print(name,dst.stat().st_size)
                 if found==wanted: break
-          if found!=wanted: raise RuntimeError('public ps0032 SAH/SAF not found: '+repr(found))
+          if found!=wanted: raise RuntimeError('public ps0032 client files not found: '+repr(found))
           print('download seconds',round(time.monotonic()-started,1))
           '@ | Set-Content recover_public_data.py
           python recover_public_data.py
