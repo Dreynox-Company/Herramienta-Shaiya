@@ -504,7 +504,7 @@ class SpkCryptoProfile {
       );
     }
     return SpkCryptoProfile(
-      profileId: '${profileId}-resources-v7',
+      profileId: '$profileId-resources-v7',
       indexSha256: indexSha256,
       indexSecret: indexSecret,
       resourceSecret: secret,
