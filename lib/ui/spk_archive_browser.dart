@@ -293,17 +293,17 @@ class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   const SpkArchiveBrowserPage({super.key, required this.source});
 
-  static Future<void> pickAndOpen(BuildContext context) async {
+  static Future<SpkArchiveSource?> pickAndOpen(BuildContext context) async {
     final picked = await openFile(
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Archivo DATA.SPK', extensions: ['spk']),
       ],
       confirmButtonText: 'Abrir DATA.SPK',
     );
-    if (picked == null || !context.mounted) return;
+    if (picked == null || !context.mounted) return null;
 
     final profile = await _chooseProfile(context, picked.path);
-    if (profile == null || !context.mounted) return;
+    if (profile == null || !context.mounted) return null;
 
     final progress = ValueNotifier<String>('Abriendo DATA.SPK…');
     showDialog<void>(
@@ -344,9 +344,9 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       source = await deriveAutomaticFragmentProfile(source, picked.path);
       progress.value = 'Resolviendo nombres y rutas conocidas…';
       await loadAutomaticSpkNameMap(source, picked.path);
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       Navigator.of(context, rootNavigator: true).pop();
-      await Navigator.of(context).push<void>(
+      return await Navigator.of(context).push<SpkArchiveSource>(
         MaterialPageRoute(
           builder: (_) => SpkArchiveBrowserPage(source: source),
         ),
@@ -361,6 +361,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
           ),
         );
       }
+      return null;
     } finally {
       progress.dispose();
     }
@@ -442,8 +443,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   String operation = '';
   int operationDone = 0;
   int operationTotal = 0;
+  late SpkArchiveSource _source;
 
-  SpkArchiveSource get source => widget.source;
+  SpkArchiveSource get source => _source;
+
+  @override
+  void initState() {
+    super.initState();
+    _source = widget.source;
+  }
 
   @override
   void dispose() {
@@ -839,9 +847,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         duration: const Duration(seconds: 8),
       ),
     );
-    await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
-    );
+    setState(() {
+      _source = next;
+      currentFolder = '';
+      selected = null;
+    });
   });
 
   Future<void> loadResourceProfile() => runAction(() async {
@@ -892,9 +902,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
 
     if (!mounted) return;
-    await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
-    );
+    setState(() {
+      _source = next;
+      currentFolder = '';
+      selected = null;
+    });
   });
 
   Future<void> exportInventory() => runAction(() async {
@@ -1349,6 +1361,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ],
         ),
         actions: [
+          if (source.canExtractAll &&
+              (source.names.paths.isNotEmpty || strongInferred > 0))
+            FilledButton.tonalIcon(
+              onPressed: busy
+                  ? null
+                  : () => Navigator.of(context).pop<SpkArchiveSource>(source),
+              icon: const Icon(Icons.hub_outlined, size: 17),
+              label: const Text('Usar en Studio'),
+            ),
           if (Platform.isWindows && !source.canExtractAll)
             TextButton.icon(
               onPressed: busy ? null : captureResourceProfile,

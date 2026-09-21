@@ -45,6 +45,53 @@ const archetypeCodes = [
   'demr',
   'dewr',
 ];
+
+String? _spkRaceForArchetype(String code) {
+  if (code.startsWith('hu')) return 'human';
+  if (code.startsWith('el')) return 'elf';
+  if (code.startsWith('vi')) return 'vile';
+  if (code.startsWith('de')) return 'deatheater';
+  return null;
+}
+
+Slot? _spkSlotFromStem(String stem) {
+  final value = stem.toLowerCase();
+  bool token(String pattern) =>
+      RegExp('(^|_)(?:$pattern)(?=_|[0-9]|\$)').hasMatch(value);
+  if (token('torso|upper')) return Slot.upper;
+  if (token('lower|trousers|pants')) return Slot.lower;
+  if (token('hand|glove|gloves|arm')) return Slot.hand;
+  if (token('foot|boot|boots')) return Slot.foot;
+  if (token('helmet|helm')) return Slot.helmet;
+  if (token('face')) return Slot.face;
+  if (token('hair')) return Slot.hair;
+  return null;
+}
+
+int _spkPartRank(String code, Slot slot, String path) {
+  final stem = baseName(path)
+      .toLowerCase()
+      .replaceFirst(RegExp(r'\.[^.]+$'), '');
+  final token = switch (slot) {
+    Slot.upper => r'(?:torso|upper)',
+    Slot.lower => r'(?:lower|trousers|pants)',
+    Slot.hand => r'(?:hand|glove|gloves|arm)',
+    Slot.foot => r'(?:foot|boot|boots)',
+    Slot.helmet => r'(?:helmet|helm)',
+    Slot.face => r'face',
+    Slot.hair => r'hair',
+  };
+  final direct = RegExp(
+    '^${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
+  ).firstMatch(stem);
+  if (direct != null) {
+    return int.tryParse(direct.group(1) ?? '') ?? 0;
+  }
+  if (stem.startsWith('${code}_') && stem.contains(RegExp(token))) {
+    return 10000;
+  }
+  return 20000;
+}
 String animationLabel(String source) => translatedMotion(source);
 String setIdentity(String texture) {
   var x = baseName(texture).toLowerCase().replaceFirst(RegExp(r'\.[^.]+$'), '');
@@ -246,6 +293,114 @@ class Catalog {
     return resolved;
   }
 
+  Future<void> _loadSpkFallbackArchetypes(
+    List<String> paths,
+    void Function(String) progress,
+  ) async {
+    if (library.spkArchive == null || archetypes.isNotEmpty) return;
+
+    final textures = <String, String>{};
+    for (final path in paths) {
+      final lower = path.toLowerCase();
+      if (!lower.startsWith('character/') ||
+          !lower.contains('/dds/') ||
+          !RegExp(r'\.(dds|tga|png|bmp)$').hasMatch(lower)) {
+        continue;
+      }
+      final parts = lower.split('/');
+      if (parts.length < 4) continue;
+      final stem = baseName(lower).replaceFirst(RegExp(r'\.[^.]+$'), '');
+      textures['${parts[1]}|$stem'] = path;
+    }
+
+    var inferred = 0;
+    for (final code in archetypeCodes) {
+      final race = _spkRaceForArchetype(code);
+      if (race == null) continue;
+      final root = 'character/$race';
+      final candidates = <Slot, List<({String mesh, String texture})>>{
+        for (final slot in Slot.values)
+          slot: <({String mesh, String texture})>[],
+      };
+
+      for (final mesh in paths) {
+        final lower = mesh.toLowerCase();
+        if (!lower.startsWith('$root/3dc/') || !lower.endsWith('.3dc')) {
+          continue;
+        }
+        final stem = baseName(lower).replaceFirst(RegExp(r'\.[^.]+$'), '');
+        if (!stem.startsWith('${code.toLowerCase()}_')) continue;
+        final slot = _spkSlotFromStem(stem);
+        if (slot == null) continue;
+        final texture = textures['$race|$stem'];
+        if (texture == null) continue;
+        candidates[slot]!.add((mesh: mesh, texture: texture));
+      }
+
+      const required = <Slot>[
+        Slot.upper,
+        Slot.lower,
+        Slot.hand,
+        Slot.foot,
+      ];
+      if (required.any((slot) => candidates[slot]!.isEmpty)) continue;
+
+      final parts = <Slot, List<PartRecord>>{};
+      for (final slot in Slot.values) {
+        final rows = candidates[slot]!
+          ..sort((a, b) {
+            final rank = _spkPartRank(
+              code,
+              slot,
+              a.mesh,
+            ).compareTo(_spkPartRank(code, slot, b.mesh));
+            return rank != 0 ? rank : a.mesh.compareTo(b.mesh);
+          });
+        parts[slot] = <PartRecord>[
+          for (var i = 0; i < rows.length; i++)
+            PartRecord(
+              slot,
+              MaterialRecord(
+                i,
+                baseName(rows[i].mesh),
+                baseName(rows[i].texture),
+                0,
+              ),
+              rows[i].mesh,
+              rows[i].texture,
+              '@spk-strong-name-pair',
+              association:
+                  'Pareja 3DC/DDS por nombre exacto sobre rutas SPK fuertes',
+            ),
+        ];
+      }
+
+      archetypes.add(
+        Archetype(
+          code,
+          race,
+          root,
+          parts,
+          paths
+              .where(
+                (path) =>
+                    path.startsWith('$root/ani/${code.toLowerCase()}_') &&
+                    path.endsWith('.ani'),
+              )
+              .toList(),
+        ),
+      );
+      inferred++;
+      progress('Reconstruyendo arquetipos SPK: $inferred');
+    }
+
+    if (inferred > 0) {
+      warnings.add(
+        'DATA.SPK: $inferred arquetipos reconstruidos sin tablas MLT, usando únicamente parejas 3DC/DDS de ruta fuerte con nombre base idéntico. Las rutas aproximadas permanecen excluidas.',
+      );
+    }
+  }
+
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
     for (final p in paths.where(
@@ -293,6 +448,8 @@ class Catalog {
       }
       progress('Leyendo arquetipos: ${archetypes.length}');
     }
+    await _loadSpkFallbackArchetypes(paths, progress);
+
     final weaponIds = <String>{};
     for (final p in paths.where(
       (p) =>
@@ -366,7 +523,7 @@ class Catalog {
     warnings.addAll(names.warnings);
     if (archetypes.isEmpty) {
       throw const FormatException(
-        'No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.',
+        'No se encontraron arquetipos utilizables mediante MLT ni mediante reconstrucción SPK de rutas fuertes. Revisa el diagnóstico.',
       );
     }
   }

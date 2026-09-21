@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../core/archive_index.dart';
 import 'archive_source.dart';
+import 'spk_source.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
@@ -67,15 +68,20 @@ class Library {
   final String location;
   final bool saf;
   final ArchiveSource? archive;
+  final SpkArchiveSource? spkArchive;
   static Map<String, Object?>? lastArchiveReport;
   Map<String, Object?> get sourceDiagnostics =>
+      spkArchive?.diagnostics() ??
       archive?.diagnostics() ??
       {
         'sourceMode': saf ? 'carpeta Android' : 'carpeta local',
         'files': files.length,
       };
-  String get sourceLabel =>
-      archive == null ? 'Carpeta DATA' : 'Par SAH + SAF · lectura por rangos';
+  String get sourceLabel => spkArchive != null
+      ? 'DATA.SPK · payloads autenticados'
+      : archive == null
+      ? 'Carpeta DATA'
+      : 'Par SAH + SAF · lectura por rangos';
   void dispose() {
     archive?.close();
   }
@@ -83,7 +89,13 @@ class Library {
   final Map<String, String> files;
   int revision = 0;
   final Map<String, List<String>> _names = {};
-  Library(this.location, this.saf, this.files, {this.archive}) {
+  Library(
+    this.location,
+    this.saf,
+    this.files, {
+    this.archive,
+    this.spkArchive,
+  }) {
     for (final p in files.keys) {
       _names.putIfAbsent(baseName(p), () => []).add(p);
     }
@@ -244,6 +256,70 @@ class Library {
     }
   }
 
+  static Library fromSpkSource(
+    SpkArchiveSource source, {
+    bool includeApproximateHints = false,
+  }) {
+    if (!source.canExtractAll) {
+      throw const FormatException(
+        'DATA.SPK todavía no tiene lectura completa validada. Ejecuta AutoPerfil SPK y valida simples + fragmentados antes de usarlo como biblioteca.',
+      );
+    }
+
+    final mapped = <String, String>{};
+    var confirmed = 0;
+    var strongInferred = 0;
+    var approximateInferred = 0;
+    for (final record in source.index.resources) {
+      String? path = source.names.confirmedPath(record.entryId);
+      if (path != null) {
+        confirmed++;
+      } else {
+        final hint = source.names.hints[record.entryId];
+        if (hint == null) continue;
+        if (hint.confidence == 'strong-inferred') {
+          path = hint.path;
+          strongInferred++;
+        } else if (includeApproximateHints) {
+          path = hint.path;
+          approximateInferred++;
+        }
+      }
+      if (path == null || !supportedPath(path)) continue;
+      final key = canon(path);
+      final previous = mapped[key];
+      if (previous != null && previous != record.ordinal.toString()) {
+        throw FormatException(
+          'Dos recursos SPK intentan usar la misma ruta: $path',
+        );
+      }
+      mapped[key] = record.ordinal.toString();
+    }
+
+    if (mapped.isEmpty) {
+      throw const FormatException(
+        'El SPK está validado criptográficamente, pero todavía no tiene rutas utilizables para montar la biblioteca.',
+      );
+    }
+
+    final library = _normalise(
+      source.file.path,
+      false,
+      mapped,
+      spkArchive: source,
+    );
+    lastArchiveReport = {
+      ...source.diagnostics(),
+      'mountedAsLibrary': true,
+      'mappedResources': library.files.length,
+      'confirmedRoutes': confirmed,
+      'strongInferredRoutes': strongInferred,
+      'approximateInferredRoutes': approximateInferred,
+      'approximateHintsIncluded': includeApproximateHints,
+    };
+    return library;
+  }
+
   static Future<Library> fromDirectory(
     String dir,
     void Function(String) progress,
@@ -287,6 +363,7 @@ class Library {
     bool saf,
     Map<String, String> source, {
     ArchiveSource? archive,
+    SpkArchiveSource? spkArchive,
   }) {
     final map = <String, String>{};
     for (final entry in source.entries) {
@@ -314,9 +391,21 @@ class Library {
           trimmed[e.key.substring(prefix.length)] = e.value;
         }
       }
-      return Library(location, saf, trimmed, archive: archive);
+      return Library(
+        location,
+        saf,
+        trimmed,
+        archive: archive,
+        spkArchive: spkArchive,
+      );
     }
-    return Library(location, saf, map, archive: archive);
+    return Library(
+      location,
+      saf,
+      map,
+      archive: archive,
+      spkArchive: spkArchive,
+    );
   }
 
   String? resolve(
@@ -353,9 +442,25 @@ class Library {
     return null;
   }
 
-  Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
+  Future<Uint8List> read(
+    String path, {
+    int limit = 64 * 1024 * 1024,
+  }) async {
     final id = files[canon(path)];
     if (id == null) throw FormatException('Recurso ausente: $path');
+    if (spkArchive != null) {
+      final ordinal = int.tryParse(id);
+      if (ordinal == null ||
+          ordinal < 0 ||
+          ordinal >= spkArchive!.index.records.length) {
+        throw FormatException('Referencia SPK inválida para $path');
+      }
+      final record = spkArchive!.index.records[ordinal];
+      if (!record.resource) {
+        throw FormatException('La ruta SPK no apunta a un recurso: $path');
+      }
+      return (await spkArchive!.readEntry(record, limit: limit)).bytes;
+    }
     if (archive != null) return archive!.read(id, limit: limit);
     if (saf) {
       final b = await channel.invokeMethod<Uint8List>('read', {

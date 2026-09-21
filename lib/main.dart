@@ -260,7 +260,20 @@ class _StudioState extends State<StudioPage> {
   Future<void> openSpkArchive() async {
     scene.clearMovement();
     focus.unfocus();
-    await SpkArchiveBrowserPage.pickAndOpen(context);
+    final source = await SpkArchiveBrowserPage.pickAndOpen(context);
+    if (source != null && mounted) {
+      try {
+        final library = Library.fromSpkSource(source);
+        await connect(prepared: library);
+      } catch (error) {
+        Library.lastArchiveReport = {
+          ...source.diagnostics(),
+          'mountError': error.toString(),
+          'stage': 'spk-library-adapter',
+        };
+        showError(error);
+      }
+    }
     if (mounted) focus.requestFocus();
   }
 
@@ -297,7 +310,7 @@ class _StudioState extends State<StudioPage> {
                 leading: const Icon(Icons.folder_zip_outlined),
                 title: const Text('Archivo DATA.SPK'),
                 subtitle: const Text(
-                  'Explorar carpetas, archivos, buscar y extraer recursos',
+                  'Explorar, validar, extraer y usar como biblioteca cuando el payload esté autenticado',
                 ),
                 onTap: () => Navigator.pop(ctx, 'spk'),
               ),
@@ -427,14 +440,14 @@ class _StudioState extends State<StudioPage> {
         Library.lastArchiveReport ?? catalog?.library.sourceDiagnostics;
     if (report == null) {
       throw const FormatException(
-        'Todavía no se ha intentado abrir un archivo SAH/SAF.',
+        'Todavía no se ha intentado abrir una fuente de archivo DATA.',
       );
     }
     await saveFile(
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.6.9',
+        'version': '0.6.12',
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -443,7 +456,11 @@ class _StudioState extends State<StudioPage> {
     );
   }
 
-  Future<void> connect({String? path, bool archive = false}) async {
+  Future<void> connect({
+    String? path,
+    bool archive = false,
+    Library? prepared,
+  }) async {
     if (importing || working) return;
     scene.clearMovement();
     setState(() => importing = true);
@@ -454,11 +471,13 @@ class _StudioState extends State<StudioPage> {
         if (mounted) setState(() => progress = s);
       }
 
-      final lib = path == null
-          ? (archive
-                ? await Library.chooseArchive(report)
-                : await Library.choose(report))
-          : await Library.fromDirectory(path, report);
+      final lib =
+          prepared ??
+          (path == null
+              ? (archive
+                    ? await Library.chooseArchive(report)
+                    : await Library.choose(report))
+              : await Library.fromDirectory(path, report));
       if (lib == null) return;
       candidate = lib;
       await loadBundledExtras();
@@ -485,7 +504,7 @@ class _StudioState extends State<StudioPage> {
     } catch (e) {
       if (catalog != scene.catalog) scene.catalog = old;
       if (candidate != null && candidate != catalog?.library) {
-        if (archive) {
+        if (archive || prepared != null) {
           Library.lastArchiveReport = {
             ...candidate.sourceDiagnostics,
             'mountError': e.toString(),
