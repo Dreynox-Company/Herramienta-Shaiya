@@ -465,14 +465,14 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   void _applyCreationCamera(){
-    // CharacterMake is rendered inside Login.wld -> DUN_LOGIN.dg.
-    // Keep the avatar front-facing and offset it away from the left UI panel.
-    scene.panX=-.72;
+    // Native CharacterMake centers the avatar on the DUN_LOGIN circular dais.
+    // The reference framebuffer gives ~560 px character height at 742 px.
+    scene.panX=0;
     scene.panZ=0;
     scene.yaw=0;
     scene.pitch=.025;
-    scene.distance=3.85;
-    scene.targetY=1.18;
+    scene.distance=2.90;
+    scene.targetY=1.06;
     if(scene.character!=null){scene.character!.root.rotation.y=0;}
     scene.updateCamera();
   }
@@ -637,10 +637,13 @@ class _GameClientPageState extends State<GameClientPage> {
       catch(e){messages.insert(0,'[Mapa] '+e.toString());}
     }
 
-    scene.yaw=math.pi;
+    // Native map-1 proof faces toward increasing world Z.
+    // Three uses local Z = -(worldZ-originZ), so yaw 0 matches that sector.
+    scene.yaw=0;
     scene.pitch=.12;
     scene.distance=5.9;
     scene.targetY=1.18;
+    if(scene.character!=null){scene.character!.root.rotation.y=math.pi;}
     scene.updateCamera();
 
     if(map!=null){
