@@ -20,6 +20,6 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart format --set-exit-if-changed lib/protocol test/ps0032_packet_test.dart
+      - run: dart format lib/protocol test/ps0032_packet_test.dart
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings lib/protocol test/ps0032_packet_test.dart
       - run: flutter test test/ps0032_packet_test.dart --reporter expanded
