@@ -8,19 +8,29 @@ import 'package:flutter/material.dart';
 import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
 
+String _spkParentPath(String value, String separator) {
+  final normalized = value.replaceAll('\\', separator).replaceAll('/', separator);
+  final index = normalized.lastIndexOf(separator);
+  if (index < 0) return '.';
+  if (index == 0) return separator;
+  return normalized.substring(0, index);
+}
+
 List<String> spkProfileCandidatePaths(
   String spkPath, {
   String? executablePath,
   String? separatorOverride,
 }) {
-  final spk = File(spkPath);
   final separator = separatorOverride ?? Platform.pathSeparator;
-  final exe = File(executablePath ?? Platform.resolvedExecutable);
-  final exeDir = exe.parent.path;
+  final spkDir = _spkParentPath(spkPath, separator);
+  final exeDir = _spkParentPath(
+    executablePath ?? Platform.resolvedExecutable,
+    separator,
+  );
   return <String>[
     '$spkPath.profile.json',
-    '${spk.parent.path}${separator}data.spk.profile.json',
-    '${spk.parent.path}${separator}spk-crypto-profile.json',
+    '$spkDir${separator}data.spk.profile.json',
+    '$spkDir${separator}spk-crypto-profile.json',
     '$exeDir${separator}profiles${separator}data.spk.profile.json',
     '$exeDir${separator}profiles${separator}spk-crypto-profile.json',
     '$exeDir${separator}data.spk.profile.json',
