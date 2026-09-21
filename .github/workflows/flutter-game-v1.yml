@@ -113,7 +113,7 @@ jobs:
             $g.Dispose();$im.Dispose()
           }
           $results=@()
-          foreach($stage in @('faction','characterSelect','characterCreate','world')){
+          foreach($stage in @('faction','characterSelect','characterCreate','characterMode','world')){
             $marker=(Join-Path (Resolve-Path qa-game) ($stage+'-ready.json'))
             if(Test-Path $marker){Remove-Item $marker -Force}
             $env:SHAIYA_QA_READY_FILE=$marker
@@ -301,6 +301,7 @@ jobs:
             'faction':'03-faction-selected.png',
             'characterSelect':'07-character-created.png',
             'characterCreate':'05-character-editor.png',
+            'characterMode':'06c-mode-selected.png',
             'world':'09-world-entry.png',
           }
           def load(p):
