@@ -2,7 +2,7 @@ name: Native game - localhost backend build
 on:
   push:
     branches: [work/native-game-tools-20260920]
-    paths: [.github/workflows/native-backend.yml]
+    paths: [.github/workflows/native-backend.yml, runtime/fix_native_login.py]
 permissions:
   contents: read
 jobs:
@@ -14,6 +14,10 @@ jobs:
         with:
           ref: 63afe4c3a2b97be1dd0f415930b7fa6bd59e82e9
           path: scaffold
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: hotfix
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
@@ -32,6 +36,8 @@ jobs:
           git -C upstream/submodules/Imgeneus.Authentication checkout 77b3a65e9a0ba60f83e1aa452e9f0b997ea27a70
           python3 scaffold/runtime/prepare_offline.py upstream
           python3 scaffold/runtime/bootstrap_offline.py upstream
+          python3 hotfix/runtime/fix_native_login.py upstream
+          cp upstream/NATIVE_LOGIN_COMPAT_MANIFEST.json out/proof/
           git -C upstream submodule status --recursive > out/proof/submodules.txt
       - name: Build, boot and publish localhost services
         shell: bash
@@ -56,7 +62,7 @@ jobs:
           mkdir -p workspace
           tar -I 'zstd -T0 -3' -cf workspace/dotnet-sdk.tar.zst -C "$DOTNET_ROOT" .
           tar -I 'zstd -T0 -3' -cf workspace/nuget-cache.tar.zst -C "$HOME/.nuget" packages
-          tar --exclude=.git -I 'zstd -T0 -3' -cf workspace/backend-workspace.tar.zst upstream scaffold/runtime
+          tar --exclude=.git -I 'zstd -T0 -3' -cf workspace/backend-workspace.tar.zst upstream scaffold/runtime hotfix/runtime
           ls -lh out/*.tar.zst workspace/*.tar.zst
       - uses: actions/upload-artifact@v4
         if: always()
