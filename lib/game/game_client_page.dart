@@ -39,6 +39,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsWorldSession? liveWorld;
   PsWorldSnapshot? liveSnapshot;
   PsCharacterDetails? liveDetails;
+  PsCharacterHitpoints? liveHitpoints;
   List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
   PsCharacterSlot? liveCharacter;
   final focus=FocusNode();
@@ -479,6 +480,7 @@ class _GameClientPageState extends State<GameClientPage> {
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
         liveDetails=selected.details;
+        liveHitpoints=selected.hitpoints;
         mapId=current.mapId;
         x=networkSnapshot.self?.x??selected.details.x;
         z=networkSnapshot.self?.z??selected.details.z;
@@ -808,9 +810,12 @@ class _GameClientPageState extends State<GameClientPage> {
             messages:messages,
             questOpen:questOpen,
             questId:questId,
-            hp:liveDetails?.maxHp??255,
-            mp:liveDetails?.maxMp??95,
-            sp:liveDetails?.maxSp??180,
+            hp:liveHitpoints?.hp??liveDetails?.maxHp??255,
+            mp:liveHitpoints?.mp??liveDetails?.maxMp??95,
+            sp:liveHitpoints?.sp??liveDetails?.maxSp??180,
+            maxHp:liveDetails?.maxHp??255,
+            maxMp:liveDetails?.maxMp??95,
+            maxSp:liveDetails?.maxSp??180,
             onAcceptQuest:(){
               setState(()=>questOpen=false);
               final q=catalog!.questText(uiLocale)?.quest(questId);
