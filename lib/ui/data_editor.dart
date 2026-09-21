@@ -784,17 +784,13 @@ class _DataEditorPageState extends State<DataEditorPage> {
       fresh[d.path] = check;
     }
     if (library.isSpkWorkspace) {
-      progress = 'Verificando y escribiendo overlay SPK…';
+      status = 'Verificando y escribiendo overlay SPK…';
       if (mounted) setState(() {});
-      try {
-        await library.writeSpkOverlay(
-          output,
-          expectedHashes: {for (final d in changed) d.path: d.sha},
-          keepBackup: keepBackup,
-        );
-      } finally {
-        progress = null;
-      }
+      await library.writeSpkOverlay(
+        output,
+        expectedHashes: {for (final d in changed) d.path: d.sha},
+        keepBackup: keepBackup,
+      );
       for (final d in changed) {
         _cache[d.path] = fresh[d.path]!;
       }
