@@ -7,8 +7,16 @@ class CharacterCreateScreen extends StatelessWidget {
   final TextEditingController nameController;
   final int classIndex;
   final int genderIndex;
+  final int tabIndex;
+  final int faceIndex;
+  final int hairIndex;
+  final int modeIndex;
   final ValueChanged<int> onClass;
   final ValueChanged<int> onGender;
+  final ValueChanged<int> onTab;
+  final ValueChanged<int> onFace;
+  final ValueChanged<int> onHair;
+  final ValueChanged<int> onMode;
   final VoidCallback onBack;
   final VoidCallback onCreate;
   final VoidCallback onZoomIn;
@@ -22,8 +30,16 @@ class CharacterCreateScreen extends StatelessWidget {
     required this.nameController,
     required this.classIndex,
     required this.genderIndex,
+    required this.tabIndex,
+    required this.faceIndex,
+    required this.hairIndex,
+    required this.modeIndex,
     required this.onClass,
     required this.onGender,
+    required this.onTab,
+    required this.onFace,
+    required this.onHair,
+    required this.onMode,
     required this.onBack,
     required this.onCreate,
     required this.onZoomIn,
@@ -131,8 +147,164 @@ class CharacterCreateScreen extends StatelessWidget {
     ]),
   );
 
+
+  String get appearanceCode=>genderIndex==0?'hum':'huf';
+
+  Widget tabButton(int index,String text)=>GestureDetector(
+    onTap:()=>onTab(index),
+    child:Container(
+      width:index==0?91:95,
+      height:31,
+      alignment:Alignment.center,
+      decoration:BoxDecoration(
+        gradient:LinearGradient(colors:tabIndex==index
+          ?const [Color(0xff574630),Color(0xff221c15)]
+          :const [Color(0xff302b24),Color(0xff161411)]),
+        border:Border.all(color:tabIndex==index?const Color(0xffaf8b4d):const Color(0xff595149)),
+      ),
+      child:Text(text,style:TextStyle(fontSize:10,color:tabIndex==index?const Color(0xffffecad):Colors.white70)),
+    ),
+  );
+
+  Widget baseInfoContent()=>Padding(
+    padding:const EdgeInsets.fromLTRB(20,14,18,14),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      const Text('Name',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
+      const SizedBox(height:4),
+      Row(children:[
+        Expanded(child:SizedBox(height:28,child:TextField(
+          controller:nameController,
+          style:const TextStyle(fontSize:11),
+          decoration:InputDecoration(
+            filled:true,fillColor:const Color(0xdd101010),
+            contentPadding:const EdgeInsets.symmetric(horizontal:9,vertical:6),
+            border:OutlineInputBorder(borderRadius:BorderRadius.circular(2)),
+          ),
+        ))),
+        const SizedBox(width:8),
+        shaiyaRedButton('Name Check',(){},width:88,height:29,fontSize:9),
+      ]),
+      const SizedBox(height:13),
+      const Text('Class',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
+      const SizedBox(height:6),
+      Wrap(spacing:4,runSpacing:4,children:[
+        classButton(0,'Fighter','interface/charactermake/button/fighter_worrior.tga'),
+        classButton(1,'Defender','interface/charactermake/button/defender_guardian.tga'),
+        classButton(2,'Priest','interface/charactermake/button/priest_oracle.tga'),
+        classButton(3,'Ranger','interface/charactermake/button/ranger_assassin.tga'),
+        classButton(4,'Archer','interface/charactermake/button/archer_hunter.tga'),
+        classButton(5,'Mage','interface/charactermake/button/mage_pagan.tga'),
+      ]),
+      const SizedBox(height:8),
+      const Text('Gender',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
+      const SizedBox(height:5),
+      Row(children:[
+        genderButton(0,'interface/charactermake/button/sexm.tga','Male'),
+        const SizedBox(width:7),
+        genderButton(1,'interface/charactermake/button/sexw.tga','Female'),
+      ]),
+    ]),
+  );
+
+  Widget appearanceChoice(String title,bool face)=>Column(
+    crossAxisAlignment:CrossAxisAlignment.start,
+    children:[
+      Text(title,style:const TextStyle(color:Color(0xffffdc50),fontSize:10)),
+      const SizedBox(height:8),
+      Row(
+        mainAxisAlignment:MainAxisAlignment.spaceBetween,
+        children:List.generate(5,(i){
+          final selected=(face?faceIndex:hairIndex)==i;
+          final path='interface/charactermake/appearance/create_appearance_${appearanceCode}_${face?'face':'hair'}0${i+1}.tga';
+          return GestureDetector(
+            onTap:()=>face?onFace(i):onHair(i),
+            child:Container(
+              width:52,height:52,padding:const EdgeInsets.all(2),
+              decoration:BoxDecoration(
+                color:const Color(0xaa121212),
+                border:Border.all(color:selected?const Color(0xffffdd55):const Color(0xff5f5549),width:selected?2:1),
+              ),
+              child:image(path,fit:BoxFit.cover),
+            ),
+          );
+        }),
+      ),
+    ],
+  );
+
+  Widget appearanceContent()=>Padding(
+    padding:const EdgeInsets.fromLTRB(18,18,18,14),
+    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      appearanceChoice('Face',true),
+      const SizedBox(height:26),
+      appearanceChoice('Hair',false),
+      const Spacer(),
+      const Text(
+        'Face and hair are applied to the actual MLT pieces of the active 3D archetype.',
+        style:TextStyle(fontSize:9,color:Colors.white60,height:1.4),
+      ),
+    ]),
+  );
+
+  Widget modeCard(int index,String path)=>GestureDetector(
+    onTap:()=>onMode(index),
+    child:DataRegion(
+      cache:ui,
+      path:path,
+      sheetWidth:512,
+      sheetHeight:512,
+      source:Rect.fromLTWH(0,(modeIndex==index?3:0)*128,318,128),
+      width:308,
+      height:127,
+    ),
+  );
+
+  Widget modeContent()=>Padding(
+    padding:const EdgeInsets.fromLTRB(11,31,11,8),
+    child:Column(children:[
+      modeCard(0,'interface/charactermake/button/mode_basic.tga'),
+      const SizedBox(height:14),
+      modeCard(1,'interface/charactermake/button/mode_ultimate.tga'),
+      const Spacer(),
+    ]),
+  );
+
+  Widget leftPanel()=>Positioned(
+    left:8,top:293,width:330,height:473,
+    child:Stack(children:[
+      Positioned.fill(child:DataRegion(
+        cache:ui,
+        path:tabIndex==0
+          ?'interface/charactermake/basicinfo_bg.tga'
+          :tabIndex==1
+            ?'interface/charactermake/appearance_bg.tga'
+            :'interface/charactermake/mode_bg.tga',
+        sheetWidth:512,sheetHeight:512,
+        source:const Rect.fromLTWH(0,0,334,466),
+        width:330,height:473,
+      )),
+      Positioned(left:28,top:0,child:Row(children:[
+        tabButton(0,'Basic Info'),
+        tabButton(1,'Appearance'),
+        tabButton(2,'Mode'),
+      ])),
+      Positioned(left:0,top:31,right:0,bottom:54,child:switch(tabIndex){
+        1=>appearanceContent(),
+        2=>modeContent(),
+        _=>baseInfoContent(),
+      }),
+      Positioned(
+        left:20,right:18,bottom:13,
+        child:Row(children:[
+          shaiyaRedButton('Back',onBack,width:112,height:36,fontSize:10),
+          const Spacer(),
+          shaiyaRedButton('Create',onCreate,width:112,height:36,fontSize:10),
+        ]),
+      ),
+    ]),
+  );
+
   @override Widget build(BuildContext context)=>Stack(children:[
-    // Explicación: la escena 3D select_A.wld queda visible detrás, como en ps0032.
     Positioned(
       left:8,top:48,width:330,height:210,
       child:Container(
@@ -141,91 +313,19 @@ class CharacterCreateScreen extends StatelessWidget {
           color:const Color(0x99140f0b),
           border:Border.all(color:const Color(0xff756759)),
         ),
-        child:const SingleChildScrollView(
+        child:SingleChildScrollView(
           child:Text(
-            'El Guerrero es el combatiente cuerpo a cuerpo estándar. De cerca y en combate personal es como mejor rinde.\n\nEl poder de ataque físico es su especialidad; sus habilidades consumen SP.\n\nCaracterísticas:\n· Gran variedad de armas\n· Potentes ataques físicos',
-            style:TextStyle(fontSize:11,color:Colors.white,height:1.55),
+            tabIndex==2
+              ?(modeIndex==0
+                ?'It requires low level of Experience and will allow you to level up fast.\n\nAlso, character will not be deleted on death, so you may play safer.'
+                :'Ultimate mode grants more Status and Skill Points, but is intended for experienced players and a more demanding adventure.')
+              :'The Fighter is your standard melee combatant. Up close and personal is how the Fighter prefers confrontation.\n\nPhysical attack power is the focus of the Fighter, but don\'t be fooled. A certain amount of Magical Points (MP) is needed to power the Fighter\'s devastating Special Skills.\n\nCharacteristics:\n· Wide range of available weapons\n· Powerful physical attacks',
+            style:const TextStyle(fontSize:11,color:Colors.white,height:1.55),
           ),
         ),
       ),
     ),
-
-    // Panel izquierdo original, recortado de la hoja 512x512.
-    Positioned(
-      left:8,top:293,width:330,height:473,
-      child:Stack(children:[
-        Positioned.fill(
-          child:DataRegion(
-            cache:ui,
-            path:'interface/charactermake/basicinfo_bg.tga',
-            sheetWidth:512,
-            sheetHeight:512,
-            source:const Rect.fromLTWH(0,0,334,466),
-            width:330,
-            height:473,
-          ),
-        ),
-        Positioned(
-          left:20,top:16,right:18,bottom:14,
-          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            const Row(children:[
-              Text('Información básica',style:TextStyle(fontSize:11,color:Colors.white)),
-              Spacer(),
-              Text('Apariencia',style:TextStyle(fontSize:11,color:Colors.white70)),
-              Spacer(),
-              Text('Modo',style:TextStyle(fontSize:11,color:Colors.white70)),
-            ]),
-            const SizedBox(height:18),
-            const Text('Nombre',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
-            const SizedBox(height:4),
-            Row(children:[
-              Expanded(
-                child:SizedBox(
-                  height:28,
-                  child:TextField(
-                    controller:nameController,
-                    style:const TextStyle(fontSize:11),
-                    decoration:InputDecoration(
-                      filled:true,
-                      fillColor:const Color(0xdd101010),
-                      contentPadding:const EdgeInsets.symmetric(horizontal:9,vertical:6),
-                      border:OutlineInputBorder(borderRadius:BorderRadius.circular(2)),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width:8),
-              shaiyaRedButton('Comprobar',(){},width:88,height:29,fontSize:9),
-            ]),
-            const SizedBox(height:13),
-            const Text('Clase',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
-            const SizedBox(height:6),
-            Wrap(spacing:4,runSpacing:4,children:[
-              classButton(0,'Guerrero','interface/charactermake/button/fighter_worrior.tga'),
-              classButton(1,'Defensor','interface/charactermake/button/defender_guardian.tga'),
-              classButton(2,'Sacerdote','interface/charactermake/button/priest_oracle.tga'),
-              classButton(3,'Ranger','interface/charactermake/button/ranger_assassin.tga'),
-              classButton(4,'Arquero','interface/charactermake/button/archer_hunter.tga'),
-              classButton(5,'Mago','interface/charactermake/button/mage_pagan.tga'),
-            ]),
-            const SizedBox(height:8),
-            const Text('Género',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
-            const SizedBox(height:5),
-            Row(children:[
-              genderButton(0,'interface/charactermake/button/sexm.tga','Masculino'),
-              const SizedBox(width:7),
-              genderButton(1,'interface/charactermake/button/sexw.tga','Femenino'),
-            ]),
-            const Spacer(),
-            Row(children:[
-              shaiyaRedButton('Atrás',onBack,width:112,height:36,fontSize:10),
-              const Spacer(),
-              shaiyaRedButton('Crear',onCreate,width:112,height:36,fontSize:10),
-            ]),
-          ]),
-        ),
-      ]),
-    ),
+    leftPanel(),
 
     // Panel de armas y perfil de clase con las texturas originales.
     Positioned(
