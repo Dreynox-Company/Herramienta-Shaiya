@@ -1,0 +1,214 @@
+pty) {
+        next = await Library.fromDirectory(requested, _log);
+      } else {
+        next = await Library.choose(_log);
+      }
+      if (next == null) {
+        setState(() {
+          loading = false;
+          progress = 'Selecciona DATA para jugar.';
+        });
+        return;
+      }
+      final nextCatalog = Catalog(next);
+      await nextCatalog.load(_log);
+      NpcQuestDatabase? npc;
+      try {
+        npc = await NpcQuestDatabase.load(next);
+      } catch (e) {
+        stderr.writeln('NpcQuest: $e');
+      }
+      if (!mounted) {
+        next.dispose();
+        return;
+      }
+      library?.dispose();
+      library = next;
+      catalog = nextCatalog;
+      npcDatabase = npc;
+      scene.catalog = nextCatalog;
+      await _loadCharacter();
+      setState(() {
+        loading = false;
+        screen = widget.quickWorld ? ClientScreen.world : ClientScreen.server;
+        progress = '${nextCatalog.archetypes.length} personajes · '
+            '${nextCatalog.npcs.length} NPC visuales · '
+            '${nextCatalog.worlds.length} mapas · DATA listo';
+      });
+      if (widget.quickWorld && rendererReady) await _enterWorld();
+    } catch (e, st) {
+      setState(() {
+        loading = false;
+        error = '$e';
+        progress = 'No se pudo abrir DATA.';
+      });
+      stderr.writeln('$e\n$st');
+    }
+  }
+
+  Future<void> _chooseDataAgain() async {
+    setState(() => loading = true);
+    try {
+      final next = await Library.choose(_log);
+      if (next == null) return;
+      final nextCatalog = Catalog(next);
+      await nextCatalog.load(_log);
+      NpcQuestDatabase? npc;
+      try {
+        npc = await NpcQuestDatabase.load(next);
+      } catch (_) {}
+      library?.dispose();
+      library = next;
+      catalog = nextCatalog;
+      npcDatabase = npc;
+      scene.catalog = nextCatalog;
+      setState(() {
+        screen = ClientScreen.server;
+        error = null;
+      });
+    } catch (e) {
+      setState(() => error = '$e');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _selectFaction(bool light) async {
+    lightFaction = light;
+    await _loadCharacter();
+    if (!light && !character.archetype.startsWith('de') && !character.archetype.startsWith('vi')) {
+      character.archetype = 'demf';
+    }
+    if (light && !character.archetype.startsWith('hu') && !character.archetype.startsWith('el')) {
+      character.archetype = 'humf';
+    }
+    setState(() => screen = ClientScreen.characters);
+    if (rendererReady) await _prepareCharacterSelection();
+  }
+
+  Archetype _selectedArchetype() {
+    final rows = catalog!.archetypes;
+    return rows.firstWhere(
+      (a) => a.id.toLowerCase() == character.archetype.toLowerCase(),
+      orElse: () => rows.firstWhere(
+        (a) => lightFaction ? a.id.toLowerCase() == 'humf' : a.id.toLowerCase() == 'demf',
+        orElse: () => rows.first,
+      ),
+    );
+  }
+
+  Future<void> _prepareCharacterSelection() async {
+    if (!rendererReady || catalog == null || loading) return;
+    setState(() => loading = true);
+    try {
+      _clearNpcVisuals();
+      final c = catalog!;
+      final wanted = lightFaction ? 'select_a.wld' : 'select_b.wld';
+      final selectWorld = c.worlds.where((p) => baseName(p).toLowerCase() == wanted).firstOrNull;
+      if (selectWorld != null) {
+        await scene.setWorld(selectWorld);
+      } else {
+        await scene.setWorld(null);
+      }
+      await scene.setAppearance(Appearance.initial(_selectedArchetype()));
+      scene.distance = 5.4;
+      scene.pitch = .06;
+      scene.yaw = .05;
+      scene.targetY = 1.1;
+      scene.panX = -1.0;
+      scene.updateCamera();
+      focus.requestFocus();
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _createCharacter() async {
+    final controller = TextEditingController(text: character.name);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xff160b0b),
+        title: const Text('Crear personaje'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 18,
+          decoration: const InputDecoration(labelText: 'Nombre'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty) return;
+    character = LocalCharacter(name: value, archetype: lightFaction ? 'humf' : 'demf');
+    await _saveCharacter();
+    if (mounted) setState(() {});
+    await _prepareCharacterSelection();
+  }
+
+  Future<void> _deleteCharacter() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar personaje'),
+        content: Text('¿Eliminar ${character.name} del guardado local?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final file = await _saveFile();
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    character = LocalCharacter(archetype: lightFaction ? 'humf' : 'demf');
+    if (mounted) setState(() {});
+    await _prepareCharacterSelection();
+  }
+
+  Future<void> _enterWorld() async {
+    if (!rendererReady || catalog == null || loading) return;
+    setState(() {
+      loading = true;
+      screen = ClientScreen.world;
+      activeQuest = null;
+      activeQuestNpc = null;
+      progress = 'Cargando Erina, NPC, misiones y DATA…';
+    });
+    try {
+      _clearNpcVisuals();
+      final c = catalog!;
+      final world = c.worlds.where((p) => baseName(p).toLowerCase() == '${character.map}.wld').firstOrNull;
+      if (world == null) throw StateError('No se encontró World/${character.map}.wld');
+      await scene.setAppearance(Appearance.initial(_selectedArchetype()));
+      await scene.setWorld(world, x: character.x, z: character.z);
+      scene.distance = 5.4;
+      scene.pitch = .20;
+      scene.yaw = .18;
+      scene.targetY = 1.15;
+      scene.panX = 0;
+      scene.updateCamera();
+      await _spawnWorldNpcs(world);
+      _pickInitialQuest();
+      focus.requestFocus();
+      await _saveCharacter();
+    } catch (e) {
+      error = '$e';
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  void _clearNpcVisuals() {
+    for (final n in _npcVisuals) {
+      n.dispose();
+    }
+    _npcVisuals.clear()
