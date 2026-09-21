@@ -185,7 +185,7 @@ class _GameClientPageState extends State<GameClientPage> {
     stage=widget.initialStage??GameStage.faction;
     if(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode){
       if(stage==GameStage.characterMode){createTab=2;stage=GameStage.characterMode;}
-      await _prepareSelectionWorld();
+      await _prepareSelectionWorld(creation:stage!=GameStage.characterSelect);
       characterCreated=stage==GameStage.characterSelect;
     }else if(stage==GameStage.world){
       characterCreated=true;
@@ -302,27 +302,36 @@ class _GameClientPageState extends State<GameClientPage> {
     await scene.setAppearance(look);
   }
 
-  Future<void> _prepareSelectionWorld() async {
+  Future<void> _prepareSelectionWorld({required bool creation}) async {
     final c=catalog!;
+    if(!creation){
+      await scene.setWorld(null);
+      await scene.setSky(null);
+      await scene.setBackdrop('interface/characterselect/selectbg.tga');
+      scene.yaw=0;
+      scene.pitch=.01;
+      scene.distance=3.55;
+      scene.targetY=1.16;
+      scene.updateCamera();
+      return;
+    }
+
+    await scene.setBackdrop(null);
     final wanted=faction=='light'?'world/select_a.wld':'world/select_b.wld';
     final path=c.library.files.containsKey(wanted)
       ?wanted
-      :c.worlds.where((p)=>baseName(p).toLowerCase()=='select_a.wld').firstOrNull;
+      :c.worlds.where((p)=>baseName(p).toLowerCase()==(faction=='light'?'select_a.wld':'select_b.wld')).firstOrNull;
     if(path!=null){
       try{
-        // Los objetos de select_A/select_B están concentrados alrededor de la plaza
-        // 235,164. El antiguo 512,512 mostraba solo terreno y filtraba edificios.
         await scene.setWorld(path,x:235.2,z:164.2);
-      }
-      catch(e){messages.insert(0,'[Selección] '+e.toString());}
+      }catch(e){messages.insert(0,'[Creación] '+e.toString());}
     }else{
       await scene.setWorld(null);
     }
-    // Character selection/creation uses the front-facing presentation camera.
     scene.yaw=0;
     scene.pitch=.02;
-    scene.distance=3.65;
-    scene.targetY=1.18;
+    scene.distance=3.15;
+    scene.targetY=1.12;
     scene.updateCamera();
   }
 
@@ -346,6 +355,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _enterWorld() async {
     if(mounted)setState(()=>loading=true);
+    await scene.setBackdrop(null);
     final c=catalog!;
     svmap??=await _loadSvmap();
     var world=c.worlds.where((p)=>baseName(p).toLowerCase()=='1.wld').firstOrNull;
@@ -415,7 +425,7 @@ class _GameClientPageState extends State<GameClientPage> {
   Future<void> _goCreate() async {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
-    await _prepareSelectionWorld();
+    await _prepareSelectionWorld(creation:true);
     scene.distance=3.15;
     scene.targetY=1.12;
     scene.updateCamera();
@@ -425,7 +435,7 @@ class _GameClientPageState extends State<GameClientPage> {
   Future<void> _finishCreate() async {
     if(nameController.text.trim().isEmpty)nameController.text='DreynoxLocal';
     characterCreated=true;
-    await _prepareSelectionWorld();
+    await _prepareSelectionWorld(creation:false);
     if(mounted)setState(()=>stage=GameStage.characterSelect);
   }
 
