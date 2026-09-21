@@ -468,9 +468,10 @@ class _GameClientPageState extends State<GameClientPage> {
     return Scaffold(
       backgroundColor:Colors.black,
       body:RepaintBoundary(key:captureKey,child:Stack(children:[
-        if(active&&stage!=GameStage.faction)
-          Positioned.fill(child:renderer.build())
-        else
+        // The renderer must be mounted from frame zero. Its onSetupComplete callback
+        // starts DATA loading; mounting it only after catalog creation deadlocks startup.
+        Positioned.fill(child:renderer.build()),
+        if(stage==GameStage.faction||!active)
           const Positioned.fill(child:ColoredBox(color:Colors.black)),
         if(active&&stage!=GameStage.faction)_viewport(),
         if(active)_designSurface(switch(stage){
