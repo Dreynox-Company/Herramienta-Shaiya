@@ -119,6 +119,7 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState(()=>progress=s);
     });
     scene=StudioScene((s){if(mounted)setState(()=>progress=s);});
+    scene.gridVisible=false;
     renderer=three.ThreeJS(
       settings:three.Settings(
         clearColor:0x000000,
@@ -316,6 +317,8 @@ class _GameClientPageState extends State<GameClientPage> {
       await scene.setWorld(null);
       await scene.setSky(null);
       await scene.setBackdrop('interface/characterselect/selectbg.tga');
+      scene.panX=-0.82;
+      scene.panZ=0;
       scene.yaw=0;
       scene.pitch=.01;
       scene.distance=3.55;
@@ -325,6 +328,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }
 
     await scene.setBackdrop(null);
+    scene.panX=0;scene.panZ=0;
     final wanted=faction=='light'?'world/select_a.wld':'world/select_b.wld';
     final path=c.library.files.containsKey(wanted)
       ?wanted
@@ -365,6 +369,7 @@ class _GameClientPageState extends State<GameClientPage> {
   Future<void> _enterWorld() async {
     if(mounted)setState(()=>loading=true);
     await scene.setBackdrop(null);
+    scene.panX=0;scene.panZ=0;
     final c=catalog!;
     // Tutorial quest shown by the native ps0032 client for a fresh level-1 character.
     questId=faction=='light'?3781:3792;
