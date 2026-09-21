@@ -19,6 +19,8 @@ class PsPacketType {
   static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
+  static const characterSkills=0x0108;
+  static const characterActiveBuffs=0x010A;
   static const characterSkillBar=0x010B;
   static const characterCurrentHitpoints=0x0521;
   static const accountFaction=0x0109;
@@ -400,6 +402,63 @@ class PsCharacterSlot {
   }
 }
 
+class PsLearnedSkill {
+  final int skillId,level,number,cooldownSeconds;
+  const PsLearnedSkill(this.skillId,this.level,this.number,this.cooldownSeconds);
+}
+class PsCharacterSkills {
+  final int skillPoints;
+  final List<PsLearnedSkill> skills;
+  const PsCharacterSkills(this.skillPoints,this.skills);
+  static PsCharacterSkills parse(PsPacket p){
+    if(p.type!=PsPacketType.characterSkills||p.body.length<3){
+      throw FormatException('CHARACTER_SKILLS truncado: '+p.body.length.toString());
+    }
+    final d=ByteData.sublistView(p.body),points=d.getUint16(0,Endian.little),count=p.body[2];
+    if(p.body.length<3+count*8)throw FormatException('CHARACTER_SKILLS payload truncado.');
+    final out=<PsLearnedSkill>[];var o=3;
+    for(var i=0;i<count;i++,o+=8){
+      out.add(PsLearnedSkill(
+        d.getUint16(o,Endian.little),p.body[o+2],p.body[o+3],d.getInt32(o+4,Endian.little),
+      ));
+    }
+    return PsCharacterSkills(points,List.unmodifiable(out));
+  }
+}
+
+class PsActiveBuff {
+  final int id,skillId,level,countdownSeconds;
+  const PsActiveBuff(this.id,this.skillId,this.level,this.countdownSeconds);
+}
+List<PsActiveBuff> parseActiveBuffs(PsPacket p){
+  if(p.type!=PsPacketType.characterActiveBuffs||p.body.isEmpty)return const [];
+  final count=p.body[0],d=ByteData.sublistView(p.body);
+  if(p.body.length<1+count*11)throw FormatException('CHARACTER_ACTIVE_BUFFS truncado.');
+  final out=<PsActiveBuff>[];var o=1;
+  for(var i=0;i<count;i++,o+=11){
+    out.add(PsActiveBuff(
+      d.getUint32(o,Endian.little),d.getUint16(o+4,Endian.little),p.body[o+6],d.getInt32(o+7,Endian.little),
+    ));
+  }
+  return List.unmodifiable(out);
+}
+
+class PsQuickBarItem {
+  final int bar,slot,bag,number,cooldown;
+  const PsQuickBarItem(this.bar,this.slot,this.bag,this.number,this.cooldown);
+}
+List<PsQuickBarItem> parseQuickBar(PsPacket p){
+  if(p.type!=PsPacketType.characterSkillBar||p.body.length<5)return const [];
+  final count=p.body[0],d=ByteData.sublistView(p.body);
+  if(p.body.length<5+count*9)throw FormatException('CHARACTER_SKILL_BAR truncado.');
+  final out=<PsQuickBarItem>[];var o=5;
+  for(var i=0;i<count;i++,o+=9){
+    out.add(PsQuickBarItem(
+      p.body[o],p.body[o+1],p.body[o+2],d.getUint16(o+3,Endian.little),d.getInt32(o+5,Endian.little),
+    ));
+  }
+  return List.unmodifiable(out);
+}
 class PsCharacterHitpoints {
   final int hp,mp,sp;
   const PsCharacterHitpoints(this.hp,this.mp,this.sp);
