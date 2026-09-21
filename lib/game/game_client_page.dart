@@ -511,12 +511,28 @@ class _GameClientPageState extends State<GameClientPage> {
   Future<void> _goFaction() async {
     scene.clearMovement();
     await scene.setWorld(null);
+    if(!_qaVisual)await _shutdownRuntime();
     if(mounted)setState(()=>stage=GameStage.faction);
   }
 
   Future<void> _goSelect() async {
     if(mounted)setState(()=>loading=true);
-    await _applyDefaultAppearance();
+    var connected=false;
+    try{
+      connected=await _ensureLiveWorld();
+      if(connected){
+        final existing=liveSlots.where((s)=>s.exists).firstOrNull;
+        characterCreated=existing!=null;
+        if(existing!=null)await _applyLiveSlot(existing);
+        else await _applyDefaultAppearance();
+      }else{
+        await _applyDefaultAppearance();
+      }
+    }catch(e){
+      liveProtocol=false;
+      messages.insert(0,'[ps0032] No se pudo abrir la sesión real: $e');
+      await _applyDefaultAppearance();
+    }
     await _prepareSelectionWorld(creation:false);
     if(mounted)setState((){stage=GameStage.characterSelect;loading=false;});
   }
