@@ -91,3 +91,10 @@ El explorador DATA.SPK carga automáticamente resultados validados de ResourcePr
 Cuando existe clave de recursos simples pero todavía falta validar la fragmentación, **Extraer legibles** exporta los recursos que se pueden reconstruir de forma criptográficamente válida y registra los omitidos en `_SPK_MANIFEST.json`; **Extraer todo** continúa bloqueado hasta que simples y fragmentados estén validados.
 
 El paquete sigue incluyendo el mapa ligado al índice `a3ea7e3b…`, actualmente con 21.360 rutas inferidas y sin convertirlas en nombres confirmados hasta comparar contenido real.
+
+
+## 0.6.10 — AutoPerfil SPK integrado
+
+El paquete Windows incluye `Extras/SPK/Shaiya_SPK_ResourceProbe.exe`. Desde el explorador DATA.SPK, **AutoPerfil SPK** abre únicamente el `game.exe` de la misma instalación, con confirmación explícita y recomendación de trabajar sin Internet, y observa llamadas AES-GCM que coinciden con ciphertexts del catálogo SPK validado. El helper produce un perfil únicamente cuando puede reproducir el descifrado offline.
+
+Cuando la clave de recursos simples queda validada, Studio intenta derivar la regla de nonce de fragmentos mediante autenticación AES-GCM contra chunks reales. **Extraer todo** solo se habilita cuando simples y fragmentados pasan esa validación; en caso contrario permanece fail-closed. El mapa empaquetado del índice `a3ea7e3b…` conserva 21.360 rutas inferidas separadas de las confirmadas.
