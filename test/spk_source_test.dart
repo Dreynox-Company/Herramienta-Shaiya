@@ -70,7 +70,7 @@ Future<Uint8List> _buildSyntheticSpk(Uint8List decodedResource) async {
   final profile = spkCryptoProfiles.single;
   final z = Zstandard();
 
-  final packedResource = await z.compress(decodedResource);
+  final packedResource = await z.compress(decodedResource, 3);
   if (packedResource == null) throw StateError('zstd resource');
 
   final resourceNonce = Uint8List.fromList(
@@ -97,7 +97,7 @@ Future<Uint8List> _buildSyntheticSpk(Uint8List decodedResource) async {
   record.setRange(60, 76, resourceTag);
   rd.setUint32(76, 0, Endian.little);
 
-  final packedIndex = await z.compress(record);
+  final packedIndex = await z.compress(record, 3);
   if (packedIndex == null) throw StateError('zstd index');
   final indexNonce = Uint8List.fromList(
     List<int>.generate(12, (i) => 0x40 + i),
