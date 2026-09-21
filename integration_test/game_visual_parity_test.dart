@@ -53,6 +53,35 @@ void main(){
         expect(state.metadata,isNotNull,reason:'server NPC/quest metadata must be loaded.');
         expect(state.scene.gameActors,isNotEmpty,reason:'world must contain rendered NPC/mob actors.');
       }
+      if(requireReal){
+        final critical=switch(stage){
+          GameStage.faction=><String>[
+            'interface/countryselect/bg.tga',
+            'interface/countryselect/light_select.tga',
+            'interface/countryselect/text/lightnormal_usa.tga',
+            'interface/countryselect/text/lightselect_usa.tga',
+          ],
+          GameStage.characterSelect=><String>[
+            'interface/characterselect/selectbg.tga',
+            'interface/characterselect/button/select_start_usa.tga',
+          ],
+          GameStage.characterCreate||GameStage.characterMode=><String>[
+            'interface/charactermake/basicinfo_bg.tga',
+            'interface/charactermake/classinfo/bg.tga',
+            'interface/charactermake/button/mode_basic.tga',
+          ],
+          GameStage.world=><String>[
+            'interface/main_stats_bar_bg.tga',
+            'interface/main_map.tga',
+            'interface/main_bottom.tga',
+            'interface/quest/take.tga',
+          ],
+        };
+        for(final path in critical){
+          final decoded=await state.ui.load(path);
+          expect(decoded,isNotNull,reason:'critical native UI texture did not decode: $path');
+        }
+      }
       await tester.pump(const Duration(milliseconds:650));
       return state;
     }
