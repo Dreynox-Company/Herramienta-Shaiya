@@ -753,6 +753,53 @@ class WorldData {
   }
 }
 
+
+class SvmapNpcPlacement {
+  final int type,id;
+  final v.Vector3 position;
+  final double yaw;
+  SvmapNpcPlacement(this.type,this.id,this.position,this.yaw);
+}
+class SvmapMobSpawn {
+  final int id,count;
+  SvmapMobSpawn(this.id,this.count);
+}
+class SvmapMobArea {
+  final v.Vector3 lower,upper;
+  final List<SvmapMobSpawn> mobs;
+  SvmapMobArea(this.lower,this.upper,this.mobs);
+  v.Vector3 get center=>(lower+upper)*.5;
+}
+class SvmapData {
+  final int mapSize,cellSize;
+  final List<SvmapNpcPlacement> npcs;
+  final List<SvmapMobArea> mobAreas;
+  SvmapData(this.mapSize,this.cellSize,this.npcs,this.mobAreas);
+  static SvmapData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final mapSize=r.i32();
+    if(mapSize<=0||mapSize>16384)r.fail('Tamaño SVMAP inválido: $mapSize.');
+    final mask=(mapSize*mapSize)~/8;r.skip(mask);
+    final cellSize=r.i32();
+    final ladders=r.count(100000);r.skip(ladders*12);
+    final areas=<SvmapMobArea>[];
+    final areaCount=r.count(100000);
+    for(var i=0;i<areaCount;i++){
+      final lower=r.vec(),upper=r.vec(),mobs=<SvmapMobSpawn>[];
+      final n=r.count(10000);
+      for(var j=0;j<n;j++)mobs.add(SvmapMobSpawn(r.u32(),r.u32()));
+      areas.add(SvmapMobArea(lower,upper,mobs));
+    }
+    final npcs=<SvmapNpcPlacement>[];
+    final npcGroups=r.count(100000);
+    for(var i=0;i<npcGroups;i++){
+      final type=r.i32(),id=r.i32(),n=r.count(10000);
+      for(var j=0;j<n;j++)npcs.add(SvmapNpcPlacement(type,id,r.vec(),r.f32()));
+    }
+    return SvmapData(mapSize,cellSize,npcs,areas);
+  }
+}
+
 class StaticPart {
   final String texture;
   final MeshData mesh;
