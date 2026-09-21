@@ -710,7 +710,8 @@ class Library {
       throw const FormatException('La extracción SPK no publicó una carpeta.');
     }
     final folder = Directory(folderValue);
-    final manifestFile = File(
+    try {
+      final manifestFile = File(
       '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
     );
     if (!await manifestFile.exists()) {
@@ -844,12 +845,18 @@ class Library {
     await manifestFile.delete();
     await manifestTemp.rename(manifestFile.path);
 
-    return {
-      ...extracted,
-      'folder': folder.path,
-      'overlayFiles': applied,
-      'complete': true,
-    };
+      return {
+        ...extracted,
+        'folder': folder.path,
+        'overlayFiles': applied,
+        'complete': true,
+      };
+    } catch (_) {
+      if (await folder.exists()) {
+        await folder.delete(recursive: true);
+      }
+      rethrow;
+    }
   }
 
   Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
