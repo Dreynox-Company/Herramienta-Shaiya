@@ -308,17 +308,46 @@ class _FlutterGameClientPageState extends State<FlutterGameClientPage> {
   );
 
   Widget _questPanel()=>Container(
-    decoration:BoxDecoration(color:const Color(0xf2a77845),border:Border.all(color:const Color(0xff30241b),width:3),boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:8)]),
+    decoration:BoxDecoration(
+      color:const Color(0xf2a77845),
+      border:Border.all(color:const Color(0xff30241b),width:3),
+      boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:8)],
+    ),
     child:Column(children:[
-      Container(height:34,padding:const EdgeInsets.symmetric(horizontal:12),decoration:const BoxDecoration(color:Color(0xff55331e),border:Border(bottom:BorderSide(color:Color(0xffc58d52)))),child:const Row(children:[
-        Text('!',style:TextStyle(color:Color(0xffffff33),fontSize:22,fontWeight:FontWeight.bold)),SizedBox(width:8),Text('Operación básica de la interfaz',style:TextStyle(color:Color(0xffffff66),fontSize:12)),
-      ])),
-      Expanded(child:Container(margin:const EdgeInsets.all(8),padding:const EdgeInsets.all(10),decoration:const BoxDecoration(color:Color(0xffc79a67)),child:const SingleChildScrollView(child:Text(
-        'Hmm? ¿Nos hemos visto antes? En estos tiempos difíciles… pero es el mejor momento para que un guerrero construya su fama. ¿Quieres convertirte en un guerrero? Convertirte en guerrero te aportará mucho dolor y dificultad.\n\nDebes aprender y recordar todo lo que te enseñe.\n\n\nObjeto de recompensa',
-        style:TextStyle(color:Color(0xff2e251d),fontSize:11,height:1.65)))),
-      Padding(padding:const EdgeInsets.fromLTRB(12,4,12,12),child:Row(children:[
-        Expanded(child:_oldButton('Aceptar',onTap:()=>setState(()=>questOpen=false),height:34)),const SizedBox(width:18),Expanded(child:_oldButton('Cancelar',onTap:()=>setState(()=>questOpen=false),height:34)),
-      ])),
+      Container(
+        height:34,
+        padding:const EdgeInsets.symmetric(horizontal:12),
+        decoration:const BoxDecoration(
+          color:Color(0xff55331e),
+          border:Border(bottom:BorderSide(color:Color(0xffc58d52))),
+        ),
+        child:const Row(children:[
+          Text('!',style:TextStyle(color:Color(0xffffff33),fontSize:22,fontWeight:FontWeight.bold)),
+          SizedBox(width:8),
+          Text('Operación básica de la interfaz',style:TextStyle(color:Color(0xffffff66),fontSize:12)),
+        ]),
+      ),
+      Expanded(
+        child:Container(
+          margin:const EdgeInsets.all(8),
+          padding:const EdgeInsets.all(10),
+          decoration:const BoxDecoration(color:Color(0xffc79a67)),
+          child:const SingleChildScrollView(
+            child:Text(
+              'Hmm? ¿Nos hemos visto antes? En estos tiempos difíciles… pero es el mejor momento para que un guerrero construya su fama. ¿Quieres convertirte en un guerrero? Convertirte en guerrero te aportará mucho dolor y dificultad.\n\nDebes aprender y recordar todo lo que te enseñe.\n\n\nObjeto de recompensa',
+              style:TextStyle(color:Color(0xff2e251d),fontSize:11,height:1.65),
+            ),
+          ),
+        ),
+      ),
+      Padding(
+        padding:const EdgeInsets.fromLTRB(12,4,12,12),
+        child:Row(children:[
+          Expanded(child:_oldButton('Aceptar',onTap:()=>setState(()=>questOpen=false),height:34)),
+          const SizedBox(width:18),
+          Expanded(child:_oldButton('Cancelar',onTap:()=>setState(()=>questOpen=false),height:34)),
+        ]),
+      ),
     ]),
   );
 
