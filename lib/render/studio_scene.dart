@@ -140,7 +140,7 @@ class StudioScene extends ChangeNotifier {
     say('${gameActors.length} NPC/criaturas locales cargados.');
   }
 
-  Future<void> spawnGameActorsFromSvmap(SvmapData map,{int npcLimit=28,int mobLimit=18}) async {
+  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
     gameActors.clear();
     if(view==null||catalog==null)return;
@@ -150,7 +150,8 @@ class StudioScene extends ChangeNotifier {
       if(npcsLoaded>=npcLimit)break;
       final x=p.position.x-originX,z=-(p.position.z-originZ);
       if(x.abs()>60||z.abs()>60)continue;
-      final record=npcRecords[p.id];
+      final model=npcModels?[p.type.toString()+':'+p.id.toString()]??p.id;
+      final record=npcRecords[model];
       if(record==null)continue;
       try{
         final a=await loadCreature(record);
