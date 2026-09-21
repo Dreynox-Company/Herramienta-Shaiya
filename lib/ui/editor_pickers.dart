@@ -24,6 +24,14 @@ Map<String, String>? fieldChoices(EditDocument document, String name) {
   if (n == 'country' && editorDomain(document.path) == EditorDomain.items) {
     return {for (var i = 0; i <= 6; i++) '$i': itemCountryLabel('$i')};
   }
+  if (editorDomain(document.path) == EditorDomain.items &&
+      (n == 'reqog' || n == 'og')) {
+    return const {
+      '0': 'Intercambiable',
+      '1': 'No intercambiable',
+      '2': 'Vinculado al personaje (si el servidor lo soporta)',
+    };
+  }
   return null;
 }
 
