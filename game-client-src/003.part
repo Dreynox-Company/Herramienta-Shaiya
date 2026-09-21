@@ -1,0 +1,211 @@
+ight.w300,
+                fontStyle: FontStyle.italic,
+                color: Color(0xffe6c06f),
+                letterSpacing: 5,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(progress, textAlign: TextAlign.center),
+            const SizedBox(height: 22),
+            ElevatedButton(
+              onPressed: loading ? null : _chooseDataAgain,
+              child: const Text('Seleccionar DATA_Español'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _serverScreen() => Stack(
+    fit: StackFit.expand,
+    children: [
+      _dataImage('interface/select_country_bg.jpg', fit: BoxFit.cover),
+      Container(color: const Color(0x66000000)),
+      Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(width: 520, height: 280, child: _dataImage('interface/selectserver.tga')),
+            Positioned(
+              top: 74,
+              child: Column(
+                children: [
+                  const Text(
+                    'SELECCIONAR SERVIDOR',
+                    style: TextStyle(color: Color(0xffe9d7b1), fontSize: 18),
+                  ),
+                  const SizedBox(height: 22),
+                  InkWell(
+                    onTap: () => setState(() => screen = ClientScreen.faction),
+                    child: Container(
+                      width: 365,
+                      height: 48,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xff651b21), Color(0xff1b0b0b)],
+                        ),
+                        border: Border.all(color: const Color(0xffb9855e)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Partida local', style: TextStyle(fontSize: 16)),
+                          Text('NORMAL', style: TextStyle(color: Color(0xffd6bd91))),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '127.0.0.1 · Offline · Sin servidor externo',
+                    style: TextStyle(color: Color(0xffb5aa99), fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      Positioned(
+        left: 18,
+        bottom: 18,
+        child: TextButton.icon(
+          onPressed: _chooseDataAgain,
+          icon: const Icon(Icons.folder_open),
+          label: const Text('Cambiar DATA'),
+        ),
+      ),
+    ],
+  );
+
+  Widget _factionScreen() => Stack(
+    fit: StackFit.expand,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => _selectFaction(true),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _dataImage('interface/ta_2d_country_light_select.tga', fit: BoxFit.cover),
+                  Align(
+                    alignment: const Alignment(-.15, .72),
+                    child: _factionButton('ALIANZA DE LA LUZ', true),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => _selectFaction(false),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _dataImage('interface/ta_2d_country_fury_select.tga', fit: BoxFit.cover),
+                  Align(
+                    alignment: const Alignment(.12, .72),
+                    child: _factionButton('UNIÓN DE LA FURIA', false),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      const Positioned(
+        top: 25,
+        left: 0,
+        right: 0,
+        child: Text(
+          'Selecciona una facción',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 23, color: Color(0xfff1e5cf)),
+        ),
+      ),
+    ],
+  );
+
+  Widget _factionButton(String text, bool light) => Container(
+    width: 255,
+    height: 52,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: light
+            ? const [Color(0xff245488), Color(0xff0f263e)]
+            : const [Color(0xff8f1d1c), Color(0xff3f0b0a)],
+      ),
+      border: Border.all(color: const Color(0xffc99c68)),
+      boxShadow: const [BoxShadow(blurRadius: 12, color: Colors.black)],
+    ),
+    child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
+  );
+
+  Widget _characterScreen() => Stack(
+    fit: StackFit.expand,
+    children: [
+      Positioned.fill(child: renderer.build()),
+      _referenceCanvas(
+        Stack(
+          children: [
+            for (var i = 0; i < 5; i++)
+              Positioned(
+                left: 47,
+                top: 46 + i * 128,
+                width: 330,
+                height: 112,
+                child: i == 0 ? _selectedCharacterSlot() : _emptyCharacterSlot(),
+              ),
+            Positioned(
+              left: 93,
+              bottom: 61,
+              child: _nativeButton('Crear personaje', _createCharacter, width: 115),
+            ),
+            Positioned(
+              left: 213,
+              bottom: 61,
+              child: _nativeButton('Eliminar personaje', _deleteCharacter, width: 115),
+            ),
+            Positioned(
+              left: 213,
+              bottom: 20,
+              child: _nativeButton('Opciones', () {}, width: 115),
+            ),
+            Positioned(
+              left: 598,
+              bottom: 28,
+              width: 247,
+              height: 62,
+              child: InkWell(
+                onTap: _enterWorld,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _dataImage('interface/ta_2d_character_select_startbtn.tga'),
+                    const Center(
+                      child: Text(
+                        'Iniciar partida',
+                        style: TextStyle(
+                          fontSize: 23,
+                          fontWeight: FontWeight.w600,
+                          shadows: [Shadow(blurRadius: 3, color: Colors.black)],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _selectedCharacterSlot() => Container(
