@@ -62,7 +62,7 @@ class StudioScene extends ChangeNotifier {
   t.ThreeJS? view;Catalog? catalog;
   t.LineSegments? grid;
   bool gridVisible=true;
-  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> gameActorById={};Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -143,7 +143,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> spawnGameNpcs({int count=8}) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();gameLabels.clear();
+    gameActors.clear();gameLabels.clear();gameActorById.clear();
     final source=(catalog?.npcs.isNotEmpty??false)?catalog!.npcs:catalog?.creatures??const <CreatureRecord>[];
     if(source.isEmpty||view==null)return;
     final limit=math.min(count,source.length);
@@ -165,7 +165,7 @@ class StudioScene extends ChangeNotifier {
 
   Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,String locale='spn',int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();gameLabels.clear();
+    gameActors.clear();gameLabels.clear();gameActorById.clear();
     if(view==null||catalog==null)return;
     final npcRecords={for(final n in catalog!.npcs)n.id:n};
     final orderedNpcs=[...map.npcs]..sort((a,b){
@@ -221,6 +221,76 @@ class StudioScene extends ChangeNotifier {
       }
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas colocados desde SVMAP.');
+  }
+  Future<void> spawnGameActorsFromLive({
+    required Iterable<({int globalId,int type,int typeId,double x,double y,double z,int angle})> npcs,
+    required Iterable<({int globalId,int mobId,double x,double z})> mobs,
+    Map<String,int>? npcModels,
+    Map<int,int>? mobModels,
+    Set<String>? questNpcKeys,
+    String locale='spn',
+    int npcLimit=64,
+    int mobLimit=96,
+  }) async {
+    for(final a in gameActors){a.dispose();}
+    gameActors.clear();gameLabels.clear();gameActorById.clear();
+    if(view==null||catalog==null)return;
+    final npcRecords={for(final n in catalog!.npcs)n.id:n};
+    final mobRecords={for(final m in catalog!.creatures)m.id:m};
+    var npcsLoaded=0,mobsLoaded=0;
+    for(final p in npcs){
+      if(npcsLoaded>=npcLimit)break;
+      final model=npcModels?[p.type.toString()+':'+p.typeId.toString()]??p.typeId;
+      final record=npcRecords[model];
+      if(record==null){report('LIVE NPC ${p.type}:${p.typeId}: modelo $model ausente.');continue;}
+      try{
+        final a=await loadCreature(record);
+        final x=p.x-originX,z=-(p.z-originZ);
+        a.root.position.setValues(x,p.y,z);
+        a.root.rotation.y=-p.angle.toDouble();
+        gameActors.add(a);gameActorById[p.globalId]=a;view!.scene.add(a.root);npcsLoaded++;
+        final key=p.type.toString()+':'+p.typeId.toString();
+        final localized=catalog!.questText(locale)?.npc(p.type,p.typeId);
+        gameLabels.add(GameActorLabel(
+          a,
+          (localized?.name.isNotEmpty??false)?localized!.name:'NPC '+key,
+          quest:questNpcKeys?.contains(key)??false,
+        ));
+      }catch(e){report('LIVE NPC ${p.type}:${p.typeId}: $e');}
+    }
+    for(final p in mobs){
+      if(mobsLoaded>=mobLimit)break;
+      final model=mobModels?[p.mobId]??p.mobId;
+      final record=mobRecords[model];
+      if(record==null){report('LIVE mob ${p.mobId}: modelo $model ausente.');continue;}
+      try{
+        final a=await loadCreature(record);
+        final x=p.x-originX,z=-(p.z-originZ);
+        final y=world==null?0:world!.heightAt(p.x,p.z,scale:.02,offset:-200);
+        a.root.position.setValues(x,y,z);
+        gameActors.add(a);gameActorById[p.globalId]=a;view!.scene.add(a.root);mobsLoaded++;
+        gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
+      }catch(e){report('LIVE mob ${p.mobId}: $e');}
+    }
+    say('$npcsLoaded NPC y $mobsLoaded criaturas recibidos del World real.');
+  }
+
+  void moveLiveNpc(int globalId,double x,double y,double z){
+    final a=gameActorById[globalId];if(a==null)return;
+    a.root.position.setValues(x-originX,y,-(z-originZ));
+  }
+
+  void moveLiveMob(int globalId,double x,double z){
+    final a=gameActorById[globalId];if(a==null)return;
+    final y=world==null?a.root.position.y:world!.heightAt(x,z,scale:.02,offset:-200);
+    a.root.position.setValues(x-originX,y,-(z-originZ));
+  }
+
+  void removeLiveActor(int globalId){
+    final a=gameActorById.remove(globalId);if(a==null)return;
+    gameActors.remove(a);
+    gameLabels.removeWhere((x)=>identical(x.actor,a));
+    a.dispose();
   }
   List<ProjectedGameLabel> projectGameLabels(double width,double height){
     final camera=view?.camera;
