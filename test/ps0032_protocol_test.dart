@@ -37,4 +37,18 @@ void main(){
     expect(x.y,closeTo(78.68,1e-3));
     expect(x.z,closeTo(1769.8774,1e-3));
   });
+
+  test('parsea CHARACTER_CURRENT_HITPOINTS reales',(){
+    final body=Uint8List(12);
+    final d=ByteData.sublistView(body)
+      ..setInt32(0,200,Endian.little)
+      ..setInt32(4,75,Endian.little)
+      ..setInt32(8,150,Endian.little);
+    final x=PsCharacterHitpoints.parse(
+      PsPacket(PsPacketType.characterCurrentHitpoints,body),
+    );
+    expect(x.hp,200);
+    expect(x.mp,75);
+    expect(x.sp,150);
+  });
 }
