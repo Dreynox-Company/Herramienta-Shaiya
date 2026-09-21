@@ -155,7 +155,7 @@ class StudioScene extends ChangeNotifier {
     say('${gameActors.length} NPC/criaturas locales cargados.');
   }
 
-  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,int npcLimit=28,int mobLimit=18}) async {
+  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,String locale='spn',int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
     gameActors.clear();gameLabels.clear();
     if(view==null||catalog==null)return;
@@ -174,7 +174,7 @@ class StudioScene extends ChangeNotifier {
         a.root.rotation.y=-p.yaw;
         gameActors.add(a);view!.scene.add(a.root);npcsLoaded++;
         final key='${p.type}:${p.id}';
-        final localized=catalog!.spanishText?.npc(p.type,p.id);
+        final localized=catalog!.questText(locale)?.npc(p.type,p.id);
         gameLabels.add(GameActorLabel(
           a,
           (localized?.name.isNotEmpty??false)?localized!.name:'NPC ${p.type}:${p.id}',
@@ -202,7 +202,7 @@ class StudioScene extends ChangeNotifier {
           a.root.position.setValues(x,world==null?center.y:world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200),z);
           a.root.rotation.y=-angle;
           gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
-          final mobName=catalog!.monsterNames[spawn.id]??'Criatura ${spawn.id}';
+          final mobName=catalog!.monsterName(spawn.id,locale);
           gameLabels.add(GameActorLabel(a,mobName,mob:true));
         }catch(e){report('SVMAP mob ${spawn.id}: $e');}
       }
