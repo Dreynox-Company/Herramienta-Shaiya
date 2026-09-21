@@ -7,63 +7,75 @@ import 'package:zstandard/zstandard.dart';
 import 'package:herramienta_shaiya/data/spk_source.dart';
 
 void main() {
-  test('SPK synthetic authenticated index and resource round-trip', () async {
-    final temp = await Directory.systemTemp.createTemp('spk-source-test-');
-    try {
-      final original = Uint8List.fromList('hola SPK reciente'.codeUnits);
-      final spk = await _buildSyntheticSpk(original);
-      final path = '${temp.path}/data.spk';
-      await File(path).writeAsBytes(spk, flush: true);
+  test(
+    'SPK synthetic authenticated index and resource round-trip',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('spk-source-test-');
+      try {
+        final original = Uint8List.fromList('hola SPK reciente'.codeUnits);
+        final spk = await _buildSyntheticSpk(original);
+        final path = '${temp.path}/data.spk';
+        await File(path).writeAsBytes(spk, flush: true);
 
-      final source = await SpkSource.open(path);
-      expect(source.records, hasLength(1));
-      expect(source.simpleCount, 1);
-      expect(source.chunkedCount, 0);
-      expect(source.validation['indexAuthenticated'], true);
+        final source = await SpkSource.open(path);
+        expect(source.records, hasLength(1));
+        expect(source.simpleCount, 1);
+        expect(source.chunkedCount, 0);
+        expect(source.validation['indexAuthenticated'], true);
 
-      final decoded = await source.read(source.records.single.entryId);
-      expect(decoded, original);
-      expect(detectSpkExtension(decoded), '.txt');
+        final decoded = await source.read(source.records.single.entryId);
+        expect(decoded, original);
+        expect(detectSpkExtension(decoded), '.txt');
 
-      final out = Directory('${temp.path}/out');
-      final report = await source.extractAll(out);
-      expect((report['result'] as Map)['extracted'], 1);
-      expect(File('${out.path}/SPK_MANIFEST.json').existsSync(), true);
-      final extracted = out
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => !f.path.endsWith('SPK_MANIFEST.json'))
-          .single;
-      expect(await extracted.readAsBytes(), original);
-    } finally {
-      await temp.delete(recursive: true);
-    }
-  }, skip: Platform.isLinux ? 'Zstandard FFI is exercised by the Windows native integration gate.' : false);
+        final out = Directory('${temp.path}/out');
+        final report = await source.extractAll(out);
+        expect((report['result'] as Map)['extracted'], 1);
+        expect(File('${out.path}/SPK_MANIFEST.json').existsSync(), true);
+        final extracted = out
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => !f.path.endsWith('SPK_MANIFEST.json'))
+            .single;
+        expect(await extracted.readAsBytes(), original);
+      } finally {
+        await temp.delete(recursive: true);
+      }
+    },
+    skip: Platform.isLinux
+        ? 'Zstandard FFI is exercised by the Windows native integration gate.'
+        : false,
+  );
 
-  test('SPK refuses an authenticated index with a damaged tag', () async {
-    final temp = await Directory.systemTemp.createTemp('spk-auth-test-');
-    try {
-      final bytes = await _buildSyntheticSpk(
-        Uint8List.fromList('integridad'.codeUnits),
-      );
-      // Header index tag starts at byte 52.
-      bytes[52] ^= 0x01;
-      final path = '${temp.path}/broken.spk';
-      await File(path).writeAsBytes(bytes, flush: true);
-      await expectLater(
-        SpkSource.open(path),
-        throwsA(
-          isA<SpkFailure>().having(
-            (e) => e.code,
-            'code',
-            'SPK_PROFILE_UNKNOWN',
+  test(
+    'SPK refuses an authenticated index with a damaged tag',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('spk-auth-test-');
+      try {
+        final bytes = await _buildSyntheticSpk(
+          Uint8List.fromList('integridad'.codeUnits),
+        );
+        // Header index tag starts at byte 52.
+        bytes[52] ^= 0x01;
+        final path = '${temp.path}/broken.spk';
+        await File(path).writeAsBytes(bytes, flush: true);
+        await expectLater(
+          SpkSource.open(path),
+          throwsA(
+            isA<SpkFailure>().having(
+              (e) => e.code,
+              'code',
+              'SPK_PROFILE_UNKNOWN',
+            ),
           ),
-        ),
-      );
-    } finally {
-      await temp.delete(recursive: true);
-    }
-  }, skip: Platform.isLinux ? 'Zstandard FFI is exercised by the Windows native integration gate.' : false);
+        );
+      } finally {
+        await temp.delete(recursive: true);
+      }
+    },
+    skip: Platform.isLinux
+        ? 'Zstandard FFI is exercised by the Windows native integration gate.'
+        : false,
+  );
 }
 
 Future<Uint8List> _buildSyntheticSpk(Uint8List decodedResource) async {
