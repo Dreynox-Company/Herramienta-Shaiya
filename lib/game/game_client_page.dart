@@ -42,6 +42,8 @@ class _GameClientPageState extends State<GameClientPage> {
   PsCharacterDetails? liveDetails;
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
+  PsSkillBook? liveSkills;
+  PsSkillBar? liveSkillBar;
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
   bool movementSending=false;
@@ -488,8 +490,12 @@ class _GameClientPageState extends State<GameClientPage> {
         liveDetails=selected.details;
         final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
         final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
+        final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
+        final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
         if(hpPacket!=null)liveHitpoints=PsHitpoints.parse(hpPacket);
         if(statsPacket!=null)liveAdditionalStats=PsAdditionalStats.parse(statsPacket);
+        if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
+        if(barPacket!=null)liveSkillBar=PsSkillBar.parse(barPacket);
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
@@ -674,6 +680,31 @@ class _GameClientPageState extends State<GameClientPage> {
     }finally{movementSending=false;}
   }
 
+  List<PsQuickSlot> get _primaryQuickSlots{
+    final all=liveSkillBar?.slots??const <PsQuickSlot>[];
+    if(all.isEmpty)return const [];
+    var bar=all.first.bar;
+    for(final s in all){if(s.bar<bar)bar=s.bar;}
+    final selected=all.where((s)=>s.bar==bar).toList()..sort((a,b)=>a.slot.compareTo(b.slot));
+    return selected;
+  }
+
+  Future<void> _useHotbarSlot(int index) async {
+    if(stage!=GameStage.world)return;
+    final slots=_primaryQuickSlots;
+    final slot=slots.where((s)=>s.slot==index).firstOrNull??(index<slots.length?slots[index]:null);
+    if(slot==null){messages.insert(0,'[Skillbar] Slot ${index+1} vacío.');if(mounted)setState((){});return;}
+    if(!slot.isSkill){messages.insert(0,'[Skillbar] Slot ${index+1} contiene bag ${slot.bag}, item ${slot.number}.');if(mounted)setState((){});return;}
+    final learned=liveSkills?.bySkillId(slot.number);
+    if(learned==null){messages.insert(0,'[Skillbar] SkillId ${slot.number} no está aprendida.');if(mounted)setState((){});return;}
+    final target=scene.nearestNetworkMobId(maxDistance:18);
+    if(target==null){messages.insert(0,'[Combate] No hay criatura viva a menos de 18 m.');if(mounted)setState((){});return;}
+    try{
+      await liveWorld?.useMobSkill(learned.number,target);
+      messages.insert(0,'[Combate] Skill ${learned.skillId} Lv.${learned.level} → mob $target.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _acceptCurrentQuest() async {
     final text=catalog?.questText(uiLocale)?.quest(questId);
     final session=liveWorld;
@@ -811,7 +842,14 @@ class _GameClientPageState extends State<GameClientPage> {
       if(stage==GameStage.world)scene.setMovement(x,z,run:run);
     },
     onAction:(key){
-      if(stage==GameStage.world&&key==LogicalKeyboardKey.keyR)scene.resetCombat();
+      if(stage!=GameStage.world)return;
+      if(key==LogicalKeyboardKey.keyR){scene.resetCombat();return;}
+      final keys=<LogicalKeyboardKey>[
+        LogicalKeyboardKey.digit1,LogicalKeyboardKey.digit2,
+        LogicalKeyboardKey.digit3,LogicalKeyboardKey.digit4,
+      ];
+      final index=keys.indexOf(key);
+      if(index>=0)unawaited(_useHotbarSlot(index));
     },
     child:Listener(
       onPointerSignal:(e){
@@ -945,6 +983,9 @@ class _GameClientPageState extends State<GameClientPage> {
             level:liveCharacter?.level??1,
             details:liveDetails,
             hitpoints:liveHitpoints,
+            skillBook:liveSkills,
+            skillBar:liveSkillBar,
+            onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             locale:uiLocale,
             ui:ui!,
             messages:messages,
