@@ -39,6 +39,7 @@ Future<void> main() async {
 
     final entered=await world.enterMap(collect:const Duration(seconds:8));
     final all=<PsPacket>[...selected.packets,...entered];
+    final snapshot=PsWorldSnapshot.fromPackets(all);
     int count(int type)=>all.where((p)=>p.type==type).length;
 
     final result={
@@ -64,6 +65,28 @@ Future<void> main() async {
       'questListPackets':count(PsPacketType.questList),
       'questFinishedPackets':count(PsPacketType.questFinishedList),
       'enteredMapPackets':count(PsPacketType.characterEnteredMap),
+      'snapshot':{
+        'self':snapshot.self==null?null:{
+          'id':snapshot.self!.characterId,
+          'x':snapshot.self!.x,'y':snapshot.self!.y,'z':snapshot.self!.z,
+          'angle':snapshot.self!.angle,
+        },
+        'npcCount':snapshot.npcs.length,
+        'mobCount':snapshot.mobs.length,
+        'openQuests':snapshot.quests.map((q)=>q.questId).toList(),
+        'finishedQuests':snapshot.finishedQuests.map((q)=>q.questId).toList(),
+        'firstNpc':snapshot.npcs.isEmpty?null:{
+          'globalId':snapshot.npcs.first.globalId,
+          'type':snapshot.npcs.first.type,
+          'typeId':snapshot.npcs.first.typeId,
+          'x':snapshot.npcs.first.x,'y':snapshot.npcs.first.y,'z':snapshot.npcs.first.z,
+        },
+        'firstMob':snapshot.mobs.isEmpty?null:{
+          'globalId':snapshot.mobs.first.globalId,
+          'mobId':snapshot.mobs.first.mobId,
+          'x':snapshot.mobs.first.x,'z':snapshot.mobs.first.z,
+        },
+      },
       'trace':trace,
     };
 
@@ -73,8 +96,10 @@ Future<void> main() async {
     if(out!=null&&out.isNotEmpty)await File(out).writeAsString(json);
 
     if(count(PsPacketType.characterDetails)==0)throw StateError('CHARACTER_DETAILS missing.');
-    if(count(PsPacketType.mapNpcEnter)==0)throw StateError('No MAP_NPC_ENTER packets after entered-map.');
-    if(count(PsPacketType.mobEnter)==0)throw StateError('No MOB_ENTER packets after entered-map.');
+    if(snapshot.self==null)throw StateError('No CHARACTER_ENTERED_MAP snapshot.');
+    if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
+    if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
+    if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
   }finally{
     await world.close();
   }
