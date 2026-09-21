@@ -33,9 +33,8 @@ Future<SecretBox> _encrypt(
 class _Fixture {
   final String path;
   final SpkCryptoProfile profile;
-  final Uint8List resourceKey;
 
-  const _Fixture(this.path, this.profile, this.resourceKey);
+  const _Fixture(this.path, this.profile);
 }
 
 Future<_Fixture> _buildSimpleFixture(Directory root) async {
@@ -120,7 +119,7 @@ Future<_Fixture> _buildSimpleFixture(Directory root) async {
     resourceKeyIsIndexKey: false,
     chunkNonceRule: 'unsupported',
   );
-  return _Fixture(file.path, profile, resourceKey);
+  return _Fixture(file.path, profile);
 }
 
 void main() {
