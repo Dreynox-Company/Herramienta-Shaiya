@@ -804,11 +804,17 @@ class WorldData {
 }
 
 
-class SvmapNpcPlacement {
-  final int type,id;
+class SvmapNpcWaypoint {
   final v.Vector3 position;
   final double yaw;
-  SvmapNpcPlacement(this.type,this.id,this.position,this.yaw);
+  const SvmapNpcWaypoint(this.position,this.yaw);
+}
+class SvmapNpcPlacement {
+  final int type,id;
+  final List<SvmapNpcWaypoint> route;
+  const SvmapNpcPlacement(this.type,this.id,this.route);
+  v.Vector3 get position=>route.first.position;
+  double get yaw=>route.first.yaw;
 }
 class SvmapMobSpawn {
   final int id,count;
@@ -862,8 +868,9 @@ class SvmapData {
     final npcs=<SvmapNpcPlacement>[];
     final npcGroups=r.count(100000);
     for(var i=0;i<npcGroups;i++){
-      final type=r.i32(),id=r.i32(),n=r.count(10000);
-      for(var j=0;j<n;j++){npcs.add(SvmapNpcPlacement(type,id,r.vec(),r.f32()));}
+      final type=r.i32(),id=r.i32(),n=r.count(10000),route=<SvmapNpcWaypoint>[];
+      for(var j=0;j<n;j++){route.add(SvmapNpcWaypoint(r.vec(),r.f32()));}
+      if(route.isNotEmpty)npcs.add(SvmapNpcPlacement(type,id,List.unmodifiable(route)));
     }
     final portals=<SvmapPortal>[];
     final portalCount=r.count(100000);
