@@ -899,6 +899,37 @@ class DgData {
 
   v.Vector3 get center=>(lower+upper)*.5;
 
+  v.Vector3 get presentationAnchor {
+    DgPart? best;
+    var bestScore=-double.infinity;
+    for(final part in parts){
+      final p=part.mesh.positions;
+      if(p.length<9)continue;
+      var minX=double.infinity,minY=double.infinity,minZ=double.infinity;
+      var maxX=-double.infinity,maxY=-double.infinity,maxZ=-double.infinity;
+      for(var i=0;i<p.length;i+=3){
+        minX=math.min(minX,p[i]);maxX=math.max(maxX,p[i]);
+        minY=math.min(minY,p[i+1]);maxY=math.max(maxY,p[i+1]);
+        minZ=math.min(minZ,p[i+2]);maxZ=math.max(maxZ,p[i+2]);
+      }
+      final sx=maxX-minX,sy=maxY-minY,sz=maxZ-minZ;
+      if(sy>1||sx<2||sz<2||sx>12||sz>12)continue;
+      final cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;
+      final dx=cx-center.x,dz=cz-center.z,dist=math.sqrt(dx*dx+dz*dz);
+      if(dist>20)continue;
+      final score=part.mesh.vertices-dist*2-sy*20;
+      if(score>bestScore){bestScore=score;best=part;}
+    }
+    if(best==null)return center;
+    final p=best.mesh.positions;
+    var minX=double.infinity,minZ=double.infinity,maxX=-double.infinity,maxZ=-double.infinity;
+    for(var i=0;i<p.length;i+=3){
+      minX=math.min(minX,p[i]);maxX=math.max(maxX,p[i]);
+      minZ=math.min(minZ,p[i+2]);maxZ=math.max(maxZ,p[i+2]);
+    }
+    return v.Vector3((minX+maxX)/2,floorAt((minX+maxX)/2,(minZ+maxZ)/2),(minZ+maxZ)/2);
+  }
+
   double floorAt(double x,double z,{double radius=6}){
     final ys=<double>[];
     for(final part in parts){
