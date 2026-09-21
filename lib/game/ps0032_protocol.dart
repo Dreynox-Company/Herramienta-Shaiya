@@ -290,6 +290,87 @@ class WorldBootstrap {
     ..sort((a,b)=>a.slot.compareTo(b.slot));
 }
 
+
+class PsWorldSession {
+  final PsConnection connection;
+  final int faction,maxMode;
+  final Uint8List xorKey;
+  final List<PsPacket> initialPackets;
+  bool _expanded=false;
+
+  PsWorldSession(this.connection,this.faction,this.maxMode,this.xorKey,this.initialPackets);
+
+  List<PsCharacterSlot> get characters=>initialPackets
+    .where((p)=>p.type==PsPacketType.characterList)
+    .map(PsCharacterSlot.parse)
+    .toList()
+    ..sort((a,b)=>a.slot.compareTo(b.slot));
+
+  Future<List<PsCharacterSlot>> createCharacter({
+    int slot=0,int race=0,int mode=2,int hair=0,int face=0,
+    int height=2,int profession=0,int gender=0,String name='FlutterLocal',
+  }) async {
+    final rawName=utf8.encode(name);
+    if(rawName.length>20)throw ArgumentError('Nombre de personaje demasiado largo.');
+    final fixedName=Uint8List(21)..setRange(0,rawName.length,rawName);
+    await connection.send(PsPacketType.createCharacter,[
+      slot,race,mode,hair,face,height,profession,gender,...fixedName,
+    ]);
+    final result=await connection.nextType(PsPacketType.createCharacter);
+    if(result.body.isEmpty||result.body[0]!=0){
+      throw StateError('CREATE_CHARACTER falló: ${result.body.isEmpty?-1:result.body[0]}');
+    }
+    final slots=<PsCharacterSlot>[];
+    final deadline=DateTime.now().add(const Duration(seconds:10));
+    while(slots.length<5&&DateTime.now().isBefore(deadline)){
+      final p=await connection.next(timeout:deadline.difference(DateTime.now()));
+      if(p.type==PsPacketType.characterList)slots.add(PsCharacterSlot.parse(p));
+    }
+    if(slots.length<5)throw StateError('El servidor no devolvió los 5 CHARACTER_LIST después de crear.');
+    slots.sort((a,b)=>a.slot.compareTo(b.slot));
+    return slots;
+  }
+
+  Future<({PsCharacterDetails details,List<PsPacket> packets})> selectCharacter(int characterId) async {
+    await connection.send(PsPacketType.selectCharacter,_u32Bytes(characterId));
+    final packets=<PsPacket>[];
+    PsCharacterDetails? details;
+    final deadline=DateTime.now().add(const Duration(seconds:20));
+    while(DateTime.now().isBefore(deadline)){
+      final p=await connection.next(timeout:deadline.difference(DateTime.now()));
+      packets.add(p);
+      if(p.type==PsPacketType.selectCharacter){
+        if(p.body.length<5||p.body[0]!=0)throw StateError('SELECT_CHARACTER rechazado.');
+      }else if(p.type==PsPacketType.characterDetails){
+        details=PsCharacterDetails.parse(p);
+      }else if(p.type==PsPacketType.characterSkillBar){
+        connection.switchIncomingToExpanded(xorKey);
+        _expanded=true;
+        break;
+      }
+    }
+    if(details==null)throw StateError('No llegó CHARACTER_DETAILS.');
+    if(!_expanded)throw StateError('No llegó CHARACTER_SKILL_BAR/cambio de cifrado.');
+    return (details:details,packets:packets);
+  }
+
+  Future<List<PsPacket>> enterMap({Duration collect=const Duration(seconds:6)}) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de entrar al mapa.');
+    // Client -> server remains AES-CTR. The server only changes outgoing crypto.
+    await connection.send(PsPacketType.characterEnteredMap);
+    final packets=<PsPacket>[];
+    final deadline=DateTime.now().add(collect);
+    while(DateTime.now().isBefore(deadline)){
+      try{
+        packets.add(await connection.next(timeout:const Duration(milliseconds:500)));
+      }on TimeoutException{}
+    }
+    return packets;
+  }
+
+  Future<void> close()=>connection.close();
+}
+
 class Ps0032Client {
   final String host;
   final int loginPort,worldPort;
