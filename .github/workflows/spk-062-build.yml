@@ -10,6 +10,7 @@ on:
       - lib/main.dart
       - test/spk_source_test.dart
       - integration_test/spk_native_test.dart
+      - tool/run_all_local.dart
       - .github/workflows/build.yml
       - pubspec.yaml
 
