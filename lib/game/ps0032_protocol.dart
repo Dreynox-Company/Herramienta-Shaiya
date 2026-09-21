@@ -365,11 +365,14 @@ class LoginSession {
 class PsCharacterSlot {
   final int slot,id,mapId;
   final int level,race,mode,hair,face,height,profession,gender;
+  final String name;
+  final bool isDelete,isRename;
   const PsCharacterSlot({
     required this.slot,required this.id,required this.mapId,
     required this.level,required this.race,required this.mode,
     required this.hair,required this.face,required this.height,
     required this.profession,required this.gender,
+    required this.name,required this.isDelete,required this.isRename,
   });
   bool get exists=>id!=0;
 
@@ -381,12 +384,17 @@ class PsCharacterSlot {
     if(id==0){
       return PsCharacterSlot(
         slot:slot,id:0,mapId:0,level:0,race:0,mode:0,hair:0,face:0,height:0,profession:0,gender:0,
+        name:'',isDelete:false,isRename:false,
       );
     }
-    if(b.length<20)throw FormatException('CHARACTER_LIST existente truncado: ${b.length}');
+    if(b.length<657)throw FormatException('CHARACTER_LIST existente truncado: ${b.length}');
+    final rawName=b.sublist(612,631);
+    final zero=rawName.indexOf(0);
+    final name=utf8.decode(zero<0?rawName:rawName.sublist(0,zero),allowMalformed:true);
     return PsCharacterSlot(
       slot:slot,id:id,level:_u16(b,9),race:b[11],mode:b[12],hair:b[13],
       face:b[14],height:b[15],profession:b[16],gender:b[17],mapId:_u16(b,18),
+      name:name,isDelete:b[631]!=0,isRename:b[632]!=0,
     );
   }
 }
