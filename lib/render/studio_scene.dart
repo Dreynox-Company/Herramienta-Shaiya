@@ -47,7 +47,7 @@ class Actor {
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
   t.ThreeJS? view;Catalog? catalog;
-  Actor? character,enemy,mount,wing;Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -119,6 +119,25 @@ class StudioScene extends ChangeNotifier {
       for(final entry in c.animations.entries){final p=lib.resolve(entry.value,['$root/ani',root]);if(p==null)continue;try{final animation=await clip(p);if(compatible(a,animation))a.clips[entry.key]=animation;}catch(e){report(e.toString());}}
       final idle=a.clips['Respirar']??a.clips['Reposo']??(a.clips.isEmpty?null:a.clips.values.first);if(idle!=null){a.idle=idle;a.normal=idle;a.play(idle);}a.root.scale.z=-1;return a;
     }catch(_){a.dispose();rethrow;}
+  }
+  Future<void> spawnGameNpcs({int count=8}) async {
+    for(final a in gameActors){a.dispose();}
+    gameActors.clear();
+    final source=(catalog?.npcs.isNotEmpty??false)?catalog!.npcs:catalog?.creatures??const <CreatureRecord>[];
+    if(source.isEmpty||view==null)return;
+    final limit=math.min(count,source.length);
+    for(var i=0;i<limit;i++){
+      try{
+        final a=await loadCreature(source[i]);
+        final angle=(i/math.max(1,limit))*math.pi*2;
+        final radius=6.0+(i%3)*2.2;
+        final x=math.cos(angle)*radius,z=math.sin(angle)*radius;
+        a.root.position.setValues(x,world==null?0:world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200),z);
+        a.root.rotation.y=-angle+math.pi/2;
+        gameActors.add(a);view!.scene.add(a.root);
+      }catch(e){report('NPC ${source[i].id}: $e');}
+    }
+    say('${gameActors.length} NPC/criaturas locales cargados.');
   }
   Future<void> selectCreature(CreatureRecord? c,String kind) async {
     final revision=kind=='enemy'?++_creatureRevision:kind=='mount'?++_mountRevision:++_wingRevision;
@@ -209,7 +228,7 @@ class StudioScene extends ChangeNotifier {
     if(disposed)return;_frameAccumulator+=dt;_uiAccumulator+=dt;if(_frameAccumulator<1/30)return;final delta=_frameAccumulator.clamp(0.0,.1);_frameAccumulator=0;
     final moving=walkX!=0||walkZ!=0;final transition=movementTransitions.update(x:walkX,z:walkZ,running:running,blocked:sceneCombatLocked);if(transition!=null)applyLocomotion(transition);final desired=movementClip(movementTransitions.requested);
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
-    for(final a in [character,enemy,mount,wing]){a?.tick(delta);}
+    for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final norm=math.max(1,math.sqrt(walkX*walkX+walkZ*walkZ)),speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);final x=character!.root.position.x+walkX/norm*delta*speed,z=character!.root.position.z+walkZ/norm*delta*speed;
       if(world==null||(x.abs()<55&&z.abs()<55)){character!.root.position.x=x;character!.root.position.z=z;if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);}character!.root.rotation.y=math.atan2(walkX,walkZ);
@@ -249,6 +268,6 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing]){a?.dispose();}weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
 }
 Uint8List _decodeTexture(Map<String,Object> args)=>Pixels.decode(args['bytes'] as Uint8List,args['path'] as String).png(opaque:args['opaque'] as bool);
