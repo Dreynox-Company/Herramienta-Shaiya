@@ -545,10 +545,49 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _finishCreate() async {
-    if(nameController.text.trim().isEmpty)nameController.text='DreynoxLocal';
-    characterCreated=true;
+    final name=nameController.text.trim().isEmpty?'DreynoxLocal':nameController.text.trim();
+    if(name.length>16){
+      messages.insert(0,'[Creación] El nombre admite máximo 16 caracteres.');
+      return;
+    }
+    nameController.text=name;
+    if(!_qaVisual){
+      if(mounted)setState(()=>loading=true);
+      try{
+        final connected=await _ensureLiveWorld();
+        final world=liveWorld;
+        if(!connected||world==null)throw StateError('World offline no disponible.');
+        final empty=liveSlots.where((s)=>!s.exists).firstOrNull;
+        if(empty==null)throw StateError('No quedan slots de personaje disponibles.');
+        final slots=await world.createCharacter(
+          slot:empty.slot,
+          race:_protocolRace(),
+          mode:_protocolMode(),
+          hair:hairIndex,
+          face:faceIndex,
+          height:2,
+          profession:_protocolProfession(),
+          gender:genderIndex,
+          name:name,
+        );
+        liveSlots=List<PsCharacterSlot>.unmodifiable(slots);
+        final created=liveSlots.where((s)=>s.exists&&s.slot==empty.slot).firstOrNull
+          ??liveSlots.where((s)=>s.exists).firstOrNull;
+        if(created==null)throw StateError('El servidor confirmó CREATE_CHARACTER pero no devolvió el personaje.');
+        await _applyLiveSlot(created);
+        characterCreated=true;
+        messages.insert(0,'[ps0032] Personaje creado por World · id '+created.id.toString()+'.');
+      }catch(e){
+        characterCreated=false;
+        messages.insert(0,'[Creación] '+e.toString());
+        if(mounted)setState(()=>loading=false);
+        return;
+      }
+    }else{
+      characterCreated=true;
+    }
     await _prepareSelectionWorld(creation:false);
-    if(mounted)setState(()=>stage=GameStage.characterSelect);
+    if(mounted)setState((){stage=GameStage.characterSelect;loading=false;});
   }
 
   Future<void> _changeGender(int value) async {
