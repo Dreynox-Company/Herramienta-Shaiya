@@ -5,7 +5,9 @@
     final c = catalog, db = npcDatabase, view = scene.view;
     if (c == null || db == null || view == null) return;
     final resource = c.names.maps[worldPath];
-    if (resource == null) return;
+    if (resource == null) {
+      return;
+    }
     final centerX = character.x, centerZ = character.z;
     final placements = resource.npcs.toList()
       ..sort((a, b) {
