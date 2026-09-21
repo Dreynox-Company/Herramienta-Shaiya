@@ -13,6 +13,7 @@ import '../input/viewport_movement_input.dart';
 import '../render/studio_scene.dart';
 import 'game_stage.dart';
 import 'offline_backend.dart';
+import 'ps0032_protocol.dart';
 import 'server_metadata.dart';
 import 'screens/character_create_screen.dart';
 import 'screens/character_select_screen.dart';
@@ -40,6 +41,11 @@ class _GameClientPageState extends State<GameClientPage> {
   UiAssetCache? ui;
   SvmapData? svmap;
   ServerMetadata? metadata;
+  Ps0032Client? protocolClient;
+  PsWorldSession? liveWorld;
+  PsWorldSnapshot? liveSnapshot;
+  List<PsCharacterSlot> liveSlots=const [];
+  bool liveProtocol=false;
   int questId=1;
   GameStage stage=GameStage.faction;
   bool loading=true;
@@ -142,7 +148,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _refresh(){if(mounted)setState((){});}
 
   @override void dispose(){
-    unawaited(backend.stop());
+    unawaited(_shutdownRuntime());
     scene.removeListener(_refresh);
     scene.dispose();
     renderer.dispose();
@@ -151,6 +157,64 @@ class _GameClientPageState extends State<GameClientPage> {
     super.dispose();
   }
 
+  bool get _qaVisual=>Platform.environment['SHAIYA_QA_DISABLE_BACKEND']=='1';
+
+  Future<void> _shutdownRuntime() async {
+    final world=liveWorld;
+    liveWorld=null;liveSlots=const [];liveSnapshot=null;liveProtocol=false;
+    if(world!=null){try{await world.close();}catch(_){}}
+    await backend.stop();
+  }
+
+  int _protocolProfession()=>const [0,1,5,2,3,4][classIndex.clamp(0,5)];
+  int _protocolRace(){
+    final firstRace=classIndex<=2;
+    if(faction=='light')return firstRace?0:1;
+    return firstRace?2:3;
+  }
+  int _protocolMode()=>modeIndex==1?3:2;
+  int _uiClassFromProfession(int value)=>switch(value){0=>0,1=>1,5=>2,2=>3,3=>4,4=>5,_=>0};
+
+  Future<void> _applyLiveSlot(PsCharacterSlot slot) async {
+    if(!slot.exists)return;
+    faction=(slot.race<=1)?'light':'fury';
+    classIndex=_uiClassFromProfession(slot.profession);
+    genderIndex=slot.gender.clamp(0,1);
+    hairIndex=slot.hair;
+    faceIndex=slot.face;
+    modeIndex=slot.mode==3?1:0;
+    if(slot.name.isNotEmpty)nameController.text=slot.name;
+    characterCreated=true;
+    await _applyDefaultAppearance();
+  }
+
+  Future<bool> _ensureLiveWorld() async {
+    if(_qaVisual)return false;
+    if(liveWorld!=null)return true;
+    final started=await backend.start(faction:faction);
+    if(!started)return false;
+    final secret=backend.password;
+    if(secret==null||secret.isEmpty)throw StateError('Backend offline sin secreto de sesión.');
+    final client=Ps0032Client(trace:(s){
+      messages.insert(0,'[ps0032] '+s);
+      if(mounted)setState(()=>progress=s);
+    });
+    protocolClient=client;
+    final login=await client.loginOffline(secret);
+    final world=await client.openWorld(login);
+    final expected=faction=='light'?0:1;
+    if(world.faction!=expected){
+      await world.close();
+      throw StateError('La facción del slot (${world.faction}) no coincide con $faction.');
+    }
+    liveWorld=world;
+    liveSlots=List<PsCharacterSlot>.unmodifiable(world.characters);
+    liveProtocol=true;
+    final existing=liveSlots.where((s)=>s.exists).firstOrNull;
+    if(existing!=null)await _applyLiveSlot(existing);
+    messages.insert(0,'[ps0032] Sesión World activa · ${liveSlots.where((s)=>s.exists).length} personaje(s).');
+    return true;
+  }
   Future<void> chooseData() async {
     setState(()=>loading=true);
     try{
@@ -178,7 +242,6 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _connectLibrary(Library lib) async {
-    await backend.start();
     final c=Catalog(lib);
     await c.load((s){if(mounted)setState(()=>progress=s);});
     catalog=c;
