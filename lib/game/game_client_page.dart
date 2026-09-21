@@ -83,6 +83,7 @@ class _GameClientPageState extends State<GameClientPage> {
           'npcs':metadata?.npcs.length??0,
           'quests':metadata?.quests.length??0,
           'mobs':metadata?.mobs.length??0,
+          'createRules':metadata?.createRules.length??0,
         },
         'backendReady':backend.ready,
         'questId':questId,
@@ -342,14 +343,15 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.updateCamera();
   }
 
-  Future<SvmapData?> _loadSvmap() async {
+  Future<SvmapData?> _loadSvmap(int mapId) async {
     final exe=File(Platform.resolvedExecutable).parent.path;
     final cwd=Directory.current.path;
+    final name=mapId.toString()+'.svmap';
     final candidates=<String>[
-      exe+'/server/maps/1.svmap',
-      exe+'/servicios/world/config/maps/1.svmap',
-      cwd+'/server/maps/1.svmap',
-      cwd+'/servicios/world/config/maps/1.svmap',
+      exe+'/server/maps/'+name,
+      exe+'/servicios/world/config/maps/'+name,
+      cwd+'/server/maps/'+name,
+      cwd+'/servicios/world/config/maps/'+name,
     ];
     for(final path in candidates){
       final file=File(path);
@@ -366,13 +368,16 @@ class _GameClientPageState extends State<GameClientPage> {
     final c=catalog!;
     // Tutorial quest shown by the native ps0032 client for a fresh level-1 character.
     questId=faction=='light'?3781:3792;
-    svmap??=await _loadSvmap();
-    var world=c.worlds.where((p)=>baseName(p).toLowerCase()=='1.wld').firstOrNull;
+    final country=faction=='light'?0:1;
+    final create=metadata?.createRule(country,classIndex);
+    final mapId=create?.mapId??(faction=='light'?1:2);
+    svmap=await _loadSvmap(mapId);
+    var world=c.worlds.where((p)=>baseName(p).toLowerCase()==mapId.toString()+'.wld').firstOrNull;
     world??=c.worlds.firstOrNull;
 
-    double? x,z;
+    double? x=create?.x,z=create?.z;
     final map=svmap;
-    if(map!=null){
+    if((x==null||z==null)&&map!=null){
       final side=map.spawns.where((s)=>faction=='light'
         ?(s.faction==0||s.faction==2)
         :(s.faction==1||s.faction==2)).firstOrNull;
