@@ -1,0 +1,25 @@
+name: Flutter ps0032 protocol
+on:
+  push:
+    branches: [work/flutter-protocol-ps0032-v2]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flutter-protocol-ps0032-v2
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --set-exit-if-changed lib/protocol test/ps0032_packet_test.dart
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings lib/protocol test/ps0032_packet_test.dart
+      - run: flutter test test/ps0032_packet_test.dart --reporter expanded
