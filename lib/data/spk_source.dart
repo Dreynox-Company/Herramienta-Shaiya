@@ -191,10 +191,15 @@ class SpkArchiveSource {
     Uint8List tag, {
     Uint8List? aad,
   }) async {
-    if (secret.length != 16 || nonce.length != 12 || tag.length != 16) {
+    if ((secret.length != 16 && secret.length != 32) ||
+        nonce.length != 12 ||
+        tag.length != 16) {
       throw const FormatException('Parámetros AES-GCM SPK inválidos.');
     }
-    final clear = await AesGcm.with128bits().decrypt(
+    final algorithm = secret.length == 16
+        ? AesGcm.with128bits()
+        : AesGcm.with256bits();
+    final clear = await algorithm.decrypt(
       SecretBox(cipherText, nonce: nonce, mac: Mac(tag)),
       secretKey: SecretKey(secret),
       aad: aad ?? const [],
