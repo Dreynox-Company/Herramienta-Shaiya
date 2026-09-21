@@ -1,0 +1,214 @@
+;
+  }
+
+  Future<void> _spawnWorldNpcs(String worldPath) async {
+    final c = catalog, db = npcDatabase, view = scene.view;
+    if (c == null || db == null || view == null) return;
+    final resource = c.names.maps[worldPath];
+    if (resource == null) return;
+    final centerX = character.x, centerZ = character.z;
+    final placements = resource.npcs.toList()
+      ..sort((a, b) {
+        double d(WorldNpc n) => math.pow(n.position.x - centerX, 2).toDouble() +
+            math.pow(n.position.z - centerZ, 2).toDouble();
+        return d(a).compareTo(d(b));
+      });
+
+    var loaded = 0;
+    for (final p in placements) {
+      final dx = p.position.x - centerX, dz = p.position.z - centerZ;
+      if (dx * dx + dz * dz > 150 * 150) continue;
+      final def = db.npc(p.type, p.typeId);
+      if (def == null || def.model < 0) continue;
+      final record = c.npcs.where((n) => n.id == def.model).firstOrNull;
+      if (record == null) continue;
+      try {
+        final actor = await scene.loadCreature(record);
+        actor.root.position.setValues(
+          p.position.x - scene.originX,
+          p.position.y,
+          scene.originZ - p.position.z,
+        );
+        actor.root.rotation.y = -p.orientation;
+        view.scene.add(actor.root);
+        _npcVisuals.add(_NpcVisual(p, def, actor));
+        if (++loaded >= 55) break;
+      } catch (e) {
+        stderr.writeln('NPC ${p.type}:${p.typeId}: $e');
+      }
+    }
+    progress = '$loaded NPC originales cargados alrededor de ${character.name}.';
+  }
+
+  void _pickInitialQuest() {
+    final db = npcDatabase;
+    if (db == null) return;
+    final candidates = _npcVisuals.where((n) => n.definition.startQuestIds.isNotEmpty).toList()
+      ..sort((a, b) {
+        double d(_NpcVisual n) => math.pow(n.placement.position.x - character.x, 2).toDouble() +
+            math.pow(n.placement.position.z - character.z, 2).toDouble();
+        return d(a).compareTo(d(b));
+      });
+    for (final n in candidates) {
+      for (final id in n.definition.startQuestIds) {
+        if (acceptedQuests.contains(id)) continue;
+        final q = db.quest(id);
+        if (q != null && character.level >= q.minLevel && character.level <= q.maxLevel) {
+          activeQuest = q;
+          activeQuestNpc = n.definition;
+          return;
+        }
+      }
+    }
+  }
+
+  void _acceptQuest() {
+    final q = activeQuest;
+    if (q != null && !acceptedQuests.contains(q.id)) acceptedQuests.add(q.id);
+    activeQuest = null;
+    activeQuestNpc = null;
+    setState(() {});
+  }
+
+  Future<Uint8List> _uiTexture(String path) {
+    final lib = library!;
+    final key = '${identityHashCode(lib)}:$path';
+    return _uiCache.putIfAbsent(key, () async {
+      final resolved = lib.files.containsKey(canon(path))
+          ? canon(path)
+          : lib.resolve(baseName(path), [directoryName(path)], uniqueFallback: true);
+      if (resolved == null) throw FormatException('UI ausente: $path');
+      final raw = await lib.read(resolved);
+      return Pixels.decode(raw, resolved).png();
+    });
+  }
+
+  Widget _dataImage(
+    String path, {
+    BoxFit fit = BoxFit.fill,
+    Alignment alignment = Alignment.center,
+    double? width,
+    double? height,
+    double opacity = 1,
+  }) {
+    if (library == null) return const SizedBox.shrink();
+    return FutureBuilder<Uint8List>(
+      future: _uiTexture(path),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        return Opacity(
+          opacity: opacity,
+          child: Image.memory(
+            snap.data!,
+            width: width,
+            height: height,
+            fit: fit,
+            alignment: alignment,
+            filterQuality: FilterQuality.medium,
+            gaplessPlayback: true,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _referenceCanvas(Widget child) => Positioned.fill(
+    child: FittedBox(
+      fit: BoxFit.fill,
+      child: SizedBox(width: 1024, height: 768, child: child),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    Widget body;
+    switch (screen) {
+      case ClientScreen.boot:
+        body = _bootScreen();
+        break;
+      case ClientScreen.server:
+        body = _serverScreen();
+        break;
+      case ClientScreen.faction:
+        body = _factionScreen();
+        break;
+      case ClientScreen.characters:
+        body = _characterScreen();
+        break;
+      case ClientScreen.world:
+        body = _worldScreen();
+        break;
+    }
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(child: body),
+          if (loading)
+            Positioned.fill(
+              child: ColoredBox(
+                color: const Color(0xaa000000),
+                child: Center(
+                  child: Container(
+                    width: 430,
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: const Color(0xee120d0d),
+                      border: Border.all(color: const Color(0xff845d3e)),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(color: Color(0xffd7ae67)),
+                        const SizedBox(height: 18),
+                        Text(progress, textAlign: TextAlign.center),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (error != null && !loading)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 20,
+              child: Material(
+                color: const Color(0xee4a1010),
+                child: ListTile(
+                  title: Text(error!),
+                  trailing: IconButton(
+                    onPressed: () => setState(() => error = null),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bootScreen() => Container(
+    decoration: const BoxDecoration(
+      gradient: RadialGradient(
+        colors: [Color(0xff302219), Color(0xff060606)],
+        radius: 1.1,
+      ),
+    ),
+    child: Center(
+      child: Container(
+        width: 560,
+        padding: const EdgeInsets.all(36),
+        decoration: BoxDecoration(
+          color: const Color(0xe5110c0b),
+          border: Border.all(color: const Color(0xff73513b)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'SHAIYA',
+              style: TextStyle(
+                fontSize: 54,
+                fontWeight: FontWe
