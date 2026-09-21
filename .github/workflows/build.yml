@@ -112,11 +112,14 @@ jobs:
       - name: Build self-contained SPK ResourceProbe
         run: |
           python -m pip install --disable-pip-version-check "pyinstaller>=6.16,<7" "frida>=17.16,<18" "zstandard>=0.23,<1" "cryptography>=46,<47"
+          $agent = Join-Path $env:GITHUB_WORKSPACE 'tool/spk_resource_probe/resource_probe.js'
+          $profile = Join-Path $env:GITHUB_WORKSPACE 'tool/spk_resource_probe/index-profile.json'
+          $entry = Join-Path $env:GITHUB_WORKSPACE 'tool/spk_resource_probe/resource_probe.py'
           python -m PyInstaller --noconfirm --clean --onefile --console --name Shaiya_SPK_ResourceProbe `
-            --distpath probe-dist --workpath probe-build --specpath probe-spec `
-            --add-data "tool/spk_resource_probe/resource_probe.js;." `
-            --add-data "tool/spk_resource_probe/index-profile.json;." `
-            tool/spk_resource_probe/resource_probe.py
+            --distpath probe-dist --workpath probe-build `
+            --add-data "$agent;." `
+            --add-data "$profile;." `
+            $entry
           $probe = Join-Path $env:GITHUB_WORKSPACE 'probe-dist/Shaiya_SPK_ResourceProbe.exe'
           if (!(Test-Path $probe)) { throw 'SPK ResourceProbe executable was not produced.' }
           $extras = Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release/Extras/SPK'
