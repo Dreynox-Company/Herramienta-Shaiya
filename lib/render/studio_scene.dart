@@ -386,7 +386,8 @@ class StudioScene extends ChangeNotifier {
           final objects=readSmod(await lib.read(model),model),group=t.Group();
           var pieceCount=0;
           for(final piece in objects){
-            final requested=piece.texture;
+            final requested=piece.texture.trim();
+            if(requested.isEmpty)continue;
             final dds=requested.toLowerCase().endsWith('.tga')
               ?requested.substring(0,requested.length-4)+'.dds'
               :requested;
@@ -419,7 +420,7 @@ class StudioScene extends ChangeNotifier {
           group.position.setValues(obj.position.x-ox,obj.position.y,-(obj.position.z-oz));
           group.rotation.y=-math.atan2(obj.forward.x,obj.forward.z);
           stage.add(group);loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
-        }catch(e){missingWorldAssets.add('error:${obj.asset}');report('Objeto $model: $e');}
+        }catch(e){missingWorldAssets.add('error:${obj.asset}:$e');report('Objeto $model: $e');}
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
