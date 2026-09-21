@@ -55,6 +55,10 @@ class SpkArchiveSource {
   SpkNameMap names;
   final List<Map<String, Object?>> recentReads = [];
   final List<Map<String, Object?>> failures = [];
+  Map<String, Object?>? resourceProfileValidation;
+  Map<String, Object?>? fragmentProfileValidation;
+  bool _simpleProfileValidated = false;
+  bool _fragmentProfileValidated = false;
   int reads = 0;
   int bytesRead = 0;
 
@@ -467,13 +471,218 @@ class SpkArchiveSource {
     return out;
   }
 
-  bool get canReadSimpleResources => profile.effectiveResourceSecret != null;
+  bool get _hasSimpleCryptoMaterial =>
+      profile.effectiveResourceSecret != null;
+
+  bool get _hasFragmentCryptoMaterial =>
+      _hasSimpleCryptoMaterial && profile.chunkNonceRule != 'unsupported';
+
+  bool get canReadSimpleResources =>
+      _hasSimpleCryptoMaterial && _simpleProfileValidated;
+
   bool get canReadFragmentedResources =>
-      profile.effectiveResourceSecret != null &&
-      profile.chunkNonceRule != 'unsupported';
+      _hasFragmentCryptoMaterial && _fragmentProfileValidated;
+
   bool get canExtractAll =>
       canReadSimpleResources &&
       (index.fragmentedResources.isEmpty || canReadFragmentedResources);
+
+  static List<SpkRecord> _spreadValidationRecords(
+    List<SpkRecord> records,
+    int maxSamples,
+  ) {
+    if (records.isEmpty || maxSamples <= 0) return const <SpkRecord>[];
+    final count = records.length < maxSamples ? records.length : maxSamples;
+    if (count == 1) return <SpkRecord>[records.first];
+    final out = <SpkRecord>[];
+    final seen = <int>{};
+    for (var i = 0; i < count; i++) {
+      final index = ((records.length - 1) * i) ~/ (count - 1);
+      final record = records[index];
+      if (seen.add(record.ordinal)) out.add(record);
+    }
+    return out;
+  }
+
+  Future<Map<String, Object?>> validateSimpleResourceProfile({
+    int minimumAuthenticatedSamples = 3,
+    int maxSamples = 8,
+  }) async {
+    final key = profile.effectiveResourceSecret;
+    if (key == null) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_PROFILE_REQUIRED',
+        'Falta material criptográfico para validar recursos simples.',
+      );
+    }
+    if (minimumAuthenticatedSamples < 1 ||
+        maxSamples < minimumAuthenticatedSamples) {
+      throw ArgumentError(
+        'La validación SPK requiere límites de muestras coherentes.',
+      );
+    }
+
+    final resources = index.simpleResources.toList(growable: false);
+    if (resources.length < minimumAuthenticatedSamples) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_VALIDATION_SAMPLES',
+        'No hay suficientes recursos simples para validar el perfil.',
+      );
+    }
+
+    final samples = <Map<String, Object?>>[];
+    var authenticated = 0;
+    var decoded = 0;
+    for (final record in _spreadValidationRecords(resources, maxSamples)) {
+      final cipher = await readRange(
+        file,
+        record.dataOffset,
+        record.storedBytes,
+        fileBytes,
+      );
+      Uint8List plain;
+      try {
+        plain = await decryptGcm(
+          cipher,
+          key,
+          record.nonce,
+          record.tag,
+          aad: profile.resourceAad.isEmpty ? null : profile.resourceAad,
+        );
+      } catch (error) {
+        _simpleProfileValidated = false;
+        resourceProfileValidation = {
+          'status': 'failed',
+          'entryId': record.idHex,
+          'authenticatedSamples': authenticated,
+          'error': error.toString(),
+        };
+        throw SpkFailure(
+          'SPK_RESOURCE_AUTH_FAILED',
+          'El perfil de payloads no autentica un recurso simple del SPK.',
+          Map<String, Object?>.from(resourceProfileValidation!),
+        );
+      }
+      authenticated++;
+
+      String format = 'PACKED';
+      String? decodeError;
+      try {
+        final bytes = await decodePayload(plain, record.decodedBytes);
+        format = detectFormat(bytes);
+        decoded++;
+      } catch (error) {
+        decodeError = error.toString();
+      }
+      samples.add({
+        'entryId': record.idHex,
+        'storedBytes': record.storedBytes,
+        'declaredDecodedBytes': record.decodedBytes,
+        'plainBytes': plain.length,
+        'format': format,
+        if (decodeError != null) 'decodeError': decodeError,
+      });
+    }
+
+    if (authenticated < minimumAuthenticatedSamples) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_VALIDATION_SAMPLES',
+        'No se autenticaron suficientes muestras de recursos simples.',
+      );
+    }
+    if (decoded == 0) {
+      throw SpkFailure(
+        'SPK_RESOURCE_CODEC_VALIDATION',
+        'AES-GCM autentica, pero ninguna muestra pudo reconstruirse con los codecs soportados.',
+        {'authenticatedSamples': authenticated, 'samples': samples},
+      );
+    }
+
+    _simpleProfileValidated = true;
+    resourceProfileValidation = {
+      'status': 'validated',
+      'authenticatedSamples': authenticated,
+      'decodedSamples': decoded,
+      'minimumRequired': minimumAuthenticatedSamples,
+      'sampleCount': samples.length,
+      'samples': samples,
+    };
+    return Map<String, Object?>.from(resourceProfileValidation!);
+  }
+
+  Future<Map<String, Object?>> validateFragmentedResourceProfile({
+    int minimumDecodedSamples = 2,
+    int maxSamples = 3,
+  }) async {
+    if (!_hasFragmentCryptoMaterial) {
+      throw const SpkFailure(
+        'SPK_FRAGMENT_PROFILE_REQUIRED',
+        'Falta una regla criptográfica reproducible para validar fragmentos.',
+      );
+    }
+    if (!_simpleProfileValidated) {
+      await validateSimpleResourceProfile();
+    }
+    if (minimumDecodedSamples < 1 || maxSamples < minimumDecodedSamples) {
+      throw ArgumentError(
+        'La validación de fragmentos requiere límites de muestras coherentes.',
+      );
+    }
+
+    final resources = index.fragmentedResources.toList(growable: false);
+    if (resources.length < minimumDecodedSamples) {
+      throw const SpkFailure(
+        'SPK_FRAGMENT_VALIDATION_SAMPLES',
+        'No hay suficientes recursos fragmentados para validar la reconstrucción.',
+      );
+    }
+
+    final samples = <Map<String, Object?>>[];
+    var decoded = 0;
+    for (final record in _spreadValidationRecords(resources, maxSamples)) {
+      try {
+        final bytes = await _readFragmented(record);
+        samples.add({
+          'entryId': record.idHex,
+          'chunks': record.chunkCount,
+          'decodedBytes': bytes.length,
+          'format': detectFormat(bytes),
+          'sha256': sha256.convert(bytes).toString(),
+        });
+        decoded++;
+      } catch (error) {
+        _fragmentProfileValidated = false;
+        fragmentProfileValidation = {
+          'status': 'failed',
+          'entryId': record.idHex,
+          'decodedSamples': decoded,
+          'error': error.toString(),
+        };
+        throw SpkFailure(
+          'SPK_FRAGMENT_VALIDATION_FAILED',
+          'La regla de fragmentación no reconstruye un recurso completo válido.',
+          Map<String, Object?>.from(fragmentProfileValidation!),
+        );
+      }
+    }
+
+    if (decoded < minimumDecodedSamples) {
+      throw const SpkFailure(
+        'SPK_FRAGMENT_VALIDATION_SAMPLES',
+        'No se reconstruyeron suficientes muestras fragmentadas.',
+      );
+    }
+    _fragmentProfileValidated = true;
+    fragmentProfileValidation = {
+      'status': 'validated',
+      'decodedSamples': decoded,
+      'minimumRequired': minimumDecodedSamples,
+      'sampleCount': samples.length,
+      'chunkNonceRule': profile.chunkNonceRule,
+      'samples': samples,
+    };
+    return Map<String, Object?>.from(fragmentProfileValidation!);
+  }
 
   Future<SpkReadResult> readEntry(
     SpkRecord record, {
@@ -482,6 +691,18 @@ class SpkArchiveSource {
     if (!record.resource) {
       throw const FormatException(
         'El registro SPK seleccionado no es un recurso.',
+      );
+    }
+    if (record.simple && !canReadSimpleResources) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_PROFILE_UNVALIDATED',
+        'El perfil de recursos simples todavía no fue autenticado contra muestras reales del SPK.',
+      );
+    }
+    if (record.fragmented && !canReadFragmentedResources) {
+      throw const SpkFailure(
+        'SPK_FRAGMENT_PROFILE_UNVALIDATED',
+        'La reconstrucción fragmentada todavía no fue validada extremo a extremo.',
       );
     }
     if (record.storedBytes > limit || record.decodedBytes > limit) {
@@ -543,7 +764,7 @@ class SpkArchiveSource {
   }
 
   Future<Uint8List> _readFragmented(SpkRecord record) async {
-    if (!canReadFragmentedResources) {
+    if (!_hasFragmentCryptoMaterial) {
       throw SpkFailure(
         'SPK_FRAGMENT_PROFILE_REQUIRED',
         'La regla criptográfica de recursos fragmentados todavía no está validada.',
@@ -936,6 +1157,18 @@ class SpkArchiveSource {
     final list = (selection ?? index.resources)
         .where((e) => e.resource)
         .toList();
+    if (list.any((e) => e.simple) && !canReadSimpleResources) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_PROFILE_UNVALIDATED',
+        'La extracción permanece bloqueada hasta autenticar el perfil de recursos simples.',
+      );
+    }
+    if (list.any((e) => e.fragmented) && !canReadFragmentedResources) {
+      throw const SpkFailure(
+        'SPK_FRAGMENT_PROFILE_UNVALIDATED',
+        'La extracción fragmentada permanece bloqueada hasta validar reconstrucciones completas.',
+      );
+    }
     if (requireComplete &&
         list.any((e) => e.fragmented) &&
         !canReadFragmentedResources) {
@@ -1059,6 +1292,8 @@ class SpkArchiveSource {
     'canReadSimpleResources': canReadSimpleResources,
     'canReadFragmentedResources': canReadFragmentedResources,
     'canExtractAll': canExtractAll,
+    'resourceProfileValidation': resourceProfileValidation,
+    'fragmentProfileValidation': fragmentProfileValidation,
     'reads': reads,
     'bytesRead': bytesRead,
     'recentReads': recentReads,
