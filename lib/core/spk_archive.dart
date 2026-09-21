@@ -460,6 +460,16 @@ class SpkCryptoProfile {
   Uint8List? get effectiveResourceSecret =>
       resourceSecret ?? (resourceKeyIsIndexKey ? indexSecret : null);
 
+  SpkCryptoProfile withChunkNonceRule(String rule) => SpkCryptoProfile(
+    profileId: '$profileId-fragments',
+    indexSha256: indexSha256,
+    indexSecret: indexSecret,
+    resourceSecret: resourceSecret,
+    resourceAad: resourceAad,
+    resourceKeyIsIndexKey: resourceKeyIsIndexKey,
+    chunkNonceRule: spkNormalizeChunkNonceRule(rule),
+  );
+
   factory SpkCryptoProfile.fromJson(Map<String, dynamic> json) {
     if (json['secretHex'] is String && json['target'] == 'index') {
       return SpkCryptoProfile(
@@ -737,4 +747,3 @@ class SpkNameMap {
     },
   };
 }
-
