@@ -59,11 +59,14 @@ jobs:
           with src.open('rb') as f:
             with zstandard.ZstdDecompressor().stream_reader(f) as stream:
               with tarfile.open(fileobj=stream,mode='r|') as t:t.extractall(dst,filter='data')
-          sv=dst/'world/config/maps/1.svmap'
-          target=pathlib.Path('build/windows/x64/runner/Release/server/maps/1.svmap')
-          target.parent.mkdir(parents=True,exist_ok=True)
-          target.write_bytes(sv.read_bytes())
-          print('backend files',sum(1 for p in dst.rglob('*') if p.is_file()),'svmap',target.stat().st_size)
+          maps=pathlib.Path('build/windows/x64/runner/Release/server/maps')
+          maps.mkdir(parents=True,exist_ok=True)
+          svmaps=list((dst/'world/config/maps').glob('*.svmap'))
+          for sv in svmaps:(maps/sv.name).write_bytes(sv.read_bytes())
+          metadata=pathlib.Path('build/windows/x64/runner/Release/server/metadata')
+          metadata.mkdir(parents=True,exist_ok=True)
+          (metadata/'character.json').write_bytes((dst/'world/config/character.json').read_bytes())
+          print('backend files',sum(1 for p in dst.rglob('*') if p.is_file()),'svmaps',len(svmaps))
           '@ | Set-Content bundle_backend.py
           python bundle_backend.py
           if($LASTEXITCODE -ne 0){throw 'backend bundle failed'}
@@ -158,7 +161,9 @@ jobs:
           if(!$server){throw 'Packaged server metadata directory missing'}
           Copy-Item $server server -Recurse -Force
           if(!(Test-Path server/maps/1.svmap)){throw '1.svmap missing'}
+          if(!(Test-Path server/maps/2.svmap)){throw '2.svmap missing'}
           if(!(Test-Path server/metadata/npc_quest.json)){throw 'NpcQuest metadata missing'}
+          if(!(Test-Path server/metadata/character.json)){throw 'character config missing'}
       - name: Recover exact public ps0032 DATA used by native reference
         shell: pwsh
         run: |
