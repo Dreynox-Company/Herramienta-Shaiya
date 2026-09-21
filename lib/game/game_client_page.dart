@@ -345,7 +345,7 @@ class _GameClientPageState extends State<GameClientPage> {
       await scene.setWorld(null);
     }
     // Reproduce the native camera vector instead of a hand-tuned orbit.
-    scene.yaw=1.9747044036310164;
+    scene.yaw=1.166888249958777;
     scene.pitch=.08187975646056456;
     scene.distance=4.29156844199336;
     // WLD terrain at the native target is ~0.74635, target Y is 1.606.
@@ -455,7 +455,7 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld(creation:true);
-    scene.yaw=1.9747044036310164;
+    scene.yaw=1.166888249958777;
     scene.pitch=.08187975646056456;
     scene.distance=4.29156844199336;
     scene.targetY=.85965;
@@ -475,7 +475,7 @@ class _GameClientPageState extends State<GameClientPage> {
     genderIndex=value;
     if(mounted)setState((){});
     await _applyDefaultAppearance();
-    scene.yaw=1.9747044036310164;
+    scene.yaw=1.166888249958777;
     scene.pitch=.08187975646056456;
     scene.distance=4.29156844199336;
     scene.targetY=.85965;
