@@ -140,7 +140,7 @@ class StudioScene extends ChangeNotifier {
     say('${gameActors.length} NPC/criaturas locales cargados.');
   }
 
-  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,int npcLimit=28,int mobLimit=18}) async {
+  Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
     gameActors.clear();
     if(view==null||catalog==null)return;
@@ -169,8 +169,9 @@ class StudioScene extends ChangeNotifier {
       if(baseX.abs()>68||baseZ.abs()>68)continue;
       for(final spawn in area.mobs){
         if(mobsLoaded>=mobLimit)break;
-        final record=mobRecords[spawn.id];
-        if(record==null)continue;
+        final model=mobModels?[spawn.id]??spawn.id;
+        final record=mobRecords[model];
+        if(record==null){report('SVMAP mob ${spawn.id}: modelo $model no existe en monster.mon.');continue;}
         try{
           final a=await loadCreature(record);
           final ring=mobsLoaded%6,rad=2.5+(mobsLoaded%3);
