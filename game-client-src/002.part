@@ -3,7 +3,9 @@
 
   Future<void> _spawnWorldNpcs(String worldPath) async {
     final c = catalog, db = npcDatabase, view = scene.view;
-    if (c == null || db == null || view == null) return;
+    if (c == null || db == null || view == null) {
+      return;
+    }
     final resource = c.names.maps[worldPath];
     if (resource == null) {
       return;
