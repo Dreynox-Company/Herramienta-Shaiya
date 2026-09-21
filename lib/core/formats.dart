@@ -899,6 +899,24 @@ class DgData {
 
   v.Vector3 get center=>(lower+upper)*.5;
 
+  double floorAt(double x,double z,{double radius=6}){
+    final ys=<double>[];
+    for(final part in parts){
+      final p=part.mesh.positions;
+      for(var i=0;i<p.length;i+=3){
+        if((p[i]-x).abs()<=radius&&(p[i+2]-z).abs()<=radius){
+          final y=p[i+1];
+          if(y.isFinite&&y<=lower.y+12)ys.add(y);
+        }
+      }
+    }
+    if(ys.isEmpty)return lower.y;
+    ys.sort();
+    // Dungeon floor vertices are repeated heavily; the median of the low
+    // band is stable and avoids isolated wall/bounding-box points.
+    return ys[ys.length~/2];
+  }
+
   static DgData parse(Uint8List bytes,String source){
     final r=Bin(bytes,source);
     final lower=r.vec(),upper=r.vec();
