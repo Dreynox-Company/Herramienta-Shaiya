@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -466,7 +467,6 @@ class _GameClientPageState extends State<GameClientPage> {
     final c=catalog!;
 
     PsWorldSnapshot? networkSnapshot;
-    PsCharacterDetails? liveDetails;
     var mapId=0;
     double? x,z;
 
@@ -485,7 +485,6 @@ class _GameClientPageState extends State<GameClientPage> {
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
-        liveDetails=selected.details;
         mapId=current.mapId;
         x=networkSnapshot.self?.x??selected.details.x;
         z=networkSnapshot.self?.z??selected.details.z;
