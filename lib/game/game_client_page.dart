@@ -408,6 +408,7 @@ class _GameClientPageState extends State<GameClientPage> {
             scene:scene,
             catalog:catalog!,
             characterName:nameController.text,
+            ui:ui!,
             messages:messages,
             questOpen:questOpen,
             questId:questId,
