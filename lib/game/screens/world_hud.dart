@@ -72,10 +72,19 @@ class WorldHud extends StatelessWidget {
                     color: const Color(0xff571b17),
                     border: Border.all(color: const Color(0xffc2a162)),
                   ),
-                  child: const Icon(
-                    Icons.local_fire_department,
-                    color: Color(0xffffad3b),
-                    size: 34,
+                  child: DataRegion(
+                    cache: ui,
+                    path: 'interface/main_stats_light.tga',
+                    sheetWidth: 64,
+                    sheetHeight: 64,
+                    source: const Rect.fromLTWH(0, 0, 64, 64),
+                    width: 46,
+                    height: 46,
+                    fallback: const Icon(
+                      Icons.local_fire_department,
+                      color: Color(0xffffad3b),
+                      size: 34,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -297,33 +306,28 @@ class WorldHud extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (final icon in [
-                        Icons.menu_book,
-                        Icons.inventory_2,
-                        Icons.backpack,
-                        Icons.description,
-                        Icons.pan_tool,
-                        Icons.emoji_events,
-                        Icons.chat,
-                        Icons.sports_martial_arts,
-                        Icons.settings,
-                        Icons.card_giftcard,
+                      for (final asset in const [
+                        'main_bottom_btn_status.tga',
+                        'main_bottom_btn_item.tga',
+                        'main_bottom_btn_quest.tga',
+                        'main_bottom_btn_skill.tga',
+                        'main_bottom_btn_guild.tga',
+                        'main_bottom_btn_helper.tga',
+                        'main_bottom_btn_event.tga',
+                        'main_bottom_btn_shop.tga',
+                        'main_bottom_btn_option.tga',
+                        'main_bottom_btn_sub.tga',
                       ])
-                        Container(
-                          width: 28,
-                          height: 28,
-                          margin: const EdgeInsets.only(right: 3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0x886b4b33),
-                            border: Border.all(
-                              color: const Color(0xffc2985c),
-                            ),
-                          ),
-                          child: Icon(
-                            icon,
-                            size: 16,
-                            color: const Color(0xffffdfa2),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 2),
+                          child: DataRegion(
+                            cache: ui,
+                            path: 'interface/'+asset,
+                            sheetWidth: 256,
+                            sheetHeight: 64,
+                            source: const Rect.fromLTWH(0, 0, 64, 64),
+                            width: 29,
+                            height: 29,
                           ),
                         ),
                     ],
