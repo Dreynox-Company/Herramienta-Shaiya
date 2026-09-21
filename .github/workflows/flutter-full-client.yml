@@ -1,0 +1,186 @@
+name: Flutter full client v1
+on:
+  push:
+    branches: [work/flutter-full-client-v1]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: flutter-full-client-v1
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format lib test tool
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: flutter test --reporter expanded
+
+  windows:
+    needs: validate
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: python tool/prepare.py
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Native-Backend-Windows
+          run-id: 35546792715
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: backend-archive
+
+      - name: Bundle validated backend 0.1.2
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check zstandard
+          @'
+          import pathlib,tarfile,zstandard
+          src=pathlib.Path('backend-archive/native-services-win-x64.tar.zst')
+          backend=pathlib.Path('backend')
+          release=pathlib.Path('build/windows/x64/runner/Release')
+          backend.mkdir(exist_ok=True)
+          services=release/'servicios'
+          services.mkdir(parents=True,exist_ok=True)
+          with src.open('rb') as f:
+            with zstandard.ZstdDecompressor().stream_reader(f) as stream:
+              with tarfile.open(fileobj=stream,mode='r|') as t:
+                t.extractall(backend,filter='data')
+          for name in ('login','world'):
+            source=backend/name
+            target=services/name
+            if target.exists():
+              import shutil; shutil.rmtree(target)
+            import shutil; shutil.copytree(source,target)
+          maps=release/'server/maps';maps.mkdir(parents=True,exist_ok=True)
+          for sv in (backend/'world/config/maps').glob('*.svmap'):
+            (maps/sv.name).write_bytes(sv.read_bytes())
+          metadata=release/'server/metadata';metadata.mkdir(parents=True,exist_ok=True)
+          (metadata/'character.json').write_bytes((backend/'world/config/character.json').read_bytes())
+          print('services',sum(1 for p in services.rglob('*') if p.is_file()))
+          '@ | Set-Content bundle_backend.py
+          python bundle_backend.py
+          if($LASTEXITCODE -ne 0){throw 'backend bundle failed'}
+
+      - name: Export NPC quest and mob metadata
+        shell: pwsh
+        run: |
+          $world=(Resolve-Path backend/world).Path
+          $input=Join-Path $world 'config/SData/NpcQuest.SData'
+          $out='build/windows/x64/runner/Release/server/metadata/npc_quest.json'
+          dotnet run --project tool/metadata_exporter/MetadataExporter.csproj -c Release -p:ParsecDir="$world" -- "$input" "$out"
+          if($LASTEXITCODE -ne 0){throw 'metadata exporter failed'}
+          if(!(Test-Path $out)){throw 'metadata output missing'}
+
+      - name: Real ps0032 create-select-enter gate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force protocol-proof,protocol-slot | Out-Null
+          $secret='FullClientLocal2026!'
+          $token='abcdef0123456789abcdef0123456789abcdef0123456789'
+          $env:SHAIYA_OFFLINE_SLOT=(Resolve-Path protocol-slot).Path
+          $env:SHAIYA_OFFLINE_FACTION='light'
+          $env:SHAIYA_OFFLINE_PASSWORD=$secret
+          $env:SHAIYA_OFFLINE_TOKEN=$token
+          $env:SHAIYA_PROTOCOL_REPORT=(Join-Path (Resolve-Path protocol-proof).Path 'protocol.json')
+          function Wait-Health([int]$port){
+            $deadline=(Get-Date).AddSeconds(60)
+            while((Get-Date) -lt $deadline){
+              try{
+                $r=Invoke-WebRequest -UseBasicParsing -Uri ("http://127.0.0.1:"+$port+"/offline/status") -Headers @{Authorization=("Bearer "+$token)} -TimeoutSec 2
+                if($r.StatusCode -eq 200){return}
+              }catch{}
+              Start-Sleep -Milliseconds 400
+            }
+            throw "health timeout $port"
+          }
+          $login=Start-Process (Resolve-Path backend/login/Imgeneus.Login.exe) -WorkingDirectory (Resolve-Path backend/login) -RedirectStandardOutput protocol-proof/login.log -RedirectStandardError protocol-proof/login.err -PassThru
+          try{
+            Wait-Health 5000
+            $world=Start-Process (Resolve-Path backend/world/Imgeneus.World.exe) -WorkingDirectory (Resolve-Path backend/world) -RedirectStandardOutput protocol-proof/world.log -RedirectStandardError protocol-proof/world.err -PassThru
+            try{
+              Wait-Health 5001
+              dart run tool/full_client_probe.dart
+              if($LASTEXITCODE -ne 0){throw 'full protocol probe failed'}
+              $report=Get-Content protocol-proof/protocol.json -Raw | ConvertFrom-Json
+              if(!$report.ok){throw 'protocol report not ok'}
+              if($report.enteredMapPackets -lt 1){throw 'ENTER_MAP missing'}
+              if($report.npcPackets -lt 1){throw 'NPC packets missing'}
+              if($report.mobPackets -lt 1){throw 'mob packets missing'}
+            }finally{
+              if(!$world.HasExited){Stop-Process -Id $world.Id -Force}
+            }
+          }finally{
+            if(!$login.HasExited){Stop-Process -Id $login.Id -Force}
+          }
+
+      - name: Windows renderer launch smoke
+        shell: pwsh
+        run: |
+          $fixture=Join-Path $env:RUNNER_TEMP 'full-client-fixture'
+          python tool/make_native_fixture.py $fixture
+          if($LASTEXITCODE -ne 0){throw 'fixture failed'}
+          $exe=(Resolve-Path build/windows/x64/runner/Release/herramienta_shaiya.exe).Path
+          $env:SHAIYA_QA_DISABLE_BACKEND='1'
+          $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$fixture","--qa-stage=characterSelect") -PassThru
+          try{
+            Start-Sleep 15
+            $p.Refresh()
+            if($p.HasExited){throw "client exited early $($p.ExitCode)"}
+            if($p.MainWindowHandle -eq 0){throw 'no visible Flutter window'}
+          }finally{
+            if(!$p.HasExited){$p.CloseMainWindow()|Out-Null;Start-Sleep 2;$p.Refresh();if(!$p.HasExited){$p.Kill()}}
+          }
+
+      - name: Include launch notes
+        shell: pwsh
+        run: |
+          @'
+          @echo off
+          start "" "%~dp0herramienta_shaiya.exe"
+          '@ | Set-Content build/windows/x64/runner/Release/JUGAR_FLUTTER_FULL.cmd
+          @'
+          DREYNOX SHAIYA FLUTTER FULL CLIENT V1
+          =====================================
+          - Flutter/three_js renderer.
+          - DATA original read directly.
+          - Backend offline 0.1.2 bundled.
+          - Login/World ps0032 real transport.
+          - Character create/select/enter-map transport validated in CI.
+          - Light/Fury use isolated save slots.
+          '@ | Set-Content build/windows/x64/runner/Release/LEEME_FULL.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dreynox-Shaiya-Flutter-Full-Windows-x64
+          path: build/windows/x64/runner/Release/
+          retention-days: 14
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Flutter-Full-Protocol-Proof
+          path: protocol-proof/
+          retention-days: 14
