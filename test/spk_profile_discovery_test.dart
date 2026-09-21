@@ -9,9 +9,7 @@ void main() {
     );
     expect(
       paths,
-      contains(
-        r'C:\Tools\ShaiyaStudio\profiles\spk-crypto-profile.json',
-      ),
+      contains(r'C:\Tools\ShaiyaStudio\profiles\spk-crypto-profile.json'),
     );
     expect(paths, contains(r'C:\Games\Shaiya\data.spk.profile.json'));
   });
