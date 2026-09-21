@@ -38,6 +38,11 @@ class _GameClientPageState extends State<GameClientPage> {
   LoginSession? liveLogin;
   PsWorldSession? liveWorld;
   PsWorldSnapshot? liveSnapshot;
+  StreamSubscription<PsPacket>? livePacketSubscription;
+  Timer? movementTimer;
+  bool movementSending=false;
+  double? lastNetworkX,lastNetworkZ;
+  bool lastNetworkMoving=false,lastNetworkRun=false;
   List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
   PsCharacterSlot? liveCharacter;
   final focus=FocusNode();
@@ -149,6 +154,8 @@ class _GameClientPageState extends State<GameClientPage> {
   void _refresh(){if(mounted)setState((){});}
 
   @override void dispose(){
+    movementTimer?.cancel();
+    unawaited(livePacketSubscription?.cancel());
     if(liveWorld!=null)unawaited(liveWorld!.close());
     unawaited(backend.stop());
     scene.removeListener(_refresh);
@@ -565,19 +572,118 @@ class _GameClientPageState extends State<GameClientPage> {
 
     stage=GameStage.world;
     questOpen=true;
+    _startWorldRealtime();
     if(mounted)setState(()=>loading=false);
     focus.requestFocus();
     await Future<void>.delayed(const Duration(milliseconds:350));
     await _signalQaReady();
   }
 
+  void _startWorldRealtime(){
+    movementTimer?.cancel();
+    unawaited(livePacketSubscription?.cancel());
+    final session=liveWorld;
+    if(session==null)return;
+    livePacketSubscription=session.packets.listen(
+      _handleLivePacket,
+      onError:(Object e){
+        messages.insert(0,'[ps0032] Stream World: '+e.toString());
+        if(mounted)setState((){});
+      },
+    );
+    movementTimer=Timer.periodic(const Duration(milliseconds:200),(_)=>unawaited(_syncMovement()));
+  }
+
+  void _stopWorldRealtime(){
+    movementTimer?.cancel();movementTimer=null;
+    unawaited(livePacketSubscription?.cancel());livePacketSubscription=null;
+    lastNetworkX=lastNetworkZ=null;
+    lastNetworkMoving=lastNetworkRun=false;
+  }
+
+  void _handleLivePacket(PsPacket packet){
+    if(stage!=GameStage.world)return;
+    if(packet.type==PsPacketType.questStart&&packet.body.length>=6){
+      final d=ByteData.sublistView(packet.body);
+      final id=d.getInt16(4,Endian.little);
+      messages.insert(0,'[Misión] World confirmó QUEST_START '+id.toString()+'.');
+    }else if(packet.type==PsPacketType.questUpdateCount&&packet.body.length>=4){
+      final d=ByteData.sublistView(packet.body);
+      final id=d.getInt16(0,Endian.little),objective=packet.body[2]+1,count=packet.body[3];
+      messages.insert(0,'[Misión] '+id.toString()+' · objetivo '+objective.toString()+': '+count.toString());
+    }else if(packet.type==PsPacketType.questEnd&&packet.body.length>=7){
+      final d=ByteData.sublistView(packet.body);
+      final id=d.getInt16(4,Endian.little),ok=packet.body[6]!=0;
+      messages.insert(0,'[Misión] '+id.toString()+(ok?' completada.':' aún no puede completarse.'));
+    }
+    if(mounted)setState((){});
+  }
+
+  Future<void> _syncMovement() async {
+    if(movementSending||stage!=GameStage.world)return;
+    final session=liveWorld,a=scene.character;
+    if(session==null||a==null)return;
+    final moving=scene.walkX!=0||scene.walkZ!=0;
+    final x=scene.originX+a.root.position.x;
+    final z=scene.originZ-a.root.position.z;
+    final y=a.root.position.y;
+    final run=scene.running;
+    final changed=lastNetworkX==null||
+      ((x-lastNetworkX!)*(x-lastNetworkX!)+(z-lastNetworkZ!)*(z-lastNetworkZ!))>.01||
+      moving!=lastNetworkMoving||run!=lastNetworkRun;
+    if(!changed)return;
+    movementSending=true;
+    try{
+      await session.moveCharacter(x:x,y:y,z:z,yawRadians:-a.root.rotation.y,run:run);
+      lastNetworkX=x;lastNetworkZ=z;lastNetworkMoving=moving;lastNetworkRun=run;
+    }catch(e){
+      messages.insert(0,'[Movimiento] '+e.toString());
+      if(mounted)setState((){});
+    }finally{movementSending=false;}
+  }
+
+  Future<void> _acceptCurrentQuest() async {
+    final text=catalog?.questText(uiLocale)?.quest(questId);
+    final session=liveWorld;
+    final rule=metadata?.quests[questId];
+    final snapshot=liveSnapshot;
+    if(session==null||rule==null||snapshot==null){
+      messages.insert(0,'[Misión] '+(text?.name??'Misión aceptada')+' · modo visual.');
+      if(mounted)setState(()=>questOpen=false);
+      return;
+    }
+    final npc=snapshot.npcs.where((n)=>n.type==rule.startNpcType&&n.typeId==rule.startNpcId).firstOrNull;
+    if(npc==null){
+      messages.insert(0,'[Misión] No está presente el NPC '+rule.startNpcType.toString()+':'+rule.startNpcId.toString()+' requerido por '+questId.toString()+'.');
+      if(mounted)setState((){});
+      return;
+    }
+    try{
+      await session.startQuest(npc.globalId,questId);
+      final current=liveSnapshot!;
+      if(!current.quests.any((q)=>q.questId==questId)){
+        liveSnapshot=PsWorldSnapshot(
+          self:current.self,npcs:current.npcs,mobs:current.mobs,
+          quests:[...current.quests,PsQuestProgress(questId,0,0,0,0)],
+          finishedQuests:current.finishedQuests,
+        );
+      }
+      messages.insert(0,'[Misión] '+(text?.name??('Misión '+questId.toString()))+' aceptada por World.');
+      if(mounted)setState(()=>questOpen=false);
+    }catch(e){
+      messages.insert(0,'[Misión] QUEST_START '+questId.toString()+': '+e.toString());
+      if(mounted)setState((){});
+    }
+  }
   Future<void> _goFaction() async {
+    _stopWorldRealtime();
     scene.clearMovement();
     await scene.setWorld(null);
     if(mounted)setState(()=>stage=GameStage.faction);
   }
 
   Future<void> _goSelect() async {
+    _stopWorldRealtime();
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld(creation:false);
@@ -585,6 +691,7 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _goCreate() async {
+    _stopWorldRealtime();
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
     await _prepareSelectionWorld(creation:true);
@@ -808,11 +915,7 @@ class _GameClientPageState extends State<GameClientPage> {
             messages:messages,
             questOpen:questOpen,
             questId:questId,
-            onAcceptQuest:(){
-              setState(()=>questOpen=false);
-              final q=catalog!.questText(uiLocale)?.quest(questId);
-              messages.insert(0,'[Misión] '+(q?.name??'Misión aceptada'));
-            },
+            onAcceptQuest:()=>unawaited(_acceptCurrentQuest()),
             onCancelQuest:()=>setState(()=>questOpen=false),
           ),
         }),
