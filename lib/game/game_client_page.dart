@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
@@ -22,8 +23,8 @@ import 'ui_asset.dart';
 
 class GameClientPage extends StatefulWidget {
   final String? initialData;
-  final GameStage? initialStage;
-  const GameClientPage({super.key,this.initialData,this.initialStage});
+  final GameStage? initialStage;final String? qaMarker;
+  const GameClientPage({super.key,this.initialData,this.initialStage,this.qaMarker});
   @override State<GameClientPage> createState()=>_GameClientPageState();
 }
 
@@ -138,7 +139,24 @@ class _GameClientPageState extends State<GameClientPage> {
         c.worlds.length.toString()+' mapas.',
     );
     if(mounted)setState(()=>loading=false);
+    await _markQaReady();
     focus.requestFocus();
+  }
+
+  Future<void> _markQaReady() async {
+    final path=widget.qaMarker;
+    if(path==null||path.isEmpty)return;
+    try{
+      final payload={
+        'stage':stage.name,
+        'loading':loading,
+        'character':scene.character!=null,
+        'world':scene.worldPath,
+        'npcs':scene.gameActors.length,
+        'timestamp':DateTime.now().toIso8601String(),
+      };
+      await File(path).writeAsString(jsonEncode(payload),flush:true);
+    }catch(e){messages.insert(0,'[QA] '+e.toString());}
   }
 
   Future<void> _applyDefaultAppearance() async {
