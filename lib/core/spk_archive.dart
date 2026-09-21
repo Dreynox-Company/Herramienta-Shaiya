@@ -526,7 +526,9 @@ class SpkNameMap {
 
   void mergeConfirmed(Map<int, String> values) {
     paths.addAll(values);
-    for (final id in values.keys) hints.remove(id);
+    for (final id in values.keys) {
+      hints.remove(id);
+    }
   }
 
   void mergeHints(Map<int, String> values) {
