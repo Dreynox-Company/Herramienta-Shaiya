@@ -144,6 +144,9 @@ void main() {
       );
       expect(fieldChoices(d, 'Country')!['3'], 'Nordein');
       expect(fieldChoices(d, 'AttackFighter')!['1'], 'Permitido');
+      expect(fieldChoices(d, 'ReqOg')!['0'], 'Intercambiable');
+      expect(fieldChoices(d, 'Og')!['1'], 'No intercambiable');
+      expect(fieldChoices(d, 'Og')!['2'], contains('Vinculado'));
       expect(fieldChoices(d, 'CustomParameter'), null);
       expect(isAssetField('Animation.Attack'), true);
       expect(isAssetField('Inventory[0].ItemType'), false);
