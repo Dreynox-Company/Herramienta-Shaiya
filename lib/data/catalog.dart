@@ -30,8 +30,8 @@ class Catalog {
   final Library library;final List<Archetype> archetypes=[];final List<WeaponRecord> weapons=[];
   final List<CreatureRecord> creatures=[],npcs=[],mounts=[],wings=[];
   final List<String> worlds=[],sounds=[],effects=[],skies=[],warnings=[];
-  SpanishNpcQuestText? spanishText;
-  final Map<int,String> monsterNames={};
+  SpanishNpcQuestText? spanishText,englishText;
+  final Map<int,String> monsterNames={},monsterNamesEnglish={};
   Catalog(this.library);
   Future<void> load(void Function(String) progress) async {
     final paths=library.files.keys.toList()..sort();
@@ -54,10 +54,24 @@ class Catalog {
       try{monsterNames.addAll(MonsterTextData.parse(await library.read(monsterTextPath,limit:16*1024*1024),monsterTextPath).names);}
       catch(e){warnings.add('DBMonsterText Spain: $e');}
     }
+    final monsterUsaPath=paths.where((p)=>p.endsWith('dbmonstertext_usa.sdata')).firstOrNull;
+    if(monsterUsaPath!=null){
+      try{monsterNamesEnglish.addAll(MonsterTextData.parse(await library.read(monsterUsaPath,limit:16*1024*1024),monsterUsaPath).names);}
+      catch(e){warnings.add('DBMonsterText USA: $e');}
+    }
     final spanishPath=paths.where((p)=>p.endsWith('npcquesttrans_spain.sdata')).firstOrNull;
     if(spanishPath!=null){try{spanishText=SpanishNpcQuestText.parse(await library.read(spanishPath,limit:16*1024*1024),spanishPath);}catch(e){warnings.add('NpcQuestTrans Spain: $e');}}
+    final englishPath=paths.where((p)=>p.endsWith('npcquesttrans_usa.sdata')).firstOrNull;
+    if(englishPath!=null){try{englishText=SpanishNpcQuestText.parse(await library.read(englishPath,limit:16*1024*1024),englishPath);}catch(e){warnings.add('NpcQuestTrans USA: $e');}}
     if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
   }
+  SpanishNpcQuestText? questText(String locale)=>locale=='usa'?(englishText??spanishText):(spanishText??englishText);
+  String monsterName(int id,String locale){
+    final primary=locale=='usa'?monsterNamesEnglish:monsterNames;
+    final fallback=locale=='usa'?monsterNames:monsterNamesEnglish;
+    return primary[id]??fallback[id]??(locale=='usa'?'Creature $id':'Criatura $id');
+  }
+
   String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();if(c.source.startsWith('npc/'))kind='NPC';for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
 }
 class Appearance {
