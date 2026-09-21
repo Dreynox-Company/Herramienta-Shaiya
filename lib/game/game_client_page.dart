@@ -81,6 +81,7 @@ class _GameClientPageState extends State<GameClientPage> {
         'metadata':{
           'npcs':metadata?.npcs.length??0,
           'quests':metadata?.quests.length??0,
+          'mobs':metadata?.mobs.length??0,
         },
         'backendReady':backend.ready,
         'questId':questId,
@@ -356,7 +357,7 @@ class _GameClientPageState extends State<GameClientPage> {
           if(rule!=null&&rule.outQuests.isNotEmpty){questId=rule.outQuests.first;break;}
         }
       }
-      await scene.spawnGameActorsFromSvmap(map,npcModels:meta?.npcModels);
+      await scene.spawnGameActorsFromSvmap(map,npcModels:meta?.npcModels,mobModels:meta?.mobModels);
       messages.insert(
         0,
         '[Mapa] '+map.npcs.length.toString()+
