@@ -45,14 +45,14 @@ class Actor {
 }
 
 class RuntimeNpcSpawn {
-  final int type,typeId,angle;
+  final int type,typeId,angle,globalId;
   final double x,y,z;
-  const RuntimeNpcSpawn(this.type,this.typeId,this.x,this.y,this.z,this.angle);
+  const RuntimeNpcSpawn(this.type,this.typeId,this.x,this.y,this.z,this.angle,[this.globalId=0]);
 }
 class RuntimeMobSpawn {
-  final int mobId;
+  final int mobId,globalId;
   final double x,z;
-  const RuntimeMobSpawn(this.mobId,this.x,this.z);
+  const RuntimeMobSpawn(this.mobId,this.x,this.z,[this.globalId=0]);
 }
 
 class GameActorLabel {
@@ -73,7 +73,7 @@ class StudioScene extends ChangeNotifier {
   t.ThreeJS? view;Catalog? catalog;
   t.LineSegments? grid;
   bool gridVisible=true;
-  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> networkNpcActors={},networkMobActors={};Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -154,7 +154,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> spawnGameNpcs({int count=8}) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();gameLabels.clear();
+    gameActors.clear();networkNpcActors.clear();networkMobActors.clear();gameLabels.clear();
     final source=(catalog?.npcs.isNotEmpty??false)?catalog!.npcs:catalog?.creatures??const <CreatureRecord>[];
     if(source.isEmpty||view==null)return;
     final limit=math.min(count,source.length);
@@ -185,7 +185,7 @@ class StudioScene extends ChangeNotifier {
     int mobLimit=80,
   }) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();gameLabels.clear();
+    gameActors.clear();gameLabels.clear();networkNpcActors.clear();networkMobActors.clear();
     if(view==null||catalog==null)return;
 
     final npcRecords={for(final n in catalog!.npcs)n.id:n};
@@ -207,6 +207,7 @@ class StudioScene extends ChangeNotifier {
         a.root.position.setValues(x,p.y,z);
         a.root.rotation.y=-p.angle*(math.pi*2/65536.0);
         gameActors.add(a);view!.scene.add(a.root);npcsLoaded++;
+        if(p.globalId!=0)networkNpcActors[p.globalId]=a;
         final key='${p.type}:${p.typeId}';
         final localized=catalog!.questText(locale)?.npc(p.type,p.typeId);
         gameLabels.add(GameActorLabel(
@@ -237,12 +238,48 @@ class StudioScene extends ChangeNotifier {
         a.root.position.setValues(x,y,z);
         a.root.rotation.y=math.atan2(-x,-z);
         gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
+        if(p.globalId!=0)networkMobActors[p.globalId]=a;
         gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
       }catch(e){report('LIVE mob ${p.mobId}: $e');}
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas renderizados desde paquetes ps0032.');
   }
 
+  void moveNetworkNpc(int globalId,double worldX,double worldY,double worldZ,int motion){
+    final a=networkNpcActors[globalId];if(a==null)return;
+    final nx=worldX-originX,nz=-(worldZ-originZ);
+    final dx=nx-a.root.position.x,dz=nz-a.root.position.z;
+    if(dx.abs()+dz.abs()>1e-5)a.root.rotation.y=math.atan2(dx,dz);
+    a.root.position.setValues(nx,worldY,nz);
+    final clip=motion==1?(a.clips['Correr']??a.clips['Caminar']):(a.clips['Caminar']??a.clips['Correr']);
+    if(clip!=null&&a.clip!=clip)a.play(clip);
+  }
+
+  void moveNetworkMob(int globalId,double worldX,double worldZ,int motion){
+    final a=networkMobActors[globalId];if(a==null)return;
+    final nx=worldX-originX,nz=-(worldZ-originZ);
+    final dx=nx-a.root.position.x,dz=nz-a.root.position.z;
+    if(dx.abs()+dz.abs()>1e-5)a.root.rotation.y=math.atan2(dx,dz);
+    final y=world==null?a.root.position.y:world!.heightAt(worldX,worldZ,scale:.02,offset:-200);
+    a.root.position.setValues(nx,y,nz);
+    final clip=motion==1?(a.clips['Correr']??a.clips['Caminar']):(a.clips['Caminar']??a.clips['Correr']);
+    if(clip!=null&&a.clip!=clip)a.play(clip);
+  }
+
+  void removeNetworkActor(int globalId,{required bool mob}){
+    final map=mob?networkMobActors:networkNpcActors;
+    final a=map.remove(globalId);if(a==null)return;
+    gameActors.remove(a);gameLabels.removeWhere((x)=>identical(x.actor,a));a.dispose();
+    notifyListeners();
+  }
+
+  Future<void> killNetworkMob(int globalId) async {
+    final a=networkMobActors[globalId];if(a==null)return;
+    final death=a.clips['Caída']??a.clips['Muerte'];
+    if(death!=null)a.play(death,repeat:false);
+    await Future<void>.delayed(Duration(milliseconds:death==null?250:math.max(250,(death.duration*1000).round())));
+    if(networkMobActors[globalId]==a)removeNetworkActor(globalId,mob:true);
+  }
   Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,String locale='spn',int npcLimit=28,int mobLimit=18}) async {
     for(final a in gameActors){a.dispose();}
     gameActors.clear();gameLabels.clear();
