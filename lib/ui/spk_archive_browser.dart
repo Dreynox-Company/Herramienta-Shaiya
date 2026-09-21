@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
+import '../data/spk_table_discovery.dart';
 
 String _spkNormalizePath(String value, String separator) {
   final alternate = separator == '\\' ? '/' : '\\';
@@ -666,6 +667,53 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     'Se muestran como inferidas hasta confirmarlas.',
         ),
         duration: const Duration(seconds: 7),
+      ),
+    );
+  });
+
+  Future<void> discoverCoreTables() => runAction(() async {
+    if (!source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_TABLE_DISCOVERY_PROFILE',
+        'Primero valida el perfil completo de payloads con AutoPerfil SPK.',
+      );
+    }
+    final result = await SpkCoreTableDiscovery.discover(
+      source,
+      control: extractControl,
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    final persistent = File('${source.file.path}.names.json');
+    await persistent.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        ...source.names.toJson(),
+        'spkIndexSha256': source.index.encryptedIndexSha256,
+        'discovery': result,
+      }),
+      flush: true,
+    );
+    if (!mounted) return;
+    setState(() {
+      currentFolder = '';
+      selected = null;
+    });
+    final tables = Map<String, dynamic>.from(
+      (result['confirmedTables'] as Map?) ?? const {},
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Descubrimiento estructural terminado: ${tables.length} tablas '
+          'confirmadas y mapa persistido.',
+        ),
+        duration: const Duration(seconds: 8),
       ),
     );
   });
@@ -1391,6 +1439,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.key_outlined, size: 17),
             label: const Text('Perfil de recursos'),
           ),
+          if (source.canExtractAll)
+            TextButton.icon(
+              onPressed: busy ? null : discoverCoreTables,
+              icon: const Icon(Icons.table_view_outlined, size: 17),
+              label: const Text('Descubrir tablas'),
+            ),
           if (widget.onMount != null)
             TextButton.icon(
               onPressed: busy || !source.canExtractAll ? null : mountInStudio,
