@@ -458,82 +458,148 @@ class SpkCryptoProfile {
   };
 }
 
+class SpkNameHint {
+  final String path;
+  final String confidence;
+  final String evidence;
+
+  const SpkNameHint({
+    required this.path,
+    required this.confidence,
+    required this.evidence,
+  });
+
+  Map<String, Object?> toJson() => {
+    'path': path,
+    'confidence': confidence,
+    'evidence': evidence,
+  };
+}
+
 class SpkNameMap {
   final Map<int, String> paths;
-  final Map<int, String> hints;
+  final Map<int, SpkNameHint> hints;
 
-  SpkNameMap(this.paths, [Map<int, String>? hints])
-    : hints = hints ?? <int, String>{};
+  SpkNameMap(this.paths, [Map<int, SpkNameHint>? hints])
+    : hints = hints ?? <int, SpkNameHint>{};
 
-  static SpkNameMap empty() => SpkNameMap({}, {});
-
-  static int? _parseId(Object value) {
-    var key = value.toString().toLowerCase().replaceFirst('0x', '');
-    if (key.contains('-')) {
-      final negative = int.tryParse(key.split('-').last, radix: 16);
-      if (negative == null) return null;
-      return (-negative) & 0xffffffffffffffff;
-    }
-    return int.tryParse(key, radix: 16);
-  }
+  static SpkNameMap empty() => SpkNameMap({});
 
   static String? _safePath(Object? raw) {
     if (raw == null) return null;
     final value = raw.toString().replaceAll('\\', '/');
-    if (value.isEmpty || value.startsWith('/')) return null;
+    if (value.isEmpty || value.startsWith('/') || value.length > 4096) {
+      return null;
+    }
     final components = value.split('/');
     if (components.any(
-      (p) =>
-          p.isEmpty ||
-          p == '.' ||
-          p == '..' ||
-          RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(p),
+      (part) =>
+          part.isEmpty ||
+          part == '.' ||
+          part == '..' ||
+          RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(part),
     )) {
       return null;
     }
     return value;
   }
 
-  static Map<int, String> _readPaths(Object? raw) {
-    if (raw is! Map) return <int, String>{};
-    final out = <int, String>{};
-    for (final entry in raw.entries) {
-      final id = _parseId(entry.key);
-      final value = entry.value is Map
-          ? _safePath((entry.value as Map)['path'])
-          : _safePath(entry.value);
-      if (id != null && value != null) out[id] = value;
-    }
-    return out;
-  }
+  static int? _id(Object key) => int.tryParse(
+    key.toString().toLowerCase().replaceFirst('0x', ''),
+    radix: 16,
+  );
 
-  static SpkNameMap fromJson(Object? raw) {
+  factory SpkNameMap.fromJson(Object? raw) {
     if (raw is! Map) {
       throw const FormatException('Mapa de nombres SPK inválido.');
     }
-    if (raw['paths'] is Map || raw['hints'] is Map) {
-      return SpkNameMap(_readPaths(raw['paths']), _readPaths(raw['hints']));
+    final confirmedRaw = raw['paths'] is Map ? raw['paths'] as Map : raw;
+    final hintsRaw = raw['hints'] is Map ? raw['hints'] as Map : const {};
+    final confirmed = <int, String>{};
+    final inferred = <int, SpkNameHint>{};
+
+    for (final entry in confirmedRaw.entries) {
+      if (entry.key == 'schema' ||
+          entry.key == 'hints' ||
+          entry.key == 'stats') {
+        continue;
+      }
+      final id = _id(entry.key);
+      final value = _safePath(entry.value);
+      if (id != null && value != null) confirmed[id] = value;
     }
-    return SpkNameMap(_readPaths(raw), {});
+    for (final entry in hintsRaw.entries) {
+      final id = _id(entry.key);
+      if (id == null || confirmed.containsKey(id)) continue;
+      final hint = entry.value;
+      if (hint is Map) {
+        final path = _safePath(hint['path']);
+        if (path == null) continue;
+        inferred[id] = SpkNameHint(
+          path: path,
+          confidence: (hint['confidence'] ?? 'inferred').toString(),
+          evidence: (hint['evidence'] ?? 'external-map').toString(),
+        );
+      } else {
+        final path = _safePath(hint);
+        if (path != null) {
+          inferred[id] = SpkNameHint(
+            path: path,
+            confidence: 'inferred',
+            evidence: 'external-map',
+          );
+        }
+      }
+    }
+    return SpkNameMap(confirmed, inferred);
   }
 
-  String? confirmedPath(int id) => paths[id];
-  String? inferredPath(int id) => hints[id];
-  String? operator [](int id) => paths[id] ?? hints[id];
-
+  String? operator [](int id) => paths[id] ?? hints[id]?.path;
   bool isConfirmed(int id) => paths.containsKey(id);
   bool isInferred(int id) => !paths.containsKey(id) && hints.containsKey(id);
+  String confidence(int id) => isConfirmed(id)
+      ? 'confirmed'
+      : hints[id]?.confidence ?? 'unresolved';
+  String evidence(int id) => isConfirmed(id)
+      ? 'confirmed-path'
+      : hints[id]?.evidence ?? 'none';
 
   void mergeConfirmed(Map<int, String> values) {
-    paths.addAll(values);
-    for (final id in values.keys) {
-      hints.remove(id);
+    for (final entry in values.entries) {
+      final path = _safePath(entry.value);
+      if (path == null) continue;
+      paths[entry.key] = path;
+      hints.remove(entry.key);
     }
   }
 
-  void mergeHints(Map<int, String> values) {
+  void mergeHints(
+    Map<int, String> values, {
+    String confidence = 'inferred',
+    String evidence = 'unique-decoded-size-reference',
+  }) {
     for (final entry in values.entries) {
-      if (!paths.containsKey(entry.key)) hints[entry.key] = entry.value;
+      if (paths.containsKey(entry.key)) continue;
+      final path = _safePath(entry.value);
+      if (path == null) continue;
+      hints[entry.key] = SpkNameHint(
+        path: path,
+        confidence: confidence,
+        evidence: evidence,
+      );
+    }
+  }
+
+  void mergeHintRecords(Map<int, SpkNameHint> values) {
+    for (final entry in values.entries) {
+      if (paths.containsKey(entry.key)) continue;
+      final path = _safePath(entry.value.path);
+      if (path == null) continue;
+      hints[entry.key] = SpkNameHint(
+        path: path,
+        confidence: entry.value.confidence,
+        evidence: entry.value.evidence,
+      );
     }
   }
 
@@ -545,10 +611,13 @@ class SpkNameMap {
     },
     'hints': {
       for (final e in hints.entries)
-        e.key.toRadixString(16).padLeft(16, '0'): {
-          'path': e.value,
-          'confidence': 'inferred',
-        },
+        e.key.toRadixString(16).padLeft(16, '0'): e.value.toJson(),
+    },
+    'stats': {
+      'confirmed': paths.length,
+      'inferred': hints.length,
+      'total': paths.length + hints.length,
     },
   };
 }
+
