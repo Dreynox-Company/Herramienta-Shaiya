@@ -1,0 +1,13 @@
+{
+  "profileId": "shaiya-spk-v3-observed-a3ea7e3b",
+  "target": "index",
+  "indexSha256": "a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f",
+  "secretHex": "9a1f9c1bd3e9488dba7aa4543a466a5f",
+  "resourceKeyIsIndexKey": false,
+  "chunkNonceRule": "unsupported",
+  "evidence": {
+    "indexAlgorithm": "AES-GCM",
+    "indexDecodedSha256": "c282d64b04a2d84367f7b57b142dc1c13cfe200640bff13dc00dec71eac88fa9",
+    "resourceKeyValidated": false
+  }
+}
