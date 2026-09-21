@@ -523,7 +523,7 @@ class Catalog {
     warnings.addAll(names.warnings);
     if (archetypes.isEmpty) {
       throw const FormatException(
-        'No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.',
+        'No se encontraron arquetipos utilizables mediante MLT ni mediante reconstrucción SPK de rutas fuertes. Revisa el diagnóstico.',
       );
     }
   }
