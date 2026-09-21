@@ -220,6 +220,35 @@ void main() {
       expect(() => spkResourceSecret('222222222222222222222222222222222222222222222222'), throwsFormatException);
     });
 
+    test('V8 constant AAD is preserved in the resource profile', () {
+      final base = SpkCryptoProfile.fromJson({
+        'index': {'secretHex': '00000000000000000000000000000000'},
+      });
+      final merged = base.mergeResourceProbe({
+        'readyForSimple': true,
+        'readyForFragmented': false,
+        'resourceSecretHex': '11111111111111111111111111111111',
+        'aadRule': 'constant',
+        'aadHex': 'aabbccdd',
+      });
+      expect(spkHex(merged.resourceAad), 'aabbccdd');
+      expect(merged.publicJson()['resources'], isA<Map>());
+    });
+
+    test('V8 unresolved per-resource AAD fails closed', () {
+      final base = SpkCryptoProfile.fromJson({
+        'index': {'secretHex': '00000000000000000000000000000000'},
+      });
+      expect(
+        () => base.mergeResourceProbe({
+          'readyForSimple': true,
+          'resourceSecretHex': '11111111111111111111111111111111',
+          'aadRule': 'per-resource-or-unresolved',
+        }),
+        throwsFormatException,
+      );
+    });
+
     test('invalid secret size fails closed', () {
       expect(
         () => SpkCryptoProfile.fromJson({
