@@ -2,11 +2,16 @@ using System.Text.Json;
 using Parsec;
 using Parsec.Common;
 using Parsec.Shaiya.NpcQuest;
+using Parsec.Shaiya.Monster;
 
 if (args.Length != 2)
     throw new ArgumentException("usage: metadata_exporter <NpcQuest.SData> <out.json>");
 
 var parsed = Reader.ReadFromFile<NpcQuest>(args[0], Episode.EP8);
+var monsterPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "DBMonsterData.SData");
+var monsterData = File.Exists(monsterPath)
+    ? Reader.ReadFromFile<DBMonsterData>(monsterPath, Episode.EP8)
+    : null;
 
 var npc = new List<object>();
 void Add(int type, IEnumerable<BaseNpc> rows)
@@ -79,16 +84,27 @@ var quests = parsed.Quests.Select(q => new {
     }).ToArray(),
 });
 
+var mobs = monsterData?.Records.Select(m => new {
+    id = (int)m.Id,
+    image = (int)m.Image,
+    level = (int)m.Level,
+    size = m.Size,
+    hp = m.Hp,
+    ai = (int)m.Ai,
+}).ToArray() ?? Array.Empty<object>();
+
 var doc = new {
-    schema = 1,
-    source = "NpcQuest.SData parsed with backend Parsec EP8",
+    schema = 2,
+    source = "NpcQuest.SData + DBMonsterData.SData parsed with backend Parsec EP8",
     npcCount = npc.Count,
     questCount = parsed.Quests.Count,
+    mobCount = mobs.Length,
     npcs = npc,
     quests,
+    mobs,
 };
 
 var json = JsonSerializer.Serialize(doc,new JsonSerializerOptions{WriteIndented=false});
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[1]))!);
 File.WriteAllText(args[1],json);
-Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" -> "+args[1]);
+Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" -> "+args[1]);
