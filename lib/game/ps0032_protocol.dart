@@ -24,6 +24,9 @@ class PsPacketType {
   static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
   static const mobEnter=0x0601;
+  static const mobLeave=0x0602;
+  static const mobMove=0x0603;
+  static const mobDeath=0x0606;
   static const questList=0x0901;
   static const questStart=0x0902;
   static const questEnd=0x0903;
@@ -32,6 +35,8 @@ class PsPacketType {
   static const questEndSelect=0x0907;
   static const questQuit=0x0908;
   static const mapNpcEnter=0x0E01;
+  static const mapNpcLeave=0x0E02;
+  static const mapNpcMove=0x0E03;
 }
 
 class PsPacket {
