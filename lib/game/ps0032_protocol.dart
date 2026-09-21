@@ -434,7 +434,7 @@ class Ps0032Client {
     }
   }
 
-  Future<WorldBootstrap> bootstrapWorld(LoginSession login) async {
+  Future<PsWorldSession> openWorld(LoginSession login) async {
     final c=await PsConnection.connect(host,worldPort);
     try{
       final worldIv=Uint8List.fromList(hash.sha256.convert(login.iv).bytes.sublist(0,16));
@@ -442,6 +442,7 @@ class Ps0032Client {
       await c.send(PsPacketType.gameHandshake,[..._i32Bytes(login.userId),...login.sessionId],true);
       final handshake=await c.nextType(PsPacketType.gameHandshake,timeout:const Duration(seconds:15));
       if(handshake.body.length<18||handshake.body[0]!=0)throw StateError('GAME_HANDSHAKE inválido.');
+      final xorKey=Uint8List.fromList(handshake.body.sublist(2,18));
       _log('World handshake completado.');
 
       var faction=-1,maxMode=-1;
@@ -461,9 +462,20 @@ class Ps0032Client {
       }
       if(faction<0)throw StateError('World no envió ACCOUNT_FACTION.');
       _log('ACCOUNT_FACTION · faction=$faction mode=$maxMode · packets=${packets.length}');
-      return WorldBootstrap(faction,maxMode,packets);
-    }finally{
+      return PsWorldSession(c,faction,maxMode,xorKey,packets);
+    }catch(_){
       await c.close();
+      rethrow;
     }
   }
+
+  Future<WorldBootstrap> bootstrapWorld(LoginSession login) async {
+    final world=await openWorld(login);
+    try{
+      return WorldBootstrap(world.faction,world.maxMode,world.initialPackets);
+    }finally{
+      await world.close();
+    }
+  }
+
 }
