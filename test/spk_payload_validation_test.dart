@@ -1,20 +1,17 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/spk_archive.dart';
 import 'package:herramienta_shaiya/data/spk_source.dart';
-import 'package:zstandard/zstandard.dart';
 
 void _put32(Uint8List bytes, int offset, int value) =>
-    ByteData.sublistView(bytes, offset, offset + 4)
-        .setUint32(0, value, Endian.little);
-
-void _put64(Uint8List bytes, int offset, int value) =>
-    ByteData.sublistView(bytes, offset, offset + 8)
-        .setUint64(0, value, Endian.little);
+    ByteData.sublistView(
+      bytes,
+      offset,
+      offset + 4,
+    ).setUint32(0, value, Endian.little);
 
 Uint8List _nonce(int seed) =>
     Uint8List.fromList(List<int>.generate(12, (i) => (seed + i) & 0xff));
@@ -31,10 +28,11 @@ Future<SecretBox> _encrypt(
     );
 
 class _Fixture {
-  final String path;
+  final File file;
+  final SpkIndex index;
   final SpkCryptoProfile profile;
 
-  const _Fixture(this.path, this.profile);
+  const _Fixture(this.file, this.index, this.profile);
 }
 
 Future<_Fixture> _buildSimpleFixture(Directory root) async {
@@ -45,8 +43,8 @@ Future<_Fixture> _buildSimpleFixture(Directory root) async {
     List<int>.generate(16, (i) => 0x80 + i),
   );
 
-  final payload = BytesBuilder(copy: false);
-  final records = Uint8List(3 * spkRecordBytes);
+  final bytes = BytesBuilder(copy: false)..add(Uint8List(spkHeaderBytes));
+  final records = <SpkRecord>[];
   var dataOffset = spkHeaderBytes;
 
   for (var i = 0; i < 3; i++) {
@@ -56,112 +54,113 @@ Future<_Fixture> _buildSimpleFixture(Directory root) async {
       clear[j] = (j + i * 13) & 0x1f;
     }
 
-    final packed = await Zstandard().compress(clear, 3);
-    if (packed == null) {
-      throw StateError('No se pudo construir el fixture Zstandard.');
-    }
     final nonce = _nonce(0x20 + i * 16);
-    final box = await _encrypt(packed, resourceKey, nonce);
+    final box = await _encrypt(clear, resourceKey, nonce);
     final cipher = Uint8List.fromList(box.cipherText);
+    final metadata = Uint8List(32)
+      ..setRange(0, 12, nonce)
+      ..setRange(12, 28, box.mac.bytes);
+    _put32(metadata, 28, 0);
 
-    final o = i * spkRecordBytes;
-    _put64(records, o, 0x1000 + i);
-    _put64(records, o + 8, dataOffset);
-    _put64(records, o + 16, cipher.length);
-    _put64(records, o + 24, cipher.length);
-    _put64(records, o + 32, clear.length);
-    _put32(records, o + 40, 1);
-    _put32(records, o + 44, 0xffffffff);
-    records.setRange(o + 48, o + 60, nonce);
-    records.setRange(o + 60, o + 76, box.mac.bytes);
-    _put32(records, o + 76, 0);
-
-    payload.add(cipher);
+    records.add(
+      SpkRecord(
+        ordinal: i,
+        entryId: 0x1000 + i,
+        dataOffset: dataOffset,
+        storedBytes: cipher.length,
+        decodedBytes: clear.length,
+        recordType: 1,
+        auxiliaryStart: 0xffffffff,
+        chunkCount: 0,
+        metadata: metadata,
+      ),
+    );
+    bytes.add(cipher);
     dataOffset += cipher.length;
   }
 
-  final packedIndex = await Zstandard().compress(records, 3);
-  if (packedIndex == null) {
-    throw StateError('No se pudo comprimir el índice del fixture.');
-  }
-  final indexNonce = _nonce(0xd0);
-  final indexBox = await _encrypt(packedIndex, indexKey, indexNonce);
-  final encryptedIndex = Uint8List.fromList(indexBox.cipherText);
-
-  final header = Uint8List(spkHeaderBytes);
-  _put32(header, 0, spkMagic);
-  _put32(header, 4, spkVersion3);
-  _put64(header, 8, dataOffset);
-  _put64(header, 16, encryptedIndex.length);
-  _put64(header, 24, records.length);
-  _put32(header, 32, 3);
-  _put32(header, 36, 262144);
-  header.setRange(40, 52, indexNonce);
-  header.setRange(52, 68, indexBox.mac.bytes);
-  _put64(header, 100, dataOffset);
-  _put32(header, 108, 0);
-
-  final bytes = BytesBuilder(copy: false)
-    ..add(header)
-    ..add(payload.takeBytes())
-    ..add(encryptedIndex)
-    ..add(Uint8List(spkFooterBytes));
-
-  final file = File('${root.path}/fixture.spk');
+  final file = File('${root.path}/payload-fixture.bin');
   await file.writeAsBytes(bytes.takeBytes(), flush: true);
 
+  final header = SpkHeader(
+    version: spkVersion3,
+    indexOffset: dataOffset,
+    indexStoredBytes: 1,
+    indexDecodedBytes: records.length * spkRecordBytes,
+    recordCount: records.length,
+    blockBytes: 262144,
+    auxiliaryOffset: dataOffset,
+    auxiliaryCount: 0,
+    indexNonce: Uint8List(12),
+    indexTag: Uint8List(16),
+  );
+  final index = SpkIndex(
+    header: header,
+    records: records,
+    auxiliary: const <SpkAuxRecord>[],
+    encryptedIndexSha256: 'synthetic-index',
+    decodedIndexSha256: 'synthetic-decoded-index',
+  );
   final profile = SpkCryptoProfile(
     profileId: 'synthetic-validation',
-    indexSha256: sha256.convert(encryptedIndex).toString(),
+    indexSha256: 'synthetic-index',
     indexSecret: indexKey,
     resourceSecret: resourceKey,
     resourceAad: Uint8List(0),
     resourceKeyIsIndexKey: false,
     chunkNonceRule: 'unsupported',
   );
-  return _Fixture(file.path, profile);
+  return _Fixture(file, index, profile);
 }
 
+Future<SpkArchiveSource> _sourceFor(_Fixture fixture, SpkCryptoProfile profile) =>
+    SpkArchiveSource.fromValidatedIndexForTesting(
+      file: fixture.file,
+      index: fixture.index,
+      profile: profile,
+    );
+
 void main() {
-  test('SPK simple payload access stays closed until real GCM samples validate',
-      () async {
-    final root = await Directory.systemTemp.createTemp('spk-validation-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await SpkArchiveSource.open(
-        fixture.path,
-        fixture.profile,
-      );
+  test(
+    'SPK simple payload access stays closed until real GCM samples validate',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-validation-');
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
 
-      expect(source.canReadSimpleResources, isFalse);
-      await expectLater(
-        source.readEntry(source.index.simpleResources.first),
-        throwsA(
-          isA<SpkFailure>().having(
-            (e) => e.code,
-            'code',
-            'SPK_RESOURCE_PROFILE_UNVALIDATED',
+        expect(source.canReadSimpleResources, isFalse);
+        await expectLater(
+          source.readEntry(source.index.simpleResources.first),
+          throwsA(
+            isA<SpkFailure>().having(
+              (e) => e.code,
+              'code',
+              'SPK_RESOURCE_PROFILE_UNVALIDATED',
+            ),
           ),
-        ),
-      );
+        );
 
-      final validation = await source.validateSimpleResourceProfile();
-      expect(validation['status'], 'validated');
-      expect(validation['authenticatedSamples'], 3);
-      expect(validation['decodedSamples'], 3);
-      expect(source.canReadSimpleResources, isTrue);
+        final validation = await source.validateSimpleResourceProfile();
+        expect(validation['status'], 'validated');
+        expect(validation['authenticatedSamples'], 3);
+        expect(validation['decodedSamples'], 3);
+        expect(source.canReadSimpleResources, isTrue);
 
-      final result = await source.readEntry(source.index.simpleResources.first);
-      expect(result.format, 'DDS');
-      expect(result.bytes.length, 4096);
-      expect(
-        source.diagnostics()['resourceProfileValidation'],
-        isA<Map<String, Object?>>(),
-      );
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+        final result = await source.readEntry(
+          source.index.simpleResources.first,
+        );
+        expect(result.format, 'DDS');
+        expect(result.bytes.length, 4096);
+        expect(
+          source.diagnostics()['resourceProfileValidation'],
+          isA<Map<String, Object?>>(),
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test('SPK simple payload validation rejects a wrong resource key', () async {
     final root = await Directory.systemTemp.createTemp('spk-bad-key-');
@@ -178,7 +177,7 @@ void main() {
         resourceKeyIsIndexKey: false,
         chunkNonceRule: 'unsupported',
       );
-      final source = await SpkArchiveSource.open(fixture.path, bad);
+      final source = await _sourceFor(fixture, bad);
 
       await expectLater(
         source.validateSimpleResourceProfile(),
