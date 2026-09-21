@@ -32,19 +32,20 @@ Future<SecretBox> _encrypt(
       nonce: nonce,
     );
 
-Future<SpkArchiveSource> _source(Directory root) async {
+Future<SpkArchiveSource> _source(
+  Directory root, {
+  List<String> tables = const <String>[
+    'DBItemDataRecord',
+    'DBMonsterDataRecord',
+    'DBSkillDataRecord',
+  ],
+}) async {
   final indexKey = Uint8List.fromList(
     List<int>.generate(16, (i) => 0x10 + i),
   );
   final resourceKey = Uint8List.fromList(
     List<int>.generate(16, (i) => 0x80 + i),
   );
-  final tables = <String>[
-    'DBItemDataRecord',
-    'DBMonsterDataRecord',
-    'DBSkillDataRecord',
-  ];
-
   final bytes = BytesBuilder(copy: false)..add(Uint8List(spkHeaderBytes));
   final records = <SpkRecord>[];
   var dataOffset = spkHeaderBytes;
@@ -147,6 +148,40 @@ void main() {
         ]),
       );
       expect(source.names.paths.length, 3);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('duplicate structural matches stay ambiguous and unconfirmed', () async {
+    final root = await Directory.systemTemp.createTemp('spk-table-ambiguous-');
+    try {
+      final source = await _source(
+        root,
+        tables: const <String>[
+          'DBItemDataRecord',
+          'DBItemDataRecord',
+          'DBMonsterDataRecord',
+        ],
+      );
+      final result = await SpkCoreTableDiscovery.discover(
+        source,
+        control: SpkExtractControl(),
+        progress: (_, __, ___) {},
+      );
+
+      expect(
+        (result['ambiguousBinaryTables'] as List<Object?>),
+        contains('BinarySData/DBItemData.SData'),
+      );
+      expect(
+        source.names.paths.values,
+        isNot(contains('BinarySData/DBItemData.SData')),
+      );
+      expect(
+        source.names.paths.values,
+        contains('BinarySData/DBMonsterData.SData'),
+      );
     } finally {
       await root.delete(recursive: true);
     }
