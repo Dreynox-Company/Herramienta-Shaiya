@@ -25,7 +25,12 @@ class PsPacketType {
   static const characterMove=0x0501;
   static const mobEnter=0x0601;
   static const questList=0x0901;
+  static const questStart=0x0902;
+  static const questEnd=0x0903;
+  static const questUpdateCount=0x0905;
   static const questFinishedList=0x0906;
+  static const questEndSelect=0x0907;
+  static const questQuit=0x0908;
   static const mapNpcEnter=0x0E01;
 }
 
@@ -49,6 +54,14 @@ Uint8List _i32Bytes(int value){
 }
 Uint8List _u32Bytes(int value){
   final b=ByteData(4)..setUint32(0,value,Endian.little);
+  return b.buffer.asUint8List();
+}
+Uint8List _i16Bytes(int value){
+  final b=ByteData(2)..setInt16(0,value,Endian.little);
+  return b.buffer.asUint8List();
+}
+Uint8List _f32Bytes(double value){
+  final b=ByteData(4)..setFloat32(0,value,Endian.little);
   return b.buffer.asUint8List();
 }
 
@@ -131,6 +144,7 @@ class PsConnection {
   final List<int> _buffer=[];
   final List<PsPacket> _queued=[];
   final List<Completer<PsPacket>> _waiters=[];
+  final StreamController<PsPacket> _packets=StreamController<PsPacket>.broadcast(sync:true);
   StreamSubscription<Uint8List>? _subscription;
   _AesCtrLe? _recv,_send;
   _ExpandedXor? _expandedRecv;
@@ -202,7 +216,10 @@ class PsConnection {
     }
   }
 
+  Stream<PsPacket> get packets=>_packets.stream;
+
   void _emit(PsPacket packet){
+    if(!_packets.isClosed)_packets.add(packet);
     if(_waiters.isNotEmpty)_waiters.removeAt(0).complete(packet);
     else _queued.add(packet);
   }
@@ -213,6 +230,7 @@ class PsConnection {
     _closed=true;
     for(final w in _waiters){if(!w.isCompleted)w.completeError(e);}
     _waiters.clear();
+    if(!_packets.isClosed)_packets.addError(e);
   }
 
   Future<void> close() async {
@@ -220,6 +238,7 @@ class PsConnection {
     _closed=true;
     await _subscription?.cancel();
     await socket.close();
+    if(!_packets.isClosed)await _packets.close();
   }
 }
 
@@ -523,6 +542,64 @@ class PsWorldSession {
       }on TimeoutException{}
     }
     return packets;
+  }
+
+  Stream<PsPacket> get packets=>connection.packets;
+
+  Future<void> moveCharacter({
+    required double x,
+    required double y,
+    required double z,
+    required double yawRadians,
+    required bool run,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de moverlo.');
+    var yaw=yawRadians%(2*pi);
+    if(yaw<0)yaw+=2*pi;
+    final angle=((yaw/(2*pi))*65536.0).round()&0xffff;
+    await connection.send(PsPacketType.characterMove,[
+      ..._u16Bytes(angle),
+      run?1:0,
+      ..._f32Bytes(x),
+      ..._f32Bytes(y),
+      ..._f32Bytes(z),
+    ]);
+  }
+
+  Future<void> startQuest(int npcGlobalId,int questId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de iniciar una misión.');
+    await connection.send(PsPacketType.questStart,[
+      ..._u32Bytes(npcGlobalId),
+      ..._i16Bytes(questId),
+    ]);
+    final result=await connection.nextType(PsPacketType.questStart);
+    if(result.body.length<6)throw FormatException('QUEST_START response truncado.');
+    final npc=ByteData.sublistView(result.body).getUint32(0,Endian.little);
+    final quest=ByteData.sublistView(result.body).getInt16(4,Endian.little);
+    if(npc!=npcGlobalId||quest!=questId)throw StateError('QUEST_START devolvió NPC/misión inesperados.');
+  }
+
+  Future<PsPacket> finishQuest(int npcGlobalId,int questId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de finalizar una misión.');
+    await connection.send(PsPacketType.questEnd,[
+      ..._u32Bytes(npcGlobalId),
+      ..._i16Bytes(questId),
+    ]);
+    return connection.nextType(PsPacketType.questEnd);
+  }
+
+  Future<void> chooseQuestReward(int npcGlobalId,int questId,int index) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de elegir recompensa.');
+    await connection.send(PsPacketType.questEndSelect,[
+      ..._u32Bytes(npcGlobalId),
+      ..._i16Bytes(questId),
+      index&0xff,
+    ]);
+  }
+
+  Future<void> quitQuest(int questId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de abandonar una misión.');
+    await connection.send(PsPacketType.questQuit,_i16Bytes(questId));
   }
 
   Future<void> close()=>connection.close();
