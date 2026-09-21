@@ -368,11 +368,11 @@ class WorldHud extends StatelessWidget {
           ),
         ),
       ),
-      const Positioned(
+      Positioned(
         left:18,top:333,
         child:Text(
           locale=='spn'?'Objeto de recompensa':'Reward item',
-          style:TextStyle(
+          style:const TextStyle(
             color:Color(0xff321d11),
             fontSize:10,
             fontWeight:FontWeight.w600,
