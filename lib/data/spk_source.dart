@@ -685,7 +685,6 @@ class SpkArchiveSource {
     final successes = <String, int>{
       for (final rule in supportedChunkNonceRules) rule: 0,
     };
-    var sampled = 0;
     for (final sample in samples) {
       final surviving = <String>{};
       for (final rule in candidates) {
@@ -709,7 +708,6 @@ class SpkArchiveSource {
         }
       }
       candidates = surviving;
-      sampled++;
       if (candidates.isEmpty) return 'unsupported';
       if (candidates.length == 1) {
         final rule = candidates.single;
@@ -997,9 +995,9 @@ class SpkArchiveSource {
             'Omitido ${technicalPath(record)}: no pudo decodificarse',
             i + 1,
             list.length,
-          );        }
-      }
-      await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
+          );
+        }
+      }      await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
         const JsonEncoder.withIndent('  ').convert({
           'schema': 1,
           'source': file.path,
