@@ -97,13 +97,6 @@ class CharacterSelectScreen extends StatelessWidget {
   );
 
   @override Widget build(BuildContext context)=>Stack(children:[
-    Positioned.fill(
-      child:DataImage(
-        cache:ui,
-        path:'interface/characterselect/selectbg.tga',
-        fit:BoxFit.fill,
-      ),
-    ),
     Positioned(
       left:48,top:22,width:330,height:620,
       child:Column(
