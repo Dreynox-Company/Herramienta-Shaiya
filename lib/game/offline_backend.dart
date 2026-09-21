@@ -5,15 +5,16 @@ import 'dart:math';
 
 class OfflineBackend {
   Process? login,world;
-  String? password,token;
+  String? password,token,activeFaction;
   bool ready=false;
   final void Function(String) log;
   OfflineBackend(this.log);
 
   String get root=>File(Platform.resolvedExecutable).parent.path;
-  String get saveRoot{
+  String saveRootFor(String faction){
     final base=Platform.environment['LOCALAPPDATA']??Directory.systemTemp.path;
-    return '$base${Platform.pathSeparator}Dreynox${Platform.pathSeparator}ShaiyaFlutter${Platform.pathSeparator}partidas${Platform.pathSeparator}luz';
+    final slot=faction=='fury'?'furia':'luz';
+    return '$base${Platform.pathSeparator}Dreynox${Platform.pathSeparator}ShaiyaFlutter${Platform.pathSeparator}partidas${Platform.pathSeparator}$slot';
   }
 
   String _hex(int bytes){
@@ -21,18 +22,20 @@ class OfflineBackend {
     return b.map((x)=>x.toRadixString(16).padLeft(2,'0')).join();
   }
 
-  Future<bool> start() async {
+  Future<bool> start({String faction='light'}) async {
+    if(faction!='light'&&faction!='fury')throw ArgumentError.value(faction,'faction','Debe ser light o fury');
     if(Platform.environment['SHAIYA_QA_DISABLE_BACKEND']=='1'){
       log('QA visual: backend desactivado; se usan SVMAP y metadatos empaquetados.');
       return false;
     }
-    if(ready)return true;
+    if(ready&&activeFaction==faction)return true;
+    if(ready&&activeFaction!=faction)await stop();
     final loginExe=File('$root${Platform.pathSeparator}servicios${Platform.pathSeparator}login${Platform.pathSeparator}Imgeneus.Login.exe');
     final worldExe=File('$root${Platform.pathSeparator}servicios${Platform.pathSeparator}world${Platform.pathSeparator}Imgeneus.World.exe');
     if(!await loginExe.exists()||!await worldExe.exists()){log('Backend offline no empaquetado; se mantiene modo visual local.');return false;}
-    final save=Directory(saveRoot);await save.create(recursive:true);
+    final save=Directory(saveRootFor(faction));await save.create(recursive:true);
     password=_hex(8);token=_hex(24);
-    final env={...Platform.environment,'SHAIYA_OFFLINE_SLOT':save.path,'SHAIYA_OFFLINE_FACTION':'light','SHAIYA_OFFLINE_PASSWORD':password!,'SHAIYA_OFFLINE_TOKEN':token!};
+    final env={...Platform.environment,'SHAIYA_OFFLINE_SLOT':save.path,'SHAIYA_OFFLINE_FACTION':faction,'SHAIYA_OFFLINE_PASSWORD':password!,'SHAIYA_OFFLINE_TOKEN':token!};
     try{
       login=await Process.start(loginExe.path,const [],workingDirectory:loginExe.parent.path,environment:env,mode:ProcessStartMode.detachedWithStdio);
       unawaited(_pipe(login!,'Login'));
@@ -40,7 +43,7 @@ class OfflineBackend {
       world=await Process.start(worldExe.path,const [],workingDirectory:worldExe.parent.path,environment:env,mode:ProcessStartMode.detachedWithStdio);
       unawaited(_pipe(world!,'World'));
       await _waitReady(5001);
-      ready=true;log('Backend offline: Login + World listos en 127.0.0.1.');return true;
+      ready=true;activeFaction=faction;log('Backend offline: Login + World listos en 127.0.0.1 · facción $faction.');return true;
     }catch(e){log('Backend offline: $e');await stop();return false;}
   }
 
@@ -73,6 +76,6 @@ class OfflineBackend {
   Future<void> stop() async {
     ready=false;
     for(final p in [world,login]){if(p==null)continue;try{p.kill(ProcessSignal.sigterm);}catch(_){}}
-    world=null;login=null;
+    world=null;login=null;activeFaction=null;
   }
 }
