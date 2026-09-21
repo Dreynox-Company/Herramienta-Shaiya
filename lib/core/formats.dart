@@ -326,6 +326,7 @@ class MeshData {
     final p = Float32List(n * 3),
         no = Float32List(n * 3),
         uv = Float32List(n * 2);
+    var repairedUv=false;
     for (var i = 0; i < n; i++) {
       for (var k = 0; k < 3; k++) {
         p[3 * i + k] = r.f32();
@@ -334,11 +335,21 @@ class MeshData {
         no[3 * i + k] = r.rawFloat();
       }
       if (boneField) r.i32();
-      uv[i * 2] = r.f32();
-      uv[i * 2 + 1] = r.f32();
+      for(var k=0;k<2;k++){
+        final value=r.rawFloat();
+        if(value.isFinite){
+          uv[i*2+k]=value;
+        }else{
+          // Several original SMODs contain NaN in an unused UV coordinate.
+          // The native client still renders the object; zero is the neutral
+          // recoverable coordinate and preserves all geometry.
+          uv[i*2+k]=0;
+          repairedUv=true;
+        }
+      }
       if (lightUv) r.skip(8);
     }
-    return MeshData(
+    final model=MeshData(
       p,
       no,
       uv,
@@ -348,6 +359,10 @@ class MeshData {
       [],
       r.source,
     )..repairNormals();
+    if(repairedUv){
+      model.repairs.add('UV no finitas originales normalizadas a 0.');
+    }
+    return model;
   }
 }
 
