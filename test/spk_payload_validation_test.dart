@@ -242,6 +242,39 @@ void main() {
     }
   });
 
+  test('fully audited SPK exposes unresolved resources by technical Entry ID', () async {
+    final root = await Directory.systemTemp.createTemp('spk-technical-mount-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      source.names.mergeConfirmed({
+        0x1000: 'Character/Human/humf_upper.mlt',
+      });
+      await source.validateSimpleResourceProfile();
+      await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, _, _) {},
+      );
+
+      final library = await Library.fromSpk(
+        source,
+        overlayRoot: '${root.path}/overlay',
+      );
+      expect(library.files.length, 3);
+      expect(
+        library.files,
+        contains('_spk_sinnombre/0000000000001001.dds'),
+      );
+      expect(
+        library.files,
+        contains('_spk_sinnombre/0000000000001002.dds'),
+      );
+      expect(library.sourceDiagnostics['technicalMounted'], 2);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test('validated SPK mounts as Library and overlay never mutates source', () async {
     final root = await Directory.systemTemp.createTemp('spk-workspace-');
     try {
