@@ -191,10 +191,15 @@ class SpkArchiveSource {
     Uint8List tag, {
     Uint8List? aad,
   }) async {
-    if (secret.length != 16 || nonce.length != 12 || tag.length != 16) {
+    if ((secret.length != 16 && secret.length != 32) ||
+        nonce.length != 12 ||
+        tag.length != 16) {
       throw const FormatException('Parámetros AES-GCM SPK inválidos.');
     }
-    final clear = await AesGcm.with128bits().decrypt(
+    final algorithm = secret.length == 16
+        ? AesGcm.with128bits()
+        : AesGcm.with256bits();
+    final clear = await algorithm.decrypt(
       SecretBox(cipherText, nonce: nonce, mac: Mac(tag)),
       secretKey: SecretKey(secret),
       aad: aad ?? const [],
@@ -573,10 +578,12 @@ class SpkArchiveSource {
     final data = ByteData(12);
     switch (rule) {
       case 'offset_le96':
+      case 'offset_chunk0_le96':
         data.setUint64(0, part.dataOffset, Endian.little);
         data.setUint32(8, ordinal, Endian.little);
         return data.buffer.asUint8List();
       case 'entry_id_chunk_le':
+      case 'entry_id_chunk0_le':
         data.setUint64(0, record.entryId, Endian.little);
         data.setUint32(8, ordinal, Endian.little);
         return data.buffer.asUint8List();
