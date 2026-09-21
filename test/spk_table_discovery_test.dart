@@ -176,6 +176,17 @@ void main() {
     final itmBytes = itm.out.takeBytes();
     expect(SpkArchiveSource.detectFormat(itmBytes), 'ITM');
     expect(SpkArchiveSource.extensionFor('ITM'), '.itm');
+
+    final table = SeedData.encode(
+      binaryTable(
+        const ['Id', 'Value'],
+        const [
+          [1, 2],
+        ],
+      ),
+    );
+    expect(SpkArchiveSource.detectFormat(table), 'SDATA');
+    expect(SpkArchiveSource.extensionFor('SDATA'), '.sdata');
   });
 
   test('authenticated SPK payloads identify core DB tables structurally', () async {
