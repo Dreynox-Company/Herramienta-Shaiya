@@ -457,16 +457,55 @@ class _GameClientPageState extends State<GameClientPage> {
     await scene.setBackdrop(null);
     scene.panX=0;scene.panZ=0;
     final c=catalog!;
-    // Tutorial quest shown by the native ps0032 client for a fresh level-1 character.
-    questId=faction=='light'?3781:3792;
+
+    PsWorldSnapshot? networkSnapshot;
+    PsCharacterDetails? liveDetails;
+    var mapId=0;
+    double? x,z;
+
+    final session=liveWorld;
+    if(session!=null){
+      liveCharacter??=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+      final current=liveCharacter;
+      if(current==null){
+        messages.insert(0,'[ps0032] No existe personaje para Game Start.');
+        await _goCreate();
+        if(mounted)setState(()=>loading=false);
+        return;
+      }
+      try{
+        final selected=await session.selectCharacter(current.id);
+        final entered=await session.enterMap(collect:const Duration(seconds:5));
+        networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
+        liveSnapshot=networkSnapshot;
+        liveDetails=selected.details;
+        mapId=current.mapId;
+        x=networkSnapshot.self?.x??selected.details.x;
+        z=networkSnapshot.self?.z??selected.details.z;
+        if(networkSnapshot.quests.isNotEmpty)questId=networkSnapshot.quests.first.questId;
+        messages.insert(
+          0,
+          '[ps0032] Mundo real: ${networkSnapshot.npcs.length} NPC · '
+          '${networkSnapshot.mobs.length} mobs · ${networkSnapshot.quests.length} quests abiertas.',
+        );
+      }catch(e){
+        messages.insert(0,'[ps0032] Entrada real falló; se conserva fallback SVMAP: '+e.toString());
+        networkSnapshot=null;
+      }
+    }
+
+    // The native fresh-character tutorial is client-visible even before it
+    // appears in QUEST_LIST, so retain its canonical id as the empty-list fallback.
+    if(questId<=1)questId=faction=='light'?3781:3792;
     final country=faction=='light'?0:1;
     final create=metadata?.createRule(country,classIndex);
-    final mapId=create?.mapId??(faction=='light'?1:2);
+    if(mapId==0)mapId=create?.mapId??(faction=='light'?1:2);
     svmap=await _loadSvmap(mapId);
     var world=c.worlds.where((p)=>baseName(p).toLowerCase()==mapId.toString()+'.wld').firstOrNull;
     world??=c.worlds.firstOrNull;
 
-    double? x=create?.x,z=create?.z;
+    x??=create?.x;
+    z??=create?.z;
     final map=svmap;
     if((x==null||z==null)&&map!=null){
       final side=map.spawns.where((s)=>faction=='light'
@@ -491,11 +530,22 @@ class _GameClientPageState extends State<GameClientPage> {
     if(scene.character!=null){scene.character!.root.rotation.y=math.pi;}
     scene.updateCamera();
 
-    if(map!=null){
-      final meta=metadata;
-      final questNpcKeys=meta==null
-        ?null
-        :meta.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
+    final meta=metadata;
+    final questNpcKeys=meta==null
+      ?null
+      :meta.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
+    if(networkSnapshot!=null){
+      await scene.spawnGameActorsFromNetwork(
+        npcs:networkSnapshot.npcs.map((p)=>RuntimeNpcSpawn(
+          p.type,p.typeId,p.x,p.y,p.z,p.angle,
+        )).toList(),
+        mobs:networkSnapshot.mobs.map((p)=>RuntimeMobSpawn(p.mobId,p.x,p.z)).toList(),
+        npcModels:meta?.npcModels,
+        mobModels:meta?.mobModels,
+        questNpcKeys:questNpcKeys,
+        locale:uiLocale,
+      );
+    }else if(map!=null){
       await scene.spawnGameActorsFromSvmap(
         map,
         npcModels:meta?.npcModels,
@@ -506,7 +556,7 @@ class _GameClientPageState extends State<GameClientPage> {
       messages.insert(
         0,
         '[Mapa] '+map.npcs.length.toString()+
-          ' posiciones NPC · '+map.mobAreas.length.toString()+' áreas de mobs.',
+          ' NPC lógicos · '+map.mobAreas.length.toString()+' áreas de mobs.',
       );
     }else{
       await scene.spawnGameNpcs(count:12);
@@ -543,9 +593,58 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _finishCreate() async {
     if(nameController.text.trim().isEmpty)nameController.text='DreynoxLocal';
-    characterCreated=true;
-    await _prepareSelectionWorld(creation:false);
-    if(mounted)setState(()=>stage=GameStage.characterSelect);
+    if(mounted)setState(()=>loading=true);
+    try{
+      final session=liveWorld;
+      if(session!=null){
+        final free=liveCharacters.where((s)=>!s.exists).firstOrNull?.slot??0;
+        final slots=await session.createCharacter(
+          slot:free,
+          race:_protocolRace(),
+          mode:_protocolMode(),
+          hair:hairIndex,
+          face:faceIndex,
+          height:2,
+          profession:_protocolProfession(classIndex),
+          gender:genderIndex,
+          name:nameController.text.trim(),
+        );
+        liveCharacters=slots;
+        liveCharacter=slots.where((s)=>s.exists&&s.name==nameController.text.trim()).firstOrNull
+          ??slots.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+        if(liveCharacter!=null)_syncUiFromLiveCharacter(liveCharacter!);
+        messages.insert(0,'[ps0032] Personaje creado y persistido en World.');
+      }
+      characterCreated=true;
+      await _prepareSelectionWorld(creation:false);
+      if(mounted)setState(()=>stage=GameStage.characterSelect);
+    }catch(e){
+      messages.insert(0,'[ps0032] CREATE_CHARACTER: '+e.toString());
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
+
+  Future<void> _deleteSelectedCharacter() async {
+    if(mounted)setState(()=>loading=true);
+    try{
+      final current=liveCharacter;
+      if(liveWorld!=null&&current!=null){
+        await liveWorld!.deleteCharacter(current.id);
+        liveCharacters=liveCharacters.where((s)=>s.id!=current.id).toList();
+        liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+        characterCreated=liveCharacter!=null;
+        if(liveCharacter!=null)_syncUiFromLiveCharacter(liveCharacter!);
+        messages.insert(0,'[ps0032] Personaje eliminado en World.');
+      }else{
+        characterCreated=false;
+      }
+      if(mounted)setState((){});
+    }catch(e){
+      messages.insert(0,'[ps0032] DELETE_CHARACTER: '+e.toString());
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
   }
 
   Future<void> _changeGender(int value) async {
@@ -666,7 +765,7 @@ class _GameClientPageState extends State<GameClientPage> {
             faction:faction,
             locale:uiLocale,
             onFaction:(value)=>setState(()=>faction=value),
-            onNext:()=>unawaited(_goSelect()),
+            onNext:()=>unawaited(_selectFactionAndContinue()),
           ),
           GameStage.characterSelect=>CharacterSelectScreen(
             ui:ui!,
@@ -674,7 +773,7 @@ class _GameClientPageState extends State<GameClientPage> {
             name:nameController.text,
             locale:uiLocale,
             onCreate:()=>unawaited(_goCreate()),
-            onDelete:()=>setState(()=>characterCreated=false),
+            onDelete:()=>unawaited(_deleteSelectedCharacter()),
             onStart:()=>unawaited(_enterWorld()),
             onBack:()=>unawaited(_goFaction()),
           ),
