@@ -42,6 +42,22 @@ Future<void> main() async {
     final snapshot=PsWorldSnapshot.fromPackets(all);
     int count(int type)=>all.where((p)=>p.type==type).length;
 
+    if(snapshot.self==null)throw StateError('No CHARACTER_ENTERED_MAP snapshot.');
+    final moveX=snapshot.self!.x+.25;
+    final moveY=snapshot.self!.y;
+    final moveZ=snapshot.self!.z;
+    await world.moveCharacter(x:moveX,y:moveY,z:moveZ,yawRadians:0,run:false);
+    stdout.writeln('Movement 0x0501 -> x='+moveX.toString()+' y='+moveY.toString()+' z='+moveZ.toString());
+
+    final tutorialNpc=snapshot.npcs.where((n)=>n.type==7&&n.typeId==1167).firstOrNull;
+    var questStartOk=false;
+    if(tutorialNpc!=null&&!snapshot.quests.any((q)=>q.questId==3781)&&!snapshot.finishedQuests.any((q)=>q.questId==3781)){
+      await world.startQuest(tutorialNpc.globalId,3781);
+      questStartOk=true;
+      stdout.writeln('QUEST_START 3781 confirmed by World via NPC globalId='+tutorialNpc.globalId.toString());
+      await world.quitQuest(3781);
+    }
+
     final result={
       'ok':true,
       'userId':login.userId,
@@ -65,6 +81,11 @@ Future<void> main() async {
       'questListPackets':count(PsPacketType.questList),
       'questFinishedPackets':count(PsPacketType.questFinishedList),
       'enteredMapPackets':count(PsPacketType.characterEnteredMap),
+      'movement':{'sent':true,'x':moveX,'y':moveY,'z':moveZ},
+      'tutorialQuest':{
+        'id':3781,'npcFound':tutorialNpc!=null,
+        'npcGlobalId':tutorialNpc?.globalId,'startConfirmed':questStartOk,
+      },
       'snapshot':{
         'self':snapshot.self==null?null:{
           'id':snapshot.self!.characterId,
@@ -96,10 +117,11 @@ Future<void> main() async {
     if(out!=null&&out.isNotEmpty)await File(out).writeAsString(json);
 
     if(count(PsPacketType.characterDetails)==0)throw StateError('CHARACTER_DETAILS missing.');
-    if(snapshot.self==null)throw StateError('No CHARACTER_ENTERED_MAP snapshot.');
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
+    if(tutorialNpc==null)throw StateError('Tutorial NPC 7:1167 is not present near map-1 spawn.');
+    if(!questStartOk)throw StateError('Tutorial QUEST_START 3781 was not confirmed.');
   }finally{
     await world.close();
   }
