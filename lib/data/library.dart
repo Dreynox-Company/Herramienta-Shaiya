@@ -30,6 +30,8 @@ String canon(String path) {
 const supportedExtensions = {
   '.sdata',
   '.txt',
+  '.json',
+  '.bin',
   '.csv',
   '.svmap',
   '.env',
@@ -49,6 +51,9 @@ const supportedExtensions = {
   '.mon',
   '.dds',
   '.png',
+  '.gif',
+  '.zip',
+  '.exe',
   '.jpg',
   '.jpeg',
   '.tga',
@@ -316,12 +321,21 @@ class Library {
     var ambiguousExcluded = 0;
     var inferred = 0;
     var confirmed = 0;
+    var technical = 0;
 
     for (final record in source.index.resources) {
-      final raw = source.names[record.entryId];
+      var raw = source.names[record.entryId];
+      var technicalPath = false;
       if (raw == null) {
-        unnamed++;
-        continue;
+        if (!source.fullyValidatedResources) {
+          unnamed++;
+          continue;
+        }
+        final format = source.validatedFormat(record.entryId) ?? 'BIN';
+        raw =
+            '_SPK_SinNombre/${record.idHex}'
+            '${SpkArchiveSource.extensionFor(format)}';
+        technicalPath = true;
       }
       String normalized;
       try {
@@ -359,6 +373,8 @@ class Library {
       confirmedByPath[normalized] = isConfirmed;
       if (isConfirmed) {
         confirmed++;
+      } else if (technicalPath) {
+        technical++;
       } else {
         inferred++;
       }
@@ -374,6 +390,7 @@ class Library {
     final report = <String, Object?>{
       'confirmedMounted': confirmed,
       'inferredMounted': inferred,
+      'technicalMounted': technical,
       'unresolvedSkipped': unnamed,
       'unsupportedSkipped': unsupported,
       'unsafeSkipped': unsafe,
@@ -382,7 +399,8 @@ class Library {
       'completePayloadAccess': source.canExtractAll,
     };
     progress?.call(
-      'Montando SPK en Studio: ${mounted.length} recursos con ruta utilizable…',
+      'Montando SPK en Studio: ${mounted.length} recursos '
+      '(incluidos $technical por Entry ID técnico)…',
     );
     return _normalise(
       source.file.path,
