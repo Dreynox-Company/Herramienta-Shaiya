@@ -1,0 +1,21 @@
+SHAIYA SPK RESOURCE PROBE V8 - integrado en Shaiya Studio 0.6.10
+
+Este auxiliar existe para cerrar la capa criptografica de payloads del DATA.SPK
+cuyo indice SHA-256 comienza por a3ea7e3b. No modifica game.exe ni data.spk.
+
+USO RECOMENDADO:
+  Abre el SPK desde Shaiya Studio y pulsa "AutoPerfil SPK".
+
+CONDICIONES:
+  - Windows x64.
+  - game.exe y data.spk de la misma instalacion.
+  - Desconecta Internet antes de continuar.
+  - No inicies sesion ni introduzcas credenciales.
+  - El aviso de servidor sin conexion es esperado.
+
+RESULTADO:
+  derived-resource-profile.json contiene unicamente evidencia que el helper pudo
+  reproducir offline contra ciphertexts del SPK validado. Studio comprueba el
+  hash del indice antes de aplicar el perfil. Si simples o fragmentados no estan
+  suficientemente validados, las funciones correspondientes permanecen
+  bloqueadas.
