@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/catalog.dart';
 import '../../render/studio_scene.dart';
+import '../ps0032_protocol.dart';
 import '../shaiya_widgets.dart';
 import '../ui_asset.dart';
 
@@ -9,6 +10,9 @@ class WorldHud extends StatelessWidget {
   final StudioScene scene;
   final Catalog catalog;
   final String characterName,locale;
+  final int level;
+  final PsCharacterDetails? details;
+  final PsHitpoints? hitpoints;
   final UiAssetCache ui;
   final List<String> messages;
   final bool questOpen;
@@ -21,6 +25,9 @@ class WorldHud extends StatelessWidget {
     required this.scene,
     required this.catalog,
     required this.characterName,
+    required this.level,
+    required this.details,
+    required this.hitpoints,
     required this.locale,
     required this.ui,
     required this.messages,
@@ -120,9 +127,9 @@ class WorldHud extends StatelessWidget {
         fit:BoxFit.fill,
       ),
     ),
-    const Positioned(
+    Positioned(
       left:63,top:7,
-      child:Text('1',style:TextStyle(fontSize:10,color:Colors.white)),
+      child:Text(level.toString(),style:const TextStyle(fontSize:10,color:Colors.white)),
     ),
     Positioned(
       left:93,top:6,right:8,
@@ -135,17 +142,26 @@ class WorldHud extends StatelessWidget {
         ),
       ),
     ),
-    const Positioned(
+    Positioned(
       left:83,top:28,
-      child:Text('255 / 255',style:TextStyle(fontSize:8,color:Colors.white)),
+      child:Text(
+        '${hitpoints?.hp??details?.maxHp??0} / ${details?.maxHp??hitpoints?.hp??0}',
+        style:const TextStyle(fontSize:8,color:Colors.white),
+      ),
     ),
-    const Positioned(
+    Positioned(
       left:84,top:42,
-      child:Text('95 / 95',style:TextStyle(fontSize:8,color:Colors.white)),
+      child:Text(
+        '${hitpoints?.mp??details?.maxMp??0} / ${details?.maxMp??hitpoints?.mp??0}',
+        style:const TextStyle(fontSize:8,color:Colors.white),
+      ),
     ),
-    const Positioned(
+    Positioned(
       left:82,top:57,
-      child:Text('180 / 180',style:TextStyle(fontSize:8,color:Colors.white)),
+      child:Text(
+        '${hitpoints?.sp??details?.maxSp??0} / ${details?.maxSp??hitpoints?.sp??0}',
+        style:const TextStyle(fontSize:8,color:Colors.white),
+      ),
     ),
   ]);
 
@@ -301,10 +317,13 @@ class WorldHud extends StatelessWidget {
         fit:BoxFit.fill,
       ),
     ),
-    const Positioned(
+    Positioned(
       left:250,right:250,top:0,
       child:Center(
-        child:Text('0,0%',style:TextStyle(fontSize:9,color:Colors.white70)),
+        child:Text(
+          '${((details?.experienceRatio??0)*100).toStringAsFixed(1).replaceAll('.',',')}%',
+          style:const TextStyle(fontSize:9,color:Colors.white70),
+        ),
       ),
     ),
     Positioned(
