@@ -114,6 +114,8 @@ void main(){
         'world':state.scene.worldPath,
         'backdrop':state.scene.backdropTexture!=null,
         'actors':state.scene.gameActors.length,
+        'loadedWorldAssets':state.scene.loadedWorldAssets,
+        'missingWorldAssets':state.scene.missingWorldAssets,
         'originX':state.scene.originX,
         'originZ':state.scene.originZ,
         'questId':state.questId,
