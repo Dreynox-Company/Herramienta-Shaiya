@@ -57,6 +57,7 @@ jobs:
           printf '%s\n' 'Public reference service build. No user game files are included. Backend boot and SQLite checks do not establish native world entry or complete gameplay.' > out/proof/SCOPE.txt
           (cd out && sha256sum *.tar.zst > proof/SHA256SUMS.txt)
       - name: Package tools for local, private native compatibility tests
+        if: ${{ false }}
         shell: bash
         run: |
           set -euo pipefail
@@ -90,18 +91,21 @@ jobs:
           retention-days: 7
           compression-level: 0
       - uses: actions/upload-artifact@v4
+        if: ${{ false }}
         with:
           name: Native-Private-QA-SDK
           path: workspace/dotnet-sdk.tar.zst
           retention-days: 2
           compression-level: 0
       - uses: actions/upload-artifact@v4
+        if: ${{ false }}
         with:
           name: Native-Private-QA-Packages
           path: workspace/nuget-cache.tar.zst
           retention-days: 2
           compression-level: 0
       - uses: actions/upload-artifact@v4
+        if: ${{ false }}
         with:
           name: Native-Private-QA-Workspace
           path: workspace/backend-workspace.tar.zst
