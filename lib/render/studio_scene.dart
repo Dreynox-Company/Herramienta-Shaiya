@@ -49,7 +49,7 @@ class StudioScene extends ChangeNotifier {
   t.ThreeJS? view;Catalog? catalog;
   Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
-  RenderPart? weapon,secondWeapon,sky;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
+  RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
@@ -284,6 +284,27 @@ class StudioScene extends ChangeNotifier {
   void orbit(double dx,double dy){yaw-=dx*.006;pitch=(pitch+dy*.006).clamp(-1.2,1.2);updateCamera();}
   void zoom(double amount){distance=(distance*amount).clamp(.4,250);updateCamera();}
   void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));if(sky!=null)sky!.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}
+  Future<void> setBackdrop(String? path) async {
+    backdropTexture?.dispose();
+    backdropTexture=null;
+    if(view==null)return;
+    if(path==null){
+      view!.scene.background=t.Color.fromHex32(0x11151e);
+      return;
+    }
+    final bytes=await catalog!.library.read(path);
+    final png=await compute(_decodeTexture,{
+      'bytes':bytes,
+      'path':path,
+      'opaque':true,
+    });
+    final texture=await t.TextureLoader(flipY:false).fromBytes(png);
+    if(texture==null)throw FormatException('No se pudo cargar el fondo $path');
+    texture.colorSpace=t.SRGBColorSpace;
+    backdropTexture=texture;
+    view!.scene.background=texture;
+  }
+
   Future<void> setSky(String? path) async {
     final revision=++_skyRevision;
     if(path==null){
@@ -322,7 +343,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
