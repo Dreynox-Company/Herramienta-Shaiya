@@ -236,6 +236,9 @@ class SpkArchiveSource {
   String technicalPath(SpkRecord record) {
     final known = names[record.entryId];
     if (known != null) return known;
+    if (!record.resource) {
+      return '_SPK_Tecnico/Registros/${record.idHex}.record';
+    }
     final group = record.simple
         ? '_SPK_SinNombre/Simples'
         : '_SPK_SinNombre/Fragmentados';
