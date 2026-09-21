@@ -92,6 +92,7 @@ Future<void> loadAutomaticSpkNameMap(
     }
   }
 }
+
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   const SpkArchiveBrowserPage({super.key, required this.source});
@@ -165,9 +166,9 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     BuildContext context,
     String spkPath,
   ) async {
-    final candidates = spkProfileCandidatePaths(
-      spkPath,
-    ).map(File.new).toList(growable: false);
+    final candidates = spkProfileCandidatePaths(spkPath)
+        .map(File.new)
+        .toList(growable: false);
     for (final file in candidates) {
       if (!await file.exists()) continue;
       try {
@@ -356,7 +357,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Carpeta extraída: ' + result['folder'].toString())),
+        SnackBar(
+          content: Text('Carpeta extraída: ' + result['folder'].toString()),
+        ),
       );
     }
   });
@@ -942,7 +945,6 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ],
         ),
         actions: [
-
           TextButton.icon(
             onPressed: busy ? null : loadResourceProfile,
             icon: const Icon(Icons.key_outlined, size: 17),

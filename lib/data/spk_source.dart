@@ -240,7 +240,10 @@ class SpkArchiveSource {
     }
     final bySize = <int, List<String>>{};
     var scanned = 0;
-    await for (final entity in reference.list(recursive: true, followLinks: false)) {
+    await for (final entity in reference.list(
+      recursive: true,
+      followLinks: false,
+    )) {
       if (entity is! File) continue;
       final size = await entity.length();
       final relative = p
@@ -264,11 +267,19 @@ class SpkArchiveSource {
       }
       checked++;
       if (checked % 1000 == 0) {
-        progress('Relacionando rutas por tamaño único…', checked, resources.length);
+        progress(
+          'Relacionando rutas por tamaño único…',
+          checked,
+          resources.length,
+        );
       }
     }
     names.mergeHints(hints);
-    progress('Nombres inferidos: ${hints.length}.', resources.length, resources.length);
+    progress(
+      'Nombres inferidos: ${hints.length}.',
+      resources.length,
+      resources.length,
+    );
     return {
       'scannedFiles': scanned,
       'inferred': hints.length,
@@ -293,7 +304,10 @@ class SpkArchiveSource {
     }
     final bySize = <int, List<File>>{};
     var scanned = 0;
-    await for (final entity in reference.list(recursive: true, followLinks: false)) {
+    await for (final entity in reference.list(
+      recursive: true,
+      followLinks: false,
+    )) {
       if (entity is! File) continue;
       final size = await entity.length();
       bySize.putIfAbsent(size, () => <File>[]).add(entity);
@@ -315,8 +329,9 @@ class SpkArchiveSource {
       final digest = sha256.convert(result.bytes).toString();
       for (final candidate in candidates) {
         control.check();
-        final candidateHash = fileHashes[candidate.path] ??=
-            sha256.convert(await candidate.readAsBytes()).toString();
+        final candidateHash = fileHashes[candidate.path] ??= sha256
+            .convert(await candidate.readAsBytes())
+            .toString();
         if (candidateHash != digest) continue;
         final relative = p
             .relative(candidate.path, from: reference.path)
@@ -329,7 +344,11 @@ class SpkArchiveSource {
       }
     }
     names.mergeConfirmed(confirmed);
-    progress('Rutas confirmadas: ${confirmed.length}.', resources.length, resources.length);
+    progress(
+      'Rutas confirmadas: ${confirmed.length}.',
+      resources.length,
+      resources.length,
+    );
     return {
       'scannedFiles': scanned,
       'confirmed': confirmed.length,
