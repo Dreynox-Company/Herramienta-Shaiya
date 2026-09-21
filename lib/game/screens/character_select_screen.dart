@@ -4,7 +4,7 @@ import '../ui_asset.dart';
 
 class CharacterSelectScreen extends StatelessWidget {
   final UiAssetCache ui;
-  final bool created;
+  final bool created,pendingDelete;
   final String name,locale;
   final VoidCallback onCreate;
   final VoidCallback onDelete;
@@ -15,6 +15,7 @@ class CharacterSelectScreen extends StatelessWidget {
     super.key,
     required this.ui,
     required this.created,
+    required this.pendingDelete,
     required this.name,
     required this.locale,
     required this.onCreate,
@@ -75,20 +76,20 @@ class CharacterSelectScreen extends StatelessWidget {
   );
 
   Widget _startButton()=>GestureDetector(
-    onTap:created?onStart:null,
+    onTap:created&&!pendingDelete?onStart:null,
     child:Opacity(
-      opacity:created?1:.78,
+      opacity:created&&!pendingDelete?1:.55,
       child:DataRegion(
         cache:ui,
         path:'interface/characterselect/button/select_start_${locale=='spn'?'spn':'usa'}.tga',
         sheetWidth:256,
         sheetHeight:256,
-        source:Rect.fromLTWH(4,created?2:130,246,60),
+        source:Rect.fromLTWH(4,created&&!pendingDelete?2:130,246,60),
         width:247,
         height:61,
         fallback:shaiyaRedButton(
           locale=='spn'?'Inicio de Juego':'Game Start',
-          created?onStart:null,
+          created&&!pendingDelete?onStart:null,
           width:247,
           height:61,
           fontSize:24,
@@ -118,7 +119,10 @@ class CharacterSelectScreen extends StatelessWidget {
     Positioned(
       left:213,top:642,
       child:shaiyaRedButton(
-        locale=='spn'?'Eliminar':'Delete Character',created?onDelete:null,width:114,height:36,fontSize:11,
+        pendingDelete
+          ?(locale=='spn'?'Restaurar':'Restore')
+          :(locale=='spn'?'Eliminar':'Delete Character'),
+        created?onDelete:null,width:114,height:36,fontSize:11,
       ),
     ),
     Positioned(
