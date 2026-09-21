@@ -44,6 +44,23 @@ class MobRule {
   );
 }
 
+class CharacterCreateRule {
+  final int country,job,mapId;
+  final double x,y,z;
+  const CharacterCreateRule({
+    required this.country,required this.job,required this.mapId,
+    required this.x,required this.y,required this.z,
+  });
+  factory CharacterCreateRule.fromJson(Map<String,dynamic> j)=>CharacterCreateRule(
+    country:(j['Country'] as num).toInt(),
+    job:(j['Job'] as num).toInt(),
+    mapId:(j['MapId'] as num).toInt(),
+    x:(j['X'] as num).toDouble(),
+    y:(j['Y'] as num).toDouble(),
+    z:(j['Z'] as num).toDouble(),
+  );
+  String get key=>country.toString()+':'+job.toString();
+}
 class QuestRule {
   final int id,minLevel,maxLevel,startNpcType,startNpcId,endNpcType,endNpcId;
   final int requiredMobId1,requiredMobCount1,requiredMobId2,requiredMobCount2;
@@ -80,10 +97,12 @@ class ServerMetadata {
   final Map<String,NpcRule> npcs;
   final Map<int,QuestRule> quests;
   final Map<int,MobRule> mobs;
-  const ServerMetadata(this.npcs,this.quests,this.mobs);
+  final Map<String,CharacterCreateRule> createRules;
+  const ServerMetadata(this.npcs,this.quests,this.mobs,this.createRules);
 
   Map<String,int> get npcModels=>{for(final e in npcs.entries)e.key:e.value.model};
   Map<int,int> get mobModels=>{for(final e in mobs.entries)e.key:e.value.image};
+  CharacterCreateRule? createRule(int country,int job)=>createRules[country.toString()+':'+job.toString()];
 
   static Future<ServerMetadata?> load() async {
     final exe=File(Platform.resolvedExecutable).parent.path;
@@ -107,10 +126,27 @@ class ServerMetadata {
         .cast<Map>()
         .map((x)=>MobRule.fromJson(Map<String,dynamic>.from(x)))
         .toList();
+      final root=File(Platform.resolvedExecutable).parent.path;
+      final configCandidates=<String>[
+        root+'/servicios/world/config/character.json',
+        Directory.current.path+'/servicios/world/config/character.json',
+      ];
+      final createRules=<String,CharacterCreateRule>{};
+      for(final configPath in configCandidates){
+        final configFile=File(configPath);
+        if(!await configFile.exists())continue;
+        final character=jsonDecode(await configFile.readAsString()) as Map<String,dynamic>;
+        for(final row in (character['CreateConfigs'] as List? ?? const [])){
+          final rule=CharacterCreateRule.fromJson(Map<String,dynamic>.from(row as Map));
+          createRules[rule.key]=rule;
+        }
+        break;
+      }
       return ServerMetadata(
         {for(final n in npcList)n.key:n},
         {for(final q in questList)q.id:q},
         {for(final m in mobList)m.id:m},
+        createRules,
       );
     }
     return null;
