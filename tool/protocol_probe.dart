@@ -38,6 +38,10 @@ Future<void> main() async {
     );
     final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
     final currentHp=hpPacket==null?null:PsHitpoints.parse(hpPacket);
+    final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
+    final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
+    final skillBook=skillsPacket==null?null:PsSkillBook.parse(skillsPacket);
+    final quickbar=barPacket==null?null:PsSkillBar.parse(barPacket);
     stdout.writeln(
       'Vitals hp=${currentHp?.hp}/${selected.details.maxHp} '
       'mp=${currentHp?.mp}/${selected.details.maxMp} '
