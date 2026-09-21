@@ -67,6 +67,118 @@ List<String> spkNameMapCandidatePaths(
   ];
 }
 
+
+List<String> spkResourceProfileCandidatePaths(
+  String spkPath,
+  String indexSha256, {
+  String? executablePath,
+  String? separatorOverride,
+}) {
+  final separator = separatorOverride == null || separatorOverride.isEmpty
+      ? Platform.pathSeparator
+      : separatorOverride;
+  final spkDir = _spkParentPath(spkPath, separator);
+  final exeDir = _spkParentPath(
+    executablePath ?? Platform.resolvedExecutable,
+    separator,
+  );
+  final shortHash = indexSha256.length >= 8
+      ? indexSha256.substring(0, 8)
+      : indexSha256;
+  return <String>[
+    '$spkPath.resources.json',
+    '$spkDir${separator}data.spk.resources.json',
+    '$spkDir${separator}derived-resource-profile.json',
+    '$spkDir${separator}spk-resource-profile.json',
+    '$exeDir${separator}profiles${separator}spk-resource-profile-$shortHash.json',
+    '$exeDir${separator}profiles${separator}spk-resource-profile.json',
+    '$exeDir${separator}profiles${separator}derived-resource-profile.json',
+  ];
+}
+
+SpkCryptoProfile mergeSpkResourceProfile(
+  SpkArchiveSource source,
+  Map<String, dynamic> data,
+) {
+  if (data['resourceSecretHex'] is String) {
+    return source.profile.mergeResourceProbe(data);
+  }
+
+  final keyInfo = data['keyInfo'];
+  if (keyInfo is Map && keyInfo['secretHex'] is String) {
+    final resourceSecret = spkResourceSecret(keyInfo['secretHex']);
+    var chunkRule = source.profile.chunkNonceRule;
+    final target = data['target'];
+    final auth = data['authenticatedCipherInfo'];
+    if (target is Map &&
+        target['kind'] == 'chunk' &&
+        auth is Map &&
+        auth['nonceHex'] is String) {
+      final parentOrdinal = int.tryParse(
+        target['parentOrdinal']?.toString() ?? '',
+      );
+      final auxiliaryOrdinal = int.tryParse(
+        target['ordinal']?.toString() ?? '',
+      );
+      if (parentOrdinal != null && auxiliaryOrdinal != null) {
+        chunkRule = source.identifyChunkNonceRule(
+          parentOrdinal: parentOrdinal,
+          auxiliaryOrdinal: auxiliaryOrdinal,
+          observedNonce: spkHexBytes(
+            auth['nonceHex'].toString(),
+            expectedBytes: 12,
+          ),
+        );
+      }
+    }
+    return SpkCryptoProfile(
+      profileId: '${source.profile.profileId}-resources',
+      indexSha256: source.profile.indexSha256,
+      indexSecret: source.profile.indexSecret,
+      resourceSecret: resourceSecret,
+      resourceKeyIsIndexKey: false,
+      chunkNonceRule: chunkRule,
+    );
+  }
+
+  return SpkCryptoProfile.fromJson(data);
+}
+
+Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
+  SpkArchiveSource source,
+  String spkPath,
+) async {
+  for (final candidate in spkResourceProfileCandidatePaths(
+    spkPath,
+    source.index.encryptedIndexSha256,
+  )) {
+    final file = File(candidate);
+    if (!await file.exists()) continue;
+    try {
+      final value = jsonDecode(await file.readAsString());
+      if (value is! Map) continue;
+      final data = Map<String, dynamic>.from(value);
+      final declared =
+          (data['indexSha256'] ?? data['spkIndexSha256'])?.toString().toLowerCase();
+      if (declared != null &&
+          declared.isNotEmpty &&
+          declared != source.index.encryptedIndexSha256.toLowerCase()) {
+        continue;
+      }
+      final profile = mergeSpkResourceProfile(source, data);
+      if (profile.effectiveResourceSecret == null) continue;
+      return await SpkArchiveSource.open(
+        spkPath,
+        profile,
+        names: source.names,
+      );
+    } catch (_) {
+      // Un perfil opcional incompatible no debe impedir abrir el índice.
+    }
+  }
+  return source;
+}
+
 Future<void> loadAutomaticSpkNameMap(
   SpkArchiveSource source,
   String spkPath,
@@ -135,11 +247,13 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     );
 
     try {
-      final source = await SpkArchiveSource.open(
+      var source = await SpkArchiveSource.open(
         picked.path,
         profile,
         progress: (message, done, total) => progress.value = message,
       );
+      progress.value = 'Buscando perfil validado de recursos…';
+      source = await loadAutomaticSpkResourceProfile(source, picked.path);
       progress.value = 'Resolviendo nombres y rutas conocidas…';
       await loadAutomaticSpkNameMap(source, picked.path);
       if (!context.mounted) return;
@@ -472,49 +586,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       throw const FormatException('Perfil SPK JSON inválido.');
     }
     final data = Map<String, dynamic>.from(raw);
-    SpkCryptoProfile nextProfile;
-
-    final keyInfo = data['keyInfo'];
-    if (keyInfo is Map && keyInfo['secretHex'] is String) {
-      final resourceSecret = spkHexBytes(
-        keyInfo['secretHex'].toString(),
-        expectedBytes: 16,
-      );
-      var chunkRule = source.profile.chunkNonceRule;
-      final target = data['target'];
-      final auth = data['authenticatedCipherInfo'];
-      if (target is Map &&
-          target['kind'] == 'chunk' &&
-          auth is Map &&
-          auth['nonceHex'] is String) {
-        final parentOrdinal = int.tryParse(
-          target['parentOrdinal']?.toString() ?? '',
-        );
-        final auxiliaryOrdinal = int.tryParse(
-          target['ordinal']?.toString() ?? '',
-        );
-        if (parentOrdinal != null && auxiliaryOrdinal != null) {
-          chunkRule = source.identifyChunkNonceRule(
-            parentOrdinal: parentOrdinal,
-            auxiliaryOrdinal: auxiliaryOrdinal,
-            observedNonce: spkHexBytes(
-              auth['nonceHex'].toString(),
-              expectedBytes: 12,
-            ),
-          );
-        }
-      }
-      nextProfile = SpkCryptoProfile(
-        profileId: '${source.profile.profileId}-resources',
-        indexSha256: source.profile.indexSha256,
-        indexSecret: source.profile.indexSecret,
-        resourceSecret: resourceSecret,
-        resourceKeyIsIndexKey: false,
-        chunkNonceRule: chunkRule,
-      );
-    } else {
-      nextProfile = SpkCryptoProfile.fromJson(data);
-    }
+    final nextProfile = mergeSpkResourceProfile(source, data);
 
     final next = await SpkArchiveSource.open(
       source.file.path,
@@ -597,6 +669,50 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Recurso extraído en ${result['folder']}')),
+      );
+    }
+  });
+
+  Future<void> extractReadable() => runAction(() async {
+    if (!source.canReadSimpleResources) {
+      throw const SpkFailure(
+        'SPK_RESOURCE_PROFILE_REQUIRED',
+        'Aún no existe una clave de recursos validada.',
+      );
+    }
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Extraer recursos legibles aquí',
+    );
+    if (folder == null) return;
+    final readable = <SpkRecord>[
+      ...source.index.simpleResources,
+      if (source.canReadFragmentedResources)
+        ...source.index.fragmentedResources,
+    ];
+    final result = await source.extract(
+      Directory(folder),
+      selection: readable,
+      requireComplete: false,
+      continueOnError: true,
+      control: extractControl,
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${result['files']} recursos legibles extraídos · '
+            '${result['failures']} omitidos · ${result['folder']}',
+          ),
+          duration: const Duration(seconds: 9),
+        ),
       );
     }
   });
@@ -1013,6 +1129,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.drive_folder_upload_outlined, size: 17),
             label: const Text('Extraer carpeta'),
           ),
+          if (!source.canExtractAll)
+            TextButton.icon(
+              onPressed: busy || !source.canReadSimpleResources
+                  ? null
+                  : extractReadable,
+              icon: const Icon(Icons.rule_folder_outlined, size: 17),
+              label: const Text('Extraer legibles'),
+            ),
           FilledButton.icon(
             onPressed: busy || !source.canExtractAll ? null : extractAll,
             icon: const Icon(Icons.folder_copy_outlined, size: 17),
@@ -1163,9 +1287,25 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         ),
                       ),
                       const Spacer(),
-                      if (!source.canExtractAll)
+                      if (source.canExtractAll)
                         const Text(
-                          'Extraer todo requiere clave de recursos y regla de fragmentación validadas',
+                          'Lectura SPK completa validada · Extraer todo habilitado',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xff83c69d),
+                          ),
+                        )
+                      else if (source.canReadSimpleResources)
+                        const Text(
+                          'Recursos simples legibles · fragmentados pendientes',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xffd3ac76),
+                          ),
+                        )
+                      else
+                        const Text(
+                          'Índice listo · falta perfil criptográfico de payloads',
                           style: TextStyle(
                             fontSize: 9,
                             color: Color(0xffd3ac76),
