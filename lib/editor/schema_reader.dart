@@ -70,6 +70,12 @@ class EditorReader {
             .contains('binarysdata/') ||
         (name.startsWith('db') && name.endsWith('.sdata'))) {
       candidates.add('binary');
+    } else if (name.endsWith('.sdata')) {
+      // Fully audited SPK resources without a resolved filename still retain
+      // their detected SDATA extension. The binary-table contract has a
+      // distinctive 128-byte header + UTF-16 column directory, so it is safe
+      // to attempt that parser and fall back to lossless inspection on failure.
+      candidates.add('binary');
     }
     final errors = <String>[];
     for (final profile in candidates) {
