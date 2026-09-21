@@ -275,7 +275,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final folder = await getDirectoryPath(
       confirmButtonText: 'Usar DATA como referencia',
     );
-    if (folder == null) return;
+    if (folder == null || !mounted) return;
 
     final verify = source.canReadSimpleResources
         ? await showDialog<bool>(
@@ -431,7 +431,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       flush: true,
     );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
     await Navigator.of(context).pushReplacement<void, void>(
       MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
     );
