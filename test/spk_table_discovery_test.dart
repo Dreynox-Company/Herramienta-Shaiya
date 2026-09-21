@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ import 'package:herramienta_shaiya/data/spk_source.dart';
 import 'package:herramienta_shaiya/data/spk_table_discovery.dart';
 import 'package:herramienta_shaiya/editor/primitive_schemas.dart';
 
+import 'archive_test.dart' show SahWriter;
 import 'editor_document_test.dart' show binaryTable;
 
 void _put32(Uint8List bytes, int offset, int value) =>
@@ -39,6 +41,7 @@ Future<SpkArchiveSource> _source(
     'DBMonsterDataRecord',
     'DBSkillDataRecord',
   ],
+  Map<String, Uint8List> manifestFiles = const <String, Uint8List>{},
 }) async {
   final indexKey = Uint8List.fromList(
     List<int>.generate(16, (i) => 0x10 + i),
@@ -50,13 +53,21 @@ Future<SpkArchiveSource> _source(
   final records = <SpkRecord>[];
   var dataOffset = spkHeaderBytes;
 
+  final payloads = <({Uint8List bytes, String? hint})>[];
   for (var i = 0; i < tables.length; i++) {
     final schema = primitiveSchemas[tables[i]]!;
     final raw = binaryTable(
       schema.map((field) => field.$1).toList(),
       [List<int>.filled(schema.length, i + 1)],
     );
-    final clear = SeedData.encode(raw);
+    payloads.add((bytes: SeedData.encode(raw), hint: null));
+  }
+  for (final entry in manifestFiles.entries) {
+    payloads.add((bytes: entry.value, hint: entry.key));
+  }
+
+  for (var i = 0; i < payloads.length; i++) {
+    final clear = payloads[i].bytes;
     final nonce = _nonce(0x20 + i * 16);
     final box = await _encrypt(clear, resourceKey, nonce);
     final cipher = Uint8List.fromList(box.cipherText);
@@ -117,6 +128,16 @@ Future<SpkArchiveSource> _source(
       chunkNonceRule: 'unsupported',
     ),
   );
+  for (var i = 0; i < payloads.length; i++) {
+    final hint = payloads[i].hint;
+    if (hint != null) {
+      source.names.mergeHints(
+        {0x2000 + i: hint},
+        confidence: 'inferred',
+        evidence: 'synthetic-hint',
+      );
+    }
+  }
   await source.validateSimpleResourceProfile();
   return source;
 }
@@ -182,6 +203,48 @@ void main() {
         source.names.paths.values,
         contains('BinarySData/DBMonsterData.SData'),
       );
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('manifest hints are structurally validated without becoming confirmed', () async {
+    final root = await Directory.systemTemp.createTemp('spk-manifest-hints-');
+    try {
+      final writer = SahWriter();
+      writer.out.add(ascii.encode('MLT'));
+      writer.u(1);
+      writer.str('elmm_hand001.3DC');
+      writer.u(1);
+      writer.str('elmm_hand001.dds');
+      writer.u(1);
+      writer.u(0);
+      writer.u(0);
+      writer.u(0);
+
+      final source = await _source(
+        root,
+        manifestFiles: {
+          'Character/Elf/elmm_hand.MLT': writer.out.takeBytes(),
+          'Item/99.itm': Uint8List.fromList([1, 2, 3, 4]),
+        },
+      );
+      final mltId = 0x2000 + 3;
+      final badItmId = 0x2000 + 4;
+
+      final result = await SpkCoreTableDiscovery.discover(
+        source,
+        control: SpkExtractControl(),
+        progress: (_, __, ___) {},
+      );
+
+      expect(result['validatedManifestHints'], 1);
+      expect(result['rejectedManifestHints'], 1);
+      expect(source.names.isConfirmed(mltId), isFalse);
+      expect(source.names.confidence(mltId), 'validated-inferred');
+      expect(source.names.evidence(mltId), contains('payload-structure'));
+      expect(source.names[mltId], 'Character/Elf/elmm_hand.MLT');
+      expect(source.names[badItmId], isNull);
     } finally {
       await root.delete(recursive: true);
     }
