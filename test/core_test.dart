@@ -55,6 +55,27 @@ Uint8List ep6SkinFixture() {
   return bytes.takeBytes();
 }
 
+
+Uint8List svmapNpcRouteFixture() {
+  final bytes=BytesBuilder();
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void vec(double x,double y,double z){f32(x);f32(y);f32(z);}
+  i32(8); // map size
+  bytes.add(List<int>.filled(8,0)); // 8*8 / 8 collision mask bytes
+  i32(0); // cell size
+  i32(0); // ladders
+  i32(0); // mob areas
+  i32(1); // one NPC group
+  i32(9);i32(2);i32(2); // Animal 2, two patrol points
+  vec(10,20,30);f32(.25);
+  vec(40,50,60);f32(.75);
+  i32(0); // portals
+  i32(0); // rebirth/spawn areas
+  i32(0); // named areas
+  return bytes.takeBytes();
+}
+
 PartRecord part(Slot s, int id, String texture) => PartRecord(
   s,
   MaterialRecord(id, 'm.3dc', texture, 1),
@@ -175,6 +196,20 @@ void main() {
       final look=Appearance.initial(a);
       expect(look.selected[Slot.upper]!.key,'001');
       expect(look.selected[Slot.lower]!.key,'001');
+    });
+  });
+
+  group('SVMAP NPC', () {
+    test('un grupo conserva su ruta y solo crea un NPC lógico', () {
+      final map=SvmapData.parse(svmapNpcRouteFixture(),'fixture.svmap');
+      expect(map.npcs.length,1);
+      expect(map.npcs.single.type,9);
+      expect(map.npcs.single.id,2);
+      expect(map.npcs.single.route.length,2);
+      expect(map.npcs.single.position.x,closeTo(10,1e-6));
+      expect(map.npcs.single.position.z,closeTo(30,1e-6));
+      expect(map.npcs.single.route[1].position.x,closeTo(40,1e-6));
+      expect(map.npcs.single.route[1].yaw,closeTo(.75,1e-6));
     });
   });
 
