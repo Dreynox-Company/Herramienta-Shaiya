@@ -3,6 +3,7 @@ import '../core/motion_catalog.dart';
 import '../core/formats.dart';
 import '../core/npc_quest_text.dart';
 import '../core/monster_text.dart';
+import '../core/db_text.dart';
 import 'library.dart';
 enum Slot {upper,lower,hand,foot,helmet,face,hair}
 const slotLabels={Slot.upper:'Torso y hombreras',Slot.lower:'Piernas y faldones',Slot.hand:'Guantes',Slot.foot:'Botas',Slot.helmet:'Casco',Slot.face:'Rostro',Slot.hair:'Cabello'};
@@ -32,6 +33,8 @@ class Catalog {
   final List<String> worlds=[],sounds=[],effects=[],skies=[],warnings=[];
   SpanishNpcQuestText? spanishText,englishText;
   final Map<int,String> monsterNames={},monsterNamesEnglish={};
+  final Map<String,SkillTextRecord> skillTexts={},skillTextsEnglish={};
+  final Map<String,ItemTextRecord> itemTexts={},itemTextsEnglish={};
   Catalog(this.library);
   Future<void> load(void Function(String) progress) async {
     final paths=library.files.keys.toList()..sort();
@@ -59,6 +62,26 @@ class Catalog {
       try{monsterNamesEnglish.addAll(MonsterTextData.parse(await library.read(monsterUsaPath,limit:16*1024*1024),monsterUsaPath).names);}
       catch(e){warnings.add('DBMonsterText USA: $e');}
     }
+    final skillSpn=paths.where((p)=>p.endsWith('dbskilltext_spn.sdata')).firstOrNull;
+    if(skillSpn!=null){
+      try{skillTexts.addAll(BinarySDataText.skills(await library.read(skillSpn,limit:16*1024*1024),skillSpn).skills);}
+      catch(e){warnings.add('DBSkillText Spain: $e');}
+    }
+    final skillUsa=paths.where((p)=>p.endsWith('dbskilltext_usa.sdata')).firstOrNull;
+    if(skillUsa!=null){
+      try{skillTextsEnglish.addAll(BinarySDataText.skills(await library.read(skillUsa,limit:16*1024*1024),skillUsa).skills);}
+      catch(e){warnings.add('DBSkillText USA: $e');}
+    }
+    final itemSpn=paths.where((p)=>p.endsWith('dbitemtext_spn.sdata')).firstOrNull;
+    if(itemSpn!=null){
+      try{itemTexts.addAll(BinarySDataText.items(await library.read(itemSpn,limit:16*1024*1024),itemSpn).items);}
+      catch(e){warnings.add('DBItemText Spain: $e');}
+    }
+    final itemUsa=paths.where((p)=>p.endsWith('dbitemtext_usa.sdata')).firstOrNull;
+    if(itemUsa!=null){
+      try{itemTextsEnglish.addAll(BinarySDataText.items(await library.read(itemUsa,limit:16*1024*1024),itemUsa).items);}
+      catch(e){warnings.add('DBItemText USA: $e');}
+    }
     final spanishPath=paths.where((p)=>p.endsWith('npcquesttrans_spain.sdata')).firstOrNull;
     if(spanishPath!=null){try{spanishText=SpanishNpcQuestText.parse(await library.read(spanishPath,limit:16*1024*1024),spanishPath);}catch(e){warnings.add('NpcQuestTrans Spain: $e');}}
     final englishPath=paths.where((p)=>p.endsWith('npcquesttrans_usa.sdata')).firstOrNull;
@@ -66,6 +89,20 @@ class Catalog {
     if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
   }
   SpanishNpcQuestText? questText(String locale)=>locale=='usa'?(englishText??spanishText):(spanishText??englishText);
+  SkillTextRecord? skillText(int id,int level,String locale){
+    final key='$id:$level',primary=locale=='usa'?skillTextsEnglish:skillTexts,fallback=locale=='usa'?skillTexts:skillTextsEnglish;
+    return primary[key]??fallback[key]??primary['$id:1']??fallback['$id:1'];
+  }
+  ItemTextRecord? itemText(int type,int id,String locale){
+    final key='$type:$id',primary=locale=='usa'?itemTextsEnglish:itemTexts,fallback=locale=='usa'?itemTexts:itemTextsEnglish;
+    return primary[key]??fallback[key];
+  }
+  String skillName(int id,int level,String locale)=>skillText(id,level,locale)?.name.trim().isNotEmpty==true
+    ?skillText(id,level,locale)!.name.trim()
+    :(locale=='usa'?'Skill $id':'Habilidad $id');
+  String itemName(int type,int id,String locale)=>itemText(type,id,locale)?.name.trim().isNotEmpty==true
+    ?itemText(type,id,locale)!.name.trim()
+    :(locale=='usa'?'Item $type:$id':'Objeto $type:$id');
   String monsterName(int id,String locale){
     final primary=locale=='usa'?monsterNamesEnglish:monsterNames;
     final fallback=locale=='usa'?monsterNames:monsterNamesEnglish;
