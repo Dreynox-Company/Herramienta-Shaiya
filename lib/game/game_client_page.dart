@@ -55,6 +55,7 @@ class _GameClientPageState extends State<GameClientPage> {
   int modeIndex=0;
   double gestureScale=1;
   final messages=<String>['[Notice] Laboratorio local'];
+  final captureKey=GlobalKey();
 
   Future<void> _signalQaReady() async {
     final path=Platform.environment['SHAIYA_QA_READY_FILE'];
@@ -415,7 +416,7 @@ class _GameClientPageState extends State<GameClientPage> {
   Widget _designSurface(Widget child)=>Positioned.fill(
     child:FittedBox(
       fit:BoxFit.contain,
-      child:SizedBox(width:1024,height:768,child:child),
+      child:SizedBox(width:1024,height:742,child:child),
     ),
   );
 
@@ -466,7 +467,7 @@ class _GameClientPageState extends State<GameClientPage> {
     final active=catalog!=null&&ui!=null&&scene.character!=null;
     return Scaffold(
       backgroundColor:Colors.black,
-      body:Stack(children:[
+      body:RepaintBoundary(key:captureKey,child:Stack(children:[
         if(active&&stage!=GameStage.faction)
           Positioned.fill(child:renderer.build())
         else
@@ -527,7 +528,7 @@ class _GameClientPageState extends State<GameClientPage> {
           ),
         }),
         if(!active||loading)_loadingOverlay(),
-      ]),
+      ])),
     );
   }
 }
