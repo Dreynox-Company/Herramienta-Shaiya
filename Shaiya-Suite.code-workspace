@@ -1,0 +1,5 @@
+{
+  "folders": [{"name":"Shaiya Studio 0.6","path":"."},{"name":"Cliente Flutter 0.1","path":"ingenieria_inversa/flutter_game"},{"name":"Cliente original y servicios locales","path":"native-offline"}],
+  "settings":{"files.exclude":{"**/.dart_tool":true,"**/build":true},"search.exclude":{"**/ci/import06":true,"**/build":true,"**/DATA":true}},
+  "launch":{"version":"0.2.0","configurations":[{"name":"Studio Windows","type":"dart","request":"launch","program":"lib/main.dart","deviceId":"windows"},{"name":"Cliente Flutter Windows","type":"dart","request":"launch","cwd":"${workspaceFolder:Cliente Flutter 0.1}","program":"lib/main.dart","deviceId":"windows"}]}
+}

@@ -1,0 +1,68 @@
+// Complete local regression runner. Keep synchronized with test/*_test.dart.
+import '../test/archive_export_test.dart' as suite0;
+import '../test/archive_test.dart' as suite1;
+import '../test/body_coverage_test.dart' as suite2;
+import '../test/client_locale_test.dart' as suite3;
+import '../test/core_test.dart' as suite4;
+import '../test/editor_advanced_test.dart' as suite5;
+import '../test/editor_document_test.dart' as suite6;
+import '../test/editor_import_regression_test.dart' as suite7;
+import '../test/editor_storage_test.dart' as suite8;
+import '../test/editor_ui_test.dart' as suite9;
+import '../test/editor_workbench_test.dart' as suite10;
+import '../test/extra_motion_test.dart' as suite11;
+import '../test/gameplay_regression_test.dart' as suite12;
+import '../test/locomotion_test.dart' as suite13;
+import '../test/manual_flight_regression_test.dart' as suite14;
+import '../test/mounted_supplement_test.dart' as suite15;
+import '../test/movement_input_test.dart' as suite16;
+import '../test/offline_saves_test.dart' as suite17;
+import '../test/palette_test.dart' as suite18;
+import '../test/recovery_test.dart' as suite19;
+import '../test/revision04_test.dart' as suite20;
+import '../test/rig_transition_test.dart' as suite21;
+import '../test/streaming_test.dart' as suite22;
+import '../test/workspace_interaction_test.dart' as suite23;
+import '../test/workspace_material_test.dart' as suite24;
+
+import '../test/local_game_test.dart' as suite25;
+
+import '../test/flight_key_input_test.dart' as suite26;
+import '../test/spk_archive_test.dart' as suite27;
+import '../test/spk_profile_discovery_test.dart' as suite28;
+import '../test/spk_fragment_payload_test.dart' as suite29;
+import '../test/spk_payload_validation_test.dart' as suite30;
+
+void main() {
+  suite0.main();
+  suite1.main();
+  suite2.main();
+  suite3.main();
+  suite4.main();
+  suite5.main();
+  suite6.main();
+  suite7.main();
+  suite8.main();
+  suite9.main();
+  suite10.main();
+  suite11.main();
+  suite12.main();
+  suite13.main();
+  suite14.main();
+  suite15.main();
+  suite16.main();
+  suite17.main();
+  suite18.main();
+  suite19.main();
+  suite20.main();
+  suite21.main();
+  suite22.main();
+  suite23.main();
+  suite24.main();
+  suite25.main();
+  suite26.main();
+  suite27.main();
+  suite28.main();
+  suite29.main();
+  suite30.main();
+}

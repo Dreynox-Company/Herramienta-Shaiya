@@ -1,0 +1,46 @@
+name: SPK 0.6.4 source autofix
+
+on:
+  push:
+    branches:
+      - feat/studio-064-spk-explorer-extraction
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[spk-autofix]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Apply deterministic analyzer fixes
+        run: |
+          dart fix --apply --code=prefer_interpolation_to_compose_strings || true
+          dart fix --apply --code=unnecessary_underscores || true
+          dart format lib/core/spk_archive.dart lib/data/spk_source.dart lib/ui/spk_archive_browser.dart lib/main.dart test/spk_archive_test.dart
+      - name: Verify analyzer
+        run: flutter analyze
+      - name: Focused SPK tests
+        run: flutter test test/spk_archive_test.dart --reporter expanded
+      - name: Commit only SPK integration fixes
+        run: |
+          git add lib/core/spk_archive.dart lib/data/spk_source.dart lib/ui/spk_archive_browser.dart lib/main.dart test/spk_archive_test.dart
+          if git diff --cached --quiet; then
+            echo "No SPK source fixes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: apply analyzer fixes to SPK integration [spk-autofix]"
+          git push origin HEAD:feat/studio-064-spk-explorer-extraction

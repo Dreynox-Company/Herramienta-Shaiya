@@ -1,0 +1,31 @@
+name: SPK research dependencies and source snapshot
+on:
+  push:
+    branches: [work/spk-real-reader-20260920]
+    paths: [.github/workflows/spk-research-tools.yml]
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch exact public analysis wheels only
+        run: |
+          mkdir -p transfer/wheels
+          python -m pip download --only-binary=:all: --dest transfer/wheels pefile==2024.8.26 capstone==5.0.6 unicorn==2.1.4 pycryptodome==3.23.0 zstandard==0.24.0 xxhash==3.5.0
+          sha256sum transfer/wheels/* > transfer/WHEELS-SHA256.txt
+          git archive --format=zip --output=transfer/source.zip HEAD
+          git rev-parse HEAD > transfer/source-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-public-research-tools
+          path: transfer/
+          retention-days: 7
+          if-no-files-found: error

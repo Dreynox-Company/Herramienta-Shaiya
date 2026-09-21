@@ -1,0 +1,20 @@
+name: Herramientas temporales de auditoria local
+on:
+  push:
+    branches: [feat/flutter-native-studio]
+    paths: [.github/workflows/local_qa_tools.yml]
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Empaquetar lector de archivos multipartes
+        run: |
+          tar -czf archive-reader.tar.gz -C /usr/lib 7zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lector-RAR-temporal
+          path: archive-reader.tar.gz
+          retention-days: 1

@@ -1,0 +1,95 @@
+import importlib.util
+import pathlib
+import unittest
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+MODULE = ROOT / 'tool' / 'spk_resource_probe' / 'resource_probe.py'
+SPEC = importlib.util.spec_from_file_location('spk_resource_probe', MODULE)
+probe = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+SPEC.loader.exec_module(probe)
+
+
+class ResourceProbeContractTest(unittest.TestCase):
+    def test_simple_and_chunks_same_key_make_ready_for_all(self):
+        key = '11' * 32
+        base = {
+            'offlineValid': True,
+            'key': {'secretHex': key, 'chainingMode': 'ChainingModeGCM'},
+            'auth': {'authDataHex': ''},
+            'format': 'DDS',
+            'plainSha256': 'aa' * 32,
+            'matchesNative': True,
+        }
+        rows = []
+        for n in range(2):
+            rows.append({
+                **base,
+                'target': {'kind': 'simple', 'entryId': f'{n + 1:016x}', 'ordinal': n},
+                'metadataNonceMatch': True,
+                'metadataTagMatch': True,
+            })
+        for n in range(2):
+            rows.append({
+                **base,
+                'target': {'kind': 'chunk', 'entryId': '0000000000000003', 'ordinal': n, 'parentOrdinal': 2},
+                'metadataTagMatch': True,
+                'nonceRule': 'offset_chunk0_le96',
+            })
+        result = probe.derive_profile(rows)
+        self.assertTrue(result['readyForSimple'])
+        self.assertTrue(result['readyForFragmented'])
+        self.assertTrue(result['readyForAll'])
+        self.assertEqual(result['resourceSecretBytes'], 32)
+        self.assertEqual(result['chunkNonceRule'], 'offset_le96')
+        self.assertEqual(result['aadRule'], 'none')
+
+    def test_conflicting_resource_keys_fail_closed(self):
+        rows = [
+            {
+                'offlineValid': True,
+                'target': {'kind': 'simple', 'entryId': '1', 'ordinal': 1},
+                'key': {'secretHex': '11' * 16, 'chainingMode': 'ChainingModeGCM'},
+                'auth': {'authDataHex': ''},
+                'metadataNonceMatch': True,
+                'metadataTagMatch': True,
+                'format': 'BIN',
+                'plainSha256': 'aa' * 32,
+            },
+            {
+                'offlineValid': True,
+                'target': {'kind': 'simple', 'entryId': '2', 'ordinal': 2},
+                'key': {'secretHex': '22' * 16, 'chainingMode': 'ChainingModeGCM'},
+                'auth': {'authDataHex': ''},
+                'metadataNonceMatch': True,
+                'metadataTagMatch': True,
+                'format': 'BIN',
+                'plainSha256': 'bb' * 32,
+            },
+        ]
+        result = probe.derive_profile(rows)
+        self.assertFalse(result['readyForSimple'])
+        self.assertNotIn('resourceSecretHex', result)
+
+    def test_constant_aad_is_preserved(self):
+        key = '33' * 16
+        rows = []
+        for n in range(2):
+            rows.append({
+                'offlineValid': True,
+                'target': {'kind': 'simple', 'entryId': f'{n + 1:016x}', 'ordinal': n},
+                'key': {'secretHex': key, 'chainingMode': 'ChainingModeGCM'},
+                'auth': {'authDataHex': 'aabbccdd'},
+                'metadataNonceMatch': True,
+                'metadataTagMatch': True,
+                'format': 'BIN',
+                'plainSha256': 'cc' * 32,
+            })
+        result = probe.derive_profile(rows)
+        self.assertTrue(result['readyForSimple'])
+        self.assertEqual(result['aadRule'], 'constant')
+        self.assertEqual(result['aadHex'], 'aabbccdd')
+
+
+if __name__ == '__main__':
+    unittest.main()

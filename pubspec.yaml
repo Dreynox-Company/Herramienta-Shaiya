@@ -1,0 +1,30 @@
+name: herramienta_shaiya
+description: Laboratorio nativo de recursos Shaiya para Windows y Android.
+publish_to: none
+version: 0.6.11+19
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  crypto: ^3.0.7
+  cryptography: ^2.9.0
+  zstandard: ^1.5.0
+  path: ^1.9.1
+  three_js: 0.3.0
+  flutter_angle: 0.4.2
+  vector_math: '>=2.2.0 <3.0.0'
+  image: '>=4.5.4 <5.0.0'
+  file_selector: ^1.1.0
+  path_provider: ^2.1.5
+  audioplayers: ^6.8.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true

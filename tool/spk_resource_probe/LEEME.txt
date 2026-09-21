@@ -1,0 +1,29 @@
+SHAIYA SPK RESOURCE PROBE V8 - integrado en Shaiya Studio 0.6.11
+
+Este auxiliar existe para cerrar la capa criptografica de payloads del DATA.SPK
+sin tratar ciphertext como si fuera un recurso valido.
+
+USO RECOMENDADO
+  1. Coloca game.exe y data.spk originales de la misma instalacion juntos.
+  2. Desconecta Internet.
+  3. Abre el SPK desde Shaiya Studio y pulsa "AutoPerfil SPK".
+  4. No inicies sesion ni escribas credenciales. El aviso de servidor offline
+     es esperado.
+  5. El helper observa exclusivamente llamadas BCrypt cuyos ciphertexts
+     coinciden con objetivos reales del indice SPK validado.
+  6. Cuando obtiene suficientes recursos simples autenticados termina; Studio
+     vuelve a autenticar la clave sobre muestras distribuidas del archivo y
+     deriva despues la regla de nonce de chunks offline usando AES-GCM y los
+     tags de la tabla auxiliar.
+
+EVIDENCIA
+  derived-resource-profile.json contiene solamente evidencia que el helper pudo
+  reproducir offline contra ciphertexts del SPK validado. La mera presencia de
+  una clave no habilita lectura en 0.6.11: Studio exige una segunda validacion
+  contra recursos simples reales. "Extraer todo" solo se habilita despues de
+  reconstruir y validar tambien recursos fragmentados completos.
+
+SEGURIDAD
+  El helper no modifica data.spk ni game.exe. La carpeta de salida se crea fuera
+  de la instalacion del juego. El perfil esta vinculado al SHA-256 exacto del
+  indice observado; otro SPK se rechaza.
