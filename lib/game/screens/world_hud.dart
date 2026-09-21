@@ -13,6 +13,9 @@ class WorldHud extends StatelessWidget {
   final int level;
   final PsCharacterDetails? details;
   final PsHitpoints? hitpoints;
+  final PsSkillBook? skillBook;
+  final PsSkillBar? skillBar;
+  final ValueChanged<int> onHotbar;
   final UiAssetCache ui;
   final List<String> messages;
   final bool questOpen;
@@ -28,6 +31,9 @@ class WorldHud extends StatelessWidget {
     required this.level,
     required this.details,
     required this.hitpoints,
+    required this.skillBook,
+    required this.skillBar,
+    required this.onHotbar,
     required this.locale,
     required this.ui,
     required this.messages,
@@ -165,6 +171,77 @@ class WorldHud extends StatelessWidget {
     ),
   ]);
 
+  List<PsQuickSlot> get _primarySlots {
+    final all=skillBar?.slots??const <PsQuickSlot>[];
+    if(all.isEmpty)return const [];
+    var bar=all.first.bar;
+    for(final s in all){if(s.bar<bar)bar=s.bar;}
+    final out=all.where((s)=>s.bar==bar).toList()
+      ..sort((a,b)=>a.slot.compareTo(b.slot));
+    return out;
+  }
+
+  PsQuickSlot? _quickSlot(int index){
+    final slots=_primarySlots;
+    return slots.where((s)=>s.slot==index).firstOrNull
+      ??(index<slots.length?slots[index]:null);
+  }
+
+  Widget _quickCell(int index){
+    final slot=_quickSlot(index);
+    final learned=slot!=null&&slot.isSkill?skillBook?.bySkillId(slot.number):null;
+    final label=slot==null
+      ?''
+      :slot.isSkill
+        ?(learned==null?'S${slot.number}':'S${learned.skillId}')
+        :'I${slot.number}';
+    return GestureDetector(
+      onTap:()=>onHotbar(index),
+      child:SizedBox(
+        width:39,height:39,
+        child:Stack(children:[
+          Positioned.fill(
+            child:Center(
+              child:slot==null
+                ?const SizedBox.shrink()
+                :Icon(
+                    slot.isSkill?Icons.auto_fix_high:Icons.inventory_2,
+                    color:slot.isSkill?const Color(0xffffdfa0):const Color(0xffd7c18b),
+                    size:21,
+                  ),
+            ),
+          ),
+          Positioned(
+            left:2,top:1,
+            child:Text(
+              index==9?'0':'${index+1}',
+              style:const TextStyle(fontSize:8,color:Colors.white70,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+            ),
+          ),
+          if(label.isNotEmpty)
+            Positioned(
+              left:2,right:2,bottom:1,
+              child:Text(
+                label,
+                maxLines:1,
+                overflow:TextOverflow.clip,
+                textAlign:TextAlign.center,
+                style:const TextStyle(fontSize:7,color:Color(0xffffe4a3),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+              ),
+            ),
+          if(learned!=null)
+            Positioned(
+              right:1,top:1,
+              child:Text(
+                'L${learned.level}',
+                style:const TextStyle(fontSize:7,color:Color(0xff8dd8ff),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+
   Widget _topHotbar()=>Stack(children:[
     Positioned.fill(
       child:DataImage(
@@ -174,20 +251,13 @@ class WorldHud extends StatelessWidget {
       ),
     ),
     Positioned(
-      left:18,top:8,
-      child:Row(children:[
-        Container(
-          width:29,height:29,
-          alignment:Alignment.center,
-          child:const Icon(Icons.auto_fix_high,color:Color(0xffffe09a),size:22),
-        ),
-        const SizedBox(width:10),
-        Container(
-          width:29,height:29,
-          alignment:Alignment.center,
-          child:const Icon(Icons.healing,color:Color(0xffffe09a),size:21),
-        ),
-      ]),
+      left:15,top:5,
+      child:Row(
+        children:List.generate(10,(i)=>Padding(
+          padding:const EdgeInsets.only(right:1),
+          child:_quickCell(i),
+        )),
+      ),
     ),
   ]);
 
