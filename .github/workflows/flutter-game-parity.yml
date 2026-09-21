@@ -1,0 +1,87 @@
+name: Flutter game parity - Windows
+on:
+  push:
+    branches: [work/flutter-game-parity-v1]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'tool/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/flutter-game-parity.yml'
+permissions:
+  contents: read
+concurrency:
+  group: flutter-game-parity
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Format parity sources
+        run: dart format lib
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Core regression tests
+        run: flutter test test/core_test.dart test/locomotion_test.dart test/movement_input_test.dart test/palette_test.dart test/recovery_test.dart --reporter expanded
+  windows:
+    needs: validate
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Generate Windows runner
+        run: python tool/prepare.py
+      - run: flutter pub get
+      - name: Build release
+        run: flutter build windows --release
+      - name: Generate synthetic DATA for smoke
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'shaiya-parity-fixture'
+          python tool/make_native_fixture.py $fixture
+          if($LASTEXITCODE -ne 0){throw 'fixture failed'}
+          "SHAIYA_FIXTURE=$fixture" | Out-File $env:GITHUB_ENV -Append
+      - name: Launch Flutter client
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path build/windows/x64/runner/Release/herramienta_shaiya.exe
+          $p = Start-Process $exe -ArgumentList @("--data=$env:SHAIYA_FIXTURE") -PassThru
+          Start-Sleep 18
+          $p.Refresh()
+          if($p.HasExited){throw "Flutter client exited early: $($p.ExitCode)"}
+          Add-Type -AssemblyName System.Drawing
+          Add-Type -AssemblyName System.Windows.Forms
+          $bounds=[System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp=New-Object System.Drawing.Bitmap $bounds.Width,$bounds.Height
+          $g=[System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bounds.Size)
+          New-Item -ItemType Directory -Force qa | Out-Null
+          $bmp.Save((Join-Path $env:GITHUB_WORKSPACE 'qa/flutter-faction.png'))
+          $g.Dispose();$bmp.Dispose()
+          @{running=$true;title=$p.MainWindowTitle;pid=$p.Id}|ConvertTo-Json|Set-Content qa/smoke.json
+          Stop-Process -Id $p.Id -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Flutter-Game-Parity-Windows-x64
+          path: build/windows/x64/runner/Release/
+          retention-days: 14
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Shaiya-Flutter-Game-Parity-QA
+          path: qa/
+          retention-days: 14
