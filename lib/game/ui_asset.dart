@@ -55,3 +55,58 @@ class DataImage extends StatelessWidget {
     },
   );
 }
+
+
+class DataSprite extends StatelessWidget {
+  final UiAssetCache cache;
+  final String path;
+  final int columns,rows,column,row;
+  final double width,height;
+  final Widget? fallback;
+  final FilterQuality filterQuality;
+  const DataSprite({
+    super.key,
+    required this.cache,
+    required this.path,
+    required this.columns,
+    required this.rows,
+    required this.column,
+    required this.row,
+    required this.width,
+    required this.height,
+    this.fallback,
+    this.filterQuality=FilterQuality.medium,
+  });
+
+  @override Widget build(BuildContext context)=>FutureBuilder<Uint8List?>(
+    future:cache.load(path),
+    builder:(context,snapshot){
+      final data=snapshot.data;
+      if(data==null)return fallback??SizedBox(width:width,height:height);
+      return SizedBox(
+        width:width,
+        height:height,
+        child:ClipRect(
+          child:OverflowBox(
+            alignment:Alignment.topLeft,
+            minWidth:width*columns,
+            maxWidth:width*columns,
+            minHeight:height*rows,
+            maxHeight:height*rows,
+            child:Transform.translate(
+              offset:Offset(-column*width,-row*height),
+              child:Image.memory(
+                data,
+                width:width*columns,
+                height:height*rows,
+                fit:BoxFit.fill,
+                filterQuality:filterQuality,
+                gaplessPlayback:true,
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
