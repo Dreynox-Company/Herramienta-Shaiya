@@ -290,6 +290,24 @@ Future<void> loadAutomaticSpkNameMap(
   }
 }
 
+Future<bool> loadAutomaticSpkFullAudit(
+  SpkArchiveSource source,
+  String spkPath,
+) async {
+  final file = File('$spkPath.audit.json');
+  if (!await file.exists()) return false;
+  try {
+    final raw = jsonDecode(await file.readAsString());
+    if (raw is! Map) return false;
+    return source.restoreFullResourceValidation(
+      Map<String, dynamic>.from(raw),
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   final Future<void> Function(SpkArchiveSource source)? onMount;
@@ -353,6 +371,10 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       source = await deriveAutomaticFragmentProfile(source, picked.path);
       progress.value = 'Resolviendo nombres y rutas conocidas…';
       await loadAutomaticSpkNameMap(source, picked.path);
+      if (source.canExtractAll) {
+        progress.value = 'Restaurando evidencia de auditoría integral…';
+        await loadAutomaticSpkFullAudit(source, picked.path);
+      }
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       await Navigator.of(context).push<void>(
@@ -806,6 +828,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             'autenticados los recursos simples y fragmentados.',
       );
     }
+    if (!source.fullyValidatedResources) {
+      operation = 'Auditando todos los payloads antes de montar Studio…';
+      if (mounted) setState(() {});
+      await _auditAllResources(source);
+    }
     if (!hasConfirmedCoreTables) {
       operation = 'Identificando tablas editables antes de montar Studio…';
       if (mounted) setState(() {});
@@ -1045,6 +1072,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
     final simpleValidation = await next.validateSimpleResourceProfile();
     next = await deriveAutomaticFragmentProfile(next, source.file.path);
+    await loadAutomaticSpkNameMap(next, source.file.path);
+    if (next.canExtractAll) {
+      operation = 'Auditando todos los payloads con el perfil importado…';
+      if (mounted) setState(() {});
+      await _auditAllResources(next);
+      operation = 'Descubriendo tablas y rutas estructurales…';
+      if (mounted) setState(() {});
+      await _discoverCoreTables(next);
+    }
 
     final finalProfile = next.profile;
     final persistent = File('${source.file.path}.profile.json');
@@ -1788,9 +1824,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       ),
                       const Spacer(),
                       if (source.fullyValidatedResources)
-                        const Text(
-                          '50.135/50.135 auditables · lectura total validada',
-                          style: TextStyle(
+                        Text(
+                          '${source.index.resources.length}/'
+                          '${source.index.resources.length} recursos · '
+                          'lectura total validada',
+                          style: const TextStyle(
                             fontSize: 9,
                             color: Color(0xff83c69d),
                           ),
