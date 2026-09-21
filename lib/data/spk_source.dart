@@ -997,4 +997,71 @@ class SpkArchiveSource {
             list.length,
           );
         }
+      }      await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          'schema': 1,
+          'source': file.path,
+          'index': index.summary(),
+          'profile': profile.publicJson(),
+          'files': manifest,
+          'failures': exportFailures,
+          'complete': exportFailures.isEmpty,
+        }),
+        flush: true,
+      );
+      await stage.rename(published.path);
+      return {
+        'folder': published.path,
+        'files': manifest.length,
+        'failures': exportFailures.length,
+        'bytes': bytes,
+        'complete': exportFailures.isEmpty,
+      };
+    } catch (_) {
+      if (await stage.exists()) await stage.delete(recursive: true);
+      rethrow;
+    }
+  }
+
+  static String safeRelative(String path) {
+    final value = path.replaceAll('\\', '/');
+    if (value.startsWith('/') || value.contains(':') || value.length > 4096) {
+      throw FormatException('Ruta no extraíble: $path');
+    }
+    final parts = value.split('/');
+    for (final p in parts) {
+      if (p.isEmpty ||
+          p == '.' ||
+          p == '..' ||
+          p.endsWith('.') ||
+          p.endsWith(' ') ||
+          RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(p) ||
+          RegExp(
+            r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)',
+            caseSensitive: false,
+          ).hasMatch(p)) {
+        throw FormatException('Ruta no segura: $path');
       }
+    }
+    return parts.join(Platform.pathSeparator);
+  }
+
+  Map<String, Object?> diagnostics() => {
+    'sourceMode': 'spk-v3',
+    'file': file.path,
+    'fileBytes': fileBytes,
+    'profile': profile.publicJson(),
+    'index': index.summary(),
+    'resolvedNames': names.paths.length,
+    'inferredNames': names.hints.length,
+    'unresolvedNames':
+        index.resources.length - names.paths.length - names.hints.length,
+    'canReadSimpleResources': canReadSimpleResources,
+    'canReadFragmentedResources': canReadFragmentedResources,
+    'canExtractAll': canExtractAll,
+    'reads': reads,
+    'bytesRead': bytesRead,
+    'recentReads': recentReads,
+    'failures': failures,
+  };
+}
