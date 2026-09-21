@@ -335,7 +335,7 @@ class _GameClientPageState extends State<GameClientPage> {
       :c.worlds.where((p)=>baseName(p).toLowerCase()==(faction=='light'?'select_a.wld':'select_b.wld')).firstOrNull;
     if(path!=null){
       try{
-        await scene.setWorld(path,x:235.2,z:164.2);
+        await scene.setWorld(path,x:235.2,z:157.0);
       }catch(e){messages.insert(0,'[Creación] '+e.toString());}
     }else{
       await scene.setWorld(null);
@@ -396,9 +396,9 @@ class _GameClientPageState extends State<GameClientPage> {
     }
 
     scene.yaw=math.pi;
-    scene.pitch=.10;
-    scene.distance=7.2;
-    scene.targetY=1.15;
+    scene.pitch=.12;
+    scene.distance=5.9;
+    scene.targetY=1.18;
     scene.updateCamera();
 
     if(map!=null){
