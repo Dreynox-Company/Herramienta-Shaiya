@@ -57,7 +57,7 @@ String? _spkRaceForArchetype(String code) {
 Slot? _spkSlotFromStem(String stem) {
   final value = stem.toLowerCase();
   bool token(String pattern) =>
-      RegExp('(^|_)(?:$pattern)(?=_|[0-9]|\\$)').hasMatch(value);
+      RegExp('(^|_)(?:$pattern)(?=_|[0-9]|\$)').hasMatch(value);
   if (token('torso|upper')) return Slot.upper;
   if (token('lower|trousers|pants')) return Slot.lower;
   if (token('hand|glove|gloves|arm')) return Slot.hand;
@@ -71,7 +71,8 @@ Slot? _spkSlotFromStem(String stem) {
 int _spkPartRank(String code, Slot slot, String path) {
   final stem = baseName(path)
       .toLowerCase()
-      .replaceFirst(RegExp(r'\.[^.]+String animationLabel(String source) => translatedMotion(source);
+      .replaceFirst(RegExp(r'\.[^.]+
+String animationLabel(String source) => translatedMotion(source);
 String setIdentity(String texture) {
   var x = baseName(texture).toLowerCase().replaceFirst(RegExp(r'\.[^.]+$'), '');
   x = x.replaceFirst(
@@ -283,7 +284,8 @@ class Catalog {
       final lower = path.toLowerCase();
       if (!lower.startsWith('character/') ||
           !lower.contains('/dds/') ||
-          !RegExp(r'\.(dds|tga|png|bmp)    final paths = library.files.keys.toList()..sort();
+          !RegExp(r'\.(dds|tga|png|bmp)
+    final paths = library.files.keys.toList()..sort();
     for (final p in paths.where(
       (p) => RegExp(r'^character/[^/]+/[^/]+_upper\.mlt$').hasMatch(p),
     )) {
@@ -549,12 +551,12 @@ class Appearance {
     Slot.hair => r'hair',
   };
   final direct = RegExp(
-    '^\${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
+    '^${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
   ).firstMatch(stem);
   if (direct != null) {
     return int.tryParse(direct.group(1) ?? '') ?? 0;
   }
-  if (stem.startsWith('\${code}_') && stem.contains(RegExp(token))) {
+  if (stem.startsWith('${code}_') && stem.contains(RegExp(token))) {
     return 10000;
   }
   return 20000;
@@ -1019,7 +1021,8 @@ class Appearance {
       }
       final parts = lower.split('/');
       if (parts.length < 4) continue;
-      final stem = baseName(lower).replaceFirst(RegExp(r'\.[^.]+    final paths = library.files.keys.toList()..sort();
+      final stem = baseName(lower).replaceFirst(RegExp(r'\.[^.]+
+    final paths = library.files.keys.toList()..sort();
     for (final p in paths.where(
       (p) => RegExp(r'^character/[^/]+/[^/]+_upper\.mlt$').hasMatch(p),
     )) {
@@ -1283,12 +1286,12 @@ class Appearance {
     Slot.hair => r'hair',
   };
   final direct = RegExp(
-    '^\${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
+    '^${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
   ).firstMatch(stem);
   if (direct != null) {
     return int.tryParse(direct.group(1) ?? '') ?? 0;
   }
-  if (stem.startsWith('\${code}_') && stem.contains(RegExp(token))) {
+  if (stem.startsWith('${code}_') && stem.contains(RegExp(token))) {
     return 10000;
   }
   return 20000;
@@ -1749,7 +1752,7 @@ class Appearance {
     return out;
   }
 }), '');
-      textures['\${parts[1]}|$stem'] = path;
+      textures['${parts[1]}|$stem'] = path;
     }
 
     var inferred = 0;
@@ -1767,7 +1770,8 @@ class Appearance {
         if (!lower.startsWith('$root/3dc/') || !lower.endsWith('.3dc')) {
           continue;
         }
-        final stem = baseName(lower).replaceFirst(RegExp(r'\.[^.]+    final paths = library.files.keys.toList()..sort();
+        final stem = baseName(lower).replaceFirst(RegExp(r'\.[^.]+
+    final paths = library.files.keys.toList()..sort();
     for (final p in paths.where(
       (p) => RegExp(r'^character/[^/]+/[^/]+_upper\.mlt$').hasMatch(p),
     )) {
@@ -2031,12 +2035,12 @@ class Appearance {
     Slot.hair => r'hair',
   };
   final direct = RegExp(
-    '^\${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
+    '^${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
   ).firstMatch(stem);
   if (direct != null) {
     return int.tryParse(direct.group(1) ?? '') ?? 0;
   }
-  if (stem.startsWith('\${code}_') && stem.contains(RegExp(token))) {
+  if (stem.startsWith('${code}_') && stem.contains(RegExp(token))) {
     return 10000;
   }
   return 20000;
@@ -2497,7 +2501,7 @@ class Appearance {
     return out;
   }
 }), '');
-        if (!stem.startsWith('\${code.toLowerCase()}_')) continue;
+        if (!stem.startsWith('${code.toLowerCase()}_')) continue;
         final slot = _spkSlotFromStem(stem);
         if (slot == null) continue;
         final texture = textures['$race|$stem'];
@@ -2552,7 +2556,7 @@ class Appearance {
           paths
               .where(
                 (path) =>
-                    path.startsWith('$root/ani/\${code.toLowerCase()}_') &&
+                    path.startsWith('$root/ani/${code.toLowerCase()}_') &&
                     path.endsWith('.ani'),
               )
               .toList(),
@@ -2834,12 +2838,12 @@ class Appearance {
     Slot.hair => r'hair',
   };
   final direct = RegExp(
-    '^\${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
+    '^${RegExp.escape(code)}[_-]$token[_-]?(\\d+)',
   ).firstMatch(stem);
   if (direct != null) {
     return int.tryParse(direct.group(1) ?? '') ?? 0;
   }
-  if (stem.startsWith('\${code}_') && stem.contains(RegExp(token))) {
+  if (stem.startsWith('${code}_') && stem.contains(RegExp(token))) {
     return 10000;
   }
   return 20000;
