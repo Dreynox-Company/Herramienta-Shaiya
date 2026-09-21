@@ -1,6 +1,7 @@
 export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
+import '../core/npc_quest_text.dart';
 import 'library.dart';
 enum Slot {upper,lower,hand,foot,helmet,face,hair}
 const slotLabels={Slot.upper:'Torso y hombreras',Slot.lower:'Piernas y faldones',Slot.hand:'Guantes',Slot.foot:'Botas',Slot.helmet:'Casco',Slot.face:'Rostro',Slot.hair:'Cabello'};
@@ -28,6 +29,7 @@ class Catalog {
   final Library library;final List<Archetype> archetypes=[];final List<WeaponRecord> weapons=[];
   final List<CreatureRecord> creatures=[],npcs=[],mounts=[],wings=[];
   final List<String> worlds=[],sounds=[],effects=[],skies=[],warnings=[];
+  SpanishNpcQuestText? spanishText;
   Catalog(this.library);
   Future<void> load(void Function(String) progress) async {
     final paths=library.files.keys.toList()..sort();
@@ -44,7 +46,24 @@ class Catalog {
     worlds.addAll(paths.where((p)=>p.startsWith('world/')&&p.endsWith('.wld')&&!p.contains('.bak.')));
     skies.addAll(paths.where((p)=>p.startsWith('sky/')&&RegExp(r'\.(dds|tga|bmp|png)$').hasMatch(p)&&!p.contains('cloud')&&!p.contains('star')));
     sounds.addAll(paths.where((p)=>p.startsWith('sound/')&&RegExp(r'\.(wav|mp3|ogg)$').hasMatch(p)));
-    effects.addAll(paths.where((p)=>p.startsWith('effect/')&&RegExp(r'\.(dds|tga|png)$').hasMatch(p)));
+    effects.addAll(paths.where((p)=>p.startsWith('effect/')&&RegExp(r'\.(dds|tga|png)    if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
+  }
+  String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();if(c.source.startsWith('npc/'))kind='NPC';for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
+}
+class Appearance {
+  final Archetype archetype;final Map<Slot,PartRecord?> selected;final bool fullCostume;
+  Appearance(this.archetype,Map<Slot,PartRecord?> slots,{this.fullCostume=false}):selected=Map.unmodifiable(slots);
+  factory Appearance.initial(Archetype a)=>Appearance.forSet(a,a.sets.containsKey('016')?'016':a.sets.keys.first);
+  factory Appearance.forSet(Archetype a,String key,{Appearance? previous}){final set=a.sets[key];if(set==null)throw FormatException('El conjunto $key no pertenece a ${a.id}.');final slots=<Slot,PartRecord?>{for(final s in Slot.values)s:null};slots.addAll(set);for(final s in [Slot.face,Slot.hair]){slots[s]=previous?.archetype.id==a.id&&previous?.archetype.race==a.race?previous!.selected[s]:((a.parts[s]??[]).isEmpty?null:a.parts[s]!.first);}return Appearance(a,slots,fullCostume:!set.containsKey(Slot.lower));}
+  Appearance withPart(Slot slot,PartRecord? part){if(part!=null&&!(archetype.parts[slot]??[]).contains(part))throw const FormatException('La pieza no pertenece al arquetipo activo.');if(slot==Slot.upper&&part!=null){final set=archetype.sets[part.key];if(set!=null&&!set.containsKey(Slot.lower))return Appearance.forSet(archetype,part.key,previous:this);}if(slot==Slot.lower&&fullCostume&&part!=null)throw const FormatException('El atuendo integral ya incluye las piernas. Cambia primero el torso por una armadura modular.');return Appearance(archetype,{...selected,slot:part},fullCostume:slot==Slot.upper?false:fullCostume);}
+  List<PartRecord> get effective{final out=<PartRecord>[];for(final slot in Slot.values){final p=selected[slot];if(p!=null){out.add(p);continue;}if(slot==Slot.lower&&fullCostume)continue;final fallback=archetype.base(slot);if(fallback!=null)out.add(fallback);}return out;}
+}
+).hasMatch(p)));
+    final spanishPath=paths.where((p)=>p.endsWith('npcquesttrans_spain.sdata')).firstOrNull;
+    if(spanishPath!=null){
+      try{spanishText=SpanishNpcQuestText.parse(await library.read(spanishPath,limit:16*1024*1024),spanishPath);}
+      catch(e){warnings.add('NpcQuestTrans Spain: $e');}
+    }
     if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
   }
   String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();if(c.source.startsWith('npc/'))kind='NPC';for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
