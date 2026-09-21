@@ -44,10 +44,20 @@ class Actor {
   void dispose(){root.removeFromParent();for(final p in parts){p.dispose();}parts.clear();}
 }
 
+class WorldNpcActor {
+  final Actor actor;
+  final String name;
+  final bool quest;
+  final CreatureRecord record;
+  WorldNpcActor(this.actor,this.name,this.quest,this.record);
+  void dispose()=>actor.dispose();
+}
+
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
   t.ThreeJS? view;Catalog? catalog;
   Actor? character,enemy,mount,wing;Appearance? appearance;
+  final List<WorldNpcActor> worldNpcs=[];
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -210,6 +220,7 @@ class StudioScene extends ChangeNotifier {
     final moving=walkX!=0||walkZ!=0;final transition=movementTransitions.update(x:walkX,z:walkZ,running:running,blocked:sceneCombatLocked);if(transition!=null)applyLocomotion(transition);final desired=movementClip(movementTransitions.requested);
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
     for(final a in [character,enemy,mount,wing]){a?.tick(delta);}
+    for(final npc in worldNpcs){npc.actor.tick(delta);}
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final norm=math.max(1,math.sqrt(walkX*walkX+walkZ*walkZ)),speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);final x=character!.root.position.x+walkX/norm*delta*speed,z=character!.root.position.z+walkZ/norm*delta*speed;
       if(world==null||(x.abs()<55&&z.abs()<55)){character!.root.position.x=x;character!.root.position.z=z;if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);}character!.root.rotation.y=math.atan2(walkX,walkZ);
@@ -228,9 +239,24 @@ class StudioScene extends ChangeNotifier {
     part.mesh.scale.setValues(850/radius,850/radius,-850/radius);part.mesh.renderOrder=-1000;part.mesh.material?.depthWrite=false;part.mesh.material?.depthTest=false;
     sky?.dispose();sky=part;skyPath=path;view!.scene.add(part.mesh);updateCamera();say('Cielo original: ${baseName(path)}');
   }
+  Future<WorldNpcActor> spawnWorldNpc(CreatureRecord record,{required String name,required double x,required double z,bool quest=false,double rotation=0}) async {
+    if(world==null)throw const StateError('Carga un mundo antes de crear NPC.');
+    final actor=await loadCreature(record);
+    final y=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+    actor.root.position.setValues(x,y,z);
+    actor.root.rotation.y=rotation;
+    view!.scene.add(actor.root);
+    final npc=WorldNpcActor(actor,name,quest,record);
+    worldNpcs.add(npc);
+    notifyListeners();
+    return npc;
+  }
+  void clearWorldNpcs(){for(final npc in worldNpcs){npc.dispose();}worldNpcs.clear();if(!disposed)notifyListeners();}
+
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    if(path==null){clearWorldNpcs();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    clearWorldNpcs();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);if(w.size==0)throw const FormatException('Este WLD es una mazmorra DG; su geometría aún no se interpreta. Selecciona un mapa exterior FLD.');if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
     final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[];
     try{
@@ -249,6 +275,6 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing]){a?.dispose();}weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing]){a?.dispose();}for(final npc in worldNpcs){npc.dispose();}worldNpcs.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
 }
 Uint8List _decodeTexture(Map<String,Object> args)=>Pixels.decode(args['bytes'] as Uint8List,args['path'] as String).png(opaque:args['opaque'] as bool);
