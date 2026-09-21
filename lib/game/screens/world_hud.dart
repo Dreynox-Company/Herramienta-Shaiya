@@ -48,111 +48,88 @@ class WorldHud extends StatelessWidget {
         ],
       );
 
-  Widget _playerHud() => Stack(
-        children: [
-          Positioned.fill(
-            child: DataImage(
-              cache: ui,
-              path: 'interface/main_stats_bar_bg.tga',
-              fit: BoxFit.fill,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: const Color(0x6615110d),
-              border: Border.all(color: const Color(0xff87785d)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 49,
-                  height: 65,
-                  decoration: BoxDecoration(
-                    color: const Color(0xff571b17),
-                    border: Border.all(color: const Color(0xffc2a162)),
-                  ),
-                  child: const Icon(
-                    Icons.local_fire_department,
-                    color: Color(0xffffad3b),
-                    size: 34,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text('1', style: TextStyle(fontSize: 10)),
-                          const SizedBox(width: 18),
-                          Expanded(
-                            child: Text(
-                              characterName,
-                              style: const TextStyle(
-                                color: Color(0xffffe742),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      shaiyaBar(const Color(0xffd71919), 1),
-                      const SizedBox(height: 2),
-                      shaiyaBar(const Color(0xff2865ff), 1),
-                      const SizedBox(height: 2),
-                      shaiyaBar(const Color(0xffffc40d), 1),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-
-  Widget _topHotbar() => Row(
-        children: List.generate(
-          10,
-          (i) => Container(
-            width: 39,
-            height: 39,
-            margin: const EdgeInsets.only(right: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xcc282218),
-              border: Border.all(color: const Color(0xff75694f)),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Icon(
-                    i < 2
-                        ? (i == 0 ? Icons.auto_fix_high : Icons.healing)
-                        : Icons.circle_outlined,
-                    color: i < 2
-                        ? const Color(0xffffde82)
-                        : const Color(0xff8b8374),
-                    size: 23,
-                  ),
-                ),
-                Positioned(
-                  top: 1,
-                  left: 2,
-                  child: Text(
-                    ((i + 1) % 10).toString(),
-                    style: const TextStyle(
-                      fontSize: 8,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Widget _playerHud()=>Stack(children:[
+    Positioned.fill(
+      child:DataImage(
+        cache:ui,
+        path:'interface/main_stats_bar_bg.tga',
+        fit:BoxFit.fill,
+      ),
+    ),
+    Positioned(
+      left:5,top:12,width:48,height:48,
+      child:DataRegion(
+        cache:ui,
+        path:'interface/create_fighter_button.tga',
+        sheetWidth:256,
+        sheetHeight:64,
+        source:const Rect.fromLTWH(0,0,64,64),
+        width:48,height:48,
+        fallback:const Icon(Icons.sports_martial_arts,color:Color(0xffffae3a),size:34),
+      ),
+    ),
+    Positioned(
+      left:61,top:23,width:148,height:48,
+      child:DataImage(
+        cache:ui,
+        path:'interface/main_stats_bar.tga',
+        fit:BoxFit.fill,
+      ),
+    ),
+    const Positioned(
+      left:63,top:7,
+      child:Text('1',style:TextStyle(fontSize:10,color:Colors.white)),
+    ),
+    Positioned(
+      left:93,top:6,right:8,
+      child:Text(
+        characterName,
+        style:const TextStyle(
+          color:Color(0xffffed3b),
+          fontSize:12,
+          shadows:[Shadow(color:Colors.black,blurRadius:2)],
         ),
-      );
+      ),
+    ),
+    const Positioned(
+      left:83,top:28,
+      child:Text('255 / 255',style:TextStyle(fontSize:8,color:Colors.white)),
+    ),
+    const Positioned(
+      left:84,top:42,
+      child:Text('95 / 95',style:TextStyle(fontSize:8,color:Colors.white)),
+    ),
+    const Positioned(
+      left:82,top:57,
+      child:Text('180 / 180',style:TextStyle(fontSize:8,color:Colors.white)),
+    ),
+  ]);
+
+  Widget _topHotbar()=>Stack(children:[
+    Positioned.fill(
+      child:DataImage(
+        cache:ui,
+        path:'interface/main_slot_3.tga',
+        fit:BoxFit.fill,
+      ),
+    ),
+    Positioned(
+      left:18,top:8,
+      child:Row(children:[
+        Container(
+          width:29,height:29,
+          alignment:Alignment.center,
+          child:const Icon(Icons.auto_fix_high,color:Color(0xffffe09a),size:22),
+        ),
+        const SizedBox(width:10),
+        Container(
+          width:29,height:29,
+          alignment:Alignment.center,
+          child:const Icon(Icons.healing,color:Color(0xffffe09a),size:21),
+        ),
+      ]),
+    ),
+  ]);
 
   Widget _minimap() => Stack(
         children: [
@@ -215,125 +192,93 @@ class WorldHud extends StatelessWidget {
         ],
       );
 
-  Widget _chat() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 75,
-            height: 31,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xaa1d1812),
-              border: Border.all(color: const Color(0xff897556)),
-            ),
-            child: const Text('World', style: TextStyle(fontSize: 13)),
-          ),
-          const SizedBox(height: 5),
-          Expanded(
-            child: ListView(
-              reverse: true,
-              padding: const EdgeInsets.all(4),
-              children: messages
-                  .take(12)
-                  .map(
-                    (m) => Padding(
-                      padding: const EdgeInsets.only(bottom: 5),
-                      child: Text(
-                        m,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.white,
-                          shadows: [
-                            Shadow(color: Colors.black, blurRadius: 2),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+  Widget _chat()=>Stack(children:[
+    Positioned.fill(
+      child:DataImage(
+        cache:ui,
+        path:'interface/chat/chat.tga',
+        fit:BoxFit.fill,
+      ),
+    ),
+    const Positioned(
+      left:18,top:12,
+      child:Text(
+        'World',
+        style:TextStyle(
+          fontSize:13,
+          color:Colors.white,
+          shadows:[Shadow(color:Colors.black,blurRadius:2)],
+        ),
+      ),
+    ),
+    Positioned(
+      left:12,top:52,right:20,bottom:10,
+      child:ListView(
+        reverse:true,
+        padding:EdgeInsets.zero,
+        children:messages.take(12).map((m)=>Padding(
+          padding:const EdgeInsets.only(bottom:5),
+          child:Text(
+            m,
+            style:const TextStyle(
+              fontSize:10,
+              color:Colors.white,
+              shadows:[Shadow(color:Colors.black,blurRadius:2)],
             ),
           ),
-        ],
-      );
+        )).toList(),
+      ),
+    ),
+  ]);
 
-  Widget _bottomHud() => Stack(
-        children: [
-          Positioned.fill(
-            child: DataImage(
-              cache: ui,
-              path: 'interface/main_bottom.tga',
-              fit: BoxFit.fill,
-            ),
-          ),
-          Column(
-            children: [
-              Container(
-                height: 13,
-                decoration: BoxDecoration(
-                  color: const Color(0x662b241a),
-                  border: Border.all(color: const Color(0xff8e7c5d)),
-                ),
-                child: Stack(
-                  children: [
-                    const Center(
-                      child: Text(
-                        '0,0%',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ),
-                    FractionallySizedBox(
-                      widthFactor: .03,
-                      child: Container(color: const Color(0xffd6ad65)),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final icon in [
-                        Icons.menu_book,
-                        Icons.inventory_2,
-                        Icons.backpack,
-                        Icons.description,
-                        Icons.pan_tool,
-                        Icons.emoji_events,
-                        Icons.chat,
-                        Icons.sports_martial_arts,
-                        Icons.settings,
-                        Icons.card_giftcard,
-                      ])
-                        Container(
-                          width: 28,
-                          height: 28,
-                          margin: const EdgeInsets.only(right: 3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0x886b4b33),
-                            border: Border.all(
-                              color: const Color(0xffc2985c),
-                            ),
-                          ),
-                          child: Icon(
-                            icon,
-                            size: 16,
-                            color: const Color(0xffffdfa2),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      );
+  Widget _bottomButton(String path)=>DataRegion(
+    cache:ui,
+    path:path,
+    sheetWidth:256,
+    sheetHeight:64,
+    source:const Rect.fromLTWH(0,0,64,64),
+    width:31,
+    height:31,
+  );
+
+  Widget _bottomHud()=>Stack(children:[
+    Positioned.fill(
+      child:DataImage(
+        cache:ui,
+        path:'interface/main_bottom.tga',
+        fit:BoxFit.fill,
+      ),
+    ),
+    Positioned(
+      left:14,right:14,top:3,height:12,
+      child:DataImage(
+        cache:ui,
+        path:'interface/skillbar_bg.tga',
+        fit:BoxFit.fill,
+      ),
+    ),
+    const Positioned(
+      left:250,right:250,top:0,
+      child:Center(
+        child:Text('0,0%',style:TextStyle(fontSize:9,color:Colors.white70)),
+      ),
+    ),
+    Positioned(
+      right:7,bottom:1,
+      child:Row(children:[
+        _bottomButton('interface/main_bottom_btn_status.tga'),
+        _bottomButton('interface/main_bottom_btn_skill.tga'),
+        _bottomButton('interface/main_bottom_btn_item.tga'),
+        _bottomButton('interface/main_bottom_btn_quest.tga'),
+        _bottomButton('interface/main_bottom_btn_sub.tga'),
+        _bottomButton('interface/main_bottom_btn_guild.tga'),
+        _bottomButton('interface/main_bottom_btn_shop.tga'),
+        _bottomButton('interface/main_bottom_btn_option.tga'),
+        _bottomButton('interface/main_bottom_btn_event.tga'),
+        _bottomButton('interface/main_bottom_btn_helper.tga'),
+      ]),
+    ),
+  ]);
 
   Widget _questWindow() {
     final text=catalog.spanishText?.quest(questId);
@@ -436,22 +381,6 @@ class _MiniMapPainter extends CustomPainter {
       Offset.zero & size,
       Paint()..color = const Color(0x5535452b),
     );
-
-    final road = Paint()
-      ..color = const Color(0x9988744a)
-      ..strokeWidth = 8
-      ..style = PaintingStyle.stroke;
-    final path = Path()
-      ..moveTo(size.width * .05, size.height * .86)
-      ..cubicTo(
-        size.width * .34,
-        size.height * .60,
-        size.width * .46,
-        size.height * .70,
-        size.width * .9,
-        size.height * .14,
-      );
-    canvas.drawPath(path, road);
 
     for (final a in scene.gameActors) {
       final x = (a.root.position.x / 120 + .5).clamp(0.0, 1.0);
