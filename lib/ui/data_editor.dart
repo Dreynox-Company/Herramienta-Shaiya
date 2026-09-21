@@ -750,10 +750,17 @@ class _DataEditorPageState extends State<DataEditorPage> {
         'Hay archivos importados externos. Guárdalos como copia antes de guardar esta biblioteca.',
       );
     }
-    if (!await _confirm(
-      'Guardar cambios',
-      '${changed.length} archivos modificados. Se guardarán en la biblioteca que abriste, no en una copia adicional. Cierra el juego antes de continuar. Los datos del servidor se gestionan por separado.',
-    )) {
+    final saveMessage = library.isSpkWorkspace
+        ? '${changed.length} archivos modificados. Se guardarán en un overlay '
+              'editable asociado a este DATA.SPK; el SPK original permanece '
+              'intacto. Studio releerá el overlay inmediatamente para que los '
+              'cambios se reflejen en tablas y vista 3D. Los datos del servidor '
+              'se gestionan por separado.'
+        : '${changed.length} archivos modificados. Se guardarán en la '
+              'biblioteca que abriste, no en una copia adicional. Cierra el '
+              'juego antes de continuar. Los datos del servidor se gestionan '
+              'por separado.';
+    if (!await _confirm('Guardar cambios', saveMessage)) {
       return;
     }
     final output = <String, Uint8List>{};
@@ -773,16 +780,35 @@ class _DataEditorPageState extends State<DataEditorPage> {
           throw FormatException('Valor no conservado: ${c.field.spec.name}');
         }
       }
-      output[library.files[d.path]!] = b;
+      output[d.path] = b;
       fresh[d.path] = check;
     }
-    if (source != null) {
+    if (library.isSpkWorkspace) {
+      progress = 'Verificando y escribiendo overlay SPK…';
+      if (mounted) setState(() {});
+      try {
+        await library.writeSpkOverlay(
+          output,
+          expectedHashes: {for (final d in changed) d.path: d.sha},
+          keepBackup: keepBackup,
+        );
+      } finally {
+        progress = null;
+      }
+      for (final d in changed) {
+        _cache[d.path] = fresh[d.path]!;
+      }
+    } else if (source != null) {
+      final archiveOutput = <String, Uint8List>{
+        for (final entry in output.entries)
+          library.files[entry.key]!: entry.value,
+      };
       final control = ExportControl();
       exporting = control;
       try {
         await ArchiveWriter.writeInPlace(
           source,
-          output,
+          archiveOutput,
           expectedHashes: {
             for (final d in changed) library.files[d.path]!: d.sha,
           },
@@ -805,7 +831,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
       for (final d in changed) {
         await FileSave.replace(
           library.files[d.path]!,
-          output[library.files[d.path]!]!,
+          output[d.path]!,
           expectedHash: d.sha,
           keepBackup: keepBackup,
         );
@@ -821,13 +847,22 @@ class _DataEditorPageState extends State<DataEditorPage> {
     library.revision++;
     _refresh();
     _note(
-      '${changed.length} archivos guardados y releídos en la biblioteca original.',
+      library.isSpkWorkspace
+          ? '${changed.length} archivos guardados en el overlay SPK y '
+                'releídos. El DATA.SPK original no fue modificado.'
+          : '${changed.length} archivos guardados y releídos en la biblioteca original.',
     );
   });
   Future<void> _buildDirectory() => _job(() async {
     if (hasDrafts) {
       throw const FormatException(
         'Aplica los borradores antes de construir el archivo.',
+      );
+    }
+    if (widget.library.isSpkWorkspace) {
+      throw const FormatException(
+        'El workspace SPK usa un overlay editable. Para construir SAH/SAF, '
+        'extrae primero una DATA completa desde el explorador SPK.',
       );
     }
     if (widget.library.archive != null || widget.library.saf) {
