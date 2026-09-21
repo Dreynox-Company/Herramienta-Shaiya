@@ -20,6 +20,7 @@ import 'data/catalog.dart';
 import 'core/game_metadata.dart';
 import 'core/world_resources.dart';
 import 'data/library.dart';
+import 'data/spk_source.dart';
 import 'render/studio_scene.dart';
 import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
@@ -260,8 +261,64 @@ class _StudioState extends State<StudioPage> {
   Future<void> openSpkArchive() async {
     scene.clearMovement();
     focus.unfocus();
-    await SpkArchiveBrowserPage.pickAndOpen(context);
+    await SpkArchiveBrowserPage.pickAndOpen(
+      context,
+      onMount: mountSpkWorkspace,
+    );
     if (mounted) focus.requestFocus();
+  }
+
+  Future<void> mountSpkWorkspace(SpkArchiveSource source) async {
+    if (importing || working) return;
+    final old = scene.catalog;
+    Library? candidate;
+    if (mounted) setState(() => importing = true);
+    try {
+      void report(String value) {
+        if (mounted) setState(() => progress = value);
+      }
+
+      candidate = await Library.fromSpk(source, progress: report);
+      await loadBundledExtras();
+      final next = Catalog(candidate);
+      await next.load(report);
+      if (next.archetypes.isEmpty) {
+        throw const FormatException(
+          'El mapa de rutas SPK aún no permite reconstruir Character de forma '
+          'suficiente para la herramienta 3D.',
+        );
+      }
+      if (!mounted) return;
+
+      scene.catalog = next;
+      final first =
+          next.archetypes.where((a) => a.id == 'humf').firstOrNull ??
+          next.archetypes.first;
+      await scene.setAppearance(Appearance.initial(first));
+      catalog = next;
+      _memories.clear();
+      diagnostics.addAll(next.warnings);
+      scene.combat.reset();
+      await scene.selectCreature(null, 'enemy');
+      await scene.selectCreature(null, 'mount');
+      await scene.selectCreature(null, 'wing');
+      await scene.setWorld(null);
+      await scene.setSky(null);
+      progress =
+          '${candidate.files.length} recursos SPK montados · editor + 3D · '
+          'overlay editable: ${candidate.spkOverlayRoot}';
+      if (old?.library != candidate) old?.library.dispose();
+    } catch (_) {
+      if (catalog != scene.catalog) scene.catalog = old;
+      if (candidate != null && candidate != catalog?.library) {
+        candidate.dispose();
+      }
+      rethrow;
+    } finally {
+      if (mounted) {
+        setState(() => importing = false);
+      }
+    }
   }
 
   Future<void> sourceMenu() async {
@@ -297,7 +354,7 @@ class _StudioState extends State<StudioPage> {
                 leading: const Icon(Icons.folder_zip_outlined),
                 title: const Text('Archivo DATA.SPK'),
                 subtitle: const Text(
-                  'Explorar carpetas, archivos, buscar y extraer recursos',
+                  'Explorar, autenticar, editar y usar recursos en la vista 3D',
                 ),
                 onTap: () => Navigator.pop(ctx, 'spk'),
               ),
