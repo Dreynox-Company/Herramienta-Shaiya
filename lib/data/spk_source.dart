@@ -58,6 +58,7 @@ class SpkArchiveSource {
   final List<Map<String, Object?>> failures = [];
   Map<String, Object?>? resourceProfileValidation;
   Map<String, Object?>? fragmentProfileValidation;
+  Map<String, Object?>? fullResourceValidation;
   bool _simpleProfileValidated = false;
   bool _fragmentProfileValidated = false;
   int reads = 0;
@@ -510,6 +511,10 @@ class SpkArchiveSource {
       canReadSimpleResources &&
       (index.fragmentedResources.isEmpty || canReadFragmentedResources);
 
+  bool get fullyValidatedResources =>
+      fullResourceValidation?['status'] == 'validated' &&
+      fullResourceValidation?['validatedResources'] == index.resources.length;
+
   static List<SpkRecord> _spreadValidationRecords(
     List<SpkRecord> records,
     int maxSamples,
@@ -705,6 +710,88 @@ class SpkArchiveSource {
       'samples': samples,
     };
     return Map<String, Object?>.from(fragmentProfileValidation!);
+  }
+
+  Future<Map<String, Object?>> validateAllResources({
+    required SpkExtractControl control,
+    required SpkProgress progress,
+    int limit = 128 * 1024 * 1024,
+  }) async {
+    if (!canExtractAll) {
+      throw const SpkFailure(
+        'SPK_FULL_VALIDATION_PROFILE',
+        'La auditoría completa requiere simples y fragmentados autenticados.',
+      );
+    }
+    if (limit < 1) {
+      throw ArgumentError.value(limit, 'limit', 'Debe ser positivo.');
+    }
+
+    final resources = index.resources.toList(growable: false);
+    final formats = <String, int>{};
+    var decodedBytes = 0;
+    var simple = 0;
+    var fragmented = 0;
+
+    for (var i = 0; i < resources.length; i++) {
+      control.check();
+      final record = resources[i];
+      try {
+        final result = await readEntry(record, limit: limit);
+        if (result.bytes.length != record.decodedBytes) {
+          throw FormatException(
+            'Longitud decodificada inesperada: '
+            '${result.bytes.length} != ${record.decodedBytes}.',
+          );
+        }
+        decodedBytes += result.bytes.length;
+        formats[result.format] = (formats[result.format] ?? 0) + 1;
+        if (record.simple) {
+          simple++;
+        } else if (record.fragmented) {
+          fragmented++;
+        }
+      } catch (error) {
+        fullResourceValidation = {
+          'status': 'failed',
+          'validatedResources': i,
+          'totalResources': resources.length,
+          'entryId': record.idHex,
+          'path': technicalPath(record),
+          'recordType': record.recordType,
+          'error': error.toString(),
+        };
+        throw SpkFailure(
+          'SPK_FULL_VALIDATION_FAILED',
+          'La auditoría completa encontró un recurso que no puede '
+              'autenticarse y decodificarse.',
+          Map<String, Object?>.from(fullResourceValidation!),
+        );
+      }
+      if ((i + 1) % 25 == 0 || i + 1 == resources.length) {
+        progress(
+          'Auditando payloads SPK · ${i + 1}/${resources.length}',
+          i + 1,
+          resources.length,
+        );
+      }
+    }
+
+    final sortedFormats = formats.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    fullResourceValidation = {
+      'status': 'validated',
+      'validatedResources': resources.length,
+      'totalResources': resources.length,
+      'simpleResources': simple,
+      'fragmentedResources': fragmented,
+      'decodedBytes': decodedBytes,
+      'formats': {
+        for (final entry in sortedFormats) entry.key: entry.value,
+      },
+      'failures': 0,
+    };
+    return Map<String, Object?>.from(fullResourceValidation!);
   }
 
   Future<SpkReadResult> readEntry(
@@ -1317,6 +1404,8 @@ class SpkArchiveSource {
     'canExtractAll': canExtractAll,
     'resourceProfileValidation': resourceProfileValidation,
     'fragmentProfileValidation': fragmentProfileValidation,
+    'fullResourceValidation': fullResourceValidation,
+    'fullyValidatedResources': fullyValidatedResources,
     'reads': reads,
     'bytesRead': bytesRead,
     'recentReads': recentReads,
