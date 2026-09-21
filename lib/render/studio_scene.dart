@@ -44,6 +44,17 @@ class Actor {
   void dispose(){root.removeFromParent();for(final p in parts){p.dispose();}parts.clear();}
 }
 
+class RuntimeNpcSpawn {
+  final int type,typeId,angle;
+  final double x,y,z;
+  const RuntimeNpcSpawn(this.type,this.typeId,this.x,this.y,this.z,this.angle);
+}
+class RuntimeMobSpawn {
+  final int mobId;
+  final double x,z;
+  const RuntimeMobSpawn(this.mobId,this.x,this.z);
+}
+
 class GameActorLabel {
   final Actor actor;
   final String text;
@@ -161,6 +172,75 @@ class StudioScene extends ChangeNotifier {
       }catch(e){report('NPC ${source[i].id}: $e');}
     }
     say('${gameActors.length} NPC/criaturas locales cargados.');
+  }
+
+  Future<void> spawnGameActorsFromNetwork({
+    required List<RuntimeNpcSpawn> npcs,
+    required List<RuntimeMobSpawn> mobs,
+    Map<String,int>? npcModels,
+    Map<int,int>? mobModels,
+    Set<String>? questNpcKeys,
+    String locale='spn',
+    int npcLimit=60,
+    int mobLimit=80,
+  }) async {
+    for(final a in gameActors){a.dispose();}
+    gameActors.clear();gameLabels.clear();
+    if(view==null||catalog==null)return;
+
+    final npcRecords={for(final n in catalog!.npcs)n.id:n};
+    final sortedNpcs=[...npcs]..sort((a,b){
+      final adx=a.x-originX,adz=a.z-originZ;
+      final bdx=b.x-originX,bdz=b.z-originZ;
+      return (adx*adx+adz*adz).compareTo(bdx*bdx+bdz*bdz);
+    });
+    var npcsLoaded=0;
+    for(final p in sortedNpcs){
+      if(npcsLoaded>=npcLimit)break;
+      final x=p.x-originX,z=-(p.z-originZ);
+      if(x.abs()>85||z.abs()>85)continue;
+      final model=npcModels?[p.type.toString()+':'+p.typeId.toString()]??p.typeId;
+      final record=npcRecords[model];
+      if(record==null){report('LIVE NPC ${p.type}:${p.typeId}: modelo $model no existe en npc MON.');continue;}
+      try{
+        final a=await loadCreature(record);
+        a.root.position.setValues(x,p.y,z);
+        a.root.rotation.y=-p.angle*(math.pi*2/65536.0);
+        gameActors.add(a);view!.scene.add(a.root);npcsLoaded++;
+        final key='${p.type}:${p.typeId}';
+        final localized=catalog!.questText(locale)?.npc(p.type,p.typeId);
+        gameLabels.add(GameActorLabel(
+          a,
+          (localized?.name.isNotEmpty??false)?localized!.name:'NPC $key',
+          quest:questNpcKeys?.contains(key)??false,
+        ));
+      }catch(e){report('LIVE NPC ${p.type}:${p.typeId}: $e');}
+    }
+
+    final mobRecords={for(final m in catalog!.creatures)m.id:m};
+    final sortedMobs=[...mobs]..sort((a,b){
+      final adx=a.x-originX,adz=a.z-originZ;
+      final bdx=b.x-originX,bdz=b.z-originZ;
+      return (adx*adx+adz*adz).compareTo(bdx*bdx+bdz*bdz);
+    });
+    var mobsLoaded=0;
+    for(final p in sortedMobs){
+      if(mobsLoaded>=mobLimit)break;
+      final x=p.x-originX,z=-(p.z-originZ);
+      if(x.abs()>90||z.abs()>90)continue;
+      final model=mobModels?[p.mobId]??p.mobId;
+      final record=mobRecords[model];
+      if(record==null){report('LIVE mob ${p.mobId}: modelo $model no existe en monster.mon.');continue;}
+      try{
+        final a=await loadCreature(record);
+        final y=world==null?groundY:world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+        a.root.position.setValues(x,y,z);
+        a.root.rotation.y=math.atan2(-x,-z);
+        gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
+        gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
+      }catch(e){report('LIVE mob ${p.mobId}: $e');}
+    }
+    say('$npcsLoaded NPC y $mobsLoaded criaturas renderizados desde paquetes ps0032.');
   }
 
   Future<void> spawnGameActorsFromSvmap(SvmapData map,{Map<String,int>? npcModels,Map<int,int>? mobModels,Set<String>? questNpcKeys,String locale='spn',int npcLimit=28,int mobLimit=18}) async {
