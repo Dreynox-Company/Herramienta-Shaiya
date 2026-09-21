@@ -131,11 +131,15 @@ SpkCryptoProfile mergeSpkResourceProfile(
         );
       }
     }
+    final authDataHex = auth is Map && auth['authDataHex'] is String
+        ? auth['authDataHex'].toString()
+        : null;
     return SpkCryptoProfile(
       profileId: '${source.profile.profileId}-resources',
       indexSha256: source.profile.indexSha256,
       indexSecret: source.profile.indexSecret,
       resourceSecret: resourceSecret,
+      resourceAad: spkResourceAad(authDataHex),
       resourceKeyIsIndexKey: false,
       chunkNonceRule: chunkRule,
     );
@@ -607,6 +611,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'algorithm': 'AES-GCM',
           if (nextProfile.effectiveResourceSecret != null)
             'secretHex': spkHex(nextProfile.effectiveResourceSecret!),
+          if (nextProfile.resourceAad.isNotEmpty)
+            'aadHex': spkHex(nextProfile.resourceAad),
           'useIndexKey': nextProfile.resourceKeyIsIndexKey,
           'chunkNonceRule': nextProfile.chunkNonceRule,
         },
