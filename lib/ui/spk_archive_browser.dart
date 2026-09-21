@@ -455,6 +455,19 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
   SpkArchiveSource get source => widget.source;
 
+  bool get hasConfirmedCoreTables {
+    final paths = source.names.paths.values.map((p) => p.toLowerCase());
+    return paths.any(
+      (p) =>
+          p.endsWith('/dbitemdata.sdata') ||
+          p.endsWith('/dbmonsterdata.sdata') ||
+          p.endsWith('/dbskilldata.sdata') ||
+          p == 'item/item.sdata' ||
+          p == 'monster/monster.sdata' ||
+          p == 'skill/skill.sdata',
+    );
+  }
+
   @override
   void dispose() {
     searchController.dispose();
@@ -671,7 +684,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   });
 
-  Future<void> discoverCoreTables() => runAction(() async {
+  Future<Map<String, Object?>> _discoverCoreTables() async {
     if (!source.canExtractAll) {
       throw const SpkFailure(
         'SPK_TABLE_DISCOVERY_PROFILE',
@@ -699,11 +712,18 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       }),
       flush: true,
     );
+    if (mounted) {
+      setState(() {
+        currentFolder = '';
+        selected = null;
+      });
+    }
+    return result;
+  }
+
+  Future<void> discoverCoreTables() => runAction(() async {
+    final result = await _discoverCoreTables();
     if (!mounted) return;
-    setState(() {
-      currentFolder = '';
-      selected = null;
-    });
     final tables = Map<String, dynamic>.from(
       (result['confirmedTables'] as Map?) ?? const {},
     );
@@ -727,6 +747,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'Para usar DATA.SPK en el editor y la herramienta 3D deben estar '
             'autenticados los recursos simples y fragmentados.',
       );
+    }
+    if (!hasConfirmedCoreTables) {
+      operation = 'Identificando tablas editables antes de montar Studio…';
+      if (mounted) setState(() {});
+      await _discoverCoreTables();
     }
     operation = 'Montando DATA.SPK como biblioteca de Studio…';
     if (mounted) setState(() {});
@@ -1449,7 +1474,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             TextButton.icon(
               onPressed: busy || !source.canExtractAll ? null : mountInStudio,
               icon: const Icon(Icons.view_in_ar_outlined, size: 17),
-              label: const Text('Usar en Studio'),
+              label: Text(
+                hasConfirmedCoreTables ? 'Usar en Studio' : 'Preparar Studio',
+              ),
             ),
           PopupMenuButton<String>(
             enabled: !busy,
