@@ -34,4 +34,27 @@ void main() {
     );
     expect(paths, contains(r'C:\\Games\\Shaiya\\data.spk.names.json'));
   });
+  test('SPK resource profile discovery includes V7 and packaged locations', () {
+    final paths = spkResourceProfileCandidatePaths(
+      r'C:\\Games\\Shaiya\\data.spk',
+      'a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f',
+      executablePath: r'C:\\Tools\\ShaiyaStudio\\herramienta_shaiya.exe',
+      separatorOverride: r'\\',
+    );
+    expect(
+      paths,
+      contains(
+        r'C:\\Tools\\ShaiyaStudio\\profiles\\spk-resource-profile-a3ea7e3b.json',
+      ),
+    );
+    expect(
+      paths,
+      contains(r'C:\\Games\\Shaiya\\derived-resource-profile.json'),
+    );
+    expect(
+      paths,
+      contains(r'C:\\Games\\Shaiya\\data.spk.resources.json'),
+    );
+  });
+
 }
