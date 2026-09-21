@@ -26,6 +26,7 @@ List<String> spkProfileCandidatePaths(
     '${exeDir}${separator}spk-crypto-profile.json',
   ];
 }
+
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   const SpkArchiveBrowserPage({super.key, required this.source});
