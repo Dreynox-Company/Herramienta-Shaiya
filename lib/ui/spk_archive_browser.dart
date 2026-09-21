@@ -48,7 +48,9 @@ List<String> spkNameMapCandidatePaths(
   String? executablePath,
   String? separatorOverride,
 }) {
-  final separator = separatorOverride ?? Platform.pathSeparator;
+  final separator = separatorOverride == null || separatorOverride.isEmpty
+      ? Platform.pathSeparator
+      : separatorOverride.substring(0, 1);
   final spkDir = _spkParentPath(spkPath, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
