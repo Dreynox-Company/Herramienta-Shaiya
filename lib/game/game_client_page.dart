@@ -44,6 +44,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsAdditionalStats? liveAdditionalStats;
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
+  List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
   bool movementSending=false;
@@ -63,6 +64,7 @@ class _GameClientPageState extends State<GameClientPage> {
   bool loading=true;
   bool characterCreated=false;
   bool questOpen=true;
+  bool inventoryOpen=false;
   String faction='light';
   String progress='Inicializando cliente Flutter…';
   int classIndex=0;
@@ -492,6 +494,11 @@ class _GameClientPageState extends State<GameClientPage> {
         final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
         final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
         final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
+        liveInventory=selected.packets
+          .where((p)=>p.type==PsPacketType.characterItems)
+          .expand(parseInventoryItems)
+          .toList()
+          ..sort((a,b){final bag=a.bag.compareTo(b.bag);return bag!=0?bag:a.slot.compareTo(b.slot);});
         if(hpPacket!=null)liveHitpoints=PsHitpoints.parse(hpPacket);
         if(statsPacket!=null)liveAdditionalStats=PsAdditionalStats.parse(statsPacket);
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
@@ -985,6 +992,9 @@ class _GameClientPageState extends State<GameClientPage> {
             hitpoints:liveHitpoints,
             skillBook:liveSkills,
             skillBar:liveSkillBar,
+            inventory:liveInventory,
+            inventoryOpen:inventoryOpen,
+            onToggleInventory:()=>setState(()=>inventoryOpen=!inventoryOpen),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             locale:uiLocale,
             ui:ui!,
