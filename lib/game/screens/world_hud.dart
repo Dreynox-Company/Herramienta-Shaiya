@@ -9,6 +9,7 @@ class WorldHud extends StatelessWidget {
   final String characterName;
   final List<String> messages;
   final bool questOpen;
+  final int questId;
   final VoidCallback onAcceptQuest;
   final VoidCallback onCancelQuest;
 
@@ -19,6 +20,7 @@ class WorldHud extends StatelessWidget {
     required this.characterName,
     required this.messages,
     required this.questOpen,
+    required this.questId,
     required this.onAcceptQuest,
     required this.onCancelQuest,
   });
@@ -167,7 +169,7 @@ class WorldHud extends StatelessWidget {
   ]);
 
   Widget _questWindow(){
-    final text=catalog.spanishText?.quest(1);
+    final text=catalog.spanishText?.quest(questId);
     final title=text!=null&&text.name.isNotEmpty?text.name:'Operación básica de la interfaz';
     final body=text!=null&&text.initialDescription.isNotEmpty
       ?text.initialDescription
