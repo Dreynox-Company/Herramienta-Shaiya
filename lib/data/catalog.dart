@@ -46,7 +46,8 @@ class Catalog {
     worlds.addAll(paths.where((p)=>p.startsWith('world/')&&p.endsWith('.wld')&&!p.contains('.bak.')));
     skies.addAll(paths.where((p)=>p.startsWith('sky/')&&RegExp(r'\.(dds|tga|bmp|png)$').hasMatch(p)&&!p.contains('cloud')&&!p.contains('star')));
     sounds.addAll(paths.where((p)=>p.startsWith('sound/')&&RegExp(r'\.(wav|mp3|ogg)$').hasMatch(p)));
-    effects.addAll(paths.where((p)=>p.startsWith('effect/')&&RegExp(r'\.(dds|tga|png)    if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
+    effects.addAll(paths.where((p)=>p.startsWith('effect/')&&RegExp(r'\.(dds|tga|png)
+    if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
   }
   String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();if(c.source.startsWith('npc/'))kind='NPC';for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
 }
@@ -60,13 +61,10 @@ class Appearance {
 }
 ).hasMatch(p)));
     final spanishPath=paths.where((p)=>p.endsWith('npcquesttrans_spain.sdata')).firstOrNull;
-    if(spanishPath!=null){
-      try{spanishText=SpanishNpcQuestText.parse(await library.read(spanishPath,limit:16*1024*1024),spanishPath);}
-      catch(e){warnings.add('NpcQuestTrans Spain: $e');}
-    }
+    if(spanishPath!=null){try{spanishText=SpanishNpcQuestText.parse(await library.read(spanishPath,limit:16*1024*1024),spanishPath);}catch(e){warnings.add('NpcQuestTrans Spain: $e');}}
     if(archetypes.isEmpty)throw const FormatException('No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.');
   }
-  String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();if(c.source.startsWith('npc/'))kind='NPC';for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
+  String creatureLabel(CreatureRecord c){var kind=c.source.startsWith('vehicle/')?'Montura':c.source.contains('/wing/')?'Alas':'Criatura';final stem=baseName(c.parts.first.mesh).toLowerCase();for(final e in {'bear':'Oso','wolf':'Lobo','dragon':'Dragón','horse':'Caballo','tiger':'Tigre','lion':'León','boar':'Jabalí','spider':'Araña','golem':'Gólem','skeleton':'Esqueleto','rabbit':'Conejo','deer':'Ciervo','unicorn':'Unicornio'}.entries){if(stem.contains(e.key))kind=e.value;}return '$kind ${c.id.toString().padLeft(3,'0')} · ${baseName(c.source).replaceFirst('.mon','')}';}
 }
 class Appearance {
   final Archetype archetype;final Map<Slot,PartRecord?> selected;final bool fullCostume;
