@@ -1,0 +1,56 @@
+name: Studio 0.6.2 - SPK browser and extraction
+on:
+  push:
+    branches: [feat/studio-062-spk-browser]
+    paths:
+      - .github/workflows/spk-062-build.yml
+      - lib/data/spk_source.dart
+      - lib/ui/spk_browser.dart
+      - lib/main.dart
+      - test/spk_source_test.dart
+      - pubspec.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    outputs:
+      source_commit: ${{ steps.finish.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/studio-062-spk-browser
+          fetch-depth: 1
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Resolve the new native codec dependencies
+        run: flutter pub get
+      - name: Format touched Dart sources
+        run: dart format lib/data/spk_source.dart lib/ui/spk_browser.dart lib/main.dart test/spk_source_test.dart
+      - name: Commit deterministic lockfile and formatting
+        id: finish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shaiya Studio CI'
+          git config user.email 'studio-ci@users.noreply.github.com'
+          git add pubspec.lock lib/data/spk_source.dart lib/ui/spk_browser.dart lib/main.dart test/spk_source_test.dart
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: lock and format Studio 0.6.2 SPK support'
+            git push origin HEAD:feat/studio-062-spk-browser
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  verified-windows:
+    needs: integrate
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.integrate.outputs.source_commit }}
