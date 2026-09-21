@@ -36,6 +36,14 @@ Future<void> main() async {
     stdout.writeln(
       'Details x=${selected.details.x} y=${selected.details.y} z=${selected.details.z} angle=${selected.details.angle}'
     );
+    final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
+    final currentHp=hpPacket==null?null:PsHitpoints.parse(hpPacket);
+    stdout.writeln(
+      'Vitals hp=${currentHp?.hp}/${selected.details.maxHp} '
+      'mp=${currentHp?.mp}/${selected.details.maxMp} '
+      'sp=${currentHp?.sp}/${selected.details.maxSp} '
+      'exp=${selected.details.currentExp}/${selected.details.endExp}'
+    );
 
     final entered=await world.enterMap(collect:const Duration(seconds:8));
     final all=<PsPacket>[...selected.packets,...entered];
@@ -73,6 +81,12 @@ Future<void> main() async {
       'characterMode':character.mode,
       'details':{
         'x':selected.details.x,'y':selected.details.y,'z':selected.details.z,'angle':selected.details.angle,
+        'maxHp':selected.details.maxHp,'maxMp':selected.details.maxMp,'maxSp':selected.details.maxSp,
+        'currentExp':selected.details.currentExp,'startExp':selected.details.startExp,'endExp':selected.details.endExp,
+        'gold':selected.details.gold,'statPoint':selected.details.statPoint,'skillPoint':selected.details.skillPoint,
+      },
+      'hitpoints':currentHp==null?null:{
+        'hp':currentHp.hp,'mp':currentHp.mp,'sp':currentHp.sp,
       },
       'selectedPacketTypes':selected.packets.map((p)=>hexType(p.type)).toList(),
       'enteredPacketTypes':entered.map((p)=>hexType(p.type)).toList(),
@@ -117,6 +131,11 @@ Future<void> main() async {
     if(out!=null&&out.isNotEmpty)await File(out).writeAsString(json);
 
     if(count(PsPacketType.characterDetails)==0)throw StateError('CHARACTER_DETAILS missing.');
+    if(selected.details.maxHp<=0||selected.details.maxMp<=0||selected.details.maxSp<=0){
+      throw StateError('CHARACTER_DETAILS max hitpoints invalid.');
+    }
+    if(currentHp==null)throw StateError('CHARACTER_CURRENT_HITPOINTS missing.');
+    if(currentHp.hp<=0||currentHp.mp<0||currentHp.sp<0)throw StateError('Current hitpoints invalid.');
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
