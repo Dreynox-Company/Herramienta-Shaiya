@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../core/formats.dart';
 import '../core/game_text_codec.dart';
 import '../core/spk_archive.dart';
 import '../core/seed_data.dart';
@@ -125,6 +126,65 @@ class SpkCoreTableDiscovery {
         'El descubrimiento estructural de tablas requiere lectura completa y '
             'autenticada de simples y fragmentados.',
       );
+    }
+
+    final recordsById = <int, SpkRecord>{
+      for (final record in source.index.resources) record.entryId: record,
+    };
+    var validatedManifestHints = 0;
+    var rejectedManifestHints = 0;
+    final hintUpdates = <int, SpkNameHint>{};
+    final hintRemovals = <int>[];
+
+    for (final entry in source.names.hints.entries.toList(growable: false)) {
+      control.check();
+      final path = entry.value.path;
+      final lower = path.toLowerCase();
+      if (!(lower.endsWith('.mlt') ||
+          lower.endsWith('.itm') ||
+          lower.endsWith('.mon') ||
+          lower.endsWith('.sdata'))) {
+        continue;
+      }
+      final record = recordsById[entry.key];
+      if (record == null) {
+        hintRemovals.add(entry.key);
+        rejectedManifestHints++;
+        continue;
+      }
+      var valid = false;
+      try {
+        final bytes = (await source.readEntry(record)).bytes;
+        if (lower.endsWith('.mlt')) {
+          valid = readMlt(bytes, path).isNotEmpty;
+        } else if (lower.endsWith('.itm')) {
+          valid = readItm(bytes, path).isNotEmpty;
+        } else if (lower.endsWith('.mon')) {
+          valid = readMon(bytes, path).isNotEmpty;
+        } else if (lower.endsWith('.sdata')) {
+          valid = SeedData.isEncoded(bytes);
+          if (valid) {
+            SeedData.decode(bytes, verifyChecksum: true);
+          }
+        }
+      } catch (_) {
+        valid = false;
+      }
+      if (valid) {
+        hintUpdates[entry.key] = SpkNameHint(
+          path: path,
+          confidence: 'validated-inferred',
+          evidence: '${entry.value.evidence}+payload-structure',
+        );
+        validatedManifestHints++;
+      } else {
+        hintRemovals.add(entry.key);
+        rejectedManifestHints++;
+      }
+    }
+    source.names.mergeHintRecords(hintUpdates);
+    for (final id in hintRemovals) {
+      source.names.hints.remove(id);
     }
 
     final candidates = source.index.resources
@@ -340,6 +400,8 @@ class SpkCoreTableDiscovery {
       'authenticatedResources': authenticated,
       'seedEncodedResources': encoded,
       'rejectedResources': rejected,
+      'validatedManifestHints': validatedManifestHints,
+      'rejectedManifestHints': rejectedManifestHints,
       'confirmedTables': {
         for (final entry in confirmed.entries)
           spkU64Hex(entry.key): entry.value,
@@ -379,7 +441,7 @@ class SpkCoreTableDiscovery {
           .toList(),
       'unresolvedSkillCandidates': unassignedSkills.length,
       'method':
-          'authenticated-payload+SEED-checksum+binary-header+schema-roundtrip+row-correlation',
+          'authenticated-payload+manifest-structure+SEED-checksum+binary-header+schema-roundtrip+row-correlation',
     };
   }
 }
