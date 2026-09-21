@@ -168,8 +168,13 @@ class StudioScene extends ChangeNotifier {
     gameActors.clear();gameLabels.clear();
     if(view==null||catalog==null)return;
     final npcRecords={for(final n in catalog!.npcs)n.id:n};
+    final orderedNpcs=[...map.npcs]..sort((a,b){
+      final adx=a.position.x-originX,adz=a.position.z-originZ;
+      final bdx=b.position.x-originX,bdz=b.position.z-originZ;
+      return (adx*adx+adz*adz).compareTo(bdx*bdx+bdz*bdz);
+    });
     var npcsLoaded=0;
-    for(final p in map.npcs){
+    for(final p in orderedNpcs){
       if(npcsLoaded>=npcLimit)break;
       final x=p.position.x-originX,z=-(p.position.z-originZ);
       if(x.abs()>60||z.abs()>60)continue;
