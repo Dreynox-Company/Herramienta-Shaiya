@@ -443,8 +443,79 @@ class _GameClientPageState extends State<GameClientPage> {
     return null;
   }
 
+  Future<bool> _enterWorldLive() async {
+    final connected=await _ensureLiveWorld();
+    final world=liveWorld;
+    if(!connected||world==null)return false;
+    final selectedSlot=liveSlots.where((s)=>s.exists).firstOrNull;
+    if(selectedSlot==null)throw StateError('No hay personaje real para entrar al mapa.');
+    await _applyLiveSlot(selectedSlot);
+    final selected=await world.selectCharacter(selectedSlot.id);
+    final entered=await world.enterMap(collect:const Duration(seconds:5));
+    final all=<PsPacket>[...selected.packets,...entered];
+    final snapshot=PsWorldSnapshot.fromPackets(all);
+    liveSnapshot=snapshot;
+    final self=snapshot.self;
+    final x=self?.x??selected.details.x;
+    final y=self?.y??selected.details.y;
+    final z=self?.z??selected.details.z;
+    final angle=self?.angle??selected.details.angle;
+    final mapId=selectedSlot.mapId;
+    svmap=await _loadSvmap(mapId);
+    final c=catalog!;
+    var worldPath=c.worlds.where((p)=>baseName(p).toLowerCase()==mapId.toString()+'.wld').firstOrNull;
+    worldPath??=c.worlds.firstOrNull;
+    if(worldPath==null)throw StateError('DATA no contiene WLD para map '+mapId.toString()+'.');
+    await scene.setBackdrop(null);
+    scene.panX=0;scene.panZ=0;
+    await scene.setWorld(worldPath,x:x,z:z);
+    if(scene.character!=null){
+      scene.character!.root.position.y=y;
+      scene.character!.root.rotation.y=-angle.toDouble();
+    }
+    scene.yaw=math.pi+angle.toDouble();
+    scene.pitch=.12;
+    scene.distance=5.9;
+    scene.targetY=1.18;
+    scene.updateCamera();
+    final meta=metadata;
+    final questNpcKeys=meta==null
+      ?null
+      :meta.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
+    await scene.spawnGameActorsFromLive(
+      npcs:snapshot.npcs.map((p)=>(
+        globalId:p.globalId,type:p.type,typeId:p.typeId,
+        x:p.x,y:p.y,z:p.z,angle:p.angle,
+      )),
+      mobs:snapshot.mobs.map((p)=>(globalId:p.globalId,mobId:p.mobId,x:p.x,z:p.z)),
+      npcModels:meta?.npcModels,
+      mobModels:meta?.mobModels,
+      questNpcKeys:questNpcKeys,
+      locale:uiLocale,
+    );
+    if(snapshot.quests.isNotEmpty)questId=snapshot.quests.first.questId;
+    else questId=faction=='light'?3781:3792;
+    messages.insert(0,'[ps0032] ENTER_MAP '+mapId.toString()+' · '+
+      snapshot.npcs.length.toString()+' NPC · '+snapshot.mobs.length.toString()+' mobs · '+
+      'pos '+x.toStringAsFixed(2)+'/'+y.toStringAsFixed(2)+'/'+z.toStringAsFixed(2)+'.');
+    characterCreated=true;
+    stage=GameStage.world;
+    questOpen=true;
+    if(mounted)setState(()=>loading=false);
+    focus.requestFocus();
+    await Future<void>.delayed(const Duration(milliseconds:250));
+    await _signalQaReady();
+    return true;
+  }
   Future<void> _enterWorld() async {
     if(mounted)setState(()=>loading=true);
+    if(!_qaVisual){
+      try{
+        if(await _enterWorldLive())return;
+      }catch(e){
+        messages.insert(0,'[ps0032] Entrada real falló; se usa fallback local: '+e.toString());
+      }
+    }
     await scene.setBackdrop(null);
     scene.panX=0;scene.panZ=0;
     final c=catalog!;
