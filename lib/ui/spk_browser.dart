@@ -61,7 +61,8 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
     for (final r in source.resources) {
       counts.update(r.entryId.substring(0, 2), (n) => n + 1, ifAbsent: () => 1);
     }
-    final rows = counts.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final rows = counts.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
     return rows;
   }
 
@@ -96,9 +97,9 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
       bytes = await source.read(record.entryId, limit: 64 * 1024 * 1024);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
       return;
     }
     final ext = detectSpkExtension(bytes);
@@ -123,9 +124,7 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
         style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
       );
     } else if (ext == '.png' || ext == '.jpg' || ext == '.bmp') {
-      body = InteractiveViewer(
-        child: Image.memory(bytes, fit: BoxFit.contain),
-      );
+      body = InteractiveViewer(child: Image.memory(bytes, fit: BoxFit.contain));
     } else {
       final head = bytes
           .take(256)
@@ -209,9 +208,9 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
     }
     await target.writeAsBytes(bytes, flush: true);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Extraído: ${target.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Extraído: ${target.path}')));
     }
   }
 
@@ -258,9 +257,9 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
     }
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
       return;
     }
     final result = report!['result'] as Map;
@@ -428,8 +427,8 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
                           r.type == 3
                               ? Icons.call_split
                               : r.type == 1
-                                  ? Icons.insert_drive_file_outlined
-                                  : Icons.settings_ethernet,
+                              ? Icons.insert_drive_file_outlined
+                              : Icons.settings_ethernet,
                           size: 16,
                           color: r.type == 3
                               ? const Color(0xffd7b779)
@@ -465,8 +464,8 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
                           r.type == 1
                               ? 'Directo'
                               : r.type == 3
-                                  ? '${r.chunks.length} bloques'
-                                  : 'Especial',
+                              ? '${r.chunks.length} bloques'
+                              : 'Especial',
                           style: const TextStyle(fontSize: 9),
                         ),
                       ),
@@ -603,7 +602,10 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
                 Text(
                   '${visible.length} elementos · '
                   '${_bytes(source.decodedBytesTotal)} decodificados',
-                  style: const TextStyle(fontSize: 10, color: Color(0xff91a2bb)),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xff91a2bb),
+                  ),
                 ),
               ],
             ),
@@ -629,7 +631,8 @@ class _SpkBrowserPageState extends State<SpkBrowserPage> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () => setState(() => cancelExtraction = true),
+                        onPressed: () =>
+                            setState(() => cancelExtraction = true),
                         child: const Text('Cancelar'),
                       ),
                     ],
@@ -674,6 +677,10 @@ String _bytes(int value) {
     x /= 1024;
     unit++;
   }
-  final digits = x >= 100 || unit == 0 ? 0 : x >= 10 ? 1 : 2;
+  final digits = x >= 100 || unit == 0
+      ? 0
+      : x >= 10
+      ? 1
+      : 2;
   return '${x.toStringAsFixed(digits)} ${units[unit]}';
 }

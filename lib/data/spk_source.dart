@@ -185,8 +185,11 @@ class SpkSource {
       final headerBytes = await _readExact(handle, 0, _headerBytes);
       final header = _parseHeader(headerBytes, size);
       final headerHash = sha256.convert(headerBytes).toString();
-      final encryptedIndex =
-          await _readExact(handle, header.indexOffset, header.indexBytes);
+      final encryptedIndex = await _readExact(
+        handle,
+        header.indexOffset,
+        header.indexBytes,
+      );
       final auxiliaryRaw = await _readExact(
         handle,
         header.auxiliaryOffset,
@@ -248,10 +251,7 @@ class SpkSource {
     }
   }
 
-  Future<Uint8List> read(
-    String entryId, {
-    int limit = 64 * 1024 * 1024,
-  }) async {
+  Future<Uint8List> read(String entryId, {int limit = 64 * 1024 * 1024}) async {
     final record = byId[entryId.toLowerCase()];
     if (record == null) {
       throw SpkFailure('SPK_ENTRY_MISSING', 'No existe el recurso ${entryId}.');
@@ -267,14 +267,17 @@ class SpkSource {
       throw SpkFailure(
         'SPK_CHUNK_PROFILE_PENDING',
         'El recurso ${entryId} está fragmentado. Se enumera sin ocultarlo, '
-        'pero aún falta validar el nonce implícito de sus fragmentos.',
+            'pero aún falta validar el nonce implícito de sus fragmentos.',
         {'chunks': record.chunks.length},
       );
     }
     final handle = await File(path).open(mode: FileMode.read);
     try {
-      final cipher =
-          await _readExact(handle, record.dataOffset, record.storedBytes);
+      final cipher = await _readExact(
+        handle,
+        record.dataOffset,
+        record.storedBytes,
+      );
       final decoded = await _decodeSimple(record, cipher);
       reads++;
       bytesRead += cipher.length;
@@ -333,15 +336,16 @@ class SpkSource {
     }
     final nonce = Uint8List.sublistView(record.metadata32, 0, 12);
     final tag = Uint8List.sublistView(record.metadata32, 12, 28);
-    final flags =
-        ByteData.sublistView(record.metadata32, 28, 32)
-            .getUint32(0, Endian.little);
+    final flags = ByteData.sublistView(
+      record.metadata32,
+      28,
+      32,
+    ).getUint32(0, Endian.little);
     if (flags != 0) {
-      throw SpkFailure(
-        'SPK_FLAGS',
-        'Flags de recurso no reconocidos.',
-        {'flags': flags, 'entryId': record.entryId},
-      );
+      throw SpkFailure('SPK_FLAGS', 'Flags de recurso no reconocidos.', {
+        'flags': flags,
+        'entryId': record.entryId,
+      });
     }
     final plain = _aesGcmDecrypt(profile.resourceKey, nonce, tag, cipher);
     final decoded = _isZstd(plain) ? await _zstd(plain) : plain;
@@ -389,8 +393,11 @@ class SpkSource {
         String? relative, error;
         if (record.type == 3) {
           try {
-            final raw =
-                await _readExact(handle, record.dataOffset, record.storedBytes);
+            final raw = await _readExact(
+              handle,
+              record.dataOffset,
+              record.storedBytes,
+            );
             final bucket = record.entryId.substring(0, 2);
             relative =
                 'Fragmentados_RAW/${bucket}/${record.technicalName}.spkraw';
@@ -411,8 +418,11 @@ class SpkSource {
           }
         } else {
           try {
-            final cipher =
-                await _readExact(handle, record.dataOffset, record.storedBytes);
+            final cipher = await _readExact(
+              handle,
+              record.dataOffset,
+              record.storedBytes,
+            );
             final decoded = await _decodeSimple(record, cipher);
             final ext = detectSpkExtension(decoded);
             final bucket = record.entryId.substring(0, 2);
@@ -499,11 +509,11 @@ class SpkSource {
     'limitations': [
       if (chunkedCount > 0)
         'Los recursos tipo 3 se enumeran y se pueden exportar completos como '
-        'SPKRAW. Su decodificación lógica sigue bloqueada hasta validar el nonce '
-        'implícito de cada fragmento.',
+            'SPKRAW. Su decodificación lógica sigue bloqueada hasta validar el nonce '
+            'implícito de cada fragmento.',
       'El índice observado contiene IDs técnicos de 64 bits, no rutas '
-        'originales en claro. Se usan nombres técnicos hasta disponer de un '
-        'resolvedor de nombres validado.',
+          'originales en claro. Se usan nombres técnicos hasta disponer de un '
+          'resolvedor de nombres validado.',
     ],
   };
 }
@@ -636,23 +646,18 @@ _ParsedIndex _parseIndex(
     final metadata = Uint8List.sublistView(decoded, o + 48, o + 80);
     final trailing = Uint8List.sublistView(decoded, o + 80, o + 96);
     if (stored != mirror || !trailing.every((b) => b == 0)) {
-      throw SpkFailure(
-        'SPK_RECORD_LAYOUT',
-        'Registro inconsistente.',
-        {'ordinal': i},
-      );
+      throw SpkFailure('SPK_RECORD_LAYOUT', 'Registro inconsistente.', {
+        'ordinal': i,
+      });
     }
     if (!seen.add(entryId)) {
-      throw SpkFailure(
-        'SPK_DUPLICATE_ID',
-        'ID técnico duplicado.',
-        {'entryId': entryId},
-      );
+      throw SpkFailure('SPK_DUPLICATE_ID', 'ID técnico duplicado.', {
+        'entryId': entryId,
+      });
     }
     List<SpkChunk> chunks = const [];
     if (type == 1 || type == 3) {
-      if (offset < _headerBytes ||
-          offset + stored > header.auxiliaryOffset) {
+      if (offset < _headerBytes || offset + stored > header.auxiliaryOffset) {
         throw SpkFailure(
           'SPK_RECORD_RANGE',
           'Recurso fuera de la región de datos.',
@@ -671,8 +676,11 @@ _ParsedIndex _parseIndex(
       }
     } else if (type == 3) {
       chunked++;
-      final count =
-          ByteData.sublistView(metadata, 28, 32).getUint32(0, Endian.little);
+      final count = ByteData.sublistView(
+        metadata,
+        28,
+        32,
+      ).getUint32(0, Endian.little);
       if (auxStart != auxCursor ||
           count <= 0 ||
           auxStart + count > aux.length) {
@@ -784,11 +792,9 @@ Uint8List _aesGcmDecrypt(
       ..setRange(cipherText.length, cipherText.length + tag.length, tag);
     return cipher.process(input);
   } catch (e) {
-    throw SpkFailure(
-      'SPK_AUTH',
-      'AES-GCM rechazó el bloque.',
-      {'detail': e.toString()},
-    );
+    throw SpkFailure('SPK_AUTH', 'AES-GCM rechazó el bloque.', {
+      'detail': e.toString(),
+    });
   }
 }
 
@@ -872,7 +878,9 @@ String detectSpkExtension(Uint8List bytes) {
   if (bytes.length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4d) {
     return '.bmp';
   }
-  final head = utf8.decode(bytes.take(128).toList(), allowMalformed: true).trimLeft();
+  final head = utf8
+      .decode(bytes.take(128).toList(), allowMalformed: true)
+      .trimLeft();
   if (head.startsWith('<?xml') || head.startsWith('<Workbook')) return '.xml';
   if (_looksUtf16LeText(bytes) || _looksUtf8Text(bytes)) return '.txt';
   return '.bin';
@@ -908,5 +916,4 @@ bool _looksUtf8Text(Uint8List bytes) {
   }
 }
 
-String _fileBaseName(String path) =>
-    path.replaceAll('\\', '/').split('/').last;
+String _fileBaseName(String path) => path.replaceAll('\\', '/').split('/').last;
