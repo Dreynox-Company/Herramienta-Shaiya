@@ -4,12 +4,24 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
 
+String _spkNormalizePath(String value, String separator) {
+  final alternate = separator == '\\' ? '/' : '\\';
+  var normalized = value.replaceAll(alternate, separator);
+  final doubled = '$separator$separator';
+  while (normalized.contains(doubled)) {
+    normalized = normalized.replaceAll(doubled, separator);
+  }
+  return normalized;
+}
+
 String _spkParentPath(String value, String separator) {
-  final normalized = value.replaceAll(RegExp(r'[\\/]+'), separator);
+  final normalized = _spkNormalizePath(value, separator);
   final index = normalized.lastIndexOf(separator);
   if (index < 0) return '.';
   if (index == 0) return separator;
@@ -24,13 +36,14 @@ List<String> spkProfileCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final spkDir = _spkParentPath(spkPath, separator);
+  final normalizedSpk = _spkNormalizePath(spkPath, separator);
+  final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
     separator,
   );
   return <String>[
-    '$spkPath.profile.json',
+    '$normalizedSpk.profile.json',
     '$spkDir${separator}data.spk.profile.json',
     '$spkDir${separator}spk-crypto-profile.json',
     '$exeDir${separator}profiles${separator}data.spk.profile.json',
@@ -48,8 +61,9 @@ List<String> spkNameMapCandidatePaths(
 }) {
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
-      : separatorOverride;
-  final spkDir = _spkParentPath(spkPath, separator);
+      : separatorOverride.substring(0, 1);
+  final normalizedSpk = _spkNormalizePath(spkPath, separator);
+  final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
     separator,
@@ -58,7 +72,7 @@ List<String> spkNameMapCandidatePaths(
       ? indexSha256.substring(0, 8)
       : indexSha256;
   return <String>[
-    '$spkPath.names.json',
+    '$normalizedSpk.names.json',
     '$spkDir${separator}spk-name-map.json',
     '$spkDir${separator}spk-name-map-$shortHash.json',
     '$exeDir${separator}profiles${separator}spk-name-map.json',
@@ -77,7 +91,8 @@ List<String> spkResourceProfileCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final spkDir = _spkParentPath(spkPath, separator);
+  final normalizedSpk = _spkNormalizePath(spkPath, separator);
+  final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
     separator,
@@ -86,7 +101,7 @@ List<String> spkResourceProfileCandidatePaths(
       ? indexSha256.substring(0, 8)
       : indexSha256;
   return <String>[
-    '$spkPath.resources.json',
+    '$normalizedSpk.resources.json',
     '$spkDir${separator}data.spk.resources.json',
     '$spkDir${separator}derived-resource-profile.json',
     '$spkDir${separator}spk-resource-profile.json',
@@ -94,6 +109,21 @@ List<String> spkResourceProfileCandidatePaths(
     '$exeDir${separator}profiles${separator}spk-resource-profile.json',
     '$exeDir${separator}profiles${separator}derived-resource-profile.json',
   ];
+}
+
+String spkResourceProbeExecutablePath({
+  String? executablePath,
+  String? separatorOverride,
+}) {
+  final separator = separatorOverride == null || separatorOverride.isEmpty
+      ? Platform.pathSeparator
+      : separatorOverride.substring(0, 1);
+  final exeDir = _spkParentPath(
+    executablePath ?? Platform.resolvedExecutable,
+    separator,
+  );
+  return '$exeDir${separator}Extras${separator}SPK$separator'
+      'Shaiya_SPK_ResourceProbe.exe';
 }
 
 SpkCryptoProfile mergeSpkResourceProfile(
@@ -183,6 +213,50 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
   return source;
 }
 
+Future<SpkArchiveSource> deriveAutomaticFragmentProfile(
+  SpkArchiveSource source,
+  String spkPath, {
+  bool persist = true,
+}) async {
+  if (!source.canReadSimpleResources ||
+      source.canReadFragmentedResources ||
+      source.index.fragmentedResources.isEmpty) {
+    return source;
+  }
+  final rule = await source.deriveChunkNonceRuleOffline();
+  if (rule == 'unsupported') return source;
+
+  final profile = source.profile.withChunkNonceRule(rule);
+  final next = await SpkArchiveSource.open(
+    spkPath,
+    profile,
+    names: source.names,
+  );
+  if (persist) {
+    final sidecar = File('$spkPath.resources.json');
+    await sidecar.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'schema': 4,
+        'profileId': profile.profileId,
+        'indexSha256': profile.indexSha256,
+        'readyForSimple': true,
+        'readyForFragmented': true,
+        'readyForAll': true,
+        'resourceSecretHex': spkHex(profile.effectiveResourceSecret!),
+        'resourceSecretBytes': profile.effectiveResourceSecret!.length,
+        'algorithm': 'AES-GCM',
+        'aadRule': profile.resourceAad.isEmpty ? 'none' : 'constant',
+        if (profile.resourceAad.isNotEmpty)
+          'aadHex': spkHex(profile.resourceAad),
+        'chunkNonceRule': rule,
+        'fragmentRuleEvidence': 'offline-aes-gcm-authentication',
+      }),
+      flush: true,
+    );
+  }
+  return next;
+}
+
 Future<void> loadAutomaticSpkNameMap(
   SpkArchiveSource source,
   String spkPath,
@@ -258,6 +332,8 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       );
       progress.value = 'Buscando perfil validado de recursos…';
       source = await loadAutomaticSpkResourceProfile(source, picked.path);
+      progress.value = 'Validando fragmentación AES-GCM offline…';
+      source = await deriveAutomaticFragmentProfile(source, picked.path);
       progress.value = 'Resolviendo nombres y rutas conocidas…';
       await loadAutomaticSpkNameMap(source, picked.path);
       if (!context.mounted) return;
@@ -577,6 +653,179 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   });
 
+  Future<void> captureResourceProfile() => runAction(() async {
+    if (!Platform.isWindows) {
+      throw const SpkFailure(
+        'SPK_PROBE_WINDOWS_ONLY',
+        'La captura automática del perfil de payloads requiere Windows x64.',
+      );
+    }
+    final helper = File(spkResourceProbeExecutablePath());
+    if (!await helper.exists()) {
+      throw SpkFailure(
+        'SPK_PROBE_MISSING',
+        'Esta compilación no incluye Shaiya_SPK_ResourceProbe.exe.',
+        {'expected': helper.path},
+      );
+    }
+
+    var game = File(p.join(source.file.parent.path, 'game.exe'));
+    if (!await game.exists()) {
+      final picked = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Cliente Shaiya', extensions: ['exe']),
+        ],
+        confirmButtonText: 'Usar game.exe',
+      );
+      if (picked == null) return;
+      game = File(picked.path);
+    }
+    if (!await game.exists()) {
+      throw const FileSystemException('No se encontró game.exe.');
+    }
+    final siblingSpk = File(p.join(game.parent.path, 'data.spk'));
+    if (!await siblingSpk.exists()) {
+      throw const SpkFailure(
+        'SPK_PROBE_PAIR',
+        'game.exe y data.spk deben pertenecer a la misma instalación.',
+      );
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Capturar perfil de recursos SPK'),
+        content: const SizedBox(
+          width: 520,
+          child: Text(
+            'Shaiya Studio abrirá una copia de game.exe e instrumentará solo '
+            'ese proceso para observar las llamadas AES-GCM que corresponden '
+            'exactamente a recursos del DATA.SPK ya validado.\n\n'
+            'Desconecta Internet antes de continuar. No inicies sesión ni '
+            'escribas credenciales. El aviso de servidor sin conexión es '
+            'esperado. DATA.SPK y game.exe no se modifican.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(c, true),
+            icon: const Icon(Icons.security_outlined),
+            label: const Text('Capturar offline'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final support = await getApplicationSupportDirectory();
+    final output = Directory(
+      p.join(
+        support.path,
+        'spk_probe',
+        DateTime.now().millisecondsSinceEpoch.toString(),
+      ),
+    );
+    operation = 'Preparando ResourceProbe V8…';
+    if (mounted) setState(() {});
+
+    final process = await Process.start(
+      helper.path,
+      [
+        '--client',
+        game.path,
+        '--out',
+        output.path,
+        '--seconds',
+        '150',
+        '--noninteractive',
+      ],
+      workingDirectory: game.parent.path,
+      runInShell: false,
+    );
+    final recent = <String>[];
+    void reportLine(String line) {
+      final clean = line.trim();
+      if (clean.isEmpty) return;
+      recent.add(clean);
+      if (recent.length > 12) recent.removeAt(0);
+      if (mounted) {
+        setState(() => operation = clean);
+      }
+    }
+
+    final stdoutDone = process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach(reportLine);
+    final stderrDone = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach(reportLine);
+    final exitCode = await process.exitCode;
+    await Future.wait([stdoutDone, stderrDone]);
+
+    final profileFile = File(p.join(output.path, 'derived-resource-profile.json'));
+    if (!await profileFile.exists()) {
+      throw SpkFailure(
+        'SPK_PROBE_NO_PROFILE',
+        'El helper terminó sin producir un perfil criptográfico validado.',
+        {
+          'exitCode': exitCode,
+          'output': output.path,
+          'logTail': recent,
+        },
+      );
+    }
+    final raw = jsonDecode(await profileFile.readAsString());
+    if (raw is! Map) {
+      throw const FormatException('ResourceProbe produjo un JSON inválido.');
+    }
+    final data = Map<String, dynamic>.from(raw);
+    final declared = data['indexSha256']?.toString().toLowerCase();
+    if (declared != source.index.encryptedIndexSha256.toLowerCase()) {
+      throw const SpkFailure(
+        'SPK_PROBE_HASH',
+        'El perfil capturado no corresponde al SPK abierto.',
+      );
+    }
+    final nextProfile = mergeSpkResourceProfile(source, data);
+    final persistent = File('${source.file.path}.resources.json');
+    await persistent.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(data),
+      flush: true,
+    );
+    var next = await SpkArchiveSource.open(
+      source.file.path,
+      nextProfile,
+      names: source.names,
+    );
+    operation = 'Validando nonces de fragmentos contra AES-GCM…';
+    if (mounted) setState(() {});
+    next = await deriveAutomaticFragmentProfile(next, source.file.path);
+    await loadAutomaticSpkNameMap(next, source.file.path);
+
+    if (!mounted) return;
+    final full = next.canExtractAll;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          full
+              ? 'Perfil validado: simples + fragmentados. Extraer todo habilitado.'
+              : 'Perfil simple validado. Los fragmentados siguen bloqueados hasta validarlos.',
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
+    await Navigator.of(context).pushReplacement<void, void>(
+      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
+    );
+  });
+
   Future<void> loadResourceProfile() => runAction(() async {
     final picked = await openFile(
       acceptedTypeGroups: const [
@@ -592,11 +841,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final data = Map<String, dynamic>.from(raw);
     final nextProfile = mergeSpkResourceProfile(source, data);
 
-    final next = await SpkArchiveSource.open(
+    var next = await SpkArchiveSource.open(
       source.file.path,
       nextProfile,
       names: source.names,
     );
+    next = await deriveAutomaticFragmentProfile(next, source.file.path);
 
     final persistent = File('${source.file.path}.profile.json');
     await persistent.writeAsString(
@@ -748,580 +998,3 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ),
           duration: const Duration(seconds: 8),
         ),
-      );
-    }
-  });
-
-  Future<void> inspectResource(SpkRecord record) => runAction(() async {
-    final result = await source.readEntry(record);
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(fileName(record)),
-        content: SizedBox(
-          width: 590,
-          child: SelectableText(
-            'ID: ${record.idHex}\nFormato: ${result.format}\nOffset: ${record.dataOffset}\nAlmacenado: ${bytesLabel(record.storedBytes)}\nDecodificado: ${bytesLabel(result.bytes.length)}\nSHA-256: ${sha256.convert(result.bytes)}\n\nPrimeros 64 bytes:\n${spkHex(result.bytes.take(64))}',
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
-    );
-  });
-
-  Widget folderTree() {
-    final all = source.folders();
-    final roots =
-        all.where((path) => path.isNotEmpty && !path.contains('/')).toList()
-          ..sort();
-
-    Widget node(String path, int depth) {
-      final children = all.where((candidate) {
-        if (!candidate.startsWith('$path/')) return false;
-        final rest = candidate.substring(path.length + 1);
-        return rest.isNotEmpty && !rest.contains('/');
-      }).toList()..sort();
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => setState(() {
-              currentFolder = path;
-              selected = null;
-            }),
-            child: Container(
-              height: 31,
-              padding: EdgeInsets.only(left: 10 + depth * 14, right: 8),
-              color: currentFolder == path ? const Color(0xff29384f) : null,
-              child: Row(
-                children: [
-                  Icon(
-                    currentFolder == path
-                        ? Icons.folder_open
-                        : Icons.folder_outlined,
-                    size: 16,
-                    color: const Color(0xffd4b97f),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      path.split('/').last,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          for (final child in children) node(child, depth + 1),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () => setState(() {
-            currentFolder = '';
-            selected = null;
-          }),
-          child: Container(
-            height: 35,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            color: currentFolder.isEmpty ? const Color(0xff29384f) : null,
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.inventory_2_outlined,
-                  size: 17,
-                  color: Color(0xffa9c0ff),
-                ),
-                SizedBox(width: 7),
-                Text('data.spk', style: TextStyle(fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        ),
-        for (final root in roots) node(root, 0),
-      ],
-    );
-  }
-
-  Widget resourceTable() {
-    final folders = search.isEmpty ? childFolders() : <String>[];
-    final entries = visibleEntries();
-    return Column(
-      children: [
-        Container(
-          height: 34,
-          color: const Color(0xff182231),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: const Row(
-            children: [
-              Expanded(flex: 5, child: Text('Nombre')),
-              SizedBox(width: 95, child: Text('Tipo')),
-              SizedBox(width: 105, child: Text('Almacenado')),
-              SizedBox(width: 105, child: Text('Decodificado')),
-              SizedBox(width: 145, child: Text('ID')),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemExtent: 32,
-            itemCount: folders.length + entries.length,
-            itemBuilder: (_, index) {
-              if (index < folders.length) {
-                final path = folders[index];
-                return InkWell(
-                  onTap: () => setState(() {
-                    currentFolder = path;
-                    selected = null;
-                  }),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.folder,
-                          size: 16,
-                          color: Color(0xffd4b97f),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            path.split('/').last,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              final record = entries[index - folders.length];
-              final active = identical(selected, record);
-              return InkWell(
-                onTap: () => setState(() => selected = record),
-                onDoubleTap: () => inspectResource(record),
-                child: Container(
-                  color: active ? const Color(0xff29384f) : null,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Row(
-                    children: [
-                      Icon(
-                        source.names.isConfirmed(record.entryId)
-                            ? Icons.verified_outlined
-                            : source.names.confidence(record.entryId) ==
-                                  'strong-inferred'
-                            ? Icons.auto_awesome_outlined
-                            : source.names.isInferred(record.entryId)
-                            ? Icons.lightbulb_outline
-                            : Icons.insert_drive_file_outlined,
-                        size: 15,
-                        color: source.names.isConfirmed(record.entryId)
-                            ? const Color(0xff83c69d)
-                            : source.names.confidence(record.entryId) ==
-                                  'strong-inferred'
-                            ? const Color(0xffd9b66f)
-                            : source.names.isInferred(record.entryId)
-                            ? const Color(0xff88a9d8)
-                            : null,
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        flex: 5,
-                        child: Text(
-                          fileName(record),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 95,
-                        child: Text(
-                          source.displayType(record),
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 105,
-                        child: Text(
-                          bytesLabel(record.storedBytes),
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 105,
-                        child: Text(
-                          bytesLabel(record.decodedBytes),
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 145,
-                        child: Text(
-                          record.idHex,
-                          style: const TextStyle(
-                            fontFamily: 'Consolas',
-                            fontSize: 10,
-                            color: Color(0xff9eb1cf),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget detailsPanel(SpkRecord record) => Material(
-    color: const Color(0xff151e2a),
-    child: ListView(
-      padding: const EdgeInsets.all(14),
-      children: [
-        const Text(
-          'PROPIEDADES',
-          style: TextStyle(
-            fontSize: 10,
-            letterSpacing: 1.2,
-            color: Color(0xff9eadc5),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SelectableText(
-          fileName(record),
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 12),
-        property('ID', record.idHex),
-        property('Tipo', record.recordType.toString()),
-        property('Offset', record.dataOffset.toString()),
-        property('Almacenado', bytesLabel(record.storedBytes)),
-        property('Decodificado', bytesLabel(record.decodedBytes)),
-        property('Fragmentos', record.chunkCount.toString()),
-        property('Ruta', source.technicalPath(record)),
-        property('Nombre', source.nameConfidence(record)),
-        property('Evidencia', source.nameEvidence(record)),
-        const Divider(height: 26),
-        FilledButton.tonalIcon(
-          onPressed: busy ? null : () => inspectResource(record),
-          icon: const Icon(Icons.manage_search, size: 17),
-          label: const Text('Leer / inspeccionar'),
-        ),
-        const SizedBox(height: 7),
-        OutlinedButton.icon(
-          onPressed: busy ? null : extractSelected,
-          icon: const Icon(Icons.file_download_outlined, size: 17),
-          label: const Text('Extraer recurso'),
-        ),
-      ],
-    ),
-  );
-
-  Widget property(String name, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 78,
-          child: Text(
-            name,
-            style: const TextStyle(fontSize: 9, color: Color(0xff7f8ea6)),
-          ),
-        ),
-        Expanded(
-          child: SelectableText(
-            value,
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = source.index.summary();
-    final strongInferred = source.names.hints.values
-        .where((hint) => hint.confidence == 'strong-inferred')
-        .length;
-    final weakInferred = source.names.hints.length - strongInferred;
-    return Scaffold(
-      backgroundColor: const Color(0xff101722),
-      appBar: AppBar(
-        titleSpacing: 12,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Explorador DATA.SPK', style: TextStyle(fontSize: 14)),
-            Text(
-              'Archivo montado en solo lectura',
-              style: TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: busy ? null : loadResourceProfile,
-            icon: const Icon(Icons.key_outlined, size: 17),
-            label: const Text('Perfil de recursos'),
-          ),
-          PopupMenuButton<String>(
-            enabled: !busy,
-            tooltip: 'Nombres y rutas',
-            icon: const Icon(Icons.drive_file_rename_outline, size: 18),
-            onSelected: (value) {
-              if (value == 'resolve') resolveNamesFromReferenceData();
-              if (value == 'import') importNameMap();
-              if (value == 'export') exportNameMap();
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'resolve',
-                child: ListTile(
-                  leading: Icon(Icons.auto_awesome_outlined),
-                  title: Text('Resolver con DATA de referencia'),
-                  subtitle: Text('Tamaño + Zstandard nivel 3'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'import',
-                child: ListTile(
-                  leading: Icon(Icons.file_open_outlined),
-                  title: Text('Importar mapa de nombres'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'export',
-                child: ListTile(
-                  leading: Icon(Icons.save_alt_outlined),
-                  title: Text('Exportar mapa actual'),
-                ),
-              ),
-            ],
-          ),
-          TextButton.icon(
-            onPressed: busy ? null : exportInventory,
-            icon: const Icon(Icons.receipt_long_outlined, size: 17),
-            label: const Text('Inventario'),
-          ),
-          TextButton.icon(
-            onPressed: busy || selected == null ? null : extractSelected,
-            icon: const Icon(Icons.file_download_outlined, size: 17),
-            label: const Text('Extraer'),
-          ),
-          TextButton.icon(
-            onPressed: busy || currentFolder.isEmpty
-                ? null
-                : extractCurrentFolder,
-            icon: const Icon(Icons.drive_folder_upload_outlined, size: 17),
-            label: const Text('Extraer carpeta'),
-          ),
-          if (!source.canExtractAll)
-            TextButton.icon(
-              onPressed: busy || !source.canReadSimpleResources
-                  ? null
-                  : extractReadable,
-              icon: const Icon(Icons.rule_folder_outlined, size: 17),
-              label: const Text('Extraer legibles'),
-            ),
-          FilledButton.icon(
-            onPressed: busy || !source.canExtractAll ? null : extractAll,
-            icon: const Icon(Icons.folder_copy_outlined, size: 17),
-            label: const Text('Extraer todo'),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            height: 54,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: const BoxDecoration(
-              color: Color(0xff141d29),
-              border: Border(bottom: BorderSide(color: Color(0xff303a4b))),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: 'Subir un nivel',
-                  onPressed: currentFolder.isEmpty
-                      ? null
-                      : () => setState(() {
-                          final i = currentFolder.lastIndexOf('/');
-                          currentFolder = i < 0
-                              ? ''
-                              : currentFolder.substring(0, i);
-                          selected = null;
-                        }),
-                  icon: const Icon(Icons.arrow_upward, size: 18),
-                ),
-                Expanded(
-                  child: Container(
-                    height: 34,
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xff0e1621),
-                      border: Border.all(color: const Color(0xff334056)),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      currentFolder.isEmpty
-                          ? 'data.spk:/'
-                          : 'data.spk:/$currentFolder',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Consolas',
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 300,
-                  child: TextField(
-                    controller: searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Buscar nombre o ID…',
-                      prefixIcon: Icon(Icons.search, size: 18),
-                    ),
-                    onChanged: (value) => setState(() => search = value),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text(
-                    'Recursivo',
-                    style: TextStyle(fontSize: 10),
-                  ),
-                  selected: recursiveSearch,
-                  onSelected: (value) =>
-                      setState(() => recursiveSearch = value),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 255,
-                  child: Material(
-                    color: const Color(0xff131b26),
-                    child: SingleChildScrollView(child: folderTree()),
-                  ),
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: resourceTable()),
-                if (selected != null) ...[
-                  const VerticalDivider(width: 1),
-                  SizedBox(width: 255, child: detailsPanel(selected!)),
-                ],
-              ],
-            ),
-          ),
-          Container(
-            height: busy ? 48 : 30,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: const BoxDecoration(
-              color: Color(0xff121a25),
-              border: Border(top: BorderSide(color: Color(0xff30394a))),
-            ),
-            child: busy
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      LinearProgressIndicator(
-                        value: operationTotal == 0
-                            ? null
-                            : operationDone / operationTotal,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              operation.isEmpty ? 'Procesando…' : operation,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 9),
-                            ),
-                          ),
-                          Text(
-                            operationTotal == 0
-                                ? ''
-                                : '$operationDone / $operationTotal',
-                            style: const TextStyle(fontSize: 9),
-                          ),
-                        ],
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Text(
-                        '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · '
-                        '${source.names.paths.length} confirmados · '
-                        '$strongInferred inferidos fuertes · '
-                        '$weakInferred aproximados · '
-                        '${(summary['resources'] as int) - source.names.paths.length - source.names.hints.length} sin resolver',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xff92a0b7),
-                        ),
-                      ),
-                      const Spacer(),
-                      if (source.canExtractAll)
-                        const Text(
-                          'Lectura SPK completa validada · Extraer todo habilitado',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Color(0xff83c69d),
-                          ),
-                        )
-                      else if (source.canReadSimpleResources)
-                        const Text(
-                          'Recursos simples legibles · fragmentados pendientes',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Color(0xffd3ac76),
-                          ),
-                        )
-                      else
-                        const Text(
-                          'Índice listo · falta perfil criptográfico de payloads',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Color(0xffd3ac76),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
