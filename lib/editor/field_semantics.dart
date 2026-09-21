@@ -54,14 +54,16 @@ class FieldMeaning {
         'Referencia exacta a la malla o textura del catálogo; no se reasigna por parecido del nombre.',
       );
     }
-    if (n == 'reqog') {
-      return const FieldMeaning(
-        'Intercambio / vinculación (ReqOg)',
+    if (n == 'reqog' || n == 'og') {
+      return FieldMeaning(
+        n == 'reqog'
+            ? 'Intercambio / vinculación (ReqOg)'
+            : 'Intercambio / vinculación (Og)',
         'Requisitos',
-        'Semántica observada en clientes Shaiya: 0 permite intercambio; 1 se usa '
-            'para objetos no intercambiables y 2 se ha usado para vinculación '
-            'al personaje. La compatibilidad del valor 2 depende del servidor; '
-            'otros valores se conservan sin reinterpretarlos.',
+        '0 permite intercambio; 1 marca el objeto como no intercambiable. '
+            'El valor 2 se usa en algunos clientes para vinculación al '
+            'personaje y depende del soporte del servidor. Otros valores se '
+            'conservan sin reinterpretarlos.',
       );
     }
     if (_extra.containsKey(n)) {
