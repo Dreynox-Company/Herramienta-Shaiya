@@ -308,39 +308,6 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   }
 
-  Future<void> resolveNamesWithReferenceData() => runAction(() async {
-    final folder = await getDirectoryPath(
-      confirmButtonText: 'Usar DATA como referencia',
-    );
-    if (folder == null) return;
-    final result = await source.inferNamesFromDirectory(
-      Directory(folder),
-      progress: (message, done, total) {
-        if (!mounted) return;
-        setState(() {
-          operation = message;
-          operationDone = done;
-          operationTotal = total;
-        });
-      },
-    );
-    if (!mounted) return;
-    setState(() {
-      currentFolder = '';
-      selected = null;
-    });
-    final message = 'Rutas: ' +
-        result['strongInferred'].toString() +
-        ' fuertes + ' +
-        result['sizeOnlyInferred'].toString() +
-        ' por tamaño; ' +
-        result['unresolved'].toString() +
-        ' aún sin resolver.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 7)),
-    );
-  });
-
   Future<void> exportNameMap() => runAction(() async {
     final location = await getSaveLocation(
       suggestedName: 'spk-name-map.json',
@@ -479,7 +446,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         content: Text(
           verify == true
               ? '${result['confirmed']} rutas confirmadas por SHA-256.'
-              : '${result['inferred']} rutas inferidas por tamaño único. '
+              : '${result['strongInferred']} rutas con evidencia Zstandard + '
+                    '${result['sizeOnlyInferred']} por tamaño único. '
                     'Se muestran como inferidas hasta confirmarlas.',
         ),
         duration: const Duration(seconds: 7),
@@ -974,11 +942,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ],
         ),
         actions: [
-          TextButton.icon(
-            onPressed: busy ? null : resolveNamesFromReferenceData,
-            icon: const Icon(Icons.account_tree_outlined, size: 17),
-            label: const Text('Reconstruir nombres'),
-          ),
+
           TextButton.icon(
             onPressed: busy ? null : loadResourceProfile,
             icon: const Icon(Icons.key_outlined, size: 17),
@@ -989,7 +953,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             tooltip: 'Nombres y rutas',
             icon: const Icon(Icons.drive_file_rename_outline, size: 18),
             onSelected: (value) {
-              if (value == 'resolve') resolveNamesWithReferenceData();
+              if (value == 'resolve') resolveNamesFromReferenceData();
               if (value == 'import') importNameMap();
               if (value == 'export') exportNameMap();
             },
