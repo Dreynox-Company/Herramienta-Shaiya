@@ -100,4 +100,37 @@ void main(){
     expect(bar.single.bag,100);
     expect(bar.single.number,321);
   });
+
+  test('parsea chunks CHARACTER_ITEMS de 102 bytes por objeto',(){
+    const record=102;
+    final body=Uint8List(1+record)..[0]=1;
+    final d=ByteData.sublistView(body);
+    final o=1;
+    body[o]=2;
+    body[o+1]=7;
+    body[o+2]=5;
+    body[o+3]=44;
+    d.setUint16(o+4,1234,Endian.little);
+    for(var i=0;i<6;i++)d.setInt32(o+6+i*4,100+i,Endian.little);
+    body[o+30]=3;
+    final name=latin1.encode('ABCD');
+    body.setRange(o+31,o+31+name.length,name);
+    body[o+51]=0;
+    body[o+75]=1;
+    final items=parseInventoryItems(
+      PsPacket(PsPacketType.characterItems,body),
+    );
+    expect(items.length,1);
+    final item=items.single;
+    expect(item.bag,2);
+    expect(item.slot,7);
+    expect(item.type,5);
+    expect(item.typeId,44);
+    expect(item.quality,1234);
+    expect(item.gems,[100,101,102,103,104,105]);
+    expect(item.count,3);
+    expect(item.craftName,'ABCD');
+    expect(item.craftDisabled,isFalse);
+    expect(item.isDyed,isTrue);
+  });
 }
