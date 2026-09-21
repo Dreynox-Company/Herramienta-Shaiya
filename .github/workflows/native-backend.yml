@@ -37,6 +37,7 @@ jobs:
           python3 scaffold/runtime/prepare_offline.py upstream
           python3 scaffold/runtime/bootstrap_offline.py upstream
           python3 hotfix/runtime/fix_native_login.py upstream
+          sed -i '1a using Imgeneus.Network.Packets;' upstream/src/Imgeneus.Login/Packets/OfflineLauncherInfoPacket.cs
           cp upstream/NATIVE_LOGIN_COMPAT_MANIFEST.json out/proof/
           git -C upstream submodule status --recursive > out/proof/submodules.txt
       - name: Build, boot and publish localhost services
