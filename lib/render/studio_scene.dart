@@ -386,7 +386,31 @@ class StudioScene extends ChangeNotifier {
           final objects=readSmod(await lib.read(model),model),group=t.Group();
           var pieceCount=0;
           for(final piece in objects){
-            final tex=lib.resolve(piece.texture,['entity/${obj.category}','entity/${obj.category}/texture','entity/${obj.category}/textures'],uniqueFallback:true);
+            final requested=piece.texture;
+            final dds=requested.toLowerCase().endsWith('.tga')
+              ?requested.substring(0,requested.length-4)+'.dds'
+              :requested;
+            final tex=lib.resolve(
+              dds,
+              [
+                'entity/texture',
+                'entity/textures',
+                'entity/${obj.category}',
+                'entity/${obj.category}/texture',
+                'entity/${obj.category}/textures',
+              ],
+              uniqueFallback:true,
+            )??lib.resolve(
+              requested,
+              [
+                'entity/texture',
+                'entity/textures',
+                'entity/${obj.category}',
+                'entity/${obj.category}/texture',
+                'entity/${obj.category}/textures',
+              ],
+              uniqueFallback:true,
+            );
             if(tex==null){missingWorldAssets.add('texture:${piece.texture} @ ${obj.asset}');continue;}
             final p=await makePart(piece.mesh,tex);parts.add(p);group.add(p.mesh);pieceCount++;
           }
