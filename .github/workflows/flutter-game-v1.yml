@@ -258,6 +258,75 @@ jobs:
           foreach($s in @('faction','characterSelect','characterCreate','characterMode','world')){
             if(!(Test-Path ("parity-report/"+$s+".png"))){throw "missing framebuffer: $s"}
           }
+      - name: Capture actual Windows client surfaces
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Add-Type -AssemblyName System.Drawing
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class WinCapture {
+            [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left,Top,Right,Bottom; }
+            [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X,Y; }
+            [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd,out RECT r);
+            [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd,ref POINT p);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+          }
+          '@
+          function Capture-Client([System.Diagnostics.Process]$p,[string]$path){
+            $p.Refresh()
+            if($p.HasExited){ throw "process exited before capture" }
+            $h=$p.MainWindowHandle
+            if($h -eq 0){ throw "no main window handle" }
+            [WinCapture]::SetForegroundWindow($h) | Out-Null
+            $r=New-Object WinCapture+RECT
+            if(![WinCapture]::GetClientRect($h,[ref]$r)){ throw "GetClientRect failed" }
+            $pt=New-Object WinCapture+POINT
+            $pt.X=0;$pt.Y=0
+            if(![WinCapture]::ClientToScreen($h,[ref]$pt)){ throw "ClientToScreen failed" }
+            $w=$r.Right-$r.Left;$hgt=$r.Bottom-$r.Top
+            if($w -lt 200 -or $hgt -lt 200){ throw "invalid client size $w x $hgt" }
+            $bmp=New-Object System.Drawing.Bitmap $w,$hgt
+            $g=[System.Drawing.Graphics]::FromImage($bmp)
+            try{
+              $g.CopyFromScreen($pt.X,$pt.Y,0,0,$bmp.Size,[System.Drawing.CopyPixelOperation]::SourceCopy)
+              $bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png)
+            }finally{$g.Dispose();$bmp.Dispose()}
+          }
+          $exe=(Get-ChildItem flutter-client -Filter herramienta_shaiya.exe -File -Recurse | Select-Object -First 1).FullName
+          if(!$exe){throw 'Flutter Windows executable missing'}
+          $work=Split-Path $exe
+          $env:SHAIYA_QA_DISABLE_BACKEND='1'
+          $env:SHAIYA_UI_LOCALE='usa'
+          foreach($stage in @('faction','characterSelect','characterCreate','characterMode','world')){
+            $marker=(Join-Path (Resolve-Path parity-report) ('os-'+$stage+'-ready.json'))
+            if(Test-Path $marker){Remove-Item $marker -Force}
+            $args=@("--data=$env:SHAIYA_REAL_DATA","--qa-stage=$stage","--qa-marker=$marker")
+            $p=Start-Process $exe -WorkingDirectory $work -ArgumentList $args -PassThru
+            try{
+              $deadline=(Get-Date).AddMinutes(5)
+              while(!(Test-Path $marker)){
+                $p.Refresh()
+                if($p.HasExited){throw "Flutter $stage exited early"}
+                if((Get-Date) -gt $deadline){throw "timeout waiting for $stage marker"}
+                Start-Sleep -Milliseconds 500
+              }
+              $state=Get-Content $marker -Raw | ConvertFrom-Json
+              if(!$state.ready){throw "$stage did not become ready"}
+              Start-Sleep -Seconds 3
+              Capture-Client $p (Join-Path (Resolve-Path parity-report) ('os-'+$stage+'.png'))
+            }finally{
+              $p.Refresh()
+              if(!$p.HasExited){
+                $p.CloseMainWindow() | Out-Null
+                Start-Sleep -Seconds 1
+                $p.Refresh()
+                if(!$p.HasExited){$p.Kill()}
+              }
+            }
+          }
+
       - name: Compare native and Flutter scenes
         shell: pwsh
         run: |
@@ -276,7 +345,9 @@ jobs:
             'world':'09-world-entry.png',
           }
           def flutter_image(stage):
-            return Image.open(root/f'{stage}.png').convert('RGB').resize((1024,742))
+            os_capture=root/f'os-{stage}.png'
+            source=os_capture if os_capture.exists() else root/f'{stage}.png'
+            return Image.open(source).convert('RGB').resize((1024,742))
           def native_image(name):
             p=next(native.rglob(name))
             im=Image.open(p).convert('RGB').resize((1024,768))
@@ -300,7 +371,7 @@ jobs:
               'edgeCorrelation':round(edge,5),
               'luminanceCorrelation':round(lum,5),
               'native':str(rp),
-              'flutter':str(root/f'{stage}.png'),
+              'flutter':str((root/f'os-{stage}.png') if (root/f'os-{stage}.png').exists() else (root/f'{stage}.png')),
             }
             diff=ImageChops.difference(fa,nb)
             ImageEnhance.Contrast(diff).enhance(2.0).save(root/f'diff-{stage}.png')
