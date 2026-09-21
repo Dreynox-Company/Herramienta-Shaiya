@@ -57,6 +57,16 @@ Uint8List spkHexBytes(String value, {int? expectedBytes}) {
   return out;
 }
 
+Uint8List spkAesResourceSecret(String value) {
+  final out = spkHexBytes(value);
+  if (out.length != 16 && out.length != 32) {
+    throw FormatException(
+      'La clave AES de recursos debe tener 16 o 32 bytes; recibió ${out.length}.',
+    );
+  }
+  return out;
+}
+
 class SpkFailure implements Exception {
   final String code;
   final String message;
@@ -437,10 +447,7 @@ class SpkCryptoProfile {
           expectedBytes: 16,
         ),
         resourceSecret: json['resourceSecretHex'] is String
-            ? spkHexBytes(
-                json['resourceSecretHex'].toString(),
-                expectedBytes: 16,
-              )
+            ? spkAesResourceSecret(json['resourceSecretHex'].toString())
             : null,
         resourceKeyIsIndexKey: json['resourceKeyIsIndexKey'] == true,
         chunkNonceRule: (json['chunkNonceRule'] ?? 'unsupported').toString(),
@@ -461,7 +468,7 @@ class SpkCryptoProfile {
       ),
       resourceSecret: resources['secretHex'] == null
           ? null
-          : spkHexBytes(resources['secretHex'].toString(), expectedBytes: 16),
+          : spkAesResourceSecret(resources['secretHex'].toString()),
       resourceKeyIsIndexKey: resources['useIndexKey'] == true,
       chunkNonceRule: (resources['chunkNonceRule'] ?? 'unsupported').toString(),
     );
