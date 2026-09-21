@@ -48,5 +48,6 @@ with (base/'data.saf').open('rb') as source:
 (base/'gsconfig.cfg').write_text('[framework]\nIP=127.0.0.1\nSAH=false\n\n[gsCommon]\nLogDefaultListener=1\nLogLevel=3\n')
 # Rename the archive index so an accidental fallback cannot pass the test.
 (base/'data.sah').rename(base/'data.sah.not-used-by-raw-test')
+pathlib.Path('proof').mkdir(parents=True,exist_ok=True)
 pathlib.Path('proof/raw-data.json').write_text(json.dumps({'files':len(entries),'bytes':total,'mode':'original native direct DATA reader, SAH=false','archiveFallbackAvailable':False},indent=2))
 print('Raw public DATA prepared:',len(entries),'files',total,'bytes')
