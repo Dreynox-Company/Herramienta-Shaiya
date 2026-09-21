@@ -46,6 +46,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsWorldSnapshot? liveSnapshot;
   List<PsCharacterSlot> liveSlots=const [];
   bool liveProtocol=false;
+  bool _movementSendFault=false;
   int questId=1;
   GameStage stage=GameStage.faction;
   bool loading=true;
@@ -125,6 +126,7 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState(()=>progress=s);
     });
     scene=StudioScene((s){if(mounted)setState(()=>progress=s);});
+    scene.onPlayerMoved=_sendLiveMovement;
     scene.gridVisible=false;
     renderer=three.ThreeJS(
       settings:three.Settings(
@@ -161,8 +163,11 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _shutdownRuntime() async {
     final world=liveWorld;
-    liveWorld=null;liveSlots=const [];liveSnapshot=null;liveProtocol=false;
-    if(world!=null){try{await world.close();}catch(_){}}
+    liveWorld=null;liveSlots=const [];liveSnapshot=null;liveProtocol=false;_movementSendFault=false;
+    if(world!=null){
+      world.removePacketListener(_consumeLivePacket);
+      try{await world.close();}catch(_){}
+    }
     await backend.stop();
   }
 
@@ -214,6 +219,91 @@ class _GameClientPageState extends State<GameClientPage> {
     if(existing!=null)await _applyLiveSlot(existing);
     messages.insert(0,'[ps0032] Sesión World activa · ${liveSlots.where((s)=>s.exists).length} personaje(s).');
     return true;
+  }
+  int _wireAngle(double yaw){
+    var angle=yaw%(math.pi*2);
+    if(angle<0)angle+=math.pi*2;
+    return angle.round()&0xffff;
+  }
+
+  void _sendLiveMovement(double x,double y,double z,double yaw,bool run){
+    final world=liveWorld;
+    if(world==null||stage!=GameStage.world||_qaVisual)return;
+    unawaited(world.sendCharacterMove(
+      x:x,y:y,z:z,angle:_wireAngle(yaw),run:run,
+    ).catchError((Object e){
+      if(!_movementSendFault){
+        _movementSendFault=true;
+        messages.insert(0,'[ps0032] Movimiento: '+e.toString());
+        if(mounted)setState((){});
+      }
+    }));
+  }
+
+  bool _consumeLivePacket(PsPacket packet){
+    switch(packet.type){
+      case PsPacketType.mapNpcMove:
+      case PsPacketType.mobMove:
+      case PsPacketType.mapNpcLeave:
+      case PsPacketType.mobLeave:
+      case PsPacketType.mapNpcEnter:
+      case PsPacketType.mobEnter:
+      case PsPacketType.questList:
+      case PsPacketType.questFinishedList:
+        unawaited(_handleLivePacket(packet));
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  Future<void> _handleLivePacket(PsPacket packet) async {
+    final meta=metadata;
+    try{
+      switch(packet.type){
+        case PsPacketType.mapNpcMove:
+          final p=PsNpcMove.parse(packet);
+          scene.moveLiveNpc(p.globalId,p.x,p.y,p.z);
+          break;
+        case PsPacketType.mobMove:
+          final p=PsMobMove.parse(packet);
+          scene.moveLiveMob(p.globalId,p.x,p.z);
+          break;
+        case PsPacketType.mapNpcLeave:
+        case PsPacketType.mobLeave:
+          scene.removeLiveActor(parseActorLeave(packet));
+          break;
+        case PsPacketType.mapNpcEnter:
+          final p=PsNpcEnter.parse(packet);
+          final questNpcKeys=meta==null
+            ?null
+            :meta.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
+          await scene.addLiveNpc(
+            globalId:p.globalId,type:p.type,typeId:p.typeId,
+            x:p.x,y:p.y,z:p.z,angle:p.angle,
+            npcModels:meta?.npcModels,questNpcKeys:questNpcKeys,locale:uiLocale,
+          );
+          break;
+        case PsPacketType.mobEnter:
+          final p=PsMobEnter.parse(packet);
+          await scene.addLiveMob(
+            globalId:p.globalId,mobId:p.mobId,x:p.x,z:p.z,
+            mobModels:meta?.mobModels,locale:uiLocale,
+          );
+          break;
+        case PsPacketType.questList:
+          final quests=parseQuestList(packet);
+          if(quests.isNotEmpty){questId=quests.first.questId;questOpen=true;}
+          break;
+        case PsPacketType.questFinishedList:
+          // Kept for state parity; finished quest badges will consume this next.
+          break;
+      }
+      if(mounted)setState((){});
+    }catch(e){
+      messages.insert(0,'[ps0032] Paquete vivo '+packet.toString()+': '+e.toString());
+      if(mounted)setState((){});
+    }
   }
   Future<void> chooseData() async {
     setState(()=>loading=true);
@@ -493,6 +583,10 @@ class _GameClientPageState extends State<GameClientPage> {
       questNpcKeys:questNpcKeys,
       locale:uiLocale,
     );
+    scene.groundY=y;
+    if(scene.character!=null)scene.character!.root.position.y=y;
+    world.addPacketListener(_consumeLivePacket);
+    _movementSendFault=false;
     if(snapshot.quests.isNotEmpty)questId=snapshot.quests.first.questId;
     else questId=faction=='light'?3781:3792;
     messages.insert(0,'[ps0032] ENTER_MAP '+mapId.toString()+' · '+
