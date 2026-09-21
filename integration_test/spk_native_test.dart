@@ -28,9 +28,7 @@ void main() {
       final decoded = await source.read(source.records.single.entryId);
       expect(decoded, original);
 
-      final out = Directory(
-        '${temp.path}${Platform.pathSeparator}extracted',
-      );
+      final out = Directory('${temp.path}${Platform.pathSeparator}extracted');
       final report = await source.extractAll(out);
       expect((report['result'] as Map)['extracted'], 1);
       final extracted = out
@@ -39,9 +37,12 @@ void main() {
           .where((f) => !f.path.endsWith('SPK_MANIFEST.json'))
           .single;
       expect(await extracted.readAsBytes(), original);
-      expect(await File(
-        '${out.path}${Platform.pathSeparator}SPK_MANIFEST.json',
-      ).exists(), true);
+      expect(
+        await File(
+          '${out.path}${Platform.pathSeparator}SPK_MANIFEST.json',
+        ).exists(),
+        true,
+      );
     } finally {
       await temp.delete(recursive: true);
     }
