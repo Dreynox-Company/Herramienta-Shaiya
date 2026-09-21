@@ -23,9 +23,13 @@ class PsPacketType {
   static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
   static const mobEnter=0x0601;
+  static const mobLeave=0x0602;
+  static const mobMove=0x0603;
   static const questList=0x0901;
   static const questFinishedList=0x0906;
   static const mapNpcEnter=0x0E01;
+  static const mapNpcLeave=0x0E02;
+  static const mapNpcMove=0x0E03;
 }
 
 class PsPacket {
@@ -53,6 +57,10 @@ Uint8List _i32Bytes(int value){
 }
 Uint8List _u32Bytes(int value){
   final b=ByteData(4)..setUint32(0,value,Endian.little);
+  return b.buffer.asUint8List();
+}
+Uint8List _f32Bytes(double value){
+  final b=ByteData(4)..setFloat32(0,value,Endian.little);
   return b.buffer.asUint8List();
 }
 
@@ -135,6 +143,7 @@ class PsConnection {
   final List<int> _buffer=[];
   final List<PsPacket> _queued=[];
   final List<Completer<PsPacket>> _waiters=[];
+  final List<void Function(PsPacket)> _listeners=[];
   StreamSubscription<Uint8List>? _subscription;
   _AesCtrLe? _recv,_send;
   _ExpandedXor? _expandedRecv;
@@ -206,7 +215,13 @@ class PsConnection {
     }
   }
 
+  void addListener(void Function(PsPacket) listener){if(!_listeners.contains(listener))_listeners.add(listener);}
+  void removeListener(void Function(PsPacket) listener)=>_listeners.remove(listener);
+
   void _emit(PsPacket packet){
+    for(final listener in List<void Function(PsPacket)>.from(_listeners)){
+      try{listener(packet);}catch(_){}
+    }
     if(_waiters.isNotEmpty)_waiters.removeAt(0).complete(packet);
     else _queued.add(packet);
   }
@@ -222,6 +237,7 @@ class PsConnection {
   Future<void> close() async {
     if(_closed)return;
     _closed=true;
+    _listeners.clear();
     await _subscription?.cancel();
     await socket.close();
   }
@@ -269,6 +285,46 @@ class PsMobEnter {
   }
 }
 
+class PsCharacterMove {
+  final int globalId,angle,motion;
+  final double x,y,z;
+  const PsCharacterMove(this.globalId,this.angle,this.motion,this.x,this.y,this.z);
+  static PsCharacterMove parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMove||p.body.length<19)throw FormatException('CHARACTER_MOVE truncado: ${p.body.length}');
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterMove(
+      d.getUint32(0,Endian.little),d.getUint16(4,Endian.little),p.body[6],
+      d.getFloat32(7,Endian.little),d.getFloat32(11,Endian.little),d.getFloat32(15,Endian.little),
+    );
+  }
+}
+
+class PsNpcMove {
+  final int globalId,motion;
+  final double x,y,z;
+  const PsNpcMove(this.globalId,this.motion,this.x,this.y,this.z);
+  static PsNpcMove parse(PsPacket p){
+    if(p.type!=PsPacketType.mapNpcMove||p.body.length<17)throw FormatException('MAP_NPC_MOVE truncado: ${p.body.length}');
+    final d=ByteData.sublistView(p.body);
+    return PsNpcMove(d.getUint32(0,Endian.little),p.body[4],d.getFloat32(5,Endian.little),d.getFloat32(9,Endian.little),d.getFloat32(13,Endian.little));
+  }
+}
+
+class PsMobMove {
+  final int globalId,motion;
+  final double x,z;
+  const PsMobMove(this.globalId,this.motion,this.x,this.z);
+  static PsMobMove parse(PsPacket p){
+    if(p.type!=PsPacketType.mobMove||p.body.length<13)throw FormatException('MOB_MOVE truncado: ${p.body.length}');
+    final d=ByteData.sublistView(p.body);
+    return PsMobMove(d.getUint32(0,Endian.little),p.body[4],d.getFloat32(5,Endian.little),d.getFloat32(9,Endian.little));
+  }
+}
+
+int parseActorLeave(PsPacket p){
+  if(![PsPacketType.mobLeave,PsPacketType.mapNpcLeave].contains(p.type)||p.body.length<4)throw FormatException('Actor leave truncado: ${p.body.length}');
+  return ByteData.sublistView(p.body).getUint32(0,Endian.little);
+}
 class PsEnteredMap {
   final int characterId,isAdmin,angle,guildId,vehicleId;
   final double x,y,z;
@@ -449,6 +505,17 @@ class PsWorldSession {
     .toList()
     ..sort((a,b)=>a.slot.compareTo(b.slot));
 
+  void addPacketListener(void Function(PsPacket) listener)=>connection.addListener(listener);
+  void removePacketListener(void Function(PsPacket) listener)=>connection.removeListener(listener);
+
+  Future<void> sendCharacterMove({
+    required double x,required double y,required double z,
+    required int angle,bool run=false,
+  })=>connection.send(PsPacketType.characterMove,[
+    ..._u16Bytes(angle&0xffff),
+    run?1:0,
+    ..._f32Bytes(x),..._f32Bytes(y),..._f32Bytes(z),
+  ]);
   Future<List<PsCharacterSlot>> createCharacter({
     int slot=0,int race=0,int mode=2,int hair=0,int face=0,
     int height=2,int profession=0,int gender=0,String name='FlutterLocal',
