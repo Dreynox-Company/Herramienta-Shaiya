@@ -673,12 +673,21 @@ class WorldInstance {
   );
 }
 
+class WorldNpcSpawn {
+  final int type,typeId;
+  final v.Vector3 position;
+  final double orientation;
+  final List<v.Vector3> patrol;
+  WorldNpcSpawn(this.type,this.typeId,this.position,this.orientation,this.patrol);
+}
+
 class WorldData {
   final int size;
   final Uint16List heights;
   final Uint8List types;
   final List<WorldLayer> layers;
   final List<WorldInstance> objects;
+  final List<WorldNpcSpawn> npcs;
   final String layout;
   WorldData(
     this.size,
@@ -686,6 +695,7 @@ class WorldData {
     this.types,
     this.layers,
     this.objects,
+    this.npcs,
     this.layout,
   );
   static WorldData parse(Uint8List bytes, String source) {
@@ -730,7 +740,54 @@ class WorldData {
         objects.add(WorldInstance(category, names[id], p, f, u));
       }
     }
-    return WorldData(size, heights, types, layers, objects, layout);
+    // Continue through the WLD's gameplay section instead of stopping after
+    // visual instances. This makes NPC positions data-driven and keeps the
+    // Flutter client aligned with the native map file.
+    void skipNames([int max=30000]){
+      final n=r.count(max);
+      for(var i=0;i<n;i++)r.skip(256);
+    }
+    void skipFixedList(int stride,[int max=2000000]){
+      final n=r.count(max);
+      r.skip(n*stride);
+    }
+
+    skipNames();              // MAni asset names
+    skipFixedList(44);        // MAni instances
+    r.skip(256);              // EFT filename
+    skipFixedList(40);        // effect instances
+    r.skip(12);               // three unknown ints
+
+    skipNames();              // Object asset names
+    skipFixedList(40);        // Object instances
+    skipNames();              // Music asset names
+    skipFixedList(36);        // music zones
+    skipNames();              // Sound asset names
+
+    final zoneCount=r.count(200000);
+    for(var i=0;i<zoneCount;i++){
+      r.skip(24);
+      final identifiers=r.count(10000);
+      r.skip(identifiers*4);
+    }
+    skipFixedList(20,200000); // sound effect instances
+    skipFixedList(28,200000); // monster restricted zones
+    skipFixedList(556,200000);// portals
+    skipFixedList(40,200000); // spawn areas
+    skipFixedList(548,200000);// named areas
+
+    final aggregateNpcCount=r.count(1000000);
+    var remaining=aggregateNpcCount;
+    final npcs=<WorldNpcSpawn>[];
+    while(remaining>0){
+      final type=r.i32(),typeId=r.i32(),position=r.vec(),orientation=r.f32();
+      final patrolCount=r.count(10000);
+      final patrol=List.generate(patrolCount,(_)=>r.vec());
+      npcs.add(WorldNpcSpawn(type,typeId,position,orientation,patrol));
+      remaining-=patrolCount+1;
+      if(remaining<0)r.fail('Recuento agregado de NPC inconsistente.');
+    }
+    return WorldData(size, heights, types, layers, objects, npcs, layout);
   }
 
   double heightAt(
