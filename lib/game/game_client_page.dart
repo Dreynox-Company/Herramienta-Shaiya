@@ -32,6 +32,7 @@ class _GameClientPageState extends State<GameClientPage> {
   late final StudioScene scene;
   late final three.ThreeJS renderer;
   late final OfflineBackend backend;
+  late final String uiLocale;
   final focus=FocusNode();
   final nameController=TextEditingController(text:'DreynoxLocal');
 
@@ -110,6 +111,8 @@ class _GameClientPageState extends State<GameClientPage> {
 
   @override void initState(){
     super.initState();
+    final requestedLocale=(Platform.environment['SHAIYA_UI_LOCALE']??'spn').toLowerCase();
+    uiLocale=requestedLocale=='usa'?'usa':'spn';
     backend=OfflineBackend((s){
       messages.insert(0,'[Backend] '+s);
       if(mounted)setState(()=>progress=s);
@@ -217,12 +220,16 @@ class _GameClientPageState extends State<GameClientPage> {
         'interface/countryselect/bg.tga',
         'interface/countryselect/light_select.tga',
         'interface/countryselect/fury_select.tga',
+        'interface/countryselect/text/lightnormal_$uiLocale.tga',
+        'interface/countryselect/text/furynormal_$uiLocale.tga',
+        'interface/countryselect/text/lightselect_$uiLocale.tga',
+        'interface/countryselect/text/furyselect_$uiLocale.tga',
       ],
       GameStage.characterSelect=><String>[
         'interface/characterselect/selectbg.tga',
         'interface/characterselect/button/selectbtn_fi.tga',
         'interface/characterselect/button/selectbtn_disable.tga',
-        'interface/characterselect/button/select_start_spn.tga',
+        'interface/characterselect/button/select_start_$uiLocale.tga',
       ],
       GameStage.characterCreate||GameStage.characterMode=><String>[
         'interface/charactermake/basicinfo_bg.tga',
@@ -357,6 +364,8 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState(()=>loading=true);
     await scene.setBackdrop(null);
     final c=catalog!;
+    // Tutorial quest shown by the native ps0032 client for a fresh level-1 character.
+    questId=faction=='light'?3781:3792;
     svmap??=await _loadSvmap();
     var world=c.worlds.where((p)=>baseName(p).toLowerCase()=='1.wld').firstOrNull;
     world??=c.worlds.firstOrNull;
@@ -384,12 +393,6 @@ class _GameClientPageState extends State<GameClientPage> {
 
     if(map!=null){
       final meta=metadata;
-      if(meta!=null){
-        for(final p in map.npcs){
-          final rule=meta.npcs[p.type.toString()+':'+p.id.toString()];
-          if(rule!=null&&rule.outQuests.isNotEmpty){questId=rule.outQuests.first;break;}
-        }
-      }
       final questNpcKeys=meta==null
         ?null
         :meta.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
@@ -398,6 +401,7 @@ class _GameClientPageState extends State<GameClientPage> {
         npcModels:meta?.npcModels,
         mobModels:meta?.mobModels,
         questNpcKeys:questNpcKeys,
+        locale:uiLocale,
       );
       messages.insert(
         0,
@@ -565,6 +569,7 @@ class _GameClientPageState extends State<GameClientPage> {
           GameStage.faction=>FactionScreen(
             ui:ui!,
             faction:faction,
+            locale:uiLocale,
             onFaction:(value)=>setState(()=>faction=value),
             onNext:()=>unawaited(_goSelect()),
           ),
@@ -572,6 +577,7 @@ class _GameClientPageState extends State<GameClientPage> {
             ui:ui!,
             created:characterCreated,
             name:nameController.text,
+            locale:uiLocale,
             onCreate:()=>unawaited(_goCreate()),
             onDelete:()=>setState(()=>characterCreated=false),
             onStart:()=>unawaited(_enterWorld()),
@@ -603,13 +609,14 @@ class _GameClientPageState extends State<GameClientPage> {
             scene:scene,
             catalog:catalog!,
             characterName:nameController.text,
+            locale:uiLocale,
             ui:ui!,
             messages:messages,
             questOpen:questOpen,
             questId:questId,
             onAcceptQuest:(){
               setState(()=>questOpen=false);
-              final q=catalog!.spanishText?.quest(questId);
+              final q=catalog!.questText(uiLocale)?.quest(questId);
               messages.insert(0,'[Misión] '+(q?.name??'Misión aceptada'));
             },
             onCancelQuest:()=>setState(()=>questOpen=false),
