@@ -591,14 +591,37 @@ class SpkArchiveSource {
   static String detectFormat(Uint8List bytes) {
     if (startsWith(bytes, [0x44, 0x44, 0x53, 0x20])) return 'DDS';
     if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47])) return 'PNG';
+    if (startsWith(bytes, [0x42, 0x4d])) return 'BMP';
+    if (startsWith(bytes, [0xff, 0xd8, 0xff])) return 'JPEG';
+    if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return 'GIF';
     if (startsWith(bytes, [0x4f, 0x67, 0x67, 0x53])) return 'OGG';
     if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46])) return 'RIFF';
     if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04])) return 'ZIP';
     if (startsWith(bytes, [0x4d, 0x5a])) return 'PE';
-    if (bytes.length >= 4) {
-      final s = latin1.decode(bytes.take(4).toList(), allowInvalid: true);
-      if (RegExp(r'^[A-Z0-9]{3,4}$').hasMatch(s)) return s;
+    if (bytes.length >= 18) {
+      final type = bytes[2];
+      final depth = bytes[16];
+      if ((type == 1 ||
+              type == 2 ||
+              type == 3 ||
+              type == 9 ||
+              type == 10 ||
+              type == 11) &&
+          (depth == 8 || depth == 16 || depth == 24 || depth == 32)) {
+        return 'TGA';
+      }
     }
+    if (bytes.length >= 4) {
+      final head = latin1.decode(bytes.take(4).toList(), allowInvalid: true);
+      if (RegExp(r'^[A-Z0-9]{3,4}$').hasMatch(head)) return head;
+    }
+    final probe = latin1
+        .decode(
+          bytes.take(bytes.length > 512 ? 512 : bytes.length).toList(),
+          allowInvalid: true,
+        )
+        .trimLeft();
+    if (probe.startsWith('<?xml') || probe.startsWith('<')) return 'XML/TEXT';
     return 'BIN';
   }
 
@@ -608,19 +631,31 @@ class SpkArchiveSource {
         return '.dds';
       case 'PNG':
         return '.png';
+      case 'BMP':
+        return '.bmp';
+      case 'JPEG':
+        return '.jpg';
+      case 'GIF':
+        return '.gif';
+      case 'TGA':
+        return '.tga';
       case 'OGG':
         return '.ogg';
       case 'RIFF':
         return '.wav';
       case 'ZIP':
         return '.zip';
+      case 'XML/TEXT':
+        return '.txt';
       default:
         return '.bin';
     }
   }
 
   Future<void> importNameMap(String text) async {
-    names = SpkNameMap.fromJson(jsonDecode(text));
+    final incoming = SpkNameMap.fromJson(jsonDecode(text));
+    names.mergeHintRecords(incoming.hints);
+    names.mergeConfirmed(incoming.paths);
   }
 
   Future<Map<String, Object?>> extract(
