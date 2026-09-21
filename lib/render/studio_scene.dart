@@ -448,8 +448,16 @@ class StudioScene extends ChangeNotifier {
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
     for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
-      final norm=math.max(1,math.sqrt(walkX*walkX+walkZ*walkZ)),speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);final x=character!.root.position.x+walkX/norm*delta*speed,z=character!.root.position.z+walkZ/norm*delta*speed;
-      if(world==null||(x.abs()<55&&z.abs()<55)){character!.root.position.x=x;character!.root.position.z=z;if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);}character!.root.rotation.y=math.atan2(walkX,walkZ);
+      final direction=cameraRelativeMovement(walkX,walkZ,yaw);
+      final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
+      final x=character!.root.position.x+direction.x*delta*speed;
+      final z=character!.root.position.z+direction.z*delta*speed;
+      if(world==null||(x.abs()<55&&z.abs()<55)){
+        character!.root.position.x=x;
+        character!.root.position.z=z;
+        if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+      }
+      character!.root.rotation.y=math.atan2(direction.x,direction.z);
     }
     updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
   }
