@@ -143,7 +143,7 @@ class PsConnection {
   final List<int> _buffer=[];
   final List<PsPacket> _queued=[];
   final List<Completer<PsPacket>> _waiters=[];
-  final List<void Function(PsPacket)> _listeners=[];
+  final List<bool Function(PsPacket)> _listeners=[];
   StreamSubscription<Uint8List>? _subscription;
   _AesCtrLe? _recv,_send;
   _ExpandedXor? _expandedRecv;
@@ -215,15 +215,16 @@ class PsConnection {
     }
   }
 
-  void addListener(void Function(PsPacket) listener){if(!_listeners.contains(listener))_listeners.add(listener);}
-  void removeListener(void Function(PsPacket) listener)=>_listeners.remove(listener);
+  void addListener(bool Function(PsPacket) listener){if(!_listeners.contains(listener))_listeners.add(listener);}
+  void removeListener(bool Function(PsPacket) listener)=>_listeners.remove(listener);
 
   void _emit(PsPacket packet){
-    for(final listener in List<void Function(PsPacket)>.from(_listeners)){
-      try{listener(packet);}catch(_){}
+    var consumed=false;
+    for(final listener in List<bool Function(PsPacket)>.from(_listeners)){
+      try{consumed=listener(packet)||consumed;}catch(_){}
     }
     if(_waiters.isNotEmpty)_waiters.removeAt(0).complete(packet);
-    else _queued.add(packet);
+    else if(!consumed)_queued.add(packet);
   }
   void _onError(Object e)=>_fail(e);
   void _onDone()=>_fail(StateError('Socket ps0032 cerrado por el servidor.'));
@@ -505,8 +506,8 @@ class PsWorldSession {
     .toList()
     ..sort((a,b)=>a.slot.compareTo(b.slot));
 
-  void addPacketListener(void Function(PsPacket) listener)=>connection.addListener(listener);
-  void removePacketListener(void Function(PsPacket) listener)=>connection.removeListener(listener);
+  void addPacketListener(bool Function(PsPacket) listener)=>connection.addListener(listener);
+  void removePacketListener(bool Function(PsPacket) listener)=>connection.removeListener(listener);
 
   Future<void> sendCharacterMove({
     required double x,required double y,required double z,
