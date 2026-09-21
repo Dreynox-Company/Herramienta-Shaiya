@@ -17,6 +17,27 @@ int _u64(Uint8List b, int o) =>
 String spkHex(Iterable<int> bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+String spkU64Hex(int value) {
+  final modulus = BigInt.one << 64;
+  var raw = BigInt.from(value);
+  if (raw.isNegative) raw += modulus;
+  return raw.toRadixString(16).padLeft(16, '0');
+}
+
+int? spkParseU64Hex(Object value) {
+  final text = value.toString().trim().toLowerCase().replaceFirst('0x', '');
+  if (text.isEmpty) return null;
+  if (text.startsWith('-')) {
+    return int.tryParse(text, radix: 16);
+  }
+  final raw = BigInt.tryParse(text, radix: 16);
+  if (raw == null || raw < BigInt.zero || raw >= (BigInt.one << 64)) {
+    return null;
+  }
+  final signedLimit = BigInt.one << 63;
+  return (raw >= signedLimit ? raw - (BigInt.one << 64) : raw).toInt();
+}
+
 Uint8List spkHexBytes(String value, {int? expectedBytes}) {
   final clean = value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
   if (clean.isEmpty ||
@@ -178,7 +199,7 @@ class SpkRecord {
     required this.metadata,
   });
 
-  String get idHex => entryId.toRadixString(16).padLeft(16, '0');
+  String get idHex => spkU64Hex(entryId);
   bool get simple => recordType == 1;
   bool get fragmented => recordType == 3;
   bool get resource => simple || fragmented;
@@ -523,10 +544,7 @@ class SpkNameMap {
     return value;
   }
 
-  static int? _id(Object key) => int.tryParse(
-    key.toString().toLowerCase().replaceFirst('0x', ''),
-    radix: 16,
-  );
+  static int? _id(Object key) => spkParseU64Hex(key);
 
   factory SpkNameMap.fromJson(Object? raw) {
     if (raw is! Map) {
@@ -631,11 +649,11 @@ class SpkNameMap {
     'schema': 2,
     'paths': {
       for (final e in paths.entries)
-        e.key.toRadixString(16).padLeft(16, '0'): e.value,
+        spkU64Hex(e.key): e.value,
     },
     'hints': {
       for (final e in hints.entries)
-        e.key.toRadixString(16).padLeft(16, '0'): e.value.toJson(),
+        spkU64Hex(e.key): e.value.toJson(),
     },
     'stats': {
       'confirmed': paths.length,
