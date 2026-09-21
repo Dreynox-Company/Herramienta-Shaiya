@@ -31,6 +31,20 @@ class SpkReadResult {
   const SpkReadResult(this.record, this.bytes, this.format);
 }
 
+class SpkFragmentAuthSample {
+  final SpkRecord record;
+  final SpkAuxRecord part;
+  final int localOrdinal;
+  final Uint8List cipherText;
+
+  const SpkFragmentAuthSample({
+    required this.record,
+    required this.part,
+    required this.localOrdinal,
+    required this.cipherText,
+  });
+}
+
 class SpkArchiveSource {
   static const zstdMagic = [0x28, 0xb5, 0x2f, 0xfd];
 
@@ -576,7 +590,7 @@ class SpkArchiveSource {
     'entry_id_chunk1_le',
   ];
 
-  Uint8List _fragmentNonceForRule(
+  static Uint8List fragmentNonceForRule(
     String rule,
     SpkRecord record,
     SpkAuxRecord part,
@@ -619,7 +633,7 @@ class SpkArchiveSource {
   }
 
   Uint8List _fragmentNonce(SpkRecord record, SpkAuxRecord part, int ordinal) =>
-      _fragmentNonceForRule(profile.chunkNonceRule, record, part, ordinal);
+      fragmentNonceForRule(profile.chunkNonceRule, record, part, ordinal);
 
   String identifyChunkNonceRule({
     required int parentOrdinal,
@@ -642,7 +656,7 @@ class SpkArchiveSource {
     final part = index.auxiliary[auxiliaryOrdinal];
     final local = auxiliaryOrdinal - record.auxiliaryStart;
     for (final rule in supportedChunkNonceRules) {
-      final candidate = _fragmentNonceForRule(rule, record, part, local);
+      final candidate = fragmentNonceForRule(rule, record, part, local);
       if (candidate.length == observedNonce.length) {
         var same = true;
         for (var i = 0; i < candidate.length; i++) {
@@ -653,6 +667,60 @@ class SpkArchiveSource {
         }
         if (same) return rule;
       }
+    }
+    return 'unsupported';
+  }
+
+  static Future<String> deriveChunkNonceRuleFromSamples({
+    required Iterable<SpkFragmentAuthSample> samples,
+    required Uint8List key,
+    Uint8List? aad,
+    int minimumAuthenticatedSamples = 2,
+  }) async {
+    if ((key.length != 16 && key.length != 32) ||
+        minimumAuthenticatedSamples < 1) {
+      throw ArgumentError('Parámetros de derivación AES-GCM inválidos.');
+    }
+    var candidates = supportedChunkNonceRules.toSet();
+    final successes = <String, int>{
+      for (final rule in supportedChunkNonceRules) rule: 0,
+    };
+    var sampled = 0;
+    for (final sample in samples) {
+      final surviving = <String>{};
+      for (final rule in candidates) {
+        try {
+          await decryptGcm(
+            sample.cipherText,
+            key,
+            fragmentNonceForRule(
+              rule,
+              sample.record,
+              sample.part,
+              sample.localOrdinal,
+            ),
+            sample.part.metadata,
+            aad: aad,
+          );
+          surviving.add(rule);
+          successes[rule] = (successes[rule] ?? 0) + 1;
+        } catch (_) {
+          // Una combinación incorrecta falla la autenticación GCM.
+        }
+      }
+      candidates = surviving;
+      sampled++;
+      if (candidates.isEmpty) return 'unsupported';
+      if (candidates.length == 1) {
+        final rule = candidates.single;
+        if ((successes[rule] ?? 0) >= minimumAuthenticatedSamples) {
+          return rule;
+        }
+      }
+    }
+    if (candidates.length == 1) {
+      final rule = candidates.single;
+      if ((successes[rule] ?? 0) >= minimumAuthenticatedSamples) return rule;
     }
     return 'unsupported';
   }
@@ -669,60 +737,37 @@ class SpkArchiveSource {
       throw ArgumentError('Los límites de derivación deben ser positivos.');
     }
 
-    var candidates = supportedChunkNonceRules.toSet();
-    final successes = <String, int>{
-      for (final rule in supportedChunkNonceRules) rule: 0,
-    };
-    var sampled = 0;
-
+    final samples = <SpkFragmentAuthSample>[];
     for (final record in index.fragmentedResources) {
       final parts = index.auxiliary.sublist(
         record.auxiliaryStart,
         record.auxiliaryStart + record.chunkCount,
       );
       for (var local = 0; local < parts.length; local++) {
-        if (sampled >= maxSamples) break;
+        if (samples.length >= maxSamples) break;
         final part = parts[local];
-        final cipher = await readRange(
-          file,
-          part.dataOffset,
-          part.storedBytes,
-          fileBytes,
+        samples.add(
+          SpkFragmentAuthSample(
+            record: record,
+            part: part,
+            localOrdinal: local,
+            cipherText: await readRange(
+              file,
+              part.dataOffset,
+              part.storedBytes,
+              fileBytes,
+            ),
+          ),
         );
-        final surviving = <String>{};
-        for (final rule in candidates) {
-          try {
-            await decryptGcm(
-              cipher,
-              key,
-              _fragmentNonceForRule(rule, record, part, local),
-              part.metadata,
-              aad: profile.resourceAad.isEmpty ? null : profile.resourceAad,
-            );
-            surviving.add(rule);
-            successes[rule] = (successes[rule] ?? 0) + 1;
-          } catch (_) {
-            // Un nonce/AAD incorrecto falla la autenticación GCM.
-          }
-        }
-        candidates = surviving;
-        sampled++;
-        if (candidates.isEmpty) return 'unsupported';
-        if (candidates.length == 1) {
-          final rule = candidates.single;
-          if ((successes[rule] ?? 0) >= minimumAuthenticatedSamples) {
-            return rule;
-          }
-        }
       }
-      if (sampled >= maxSamples) break;
+      if (samples.length >= maxSamples) break;
     }
-
-    if (candidates.length == 1) {
-      final rule = candidates.single;
-      if ((successes[rule] ?? 0) >= minimumAuthenticatedSamples) return rule;
-    }
-    return 'unsupported';
+    return deriveChunkNonceRuleFromSamples(
+      samples: samples,
+      key: key,
+      aad: profile.resourceAad.isEmpty ? null : profile.resourceAad,
+      minimumAuthenticatedSamples: minimumAuthenticatedSamples,
+    );
   }
 
   static Future<Uint8List> decodePayload(
@@ -952,8 +997,7 @@ class SpkArchiveSource {
             'Omitido ${technicalPath(record)}: no pudo decodificarse',
             i + 1,
             list.length,
-          );
-        }
+          );        }
       }
       await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
         const JsonEncoder.withIndent('  ').convert({
@@ -997,7 +1041,8 @@ class SpkArchiveSource {
           RegExp(
             r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)',
             caseSensitive: false,
-          ).hasMatch(p)) {        throw FormatException('Ruta no segura: $path');
+          ).hasMatch(p)) {
+        throw FormatException('Ruta no segura: $path');
       }
     }
     return parts.join(Platform.pathSeparator);
