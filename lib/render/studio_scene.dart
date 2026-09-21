@@ -266,7 +266,7 @@ class StudioScene extends ChangeNotifier {
       try{
         final a=await loadCreature(record);
         final x=p.x-originX,z=-(p.z-originZ);
-        final y=world==null?0:world!.heightAt(p.x,p.z,scale:.02,offset:-200);
+        final y=world==null?0.0:world!.heightAt(p.x,p.z,scale:.02,offset:-200);
         a.root.position.setValues(x,y,z);
         gameActors.add(a);gameActorById[p.globalId]=a;view!.scene.add(a.root);mobsLoaded++;
         gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
