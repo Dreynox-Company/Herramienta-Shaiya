@@ -26,7 +26,12 @@ class PsPacketType {
   static const mobLeave=0x0602;
   static const mobMove=0x0603;
   static const questList=0x0901;
+  static const questStart=0x0902;
+  static const questEnd=0x0903;
+  static const questUpdateCount=0x0905;
   static const questFinishedList=0x0906;
+  static const questEndSelect=0x0907;
+  static const questQuit=0x0908;
   static const mapNpcEnter=0x0E01;
   static const mapNpcLeave=0x0E02;
   static const mapNpcMove=0x0E03;
@@ -47,6 +52,10 @@ String _fixedString(Uint8List b,int o,int n){
   return utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
 }
 
+Uint8List _i16Bytes(int value){
+  final b=ByteData(2)..setInt16(0,value,Endian.little);
+  return b.buffer.asUint8List();
+}
 Uint8List _u16Bytes(int value){
   final b=ByteData(2)..setUint16(0,value,Endian.little);
   return b.buffer.asUint8List();
@@ -532,6 +541,22 @@ class PsWorldSession {
   })=>connection.send(
     PsPacketType.characterMove,
     encodeCharacterMoveBody(angle:angle,run:run,x:x,y:y,z:z),
+  );
+  Future<void> startQuest(int npcGlobalId,int questId) async {
+    await connection.send(PsPacketType.questStart,[
+      ..._u32Bytes(npcGlobalId),..._i16Bytes(questId),
+    ]);
+    final result=await connection.nextType(PsPacketType.questStart);
+    if(result.body.length<6)throw FormatException('QUEST_START truncado.');
+    final d=ByteData.sublistView(result.body);
+    final npc=d.getUint32(0,Endian.little),quest=d.getInt16(4,Endian.little);
+    if(npc!=npcGlobalId||quest!=questId){
+      throw StateError('QUEST_START confirmó npc/quest inesperado: $npc/$quest');
+    }
+  }
+
+  Future<void> quitQuest(int questId)=>connection.send(
+    PsPacketType.questQuit,_i16Bytes(questId),
   );
   Future<void> deleteCharacter(int characterId) async {
     await connection.send(PsPacketType.deleteCharacter,_u32Bytes(characterId));
