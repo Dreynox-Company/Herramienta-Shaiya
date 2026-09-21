@@ -15,6 +15,9 @@ class WorldHud extends StatelessWidget {
   final PsHitpoints? hitpoints;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
+  final List<PsInventoryItem> inventory;
+  final bool inventoryOpen;
+  final VoidCallback onToggleInventory;
   final ValueChanged<int> onHotbar;
   final UiAssetCache ui;
   final List<String> messages;
@@ -33,6 +36,9 @@ class WorldHud extends StatelessWidget {
     required this.hitpoints,
     required this.skillBook,
     required this.skillBar,
+    required this.inventory,
+    required this.inventoryOpen,
+    required this.onToggleInventory,
     required this.onHotbar,
     required this.locale,
     required this.ui,
@@ -52,6 +58,11 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           ..._worldLabels(),
+          if(inventoryOpen)
+            Positioned(
+              right:198,top:250,width:292,height:390,
+              child:_inventoryWindow(),
+            ),
           if (questOpen)
             Positioned(
               left: 566,
@@ -361,14 +372,17 @@ class WorldHud extends StatelessWidget {
     ),
   ]);
 
-  Widget _bottomButton(String path)=>DataRegion(
-    cache:ui,
-    path:path,
-    sheetWidth:256,
-    sheetHeight:64,
-    source:const Rect.fromLTWH(0,0,64,64),
-    width:31,
-    height:31,
+  Widget _bottomButton(String path,{VoidCallback? onTap})=>GestureDetector(
+    onTap:onTap,
+    child:DataRegion(
+      cache:ui,
+      path:path,
+      sheetWidth:256,
+      sheetHeight:64,
+      source:const Rect.fromLTWH(0,0,64,64),
+      width:31,
+      height:31,
+    ),
   );
 
   Widget _bottomHud()=>Stack(children:[
@@ -401,7 +415,7 @@ class WorldHud extends StatelessWidget {
       child:Row(children:[
         _bottomButton('interface/main_bottom_btn_status.tga'),
         _bottomButton('interface/main_bottom_btn_skill.tga'),
-        _bottomButton('interface/main_bottom_btn_item.tga'),
+        _bottomButton('interface/main_bottom_btn_item.tga',onTap:onToggleInventory),
         _bottomButton('interface/main_bottom_btn_quest.tga'),
         _bottomButton('interface/main_bottom_btn_sub.tga'),
         _bottomButton('interface/main_bottom_btn_guild.tga'),
@@ -412,6 +426,77 @@ class WorldHud extends StatelessWidget {
       ]),
     ),
   ]);
+
+  Widget _inventoryWindow()=>Container(
+    decoration:BoxDecoration(
+      color:const Color(0xe6241a12),
+      border:Border.all(color:const Color(0xff9b7c54),width:2),
+      boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:12)],
+    ),
+    child:Column(children:[
+      Container(
+        height:34,
+        padding:const EdgeInsets.symmetric(horizontal:10),
+        decoration:const BoxDecoration(
+          gradient:LinearGradient(colors:[Color(0xff5b3421),Color(0xff2b1810)]),
+        ),
+        child:Row(children:[
+          const Expanded(child:Text('Inventario',style:TextStyle(color:Color(0xffffdc72),fontSize:12,fontWeight:FontWeight.bold))),
+          Text(inventory.length.toString()+' objetos',style:const TextStyle(fontSize:9,color:Colors.white60)),
+          const SizedBox(width:6),
+          GestureDetector(onTap:onToggleInventory,child:const Icon(Icons.close,size:17,color:Colors.white70)),
+        ]),
+      ),
+      Expanded(
+        child:inventory.isEmpty
+          ?const Center(child:Text('Sin objetos',style:TextStyle(color:Colors.white54,fontSize:11)))
+          :GridView.builder(
+              padding:const EdgeInsets.all(9),
+              gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount:5,crossAxisSpacing:5,mainAxisSpacing:5,childAspectRatio:1,
+              ),
+              itemCount:inventory.length,
+              itemBuilder:(context,index){
+                final item=inventory[index];
+                final gems=item.gems.where((g)=>g>0).length;
+                return Tooltip(
+                  message:'Bag ${item.bag} · Slot ${item.slot}\nTipo ${item.type}:${item.typeId}\nCalidad ${item.quality} · Cantidad ${item.count}\nLapis/Gemas: $gems${item.craftName.isEmpty?'':'\n'+item.craftName}${item.dyed?'\nTeñido':''}',
+                  child:Container(
+                    decoration:BoxDecoration(
+                      color:const Color(0xff17120e),
+                      border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
+                    ),
+                    child:Stack(children:[
+                      Center(child:Icon(
+                        item.type<=16?Icons.shield:Icons.inventory_2,
+                        size:26,color:item.quality>0?const Color(0xffffd177):const Color(0xffc0b49d),
+                      )),
+                      Positioned(left:2,top:1,child:Text(
+                        '${item.type}:${item.typeId}',
+                        style:const TextStyle(fontSize:6.5,color:Colors.white54),
+                      )),
+                      if(item.count>1)Positioned(right:2,bottom:1,child:Text(
+                        'x${item.count}',style:const TextStyle(fontSize:8,color:Colors.white),
+                      )),
+                      if(gems>0)Positioned(left:2,bottom:1,child:Text(
+                        '◆$gems',style:const TextStyle(fontSize:8,color:Color(0xff7fd9ff)),
+                      )),
+                    ]),
+                  ),
+                );
+              },
+            ),
+      ),
+      Container(
+        height:30,padding:const EdgeInsets.symmetric(horizontal:10),
+        child:Row(children:[
+          Text('Oro: ${details?.gold??0}',style:const TextStyle(fontSize:10,color:Color(0xffffdb70))),
+          const Spacer(),
+          Text('Bolsas: ${inventory.map((e)=>e.bag).toSet().length}',style:const TextStyle(fontSize:9,color:Colors.white54)),
+        ]),
+      ),
+    ]),
+  );
 
   Widget _questWindow() {
     final text=catalog.questText(locale)?.quest(questId);
