@@ -51,4 +51,53 @@ void main(){
     expect(x.mp,75);
     expect(x.sp,150);
   });
+
+  test('parsea skills buffs y quickbar del bootstrap real',(){
+    final skillBody=Uint8List(11);
+    final sd=ByteData.sublistView(skillBody)
+      ..setUint16(0,7,Endian.little)
+      ..setUint16(3,321,Endian.little)
+      ..setInt32(7,12,Endian.little);
+    skillBody[2]=1;
+    skillBody[5]=3;
+    skillBody[6]=4;
+    final skills=PsCharacterSkills.parse(
+      PsPacket(PsPacketType.characterSkills,skillBody),
+    );
+    expect(skills.skillPoints,7);
+    expect(skills.skills.single.skillId,321);
+    expect(skills.skills.single.level,3);
+    expect(skills.skills.single.number,4);
+    expect(skills.skills.single.cooldownSeconds,12);
+
+    final buffBody=Uint8List(12);
+    buffBody[0]=1;
+    final bd=ByteData.sublistView(buffBody)
+      ..setUint32(1,88,Endian.little)
+      ..setUint16(5,444,Endian.little)
+      ..setInt32(8,30,Endian.little);
+    buffBody[7]=2;
+    final buffs=parseActiveBuffs(
+      PsPacket(PsPacketType.characterActiveBuffs,buffBody),
+    );
+    expect(buffs.single.id,88);
+    expect(buffs.single.skillId,444);
+    expect(buffs.single.level,2);
+    expect(buffs.single.countdownSeconds,30);
+
+    final barBody=Uint8List(14);
+    barBody[0]=1;
+    final qd=ByteData.sublistView(barBody);
+    barBody[5]=0;
+    barBody[6]=3;
+    barBody[7]=100;
+    qd.setUint16(8,321,Endian.little);
+    qd.setInt32(10,0,Endian.little);
+    final bar=parseQuickBar(
+      PsPacket(PsPacketType.characterSkillBar,barBody),
+    );
+    expect(bar.single.slot,3);
+    expect(bar.single.bag,100);
+    expect(bar.single.number,321);
+  });
 }
