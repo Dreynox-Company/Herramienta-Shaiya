@@ -10,8 +10,18 @@ import 'package:path_provider/path_provider.dart';
 import '../core/spk_archive.dart';
 import '../data/spk_source.dart';
 
+String _spkNormalizePath(String value, String separator) {
+  final alternate = separator == '\\' ? '/' : '\\';
+  var normalized = value.replaceAll(alternate, separator);
+  final doubled = '$separator$separator';
+  while (normalized.contains(doubled)) {
+    normalized = normalized.replaceAll(doubled, separator);
+  }
+  return normalized;
+}
+
 String _spkParentPath(String value, String separator) {
-  final normalized = value.replaceAll(RegExp(r'[\\/]+'), separator);
+  final normalized = _spkNormalizePath(value, separator);
   final index = normalized.lastIndexOf(separator);
   if (index < 0) return '.';
   if (index == 0) return separator;
@@ -26,7 +36,7 @@ List<String> spkProfileCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final normalizedSpk = spkPath.replaceAll(RegExp(r'[\\/]+'), separator);
+  final normalizedSpk = _spkNormalizePath(spkPath, separator);
   final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
@@ -52,7 +62,7 @@ List<String> spkNameMapCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final normalizedSpk = spkPath.replaceAll(RegExp(r'[\\/]+'), separator);
+  final normalizedSpk = _spkNormalizePath(spkPath, separator);
   final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
@@ -81,7 +91,7 @@ List<String> spkResourceProfileCandidatePaths(
   final separator = separatorOverride == null || separatorOverride.isEmpty
       ? Platform.pathSeparator
       : separatorOverride.substring(0, 1);
-  final normalizedSpk = spkPath.replaceAll(RegExp(r'[\\/]+'), separator);
+  final normalizedSpk = _spkNormalizePath(spkPath, separator);
   final spkDir = _spkParentPath(normalizedSpk, separator);
   final exeDir = _spkParentPath(
     executablePath ?? Platform.resolvedExecutable,
@@ -987,8 +997,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             '${result['files']} recursos extraídos en ${result['folder']}',
           ),
           duration: const Duration(seconds: 8),
-        ),
-      );
+        ),      );
     }
   });
 
@@ -997,7 +1006,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (c) => AlertDialog(        title: Text(fileName(record)),
+      builder: (c) => AlertDialog(
+        title: Text(fileName(record)),
         content: SizedBox(
           width: 590,
           child: SelectableText(
