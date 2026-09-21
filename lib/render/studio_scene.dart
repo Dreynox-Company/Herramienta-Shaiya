@@ -139,6 +139,50 @@ class StudioScene extends ChangeNotifier {
     }
     say('${gameActors.length} NPC/criaturas locales cargados.');
   }
+
+  Future<void> spawnGameActorsFromSvmap(SvmapData map,{int npcLimit=28,int mobLimit=18}) async {
+    for(final a in gameActors){a.dispose();}
+    gameActors.clear();
+    if(view==null||catalog==null)return;
+    final npcRecords={for(final n in catalog!.npcs)n.id:n};
+    var npcsLoaded=0;
+    for(final p in map.npcs){
+      if(npcsLoaded>=npcLimit)break;
+      final x=p.position.x-originX,z=-(p.position.z-originZ);
+      if(x.abs()>60||z.abs()>60)continue;
+      final record=npcRecords[p.id];
+      if(record==null)continue;
+      try{
+        final a=await loadCreature(record);
+        a.root.position.setValues(x,p.position.y,z);
+        a.root.rotation.y=-p.yaw;
+        gameActors.add(a);view!.scene.add(a.root);npcsLoaded++;
+      }catch(e){report('SVMAP NPC ${p.type}:${p.id}: $e');}
+    }
+    final mobRecords={for(final m in catalog!.creatures)m.id:m};
+    var mobsLoaded=0;
+    for(final area in map.mobAreas){
+      if(mobsLoaded>=mobLimit)break;
+      final center=area.center;
+      final baseX=center.x-originX,baseZ=-(center.z-originZ);
+      if(baseX.abs()>68||baseZ.abs()>68)continue;
+      for(final spawn in area.mobs){
+        if(mobsLoaded>=mobLimit)break;
+        final record=mobRecords[spawn.id];
+        if(record==null)continue;
+        try{
+          final a=await loadCreature(record);
+          final ring=mobsLoaded%6,rad=2.5+(mobsLoaded%3);
+          final angle=ring/6*math.pi*2;
+          final x=baseX+math.cos(angle)*rad,z=baseZ+math.sin(angle)*rad;
+          a.root.position.setValues(x,world==null?center.y:world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200),z);
+          a.root.rotation.y=-angle;
+          gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
+        }catch(e){report('SVMAP mob ${spawn.id}: $e');}
+      }
+    }
+    say('$npcsLoaded NPC y $mobsLoaded criaturas colocados desde SVMAP.');
+  }
   Future<void> selectCreature(CreatureRecord? c,String kind) async {
     final revision=kind=='enemy'?++_creatureRevision:kind=='mount'?++_mountRevision:++_wingRevision;
     if(kind=='mount'&&mountRecord!=null){_seats['${mountRecord!.source}#${mountRecord!.id}']=(height:riderHeight,forward:riderForward);}
