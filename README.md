@@ -110,5 +110,4 @@ ResourceProbe conserva una ventana breve para observar chunks nativos, pero no d
 
 Cuando simples y fragmentados están autenticados, el explorador habilita **Usar en Studio**. El SPK se monta directamente detrás de la misma abstracción `Library` usada por carpeta DATA y SAH/SAF; los modelos, texturas, animaciones y demás lectores consumen rangos del SPK sin exigir una extracción previa.
 
-El montaje es deliberadamente conservador: usa rutas confirmadas y rutas `strong-inferred`; las inferencias aproximadas por tamaño quedan excluidas por defecto. Si el perfil criptográfico no está completamente validado, el montaje falla cerrado y el catálogo activo no se reemplaza.
-
+El montaje es deliberadamente conservador: usa rutas confirmadas y rutas `strong-inferred`; las inferencias aproximadas por tamaño quedan excluidas por defecto. Si el perfil criptográfico no está completamente validado, el montaje falla cerrado y el catálogo activo no se reemplaza.\n\nSi todavía no hay tablas MLT utilizables, el catálogo puede reconstruir un conjunto mínimo de arquetipos únicamente cuando encuentra una pareja 3DC/DDS con el mismo nombre base dentro de las rutas fuertes. Esta reconstrucción queda marcada como inferida, exige torso, piernas, manos y botas, y no incorpora rutas aproximadas.
