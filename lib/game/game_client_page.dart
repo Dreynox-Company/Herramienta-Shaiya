@@ -193,6 +193,7 @@ class _GameClientPageState extends State<GameClientPage> {
         c.worlds.length.toString()+' mapas.',
     );
     if(mounted)setState(()=>loading=false);
+    await _signalQaReady();
     await _markQaReady();
     focus.requestFocus();
   }
