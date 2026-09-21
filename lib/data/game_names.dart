@@ -219,6 +219,7 @@ WorldResource _world(Map<String, Object> value) {
   slim.spawns.addAll(all.spawns);
   slim.portals.addAll(all.portals);
   slim.music.addAll(all.music);
+  slim.npcs.addAll(all.npcs);
   slim.sky = all.sky;
   slim.cloud = all.cloud;
   slim.secondCloud = all.secondCloud;
