@@ -1,0 +1,235 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:three_js/three_js.dart' as three;
+
+import 'core/formats.dart';
+import 'core/npc_quest_metadata.dart';
+import 'core/textures.dart';
+import 'core/world_resources.dart';
+import 'data/catalog.dart';
+import 'data/library.dart';
+import 'input/viewport_movement_input.dart';
+import 'render/studio_scene.dart';
+
+void main(List<String> args) {
+  WidgetsFlutterBinding.ensureInitialized();
+  final dataArg = args.where((a) => a.startsWith('--data=')).firstOrNull;
+  runApp(
+    ShaiyaGameApp(
+      initialData: dataArg?.substring('--data='.length),
+      quickWorld: args.contains('--quick-world'),
+    ),
+  );
+}
+
+class ShaiyaGameApp extends StatelessWidget {
+  final String? initialData;
+  final bool quickWorld;
+  const ShaiyaGameApp({super.key, this.initialData, this.quickWorld = false});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'Shaiya · Dreynox Offline',
+    locale: const Locale('es'),
+    supportedLocales: const [Locale('es')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    theme: ThemeData(
+      brightness: Brightness.dark,
+      useMaterial3: false,
+      fontFamily: 'Segoe UI',
+      scaffoldBackgroundColor: Colors.black,
+      colorScheme: const ColorScheme.dark(
+        primary: Color(0xffad2f38),
+        secondary: Color(0xffd9ad68),
+      ),
+    ),
+    home: GameClient(initialData: initialData, quickWorld: quickWorld),
+  );
+}
+
+enum ClientScreen { boot, server, faction, characters, world }
+
+class LocalCharacter {
+  String name;
+  String archetype;
+  int level, mode, map;
+  double x, y, z;
+  LocalCharacter({
+    this.name = 'DreynoxLocal',
+    this.archetype = 'humf',
+    this.level = 1,
+    this.mode = 2,
+    this.map = 1,
+    this.x = 580,
+    this.y = 78.68,
+    this.z = 1769.877,
+  });
+
+  Map<String, Object> toJson() => {
+    'name': name,
+    'archetype': archetype,
+    'level': level,
+    'mode': mode,
+    'map': map,
+    'x': x,
+    'y': y,
+    'z': z,
+  };
+
+  factory LocalCharacter.fromJson(Map<String, dynamic> json) => LocalCharacter(
+    name: json['name']?.toString() ?? 'DreynoxLocal',
+    archetype: json['archetype']?.toString() ?? 'humf',
+    level: (json['level'] as num?)?.toInt() ?? 1,
+    mode: (json['mode'] as num?)?.toInt() ?? 2,
+    map: (json['map'] as num?)?.toInt() ?? 1,
+    x: (json['x'] as num?)?.toDouble() ?? 580,
+    y: (json['y'] as num?)?.toDouble() ?? 78.68,
+    z: (json['z'] as num?)?.toDouble() ?? 1769.877,
+  );
+}
+
+class _NpcVisual {
+  final WorldNpc placement;
+  final NpcDefinition definition;
+  final Actor actor;
+  _NpcVisual(this.placement, this.definition, this.actor);
+  void dispose() => actor.dispose();
+}
+
+class GameClient extends StatefulWidget {
+  final String? initialData;
+  final bool quickWorld;
+  const GameClient({super.key, this.initialData, this.quickWorld = false});
+
+  @override
+  State<GameClient> createState() => _GameClientState();
+}
+
+class _GameClientState extends State<GameClient> {
+  late final StudioScene scene;
+  late final three.ThreeJS renderer;
+  final FocusNode focus = FocusNode();
+  final Map<String, Future<Uint8List>> _uiCache = {};
+  final List<_NpcVisual> _npcVisuals = [];
+  final List<int> acceptedQuests = [];
+
+  Library? library;
+  Catalog? catalog;
+  NpcQuestDatabase? npcDatabase;
+  ClientScreen screen = ClientScreen.boot;
+  LocalCharacter character = LocalCharacter();
+  QuestDefinition? activeQuest;
+  NpcDefinition? activeQuestNpc;
+  bool lightFaction = true;
+  bool rendererReady = false;
+  bool loading = false;
+  String progress = 'Preparando cliente Flutter…';
+  String? error;
+  double gestureScale = 1;
+  Timer? autosave;
+
+  @override
+  void initState() {
+    super.initState();
+    scene = StudioScene(_log)..game.quality = 2;
+    renderer = three.ThreeJS(
+      settings: three.Settings(
+        clearColor: 0x050505,
+        antialias: true,
+        enableShadowMap: false,
+        toneMapping: three.NoToneMapping,
+      ),
+      setup: () => scene.setup(renderer),
+      onSetupComplete: () {
+        rendererReady = true;
+        if (mounted) setState(() {});
+        if (screen == ClientScreen.characters) {
+          unawaited(_prepareCharacterSelection());
+        } else if (screen == ClientScreen.world) {
+          unawaited(_enterWorld());
+        }
+      },
+    );
+    scene.addListener(_sceneChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    autosave = Timer.periodic(const Duration(seconds: 10), (_) => _saveCharacter());
+  }
+
+  @override
+  void dispose() {
+    autosave?.cancel();
+    _clearNpcVisuals();
+    scene.removeListener(_sceneChanged);
+    scene.dispose();
+    library?.dispose();
+    focus.dispose();
+    super.dispose();
+  }
+
+  void _sceneChanged() {
+    if (!mounted) return;
+    if (screen == ClientScreen.world && scene.character != null) {
+      character.x = scene.originX + scene.character!.root.position.x;
+      character.y = scene.character!.root.position.y;
+      character.z = scene.originZ - scene.character!.root.position.z;
+    }
+    setState(() {});
+  }
+
+  void _log(String message) {
+    progress = message;
+    if (mounted) setState(() {});
+  }
+
+  Future<File> _saveFile() async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/Dreynox/ShaiyaFlutterOffline');
+    await dir.create(recursive: true);
+    return File('${dir.path}/character_${lightFaction ? 'light' : 'fury'}.json');
+  }
+
+  Future<void> _loadCharacter() async {
+    try {
+      final file = await _saveFile();
+      if (await file.exists()) {
+        character = LocalCharacter.fromJson(
+          Map<String, dynamic>.from(jsonDecode(await file.readAsString()) as Map),
+        );
+      } else {
+        character = LocalCharacter(archetype: lightFaction ? 'humf' : 'demf');
+      }
+    } catch (_) {
+      character = LocalCharacter(archetype: lightFaction ? 'humf' : 'demf');
+    }
+  }
+
+  Future<void> _saveCharacter() async {
+    try {
+      final file = await _saveFile();
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(character.toJson()),
+        flush: true,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _bootstrap() async {
+    setState(() {
+      loading = true;
+      error = null;
+      progress = 'Indexando DATA original…';
+    });
+    try {
+      Library? next;
+      final requested = widget.initialData;
+      if (requested != null && requested.isNotEm
