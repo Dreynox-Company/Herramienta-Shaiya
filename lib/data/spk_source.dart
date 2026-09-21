@@ -113,10 +113,7 @@ class SpkArchiveSource {
       throw SpkFailure(
         'SPK_INDEX_DECODE',
         'Zstandard no produjo la longitud declarada.',
-        {
-          'expected': header.indexDecodedBytes,
-          'actual': decoded?.length,
-        },
+        {'expected': header.indexDecodedBytes, 'actual': decoded?.length},
       );
     }
     final records = SpkIndex.parseRecords(decoded, header);
@@ -200,11 +197,7 @@ class SpkArchiveSource {
       throw const FormatException('Parámetros AES-GCM SPK inválidos.');
     }
     final clear = await AesGcm.with128bits().decrypt(
-      SecretBox(
-        cipherText,
-        nonce: nonce,
-        mac: Mac(tag),
-      ),
+      SecretBox(cipherText, nonce: nonce, mac: Mac(tag)),
       secretKey: SecretKey(secret),
       aad: aad ?? const [],
     );
@@ -329,12 +322,7 @@ class SpkArchiveSource {
       fileBytes,
     );
     return decodePayload(
-      await decryptGcm(
-        cipher,
-        key,
-        record.nonce,
-        record.tag,
-      ),
+      await decryptGcm(cipher, key, record.nonce, record.tag),
       record.decodedBytes,
     );
   }
@@ -377,11 +365,7 @@ class SpkArchiveSource {
     return decodePayload(packed.takeBytes(), record.decodedBytes);
   }
 
-  Uint8List _fragmentNonce(
-    SpkRecord record,
-    SpkAuxRecord part,
-    int ordinal,
-  ) {
+  Uint8List _fragmentNonce(SpkRecord record, SpkAuxRecord part, int ordinal) {
     final data = ByteData(12);
     switch (profile.chunkNonceRule) {
       case 'offset_le96':
@@ -465,8 +449,9 @@ class SpkArchiveSource {
     if (!await parent.exists()) {
       throw const FormatException('La carpeta de destino no existe.');
     }
-    final list =
-        (selection ?? index.resources).where((e) => e.resource).toList();
+    final list = (selection ?? index.resources)
+        .where((e) => e.resource)
+        .toList();
     if (requireComplete &&
         list.any((e) => e.fragmented) &&
         !canReadFragmentedResources) {
@@ -493,9 +478,7 @@ class SpkArchiveSource {
         final result = await readEntry(record);
         var relative = names[record.entryId];
         relative ??=
-            '_SPK_SinNombre/' +
-            record.idHex +
-            extensionFor(result.format);
+            '_SPK_SinNombre/' + record.idHex + extensionFor(result.format);
         final safe = safeRelative(relative);
         final target = File(stage.path + '/' + safe);
         await target.parent.create(recursive: true);
@@ -536,9 +519,7 @@ class SpkArchiveSource {
 
   static String safeRelative(String path) {
     final value = path.replaceAll('\\', '/');
-    if (value.startsWith('/') ||
-        value.contains(':') ||
-        value.length > 4096) {
+    if (value.startsWith('/') || value.contains(':') || value.length > 4096) {
       throw FormatException('Ruta no extraíble: ' + path);
     }
     final parts = value.split('/');

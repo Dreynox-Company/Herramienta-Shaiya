@@ -90,9 +90,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       try {
         final value = jsonDecode(await file.readAsString());
         if (value is Map) {
-          return SpkCryptoProfile.fromJson(
-            Map<String, dynamic>.from(value),
-          );
+          return SpkCryptoProfile.fromJson(Map<String, dynamic>.from(value));
         }
       } catch (_) {}
     }
@@ -180,9 +178,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final prefix = currentFolder.isEmpty ? '' : currentFolder + '/';
     final out = <String>{};
     for (final path in source.folders()) {
-      if (path.isEmpty ||
-          path == currentFolder ||
-          !path.startsWith(prefix)) {
+      if (path.isEmpty || path == currentFolder || !path.startsWith(prefix)) {
         continue;
       }
       final rest = path.substring(prefix.length);
@@ -193,10 +189,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   }
 
   List<SpkRecord> visibleEntries() => source.entriesInFolder(
-        currentFolder,
-        search: search,
-        recursive: recursiveSearch || search.isNotEmpty,
-      );
+    currentFolder,
+    search: search,
+    recursive: recursiveSearch || search.isNotEmpty,
+  );
 
   String fileName(SpkRecord record) {
     final path = source.technicalPath(record).replaceAll('\\', '/');
@@ -230,159 +226,157 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   }
 
   Future<void> importNameMap() => runAction(() async {
-        final picked = await openFile(
-          acceptedTypeGroups: const [
-            XTypeGroup(label: 'Mapa de nombres SPK', extensions: ['json']),
-          ],
-          confirmButtonText: 'Importar mapa',
-        );
-        if (picked == null) return;
-        await source.importNameMap(await File(picked.path).readAsString());
-        if (mounted) {
-          setState(() {
-            currentFolder = '';
-            selected = null;
-          });
-        }
+    final picked = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Mapa de nombres SPK', extensions: ['json']),
+      ],
+      confirmButtonText: 'Importar mapa',
+    );
+    if (picked == null) return;
+    await source.importNameMap(await File(picked.path).readAsString());
+    if (mounted) {
+      setState(() {
+        currentFolder = '';
+        selected = null;
       });
+    }
+  });
 
   Future<void> exportInventory() => runAction(() async {
-        final location = await getSaveLocation(
-          suggestedName: 'spk-inventario.json',
-          acceptedTypeGroups: const [
-            XTypeGroup(label: 'Inventario JSON', extensions: ['json']),
-          ],
-        );
-        if (location == null) return;
-        final body = const JsonEncoder.withIndent('  ').convert({
-          'schema': 1,
-          'source': source.file.path,
-          'diagnostics': source.diagnostics(),
-          'nameMap': source.names.toJson(),
-          'records': source.index.records
-              .map(
-                (record) => {
-                  ...record.toJson(),
-                  'path': source.technicalPath(record),
-                },
-              )
-              .toList(),
-        });
-        await File(location.path).writeAsString(body, flush: true);
-      });
+    final location = await getSaveLocation(
+      suggestedName: 'spk-inventario.json',
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Inventario JSON', extensions: ['json']),
+      ],
+    );
+    if (location == null) return;
+    final body = const JsonEncoder.withIndent('  ').convert({
+      'schema': 1,
+      'source': source.file.path,
+      'diagnostics': source.diagnostics(),
+      'nameMap': source.names.toJson(),
+      'records': source.index.records
+          .map(
+            (record) => {
+              ...record.toJson(),
+              'path': source.technicalPath(record),
+            },
+          )
+          .toList(),
+    });
+    await File(location.path).writeAsString(body, flush: true);
+  });
 
   Future<void> extractSelected() => runAction(() async {
-        final record = selected;
-        if (record == null) return;
-        final folder = await getDirectoryPath(
-          confirmButtonText: 'Extraer recurso aquí',
-        );
-        if (folder == null) return;
-        final result = await source.extract(
-          Directory(folder),
-          selection: [record],
-          requireComplete: false,
-          control: extractControl,
-          progress: (message, done, total) {
-            if (!mounted) return;
-            setState(() {
-              operation = message;
-              operationDone = done;
-              operationTotal = total;
-            });
-          },
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Recurso extraído en ' + result['folder'].toString()),
-            ),
-          );
-        }
-      });
+    final record = selected;
+    if (record == null) return;
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Extraer recurso aquí',
+    );
+    if (folder == null) return;
+    final result = await source.extract(
+      Directory(folder),
+      selection: [record],
+      requireComplete: false,
+      control: extractControl,
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Recurso extraído en ' + result['folder'].toString()),
+        ),
+      );
+    }
+  });
 
   Future<void> extractAll() => runAction(() async {
-        final folder = await getDirectoryPath(
-          confirmButtonText: 'Extraer DATA.SPK aquí',
-        );
-        if (folder == null) return;
-        final result = await source.extract(
-          Directory(folder),
-          control: extractControl,
-          progress: (message, done, total) {
-            if (!mounted) return;
-            setState(() {
-              operation = message;
-              operationDone = done;
-              operationTotal = total;
-            });
-          },
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                result['files'].toString() +
-                    ' recursos extraídos en ' +
-                    result['folder'].toString(),
-              ),
-              duration: const Duration(seconds: 8),
-            ),
-          );
-        }
-      });
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Extraer DATA.SPK aquí',
+    );
+    if (folder == null) return;
+    final result = await source.extract(
+      Directory(folder),
+      control: extractControl,
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['files'].toString() +
+                ' recursos extraídos en ' +
+                result['folder'].toString(),
+          ),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
+  });
 
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
-        final result = await source.readEntry(record);
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: Text(fileName(record)),
-            content: SizedBox(
-              width: 590,
-              child: SelectableText(
-                'ID: ' +
-                    record.idHex +
-                    '\nFormato: ' +
-                    result.format +
-                    '\nOffset: ' +
-                    record.dataOffset.toString() +
-                    '\nAlmacenado: ' +
-                    bytesLabel(record.storedBytes) +
-                    '\nDecodificado: ' +
-                    bytesLabel(result.bytes.length) +
-                    '\nSHA-256: ' +
-                    sha256.convert(result.bytes).toString() +
-                    '\n\nPrimeros 64 bytes:\n' +
-                    spkHex(result.bytes.take(64)),
-                style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(c),
-                child: const Text('Cerrar'),
-              ),
-            ],
+    final result = await source.readEntry(record);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(fileName(record)),
+        content: SizedBox(
+          width: 590,
+          child: SelectableText(
+            'ID: ' +
+                record.idHex +
+                '\nFormato: ' +
+                result.format +
+                '\nOffset: ' +
+                record.dataOffset.toString() +
+                '\nAlmacenado: ' +
+                bytesLabel(record.storedBytes) +
+                '\nDecodificado: ' +
+                bytesLabel(result.bytes.length) +
+                '\nSHA-256: ' +
+                sha256.convert(result.bytes).toString() +
+                '\n\nPrimeros 64 bytes:\n' +
+                spkHex(result.bytes.take(64)),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           ),
-        );
-      });
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  });
 
   Widget folderTree() {
     final all = source.folders();
-    final roots = all
-        .where((path) => path.isNotEmpty && !path.contains('/'))
-        .toList()
-      ..sort();
+    final roots =
+        all.where((path) => path.isNotEmpty && !path.contains('/')).toList()
+          ..sort();
 
     Widget node(String path, int depth) {
       final children = all.where((candidate) {
         if (!candidate.startsWith(path + '/')) return false;
         final rest = candidate.substring(path.length + 1);
         return rest.isNotEmpty && !rest.contains('/');
-      }).toList()
-        ..sort();
+      }).toList()..sort();
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -569,68 +563,68 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   }
 
   Widget detailsPanel(SpkRecord record) => Material(
-        color: const Color(0xff151e2a),
-        child: ListView(
-          padding: const EdgeInsets.all(14),
-          children: [
-            const Text(
-              'PROPIEDADES',
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 1.2,
-                color: Color(0xff9eadc5),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SelectableText(
-              fileName(record),
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            property('ID', record.idHex),
-            property('Tipo', record.recordType.toString()),
-            property('Offset', record.dataOffset.toString()),
-            property('Almacenado', bytesLabel(record.storedBytes)),
-            property('Decodificado', bytesLabel(record.decodedBytes)),
-            property('Fragmentos', record.chunkCount.toString()),
-            property('Ruta', source.technicalPath(record)),
-            const Divider(height: 26),
-            FilledButton.tonalIcon(
-              onPressed: busy ? null : () => inspectResource(record),
-              icon: const Icon(Icons.manage_search, size: 17),
-              label: const Text('Leer / inspeccionar'),
-            ),
-            const SizedBox(height: 7),
-            OutlinedButton.icon(
-              onPressed: busy ? null : extractSelected,
-              icon: const Icon(Icons.file_download_outlined, size: 17),
-              label: const Text('Extraer recurso'),
-            ),
-          ],
+    color: const Color(0xff151e2a),
+    child: ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        const Text(
+          'PROPIEDADES',
+          style: TextStyle(
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: Color(0xff9eadc5),
+          ),
         ),
-      );
+        const SizedBox(height: 12),
+        SelectableText(
+          fileName(record),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        property('ID', record.idHex),
+        property('Tipo', record.recordType.toString()),
+        property('Offset', record.dataOffset.toString()),
+        property('Almacenado', bytesLabel(record.storedBytes)),
+        property('Decodificado', bytesLabel(record.decodedBytes)),
+        property('Fragmentos', record.chunkCount.toString()),
+        property('Ruta', source.technicalPath(record)),
+        const Divider(height: 26),
+        FilledButton.tonalIcon(
+          onPressed: busy ? null : () => inspectResource(record),
+          icon: const Icon(Icons.manage_search, size: 17),
+          label: const Text('Leer / inspeccionar'),
+        ),
+        const SizedBox(height: 7),
+        OutlinedButton.icon(
+          onPressed: busy ? null : extractSelected,
+          icon: const Icon(Icons.file_download_outlined, size: 17),
+          label: const Text('Extraer recurso'),
+        ),
+      ],
+    ),
+  );
 
   Widget property(String name, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 78,
-              child: Text(
-                name,
-                style: const TextStyle(fontSize: 9, color: Color(0xff7f8ea6)),
-              ),
-            ),
-            Expanded(
-              child: SelectableText(
-                value,
-                style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 78,
+          child: Text(
+            name,
+            style: const TextStyle(fontSize: 9, color: Color(0xff7f8ea6)),
+          ),
         ),
-      );
+        Expanded(
+          child: SelectableText(
+            value,
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -680,9 +674,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: const BoxDecoration(
               color: Color(0xff141d29),
-              border: Border(
-                bottom: BorderSide(color: Color(0xff303a4b)),
-              ),
+              border: Border(bottom: BorderSide(color: Color(0xff303a4b))),
             ),
             child: Row(
               children: [
@@ -691,11 +683,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   onPressed: currentFolder.isEmpty
                       ? null
                       : () => setState(() {
-                            final i = currentFolder.lastIndexOf('/');
-                            currentFolder =
-                                i < 0 ? '' : currentFolder.substring(0, i);
-                            selected = null;
-                          }),
+                          final i = currentFolder.lastIndexOf('/');
+                          currentFolder = i < 0
+                              ? ''
+                              : currentFolder.substring(0, i);
+                          selected = null;
+                        }),
                   icon: const Icon(Icons.arrow_upward, size: 18),
                 ),
                 Expanded(
@@ -735,7 +728,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 ),
                 const SizedBox(width: 8),
                 FilterChip(
-                  label: const Text('Recursivo', style: TextStyle(fontSize: 10)),
+                  label: const Text(
+                    'Recursivo',
+                    style: TextStyle(fontSize: 10),
+                  ),
                   selected: recursiveSearch,
                   onSelected: (value) =>
                       setState(() => recursiveSearch = value),
@@ -767,9 +763,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: const BoxDecoration(
               color: Color(0xff121a25),
-              border: Border(
-                top: BorderSide(color: Color(0xff30394a)),
-              ),
+              border: Border(top: BorderSide(color: Color(0xff30394a))),
             ),
             child: busy
                 ? Column(
@@ -795,8 +789,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                             operationTotal == 0
                                 ? ''
                                 : operationDone.toString() +
-                                    ' / ' +
-                                    operationTotal.toString(),
+                                      ' / ' +
+                                      operationTotal.toString(),
                             style: const TextStyle(fontSize: 9),
                           ),
                         ],

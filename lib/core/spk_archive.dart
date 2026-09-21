@@ -30,9 +30,7 @@ Uint8List spkHexBytes(String value, {int? expectedBytes}) {
   }
   if (expectedBytes != null && out.length != expectedBytes) {
     throw FormatException(
-      'Longitud hexadecimal inválida: ' +
-          out.length.toString() +
-          ' bytes.',
+      'Longitud hexadecimal inválida: ' + out.length.toString() + ' bytes.',
     );
   }
   return out;
@@ -81,19 +79,15 @@ class SpkHeader {
       );
     }
     if (_u32(bytes, 0) != spkMagic) {
-      throw SpkFailure(
-        'SPK_MAGIC',
-        'Firma SPK no reconocida.',
-        {'magic': _u32(bytes, 0)},
-      );
+      throw SpkFailure('SPK_MAGIC', 'Firma SPK no reconocida.', {
+        'magic': _u32(bytes, 0),
+      });
     }
     final version = _u32(bytes, 4);
     if (version != spkVersion3) {
-      throw SpkFailure(
-        'SPK_VERSION',
-        'Versión SPK todavía no compatible.',
-        {'version': version},
-      );
+      throw SpkFailure('SPK_VERSION', 'Versión SPK todavía no compatible.', {
+        'version': version,
+      });
     }
     final indexOffset = _u64(bytes, 8);
     final stored = _u64(bytes, 16);
@@ -189,12 +183,10 @@ class SpkRecord {
   bool get fragmented => recordType == 3;
   bool get resource => simple || fragmented;
 
-  Uint8List get nonce => simple
-      ? Uint8List.fromList(metadata.sublist(0, 12))
-      : Uint8List(0);
-  Uint8List get tag => simple
-      ? Uint8List.fromList(metadata.sublist(12, 28))
-      : Uint8List(0);
+  Uint8List get nonce =>
+      simple ? Uint8List.fromList(metadata.sublist(0, 12)) : Uint8List(0);
+  Uint8List get tag =>
+      simple ? Uint8List.fromList(metadata.sublist(12, 28)) : Uint8List(0);
   int get flags => simple ? _u32(metadata, 28) : 0;
 
   Map<String, Object?> toJson() => {
@@ -243,13 +235,9 @@ class SpkIndex {
   Iterable<SpkRecord> get simpleResources => records.where((e) => e.simple);
   Iterable<SpkRecord> get fragmentedResources =>
       records.where((e) => e.fragmented);
-  Iterable<SpkRecord> get specialRecords =>
-      records.where((e) => !e.resource);
+  Iterable<SpkRecord> get specialRecords => records.where((e) => !e.resource);
 
-  static List<SpkRecord> parseRecords(
-    Uint8List decoded,
-    SpkHeader header,
-  ) {
+  static List<SpkRecord> parseRecords(Uint8List decoded, SpkHeader header) {
     if (decoded.length != header.indexDecodedBytes ||
         decoded.length % spkRecordBytes != 0) {
       throw const SpkFailure(
@@ -264,11 +252,9 @@ class SpkIndex {
       final mirror = _u64(decoded, o + 24);
       final trailing = decoded.sublist(o + 80, o + 96);
       if (stored != mirror || trailing.any((b) => b != 0)) {
-        throw SpkFailure(
-          'SPK_RECORD_INTEGRITY',
-          'Registro SPK inválido.',
-          {'ordinal': i},
-        );
+        throw SpkFailure('SPK_RECORD_INTEGRITY', 'Registro SPK inválido.', {
+          'ordinal': i,
+        });
       }
       final type = _u32(decoded, o + 40);
       final metadata = Uint8List.fromList(decoded.sublist(o + 48, o + 80));
@@ -289,10 +275,7 @@ class SpkIndex {
     return out;
   }
 
-  static List<SpkAuxRecord> parseAuxiliary(
-    Uint8List bytes,
-    SpkHeader header,
-  ) {
+  static List<SpkAuxRecord> parseAuxiliary(Uint8List bytes, SpkHeader header) {
     if (bytes.length != header.auxiliaryCount * spkAuxRecordBytes) {
       throw const SpkFailure(
         'SPK_AUX_LENGTH',
@@ -358,11 +341,9 @@ class SpkIndex {
       if (row.auxiliaryStart != cursor ||
           row.chunkCount <= 0 ||
           cursor + row.chunkCount > auxiliary.length) {
-        throw SpkFailure(
-          'SPK_CHUNK_CHAIN',
-          'Cadena de fragmentos inválida.',
-          {'entryId': row.idHex},
-        );
+        throw SpkFailure('SPK_CHUNK_CHAIN', 'Cadena de fragmentos inválida.', {
+          'entryId': row.idHex,
+        });
       }
       final parts = auxiliary.sublist(cursor, cursor + row.chunkCount);
       final total = parts.fold<int>(0, (n, e) => n + e.storedBytes);
@@ -377,11 +358,9 @@ class SpkIndex {
       for (var i = 0; i + 1 < parts.length; i++) {
         if (parts[i].dataOffset + parts[i].storedBytes !=
             parts[i + 1].dataOffset) {
-          throw SpkFailure(
-            'SPK_CHUNK_GAP',
-            'Fragmentos no contiguos.',
-            {'entryId': row.idHex},
-          );
+          throw SpkFailure('SPK_CHUNK_GAP', 'Fragmentos no contiguos.', {
+            'entryId': row.idHex,
+          });
         }
       }
       cursor += row.chunkCount;
@@ -461,13 +440,9 @@ class SpkCryptoProfile {
       ),
       resourceSecret: resources['secretHex'] == null
           ? null
-          : spkHexBytes(
-              resources['secretHex'].toString(),
-              expectedBytes: 16,
-            ),
+          : spkHexBytes(resources['secretHex'].toString(), expectedBytes: 16),
       resourceKeyIsIndexKey: resources['useIndexKey'] == true,
-      chunkNonceRule:
-          (resources['chunkNonceRule'] ?? 'unsupported').toString(),
+      chunkNonceRule: (resources['chunkNonceRule'] ?? 'unsupported').toString(),
     );
   }
 

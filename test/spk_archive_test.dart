@@ -30,10 +30,7 @@ void main() {
 
     test('unknown magic and impossible geometry are rejected', () {
       final bad = Uint8List(spkHeaderBytes);
-      expect(
-        () => SpkHeader.parse(bad, 1024),
-        throwsA(isA<SpkFailure>()),
-      );
+      expect(() => SpkHeader.parse(bad, 1024), throwsA(isA<SpkFailure>()));
 
       final b = Uint8List(spkHeaderBytes);
       put32(b, 0, spkMagic);
@@ -44,10 +41,7 @@ void main() {
       put32(b, 32, 1);
       put32(b, 36, 262144);
       put64(b, 100, 900);
-      expect(
-        () => SpkHeader.parse(b, 1264),
-        throwsA(isA<SpkFailure>()),
-      );
+      expect(() => SpkHeader.parse(b, 1264), throwsA(isA<SpkFailure>()));
     });
 
     test('record mirror mismatch is never accepted', () {
@@ -68,10 +62,7 @@ void main() {
       put64(b, 8, 128);
       put64(b, 16, 10);
       put64(b, 24, 11);
-      expect(
-        () => SpkIndex.parseRecords(b, h),
-        throwsA(isA<SpkFailure>()),
-      );
+      expect(() => SpkIndex.parseRecords(b, h), throwsA(isA<SpkFailure>()));
     });
 
     test('resource relationships cover the data area exactly', () {
@@ -120,11 +111,7 @@ void main() {
         ),
       ];
       expect(
-        () => SpkIndex.validateRelationships(
-          [simple, fragmented],
-          aux,
-          h,
-        ),
+        () => SpkIndex.validateRelationships([simple, fragmented], aux, h),
         returnsNormally,
       );
     });
@@ -148,9 +135,7 @@ void main() {
       final p = SpkCryptoProfile.fromJson({
         'profileId': 'fixture',
         'indexSha256': 'abc',
-        'index': {
-          'secretHex': '00000000000000000000000000000000',
-        },
+        'index': {'secretHex': '00000000000000000000000000000000'},
         'resources': {
           'secretHex': '11111111111111111111111111111111',
           'chunkNonceRule': 'unsupported',
