@@ -68,3 +68,8 @@ Licencias: ver `THIRD_PARTY_NOTICES.md`. No se incluyen modelos/texturas/sonidos
 ## 0.6.5 — acceso SPK visible
 
 La barra superior incluye un botón **SPK** independiente junto a **DATA**. El menú **DATA** conserva también `Archivo DATA.SPK`. La cabecera muestra la versión 0.6.5 para evitar confundir la compilación actual con una versión anterior.
+
+
+## 0.6.6 — perfil SPK empaquetado
+
+Shaiya Studio busca perfiles SPK no solo junto a `data.spk`, sino también en la carpeta `profiles` situada junto al ejecutable. Esto permite distribuir un perfil validado en el paquete Windows sin publicarlo dentro del repositorio. Un SPK con hash distinto sigue rechazándose por integridad y solicita un perfil compatible.
