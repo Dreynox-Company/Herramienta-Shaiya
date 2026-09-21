@@ -418,7 +418,7 @@ class _GameClientPageState extends State<GameClientPage> {
   Future<void> _goSelect() async {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
-    await _prepareSelectionWorld();
+    await _prepareSelectionWorld(creation:false);
     if(mounted)setState((){stage=GameStage.characterSelect;loading=false;});
   }
 
