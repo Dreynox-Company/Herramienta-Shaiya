@@ -75,3 +75,17 @@ The focused SPK format/profile tests pass after deterministic Dart formatting.
 The branch is now ready for the repository-wide regression and Windows native
 build. Full archive extraction remains intentionally fail-closed until the
 fragmented-resource crypto profile is validated.
+
+
+## 0.6.4 · explorador y extracción
+
+La integración se publica desde Shaiya Studio mediante **Biblioteca de recursos
+→ Archivo DATA.SPK**. El explorador mantiene el patrón de un gestor de archivos:
+árbol de carpetas, barra de ruta, navegación hacia arriba, búsqueda, lista de
+archivos con tamaños/ID, propiedades, inspección, extracción individual,
+inventario JSON y **Extraer todo**.
+
+La extracción completa conserva el modelo transaccional: escribe en una carpeta
+temporal, valida cada recurso y publica la carpeta DATA_SPK_* únicamente cuando
+todo termina correctamente. Si el perfil criptográfico no cubre todavía un tipo
+de recurso, la operación se bloquea en lugar de exportar bytes falsos.
