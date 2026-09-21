@@ -318,13 +318,13 @@ class SpkCoreTableDiscovery {
       'rejectedResources': rejected,
       'confirmedTables': {
         for (final entry in confirmed.entries)
-          entry.key.toRadixString(16).padLeft(16, '0'): entry.value,
+          spkU64Hex(entry.key): entry.value,
       },
       'binaryRows': binaryRows,
       'itemCandidates': itemCandidates
           .map(
             (e) => {
-              'entryId': e.id.toRadixString(16).padLeft(16, '0'),
+              'entryId': spkU64Hex(e.id),
               'rows': e.rows,
               'profile': e.profile,
             },
@@ -333,7 +333,7 @@ class SpkCoreTableDiscovery {
       'monsterCandidates': monsterCandidates
           .map(
             (e) => {
-              'entryId': e.id.toRadixString(16).padLeft(16, '0'),
+              'entryId': spkU64Hex(e.id),
               'rows': e.rows,
               'profile': e.profile,
             },
@@ -342,7 +342,7 @@ class SpkCoreTableDiscovery {
       'skillCandidates': skillCandidates
           .map(
             (e) => {
-              'entryId': e.id.toRadixString(16).padLeft(16, '0'),
+              'entryId': spkU64Hex(e.id),
               'rows': e.rows,
               'profile': e.profile,
             },
