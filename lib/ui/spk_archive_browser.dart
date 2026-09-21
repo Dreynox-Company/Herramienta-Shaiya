@@ -684,15 +684,18 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   });
 
-  Future<Map<String, Object?>> _discoverCoreTables() async {
-    if (!source.canExtractAll) {
+  Future<Map<String, Object?>> _discoverCoreTables([
+    SpkArchiveSource? target,
+  ]) async {
+    final archive = target ?? source;
+    if (!archive.canExtractAll) {
       throw const SpkFailure(
         'SPK_TABLE_DISCOVERY_PROFILE',
         'Primero valida el perfil completo de payloads con AutoPerfil SPK.',
       );
     }
     final result = await SpkCoreTableDiscovery.discover(
-      source,
+      archive,
       control: extractControl,
       progress: (message, done, total) {
         if (!mounted) return;
@@ -703,11 +706,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         });
       },
     );
-    final persistent = File('${source.file.path}.names.json');
+    final persistent = File('${archive.file.path}.names.json');
     await persistent.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
-        ...source.names.toJson(),
-        'spkIndexSha256': source.index.encryptedIndexSha256,
+        ...archive.names.toJson(),
+        'spkIndexSha256': archive.index.encryptedIndexSha256,
         'discovery': result,
       }),
       flush: true,
@@ -734,6 +737,61 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'confirmadas y mapa persistido.',
         ),
         duration: const Duration(seconds: 8),
+      ),
+    );
+  });
+
+  Future<Map<String, Object?>> _auditAllResources(
+    SpkArchiveSource archive,
+  ) async {
+    final result = await archive.validateAllResources(
+      control: extractControl,
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          operation = message;
+          operationDone = done;
+          operationTotal = total;
+        });
+      },
+    );
+    final evidence = File('${archive.file.path}.audit.json');
+    await evidence.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'schema': 1,
+        'source': archive.file.path,
+        'indexSha256': archive.index.encryptedIndexSha256,
+        'profileId': archive.profile.profileId,
+        'resourceKeySha256': archive.profile.effectiveResourceSecret == null
+            ? null
+            : sha256.convert(archive.profile.effectiveResourceSecret!).toString(),
+        'chunkNonceRule': archive.profile.chunkNonceRule,
+        'validation': result,
+        'diagnostics': archive.diagnostics(),
+      }),
+      flush: true,
+    );
+    return result;
+  }
+
+  Future<void> auditAllResources() => runAction(() async {
+    if (!source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_FULL_VALIDATION_PROFILE',
+        'Primero valida simples y fragmentados con AutoPerfil SPK.',
+      );
+    }
+    operation = 'Auditando todos los payloads del DATA.SPK…';
+    if (mounted) setState(() {});
+    final result = await _auditAllResources(source);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Auditoría total OK: ${result['validatedResources']} recursos · '
+          '${result['decodedBytes']} bytes decodificados · 0 fallos.',
+        ),
+        duration: const Duration(seconds: 10),
       ),
     );
   });
@@ -925,16 +983,36 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     await loadAutomaticSpkNameMap(next, source.file.path);
 
+    Map<String, Object?>? fullAudit;
+    Map<String, Object?>? discovery;
+    if (next.canExtractAll) {
+      operation = 'Auditoría total: autenticando y decodificando cada recurso…';
+      if (mounted) setState(() {});
+      fullAudit = await _auditAllResources(next);
+
+      operation = 'Identificando tablas y validando rutas estructurales…';
+      if (mounted) setState(() {});
+      discovery = await _discoverCoreTables(next);
+    }
+
     if (!mounted) return;
     final full = next.canExtractAll;
+    final audited = next.fullyValidatedResources;
+    final confirmedTables = Map<String, dynamic>.from(
+      (discovery?['confirmedTables'] as Map?) ?? const {},
+    ).length;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          full
-              ? 'Perfil validado: simples + fragmentados. Extraer todo habilitado.'
+          audited
+              ? 'DATA.SPK auditado completo: '
+                    '${fullAudit?['validatedResources']} recursos decodificados, '
+                    '0 fallos y $confirmedTables tablas núcleo confirmadas.'
+              : full
+              ? 'Perfil validado: simples + fragmentados. La auditoría total quedó pendiente.'
               : 'Perfil simple validado. Los fragmentados siguen bloqueados hasta validarlos.',
         ),
-        duration: const Duration(seconds: 8),
+        duration: const Duration(seconds: 10),
       ),
     );
     await Navigator.of(context).pushReplacement<void, void>(
@@ -1474,6 +1552,23 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               icon: const Icon(Icons.table_view_outlined, size: 17),
               label: const Text('Descubrir tablas'),
             ),
+          if (source.canExtractAll)
+            TextButton.icon(
+              onPressed: busy || source.fullyValidatedResources
+                  ? null
+                  : auditAllResources,
+              icon: Icon(
+                source.fullyValidatedResources
+                    ? Icons.verified_outlined
+                    : Icons.fact_check_outlined,
+                size: 17,
+              ),
+              label: Text(
+                source.fullyValidatedResources
+                    ? 'SPK auditado'
+                    : 'Auditar todo',
+              ),
+            ),
           if (widget.onMount != null)
             TextButton.icon(
               onPressed: busy || !source.canExtractAll ? null : mountInStudio,
@@ -1692,9 +1787,17 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         ),
                       ),
                       const Spacer(),
-                      if (source.canExtractAll)
+                      if (source.fullyValidatedResources)
                         const Text(
-                          'Lectura SPK completa validada · Extraer todo habilitado',
+                          '50.135/50.135 auditables · lectura total validada',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xff83c69d),
+                          ),
+                        )
+                      else if (source.canExtractAll)
+                        const Text(
+                          'Criptografía validada · falta auditoría total de payloads',
                           style: TextStyle(
                             fontSize: 9,
                             color: Color(0xff83c69d),
