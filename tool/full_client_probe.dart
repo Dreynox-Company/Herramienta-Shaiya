@@ -42,6 +42,46 @@ Future<void> main() async {
     final snapshot=PsWorldSnapshot.fromPackets(all);
     int count(int type)=>all.where((p)=>p.type==type).length;
 
+    if(count(PsPacketType.characterDetails)==0)throw StateError('CHARACTER_DETAILS missing.');
+    if(snapshot.self==null)throw StateError('No CHARACTER_ENTERED_MAP snapshot.');
+    if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
+    if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
+    if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
+
+    // Real persistence gate: move a legal short distance, disconnect, wait for
+    // GameSession's 10-second logout, reconnect and read CHARACTER_DETAILS again.
+    final targetX=selected.details.x;
+    final targetY=selected.details.y;
+    final targetZ=selected.details.z+1.5;
+    await world.sendCharacterMove(
+      x:targetX,y:targetY,z:targetZ,angle:selected.details.angle,run:false,
+    );
+    await Future<void>.delayed(const Duration(milliseconds:750));
+    await world.close();
+    stdout.writeln('Movement sent to z=$targetZ; waiting for logout persistence...');
+    await Future<void>.delayed(const Duration(seconds:12));
+
+    PsWorldSession? verificationWorld;
+    double? persistedX,persistedY,persistedZ;
+    try{
+      final verifyLogin=await client.loginOffline(password);
+      verificationWorld=await client.openWorld(verifyLogin);
+      final verifyCharacter=verificationWorld.characters
+        .where((s)=>s.exists&&s.id==character!.id)
+        .firstOrNull;
+      if(verifyCharacter==null)throw StateError('Character missing after movement reconnect.');
+      final verifySelected=await verificationWorld.selectCharacter(verifyCharacter.id);
+      persistedX=verifySelected.details.x;
+      persistedY=verifySelected.details.y;
+      persistedZ=verifySelected.details.z;
+    }finally{
+      await verificationWorld?.close();
+    }
+    final movementPersisted=persistedZ!=null&&(persistedZ!-targetZ).abs()<0.15;
+    if(!movementPersisted){
+      throw StateError('Movement did not persist: target=$targetZ actual=$persistedZ');
+    }
+
     final result={
       'ok':true,
       'userId':login.userId,
@@ -57,6 +97,12 @@ Future<void> main() async {
       'characterMode':character.mode,
       'details':{
         'x':selected.details.x,'y':selected.details.y,'z':selected.details.z,'angle':selected.details.angle,
+      },
+      'movement':{
+        'sent':true,
+        'targetX':targetX,'targetY':targetY,'targetZ':targetZ,
+        'persistedX':persistedX,'persistedY':persistedY,'persistedZ':persistedZ,
+        'persisted':movementPersisted,
       },
       'selectedPacketTypes':selected.packets.map((p)=>hexType(p.type)).toList(),
       'enteredPacketTypes':entered.map((p)=>hexType(p.type)).toList(),
@@ -94,12 +140,6 @@ Future<void> main() async {
     final json=const JsonEncoder.withIndent('  ').convert(result);
     stdout.writeln(json);
     if(out!=null&&out.isNotEmpty)await File(out).writeAsString(json);
-
-    if(count(PsPacketType.characterDetails)==0)throw StateError('CHARACTER_DETAILS missing.');
-    if(snapshot.self==null)throw StateError('No CHARACTER_ENTERED_MAP snapshot.');
-    if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
-    if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
-    if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
   }finally{
     await world.close();
   }
