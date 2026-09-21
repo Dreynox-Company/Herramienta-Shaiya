@@ -692,6 +692,37 @@ class WorldInstance {
   );
 }
 
+v.Matrix4 worldInstanceMatrix(WorldInstance obj,double originX,double originZ){
+  v.Vector3 safe(v.Vector3 value,v.Vector3 fallback){
+    final out=value.clone();
+    final length=out.length;
+    if(!length.isFinite||length<1e-6)return fallback.clone();
+    return out..scale(1/length);
+  }
+  final forward=safe(obj.forward,v.Vector3(0,0,1));
+  final up0=safe(obj.up,v.Vector3(0,1,0));
+  var right=v.Vector3(
+    up0.y*forward.z-up0.z*forward.y,
+    up0.z*forward.x-up0.x*forward.z,
+    up0.x*forward.y-up0.y*forward.x,
+  );
+  if(right.length<1e-6){right=v.Vector3(1,0,0);}else{right.scale(1/right.length);}
+  final up=v.Vector3(
+    forward.y*right.z-forward.z*right.y,
+    forward.z*right.x-forward.x*right.z,
+    forward.x*right.y-forward.y*right.x,
+  );
+  final m=v.Matrix4.identity(),s=m.storage;
+  // Shaiya's WLD basis is left-handed. Three.js is right-handed, so this
+  // is S*M with S=diag(1,1,-1): the reflection is part of the instance
+  // matrix, not an extra yaw approximation.
+  s[0]=right.x;s[1]=right.y;s[2]=-right.z;s[3]=0;
+  s[4]=up.x;s[5]=up.y;s[6]=-up.z;s[7]=0;
+  s[8]=forward.x;s[9]=forward.y;s[10]=-forward.z;s[11]=0;
+  s[12]=obj.position.x-originX;s[13]=obj.position.y;s[14]=-(obj.position.z-originZ);s[15]=1;
+  return m;
+}
+
 class WorldData {
   final int size;
   final Uint16List heights;
