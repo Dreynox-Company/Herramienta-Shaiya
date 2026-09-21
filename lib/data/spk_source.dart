@@ -515,6 +515,38 @@ class SpkArchiveSource {
       fullResourceValidation?['status'] == 'validated' &&
       fullResourceValidation?['validatedResources'] == index.resources.length;
 
+  bool restoreFullResourceValidation(Map<String, dynamic> evidence) {
+    final declaredIndex = evidence['indexSha256']?.toString().toLowerCase();
+    if (declaredIndex != index.encryptedIndexSha256.toLowerCase()) return false;
+
+    final key = profile.effectiveResourceSecret;
+    final expectedKeyHash = evidence['resourceKeySha256']?.toString().toLowerCase();
+    if (key == null ||
+        expectedKeyHash == null ||
+        expectedKeyHash != sha256.convert(key).toString().toLowerCase()) {
+      return false;
+    }
+
+    final declaredRule = evidence['chunkNonceRule']?.toString();
+    if (declaredRule != null &&
+        declaredRule.isNotEmpty &&
+        declaredRule != profile.chunkNonceRule) {
+      return false;
+    }
+
+    final raw = evidence['validation'];
+    if (raw is! Map) return false;
+    final validation = Map<String, Object?>.from(raw);
+    if (validation['status'] != 'validated' ||
+        validation['validatedResources'] != index.resources.length ||
+        validation['totalResources'] != index.resources.length ||
+        validation['failures'] != 0) {
+      return false;
+    }
+    fullResourceValidation = validation;
+    return true;
+  }
+
   static List<SpkRecord> _spreadValidationRecords(
     List<SpkRecord> records,
     int maxSamples,
