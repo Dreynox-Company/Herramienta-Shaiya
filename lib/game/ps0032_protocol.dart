@@ -162,6 +162,7 @@ class PsConnection {
   final List<int> _buffer=[];
   final List<PsPacket> _queued=[];
   final List<Completer<PsPacket>> _waiters=[];
+  final Map<int,List<Completer<PsPacket>>> _typedWaiters={};
   final List<bool Function(PsPacket)> _listeners=[];
   StreamSubscription<Uint8List>? _subscription;
   _AesCtrLe? _recv,_send;
@@ -210,14 +211,18 @@ class PsConnection {
     });
   }
 
-  Future<PsPacket> nextType(int type,{Duration timeout=const Duration(seconds:12)}) async {
-    final deadline=DateTime.now().add(timeout);
-    while(DateTime.now().isBefore(deadline)){
-      final left=deadline.difference(DateTime.now());
-      final p=await next(timeout:left);
-      if(p.type==type)return p;
-    }
-    throw TimeoutException('Timeout esperando 0x${type.toRadixString(16)}');
+  Future<PsPacket> nextType(int type,{Duration timeout=const Duration(seconds:12)}) {
+    final index=_queued.indexWhere((p)=>p.type==type);
+    if(index>=0)return Future.value(_queued.removeAt(index));
+    if(_closed)return Future.error(StateError('Conexión ps0032 cerrada.'));
+    final waiter=Completer<PsPacket>();
+    (_typedWaiters[type]??=<Completer<PsPacket>>[]).add(waiter);
+    return waiter.future.timeout(timeout,onTimeout:(){
+      final list=_typedWaiters[type];
+      list?.remove(waiter);
+      if(list?.isEmpty??false)_typedWaiters.remove(type);
+      throw TimeoutException('Timeout esperando 0x${type.toRadixString(16)}');
+    });
   }
 
   void _onData(Uint8List chunk){
@@ -243,6 +248,13 @@ class PsConnection {
       try{consumed=listener(packet)||consumed;}catch(_){}
     }
     if(consumed)return;
+    final typed=_typedWaiters[packet.type];
+    if(typed!=null&&typed.isNotEmpty){
+      final waiter=typed.removeAt(0);
+      if(typed.isEmpty)_typedWaiters.remove(packet.type);
+      waiter.complete(packet);
+      return;
+    }
     if(_waiters.isNotEmpty)_waiters.removeAt(0).complete(packet);
     else _queued.add(packet);
   }
@@ -252,13 +264,16 @@ class PsConnection {
     if(_closed)return;
     _closed=true;
     for(final w in _waiters){if(!w.isCompleted)w.completeError(e);}
-    _waiters.clear();
+    for(final list in _typedWaiters.values){for(final w in list){if(!w.isCompleted)w.completeError(e);}}
+    _waiters.clear();_typedWaiters.clear();
   }
 
   Future<void> close() async {
     if(_closed)return;
     _closed=true;
     _listeners.clear();
+    for(final list in _typedWaiters.values){for(final w in list){if(!w.isCompleted)w.completeError(StateError('Conexión ps0032 cerrada.'));}}
+    _typedWaiters.clear();
     await _subscription?.cancel();
     await socket.close();
   }
