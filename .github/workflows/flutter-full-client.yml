@@ -129,6 +129,8 @@ jobs:
               if($report.enteredMapPackets -lt 1){throw 'ENTER_MAP missing'}
               if($report.npcPackets -lt 1){throw 'NPC packets missing'}
               if($report.mobPackets -lt 1){throw 'mob packets missing'}
+              if(!$report.movement.sent){throw 'CHARACTER_MOVE not sent'}
+              if(!$report.movement.persisted){throw 'CHARACTER_MOVE did not persist after reconnect'}
             }finally{
               if(!$world.HasExited){Stop-Process -Id $world.Id -Force}
             }
