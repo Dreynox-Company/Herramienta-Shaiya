@@ -19,6 +19,7 @@ class PsPacketType {
   static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
+  static const characterItems=0x0106;
   static const characterSkills=0x0108;
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
@@ -521,6 +522,37 @@ class PsAdditionalStats {
       values[6],values[7],values[8],values[9],values[10],values[11],
     );
   }
+}
+
+class PsInventoryItem {
+  final int bag,slot,type,typeId,quality,count;
+  final List<int> gems;
+  final String craftName;
+  final bool dyed;
+  const PsInventoryItem({
+    required this.bag,required this.slot,required this.type,required this.typeId,
+    required this.quality,required this.count,required this.gems,required this.craftName,required this.dyed,
+  });
+  String get key=>'${type}:${typeId}';
+}
+
+List<PsInventoryItem> parseInventoryItems(PsPacket p){
+  if(p.type!=PsPacketType.characterItems||p.body.isEmpty)return const [];
+  final b=p.body,d=ByteData.sublistView(b),count=b[0],out=<PsInventoryItem>[];
+  const size=102;
+  if(b.length<1+count*size)throw FormatException('CHARACTER_ITEMS truncado: count=$count bytes=${b.length}.');
+  var o=1;
+  for(var i=0;i<count;i++,o+=size){
+    final gems=List<int>.generate(6,(j)=>d.getInt32(o+6+j*4,Endian.little));
+    final rawName=b.sublist(o+31,o+51),zero=rawName.indexOf(0);
+    final craft=utf8.decode(zero<0?rawName:rawName.sublist(0,zero),allowMalformed:true);
+    out.add(PsInventoryItem(
+      bag:b[o],slot:b[o+1],type:b[o+2],typeId:b[o+3],
+      quality:d.getUint16(o+4,Endian.little),gems:List.unmodifiable(gems),
+      count:b[o+30],craftName:craft,dyed:b[o+74]!=0,
+    ));
+  }
+  return out;
 }
 
 class PsLearnedSkill {
