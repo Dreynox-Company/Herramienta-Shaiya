@@ -43,6 +43,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsCharacterSkills? liveSkills;
   List<PsActiveBuff> liveBuffs=const [];
   List<PsQuickBarItem> liveQuickBar=const [];
+  List<PsInventoryItem> liveInventory=const [];
   List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
   PsCharacterSlot? liveCharacter;
   final focus=FocusNode();
@@ -102,6 +103,7 @@ class _GameClientPageState extends State<GameClientPage> {
         'liveSkills':liveSkills?.skills.length??0,
         'liveBuffs':liveBuffs.length,
         'liveQuickBar':liveQuickBar.length,
+        'liveInventory':liveInventory.length,
       };
       final file=File(path);
       await file.parent.create(recursive:true);
@@ -487,8 +489,11 @@ class _GameClientPageState extends State<GameClientPage> {
         liveSnapshot=networkSnapshot;
         liveDetails=selected.details;
         liveHitpoints=selected.hitpoints;
+        final inventory=<PsInventoryItem>[];
         for(final packet in selected.packets){
-          if(packet.type==PsPacketType.characterSkills){
+          if(packet.type==PsPacketType.characterItems){
+            inventory.addAll(parseInventoryItems(packet));
+          }else if(packet.type==PsPacketType.characterSkills){
             liveSkills=PsCharacterSkills.parse(packet);
           }else if(packet.type==PsPacketType.characterActiveBuffs){
             liveBuffs=parseActiveBuffs(packet);
@@ -496,6 +501,7 @@ class _GameClientPageState extends State<GameClientPage> {
             liveQuickBar=parseQuickBar(packet);
           }
         }
+        liveInventory=List.unmodifiable(inventory);
         mapId=current.mapId;
         x=networkSnapshot.self?.x??selected.details.x;
         z=networkSnapshot.self?.z??selected.details.z;
