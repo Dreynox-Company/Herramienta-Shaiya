@@ -38,6 +38,12 @@ class _GameClientPageState extends State<GameClientPage> {
   LoginSession? liveLogin;
   PsWorldSession? liveWorld;
   PsWorldSnapshot? liveSnapshot;
+  PsCharacterDetails? liveDetails;
+  PsCharacterHitpoints? liveHitpoints;
+  PsCharacterSkills? liveSkills;
+  List<PsActiveBuff> liveBuffs=const [];
+  List<PsQuickBarItem> liveQuickBar=const [];
+  List<PsInventoryItem> liveInventory=const [];
   List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
   PsCharacterSlot? liveCharacter;
   final focus=FocusNode();
@@ -94,6 +100,10 @@ class _GameClientPageState extends State<GameClientPage> {
         },
         'backendReady':backend.ready,
         'questId':questId,
+        'liveSkills':liveSkills?.skills.length??0,
+        'liveBuffs':liveBuffs.length,
+        'liveQuickBar':liveQuickBar.length,
+        'liveInventory':liveInventory.length,
       };
       final file=File(path);
       await file.parent.create(recursive:true);
@@ -459,7 +469,6 @@ class _GameClientPageState extends State<GameClientPage> {
     final c=catalog!;
 
     PsWorldSnapshot? networkSnapshot;
-    PsCharacterDetails? liveDetails;
     var mapId=0;
     double? x,z;
 
@@ -479,6 +488,20 @@ class _GameClientPageState extends State<GameClientPage> {
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
         liveDetails=selected.details;
+        liveHitpoints=selected.hitpoints;
+        final inventory=<PsInventoryItem>[];
+        for(final packet in selected.packets){
+          if(packet.type==PsPacketType.characterItems){
+            inventory.addAll(parseInventoryItems(packet));
+          }else if(packet.type==PsPacketType.characterSkills){
+            liveSkills=PsCharacterSkills.parse(packet);
+          }else if(packet.type==PsPacketType.characterActiveBuffs){
+            liveBuffs=parseActiveBuffs(packet);
+          }else if(packet.type==PsPacketType.characterSkillBar){
+            liveQuickBar=parseQuickBar(packet);
+          }
+        }
+        liveInventory=List.unmodifiable(inventory);
         mapId=current.mapId;
         x=networkSnapshot.self?.x??selected.details.x;
         z=networkSnapshot.self?.z??selected.details.z;
@@ -808,6 +831,12 @@ class _GameClientPageState extends State<GameClientPage> {
             messages:messages,
             questOpen:questOpen,
             questId:questId,
+            hp:liveHitpoints?.hp??liveDetails?.maxHp??255,
+            mp:liveHitpoints?.mp??liveDetails?.maxMp??95,
+            sp:liveHitpoints?.sp??liveDetails?.maxSp??180,
+            maxHp:liveDetails?.maxHp??255,
+            maxMp:liveDetails?.maxMp??95,
+            maxSp:liveDetails?.maxSp??180,
             onAcceptQuest:(){
               setState(()=>questOpen=false);
               final q=catalog!.questText(uiLocale)?.quest(questId);

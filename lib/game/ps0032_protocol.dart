@@ -19,7 +19,11 @@ class PsPacketType {
   static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
+  static const characterItems=0x0106;
+  static const characterSkills=0x0108;
+  static const characterActiveBuffs=0x010A;
   static const characterSkillBar=0x010B;
+  static const characterCurrentHitpoints=0x0521;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
   static const characterMove=0x0501;
@@ -418,24 +422,153 @@ class PsCharacterSlot {
   }
 }
 
-class PsCharacterDetails {
-  final double x,y,z;
-  final int angle;
-  const PsCharacterDetails(this.x,this.y,this.z,this.angle);
-  static PsCharacterDetails parse(PsPacket p){
-    if(p.type!=PsPacketType.characterDetails||p.body.length<58){
-      throw FormatException('CHARACTER_DETAILS truncado: ${p.body.length}');
+class PsInventoryItem {
+  final int bag,slot,type,typeId,quality,count;
+  final List<int> gems;
+  final String craftName;
+  final bool craftDisabled,isDyed;
+  const PsInventoryItem({
+    required this.bag,required this.slot,required this.type,required this.typeId,
+    required this.quality,required this.count,required this.gems,
+    required this.craftName,required this.craftDisabled,required this.isDyed,
+  });
+}
+List<PsInventoryItem> parseInventoryItems(PsPacket p){
+  if(p.type!=PsPacketType.characterItems||p.body.isEmpty)return const [];
+  const recordSize=102;
+  final count=p.body[0],needed=1+count*recordSize;
+  if(p.body.length<needed)throw FormatException('CHARACTER_ITEMS truncado: '+p.body.length.toString()+' < '+needed.toString());
+  final d=ByteData.sublistView(p.body),out=<PsInventoryItem>[];var o=1;
+  for(var i=0;i<count;i++,o+=recordSize){
+    final rawName=Uint8List.sublistView(p.body,o+31,o+51);
+    final zero=rawName.indexOf(0);
+    final nameBytes=zero<0?rawName:Uint8List.sublistView(rawName,0,zero);
+    out.add(PsInventoryItem(
+      bag:p.body[o],slot:p.body[o+1],type:p.body[o+2],typeId:p.body[o+3],
+      quality:d.getUint16(o+4,Endian.little),
+      gems:List<int>.generate(6,(g)=>d.getInt32(o+6+g*4,Endian.little),growable:false),
+      count:p.body[o+30],
+      craftName:latin1.decode(nameBytes,allowInvalid:true),
+      craftDisabled:p.body[o+51]!=0,
+      isDyed:p.body[o+75]!=0,
+    ));
+  }
+  return List.unmodifiable(out);
+}
+class PsLearnedSkill {
+  final int skillId,level,number,cooldownSeconds;
+  const PsLearnedSkill(this.skillId,this.level,this.number,this.cooldownSeconds);
+}
+class PsCharacterSkills {
+  final int skillPoints;
+  final List<PsLearnedSkill> skills;
+  const PsCharacterSkills(this.skillPoints,this.skills);
+  static PsCharacterSkills parse(PsPacket p){
+    if(p.type!=PsPacketType.characterSkills||p.body.length<3){
+      throw FormatException('CHARACTER_SKILLS truncado: '+p.body.length.toString());
     }
-    final d=ByteData.sublistView(p.body);
-    return PsCharacterDetails(
-      d.getFloat32(46,Endian.little),
-      d.getFloat32(50,Endian.little),
-      d.getFloat32(54,Endian.little),
-      d.getUint16(28,Endian.little),
-    );
+    final d=ByteData.sublistView(p.body),points=d.getUint16(0,Endian.little),count=p.body[2];
+    if(p.body.length<3+count*8)throw FormatException('CHARACTER_SKILLS payload truncado.');
+    final out=<PsLearnedSkill>[];var o=3;
+    for(var i=0;i<count;i++,o+=8){
+      out.add(PsLearnedSkill(
+        d.getUint16(o,Endian.little),p.body[o+2],p.body[o+3],d.getInt32(o+4,Endian.little),
+      ));
+    }
+    return PsCharacterSkills(points,List.unmodifiable(out));
   }
 }
 
+class PsActiveBuff {
+  final int id,skillId,level,countdownSeconds;
+  const PsActiveBuff(this.id,this.skillId,this.level,this.countdownSeconds);
+}
+List<PsActiveBuff> parseActiveBuffs(PsPacket p){
+  if(p.type!=PsPacketType.characterActiveBuffs||p.body.isEmpty)return const [];
+  final count=p.body[0],d=ByteData.sublistView(p.body);
+  if(p.body.length<1+count*11)throw FormatException('CHARACTER_ACTIVE_BUFFS truncado.');
+  final out=<PsActiveBuff>[];var o=1;
+  for(var i=0;i<count;i++,o+=11){
+    out.add(PsActiveBuff(
+      d.getUint32(o,Endian.little),d.getUint16(o+4,Endian.little),p.body[o+6],d.getInt32(o+7,Endian.little),
+    ));
+  }
+  return List.unmodifiable(out);
+}
+
+class PsQuickBarItem {
+  final int bar,slot,bag,number,cooldown;
+  const PsQuickBarItem(this.bar,this.slot,this.bag,this.number,this.cooldown);
+}
+List<PsQuickBarItem> parseQuickBar(PsPacket p){
+  if(p.type!=PsPacketType.characterSkillBar||p.body.length<5)return const [];
+  final count=p.body[0],d=ByteData.sublistView(p.body);
+  if(p.body.length<5+count*9)throw FormatException('CHARACTER_SKILL_BAR truncado.');
+  final out=<PsQuickBarItem>[];var o=5;
+  for(var i=0;i<count;i++,o+=9){
+    out.add(PsQuickBarItem(
+      p.body[o],p.body[o+1],p.body[o+2],d.getUint16(o+3,Endian.little),d.getInt32(o+5,Endian.little),
+    ));
+  }
+  return List.unmodifiable(out);
+}
+class PsCharacterHitpoints {
+  final int hp,mp,sp;
+  const PsCharacterHitpoints(this.hp,this.mp,this.sp);
+  static PsCharacterHitpoints parse(PsPacket p){
+    if(p.type!=PsPacketType.characterCurrentHitpoints||p.body.length<12){
+      throw FormatException('CHARACTER_CURRENT_HITPOINTS truncado: '+p.body.length.toString());
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterHitpoints(
+      d.getInt32(0,Endian.little),
+      d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),
+    );
+  }
+}
+class PsCharacterDetails {
+  final int strength,dexterity,reaction,intelligence,wisdom,luck;
+  final int statPoints,skillPoints,maxHp,maxMp,maxSp,angle;
+  final int previousExp,nextExp,currentExp,gold;
+  final double x,y,z;
+  const PsCharacterDetails({
+    required this.strength,required this.dexterity,required this.reaction,
+    required this.intelligence,required this.wisdom,required this.luck,
+    required this.statPoints,required this.skillPoints,
+    required this.maxHp,required this.maxMp,required this.maxSp,required this.angle,
+    required this.previousExp,required this.nextExp,required this.currentExp,required this.gold,
+    required this.x,required this.y,required this.z,
+  });
+
+  static PsCharacterDetails parse(PsPacket p){
+    if(p.type!=PsPacketType.characterDetails||p.body.length<58){
+      throw FormatException('CHARACTER_DETAILS truncado: '+p.body.length.toString());
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterDetails(
+      strength:d.getUint16(0,Endian.little),
+      dexterity:d.getUint16(2,Endian.little),
+      reaction:d.getUint16(4,Endian.little),
+      intelligence:d.getUint16(6,Endian.little),
+      wisdom:d.getUint16(8,Endian.little),
+      luck:d.getUint16(10,Endian.little),
+      statPoints:d.getUint16(12,Endian.little),
+      skillPoints:d.getUint16(14,Endian.little),
+      maxHp:d.getUint32(16,Endian.little),
+      maxMp:d.getUint32(20,Endian.little),
+      maxSp:d.getUint32(24,Endian.little),
+      angle:d.getUint16(28,Endian.little),
+      previousExp:d.getUint32(30,Endian.little),
+      nextExp:d.getUint32(34,Endian.little),
+      currentExp:d.getUint32(38,Endian.little),
+      gold:d.getUint32(42,Endian.little),
+      x:d.getFloat32(46,Endian.little),
+      y:d.getFloat32(50,Endian.little),
+      z:d.getFloat32(54,Endian.little),
+    );
+  }
+}
 class WorldBootstrap {
   final int faction,maxMode;
   final List<PsPacket> packets;
@@ -507,10 +640,11 @@ class PsWorldSession {
     return slots;
   }
 
-  Future<({PsCharacterDetails details,List<PsPacket> packets})> selectCharacter(int characterId) async {
+  Future<({PsCharacterDetails details,PsCharacterHitpoints hitpoints,List<PsPacket> packets})> selectCharacter(int characterId) async {
     await connection.send(PsPacketType.selectCharacter,_u32Bytes(characterId));
     final packets=<PsPacket>[];
     PsCharacterDetails? details;
+    PsCharacterHitpoints? hitpoints;
     final deadline=DateTime.now().add(const Duration(seconds:20));
     while(DateTime.now().isBefore(deadline)){
       final p=await connection.next(timeout:deadline.difference(DateTime.now()));
@@ -519,6 +653,8 @@ class PsWorldSession {
         if(p.body.length<5||p.body[0]!=0)throw StateError('SELECT_CHARACTER rechazado.');
       }else if(p.type==PsPacketType.characterDetails){
         details=PsCharacterDetails.parse(p);
+      }else if(p.type==PsPacketType.characterCurrentHitpoints){
+        hitpoints=PsCharacterHitpoints.parse(p);
       }else if(p.type==PsPacketType.characterSkillBar){
         connection.switchIncomingToExpanded(xorKey);
         _expanded=true;
@@ -526,8 +662,9 @@ class PsWorldSession {
       }
     }
     if(details==null)throw StateError('No llegó CHARACTER_DETAILS.');
+    if(hitpoints==null)throw StateError('No llegó CHARACTER_CURRENT_HITPOINTS.');
     if(!_expanded)throw StateError('No llegó CHARACTER_SKILL_BAR/cambio de cifrado.');
-    return (details:details,packets:packets);
+    return (details:details,hitpoints:hitpoints,packets:packets);
   }
 
   Future<List<PsPacket>> enterMap({Duration collect=const Duration(seconds:6)}) async {
