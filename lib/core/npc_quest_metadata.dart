@@ -5,7 +5,7 @@ import 'formats.dart';
 import 'seed_data.dart';
 
 class NpcDefinition {
-  final int type, typeId, model, faction, moveDistance, moveSpeed;
+  final int type, typeId, model, faction, moveDistance, moveSpeed, sourceIndex;
   final List<int> startQuestIds, endQuestIds;
   final String name, welcome;
   const NpcDefinition({
@@ -15,6 +15,7 @@ class NpcDefinition {
     required this.faction,
     required this.moveDistance,
     required this.moveSpeed,
+    required this.sourceIndex,
     required this.startQuestIds,
     required this.endQuestIds,
     this.name = '',
@@ -30,6 +31,7 @@ class NpcDefinition {
     faction: faction,
     moveDistance: moveDistance,
     moveSpeed: moveSpeed,
+    sourceIndex: sourceIndex,
     startQuestIds: startQuestIds,
     endQuestIds: endQuestIds,
     name: nextName,
@@ -126,10 +128,11 @@ class NpcQuestDatabase {
         path,
       ).read();
       final translatedNpcs = <String, NpcDefinition>{...raw.$1};
-      for (final e in trans.$1.entries) {
-        final current = translatedNpcs[e.key];
-        if (current != null) {
-          translatedNpcs[e.key] = current.translated(e.value.$1, e.value.$2);
+      for (final entry in translatedNpcs.entries.toList()) {
+        final current = entry.value,
+            text = trans.$1['${current.type}:${current.sourceIndex}'];
+        if (text != null) {
+          translatedNpcs[entry.key] = current.translated(text.$1, text.$2);
         }
       }
       final translatedQuests = <int, QuestDefinition>{...raw.$2};
@@ -159,7 +162,7 @@ class _NpcQuestParser {
       final count = r.count(100000);
       final rows = <NpcDefinition>[];
       for (var i = 0; i < count; i++) {
-        rows.add(_npc(category));
+        rows.add(_npc(category, i));
       }
       byCategory.add(rows);
     }
@@ -185,7 +188,7 @@ class _NpcQuestParser {
     return (npcs, quests);
   }
 
-  NpcDefinition _npc(int expectedCategory) {
+  NpcDefinition _npc(int expectedCategory, int sourceIndex) {
     final type = r.u8(), typeId = _i16(r);
     if (type != expectedCategory) {
       r.fail('Categoría NPC inesperada: $type, esperaba $expectedCategory.');
@@ -217,6 +220,7 @@ class _NpcQuestParser {
       faction: faction,
       moveDistance: moveDistance,
       moveSpeed: moveSpeed,
+      sourceIndex: sourceIndex,
       startQuestIds: start,
       endQuestIds: end,
     );
