@@ -182,5 +182,45 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test('confirmed names override inferred hints and preserve evidence', () {
+      final map = SpkNameMap.fromJson({
+        'schema': 5,
+        'paths': {'0000000000000001': 'Character/confirmed.dds'},
+        'hints': {
+          '0000000000000001': {
+            'path': 'Character/wrong.dds',
+            'confidence': 'strong-inferred',
+            'evidence': 'size+zstd',
+          },
+          '0000000000000002': {
+            'path': 'Item/3DO/01201.3do',
+            'confidence': 'strong-inferred',
+            'evidence': 'decoded-size+zstd3-size',
+          },
+        },
+      });
+      expect(map[1], 'Character/confirmed.dds');
+      expect(map.isConfirmed(1), isTrue);
+      expect(map.isInferred(1), isFalse);
+      expect(map[2], 'Item/3DO/01201.3do');
+      expect(map.isInferred(2), isTrue);
+      expect(map.confidence(2), 'strong-inferred');
+      expect(map.evidence(2), 'decoded-size+zstd3-size');
+    });
+
+    test('name map merge keeps confirmed paths authoritative', () {
+      final map = SpkNameMap.empty();
+      map.mergeHints(
+        {7: 'Monster/ANI/mob.ANI'},
+        confidence: 'strong-inferred',
+        evidence: 'decoded-size+zstd3-size',
+      );
+      expect(map.isInferred(7), isTrue);
+      map.mergeConfirmed({7: 'Monster/ANI/Mob_Guard04_Idle.ANI'});
+      expect(map.isConfirmed(7), isTrue);
+      expect(map.isInferred(7), isFalse);
+      expect(map[7], 'Monster/ANI/Mob_Guard04_Idle.ANI');
+    });
   });
 }
