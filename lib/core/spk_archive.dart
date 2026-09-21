@@ -57,6 +57,28 @@ Uint8List spkHexBytes(String value, {int? expectedBytes}) {
   return out;
 }
 
+Uint8List spkResourceSecret(Object value) {
+  final out = spkHexBytes(value.toString());
+  if (out.length != 16 && out.length != 32) {
+    throw FormatException(
+      'La clave AES-GCM de recursos debe tener 16 o 32 bytes; '
+      'se recibieron ${out.length}.',
+    );
+  }
+  return out;
+}
+
+String spkNormalizeChunkNonceRule(Object? value) {
+  switch ((value ?? 'unsupported').toString()) {
+    case 'offset_chunk0_le96':
+      return 'offset_le96';
+    case 'entry_id_chunk0_le':
+      return 'entry_id_chunk_le';
+    default:
+      return (value ?? 'unsupported').toString();
+  }
+}
+
 class SpkFailure implements Exception {
   final String code;
   final String message;
@@ -437,13 +459,10 @@ class SpkCryptoProfile {
           expectedBytes: 16,
         ),
         resourceSecret: json['resourceSecretHex'] is String
-            ? spkHexBytes(
-                json['resourceSecretHex'].toString(),
-                expectedBytes: 16,
-              )
+            ? spkResourceSecret(json['resourceSecretHex'])
             : null,
         resourceKeyIsIndexKey: json['resourceKeyIsIndexKey'] == true,
-        chunkNonceRule: (json['chunkNonceRule'] ?? 'unsupported').toString(),
+        chunkNonceRule: spkNormalizeChunkNonceRule(json['chunkNonceRule']),
       );
     }
     final index = Map<String, dynamic>.from(
@@ -461,9 +480,36 @@ class SpkCryptoProfile {
       ),
       resourceSecret: resources['secretHex'] == null
           ? null
-          : spkHexBytes(resources['secretHex'].toString(), expectedBytes: 16),
+          : spkResourceSecret(resources['secretHex']),
       resourceKeyIsIndexKey: resources['useIndexKey'] == true,
-      chunkNonceRule: (resources['chunkNonceRule'] ?? 'unsupported').toString(),
+      chunkNonceRule: spkNormalizeChunkNonceRule(resources['chunkNonceRule']),
+    );
+  }
+
+  SpkCryptoProfile mergeResourceProbe(Map<String, dynamic> probe) {
+    if (probe['readyForSimple'] != true ||
+        probe['resourceSecretHex'] is! String) {
+      throw const FormatException(
+        'El resultado del probe no valida todavía recursos simples.',
+      );
+    }
+    final secret = spkResourceSecret(probe['resourceSecretHex']);
+    final readyFragments = probe['readyForFragmented'] == true;
+    final rule = readyFragments
+        ? spkNormalizeChunkNonceRule(probe['chunkNonceRule'])
+        : chunkNonceRule;
+    if (readyFragments && rule == 'unsupported') {
+      throw const FormatException(
+        'El probe indica fragmentos listos pero no aporta una regla de nonce compatible.',
+      );
+    }
+    return SpkCryptoProfile(
+      profileId: '${profileId}-resources-v7',
+      indexSha256: indexSha256,
+      indexSecret: indexSecret,
+      resourceSecret: secret,
+      resourceKeyIsIndexKey: false,
+      chunkNonceRule: rule,
     );
   }
 
@@ -474,6 +520,7 @@ class SpkCryptoProfile {
     'resources': {
       'algorithm': 'AES-GCM',
       'secretAvailable': effectiveResourceSecret != null,
+      'secretBytes': effectiveResourceSecret?.length,
       'chunkNonceRule': chunkNonceRule,
     },
   };
