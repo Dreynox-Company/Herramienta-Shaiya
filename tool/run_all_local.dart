@@ -34,6 +34,7 @@ import '../test/spk_fragment_payload_test.dart' as suite29;
 import '../test/spk_payload_validation_test.dart' as suite30;
 import '../test/spk_library_adapter_test.dart' as suite31;
 import '../test/spk_catalog_fallback_test.dart' as suite32;
+import '../test/spk_name_verification_test.dart' as suite33;
 
 void main() {
   suite0.main();
@@ -69,4 +70,5 @@ void main() {
   suite30.main();
   suite31.main();
   suite32.main();
+  suite33.main();
 }
