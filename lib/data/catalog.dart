@@ -247,267 +247,8 @@ class Catalog {
   }
 
   Slot? _spkSlotFromMeshName(String name) {
-    final n = name.toLowerCase().replaceFirst(RegExp(r'\.3dc
-    final paths = library.files.keys.toList()..sort();
-    for (final p in paths.where(
-      (p) => RegExp(r'^character/[^/]+/[^/]+_upper\.mlt$').hasMatch(p),
-    )) {
-      final root = directoryName(p),
-          id = baseName(p).replaceFirst('_upper.mlt', ''),
-          race = p.split('/')[1],
-          parts = <Slot, List<PartRecord>>{};
-      for (final slot in Slot.values) {
-        final table = '$root/${id}_${slot.name}.mlt';
-        parts[slot] = [];
-        if (!library.files.containsKey(table)) continue;
-        try {
-          for (final raw in readMlt(await library.read(table), table)) {
-            if (raw.isNull) continue;
-            final m = library.resolve(raw.mesh, ['$root/3dc', root]),
-                t = library.resolve(raw.texture, ['$root/dds', root]);
-            if (m == null || t == null) {
-              warnings.add(
-                '$table #${raw.id}: falta ${m == null ? raw.mesh : raw.texture}',
-              );
-              continue;
-            }
-            parts[slot]!.add(PartRecord(slot, raw, m, t, table));
-          }
-        } catch (e) {
-          warnings.add(e.toString());
-        }
-      }
-      if (parts[Slot.upper]!.isNotEmpty) {
-        archetypes.add(
-          Archetype(
-            id,
-            race,
-            root,
-            parts,
-            paths
-                .where(
-                  (p) => p.startsWith('$root/ani/${id}_') && p.endsWith('.ani'),
-                )
-                .toList(),
-          ),
-        );
-      }
-      progress('Leyendo arquetipos: ${archetypes.length}');
-    }
-
-    if (library.isSpkWorkspace) {
-      _loadSpkDirectArchetypes(paths, progress);
-    }
-
-    final weaponIds = <String>{};
-    for (final p in paths.where(
-      (p) =>
-          p.startsWith('item/') && p.endsWith('.itm') && !p.contains('.bak.'),
-    )) {
-      try {
-        for (final w in readItm(await library.read(p), p)) {
-          final key = '${w.mesh.toLowerCase()}|${w.texture.toLowerCase()}';
-          if (!w.mesh.toLowerCase().startsWith('null.') && weaponIds.add(key)) {
-            weapons.add(w);
-          }
-        }
-      } catch (e) {
-        warnings.add(e.toString());
-      }
-    }
-    for (final p in paths.where(
-      (p) =>
-          p.endsWith('.mon') &&
-          (p.startsWith('monster/') ||
-              p.startsWith('vehicle/') ||
-              p.startsWith('character/wing/')),
-    )) {
-      try {
-        final entries = readMon(
-          await library.read(p),
-          p,
-        ).where((c) => c.parts.any((p) => !p.isNull));
-        if (p.startsWith('vehicle/')) {
-          mounts.addAll(entries);
-        } else if (p.startsWith('character/wing/')) {
-          wings.addAll(entries);
-        } else {
-          creatures.addAll(entries);
-        }
-      } catch (e) {
-        warnings.add(e.toString());
-      }
-    }
-    worlds.addAll(
-      paths.where(
-        (p) =>
-            p.startsWith('world/') &&
-            p.endsWith('.wld') &&
-            !p.contains('.bak.'),
-      ),
-    );
-    skies.addAll(
-      paths.where(
-        (p) =>
-            p.startsWith('sky/') &&
-            RegExp(r'\.(dds|tga|bmp|png)$').hasMatch(p) &&
-            !p.contains('cloud') &&
-            !p.contains('star'),
-      ),
-    );
-    sounds.addAll(
-      paths.where(
-        (p) =>
-            p.startsWith('sound/') && RegExp(r'\.(wav|mp3|ogg)$').hasMatch(p),
-      ),
-    );
-    effects.addAll(
-      paths.where(
-        (p) =>
-            p.startsWith('effect/') && RegExp(r'\.(dds|tga|png)$').hasMatch(p),
-      ),
-    );
-    await discoverTextures(progress);
-    await names.load(library, progress);
-    warnings.addAll(names.warnings);
-    if (archetypes.isEmpty) {
-      throw const FormatException(
-        'No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.',
-      );
-    }
-  }
-
-  String creatureLabel(CreatureRecord c) {
-    var kind = c.source.startsWith('vehicle/')
-        ? 'Montura'
-        : c.source.contains('/wing/')
-        ? 'Alas'
-        : 'Criatura';
-    final stem = baseName(c.parts.first.mesh).toLowerCase();
-    for (final e in {
-      'bear': 'Oso',
-      'wolf': 'Lobo',
-      'dragon': 'Dragón',
-      'horse': 'Caballo',
-      'tiger': 'Tigre',
-      'lion': 'León',
-      'boar': 'Jabalí',
-      'spider': 'Araña',
-      'golem': 'Gólem',
-      'skeleton': 'Esqueleto',
-      'rabbit': 'Conejo',
-      'deer': 'Ciervo',
-      'unicorn': 'Unicornio',
-    }.entries) {
-      if (stem.contains(e.key)) kind = e.value;
-    }
-    return names.creatureTitle(c, '$kind ${c.id.toString().padLeft(3, '0')}');
-  }
-}
-
-/// A selection is not evidence that a mesh contains a body region.
-/// Only resolveAppearance may suppress fallback pieces after inspecting geometry.
-class Appearance {
-  final Archetype archetype;
-  final Map<Slot, PartRecord?> selected;
-  final bool fullCostume;
-  final String? preset;
-  final bool geometryResolved;
-  final Set<Slot> embeddedSlots;
-  Appearance(
-    this.archetype,
-    Map<Slot, PartRecord?> slots, {
-    this.fullCostume = false,
-    this.preset,
-    this.geometryResolved = false,
-    Set<Slot> embeddedSlots = const {},
-  }) : selected = Map.unmodifiable(slots),
-       embeddedSlots = Set.unmodifiable(embeddedSlots);
-
-  factory Appearance.initial(Archetype a) {
-    // A complete canonical set is safe; otherwise start from all original bases.
-    final preferred = a.sets['016'];
-    return Appearance.forSet(
-      a,
-      preferred != null && preferred.containsKey(Slot.lower) ? '016' : '@base',
-    );
-  }
-
-  factory Appearance.base(Archetype a, {Appearance? previous}) =>
-      Appearance.forSet(a, '@base', previous: previous);
-
-  factory Appearance.forSet(Archetype a, String key, {Appearance? previous}) {
-    final set = a.sets[key];
-    if (set == null) {
-      throw FormatException('El conjunto $key no pertenece a ${a.id}.');
-    }
-    final slots = <Slot, PartRecord?>{for (final s in Slot.values) s: null};
-    slots.addAll(set);
-
-    for (final s in [Slot.face, Slot.hair]) {
-      slots[s] =
-          previous?.archetype.id == a.id && previous?.archetype.race == a.race
-          ? previous!.selected[s]
-          : ((a.parts[s] ?? []).isEmpty ? null : a.parts[s]!.first);
-    }
-    return Appearance(a, slots, preset: key);
-  }
-
-  Appearance withResolvedCoverage(Set<Slot> coverage) => Appearance(
-    archetype,
-    selected,
-    preset: preset,
-    geometryResolved: true,
-    embeddedSlots: coverage,
-    fullCostume: coverage.contains(Slot.lower),
-  );
-
-  Appearance withPart(Slot slot, PartRecord? part) {
-    if (part != null && !(archetype.parts[slot] ?? []).contains(part)) {
-      throw const FormatException('La pieza no pertenece al arquetipo activo.');
-    }
-    // A new torso must not inherit unrelated costume components or an old helmet.
-    if (slot == Slot.upper && part != null) {
-      final matching = archetype.sets[part.key];
-      if (matching != null) {
-        return Appearance.forSet(archetype, part.key, previous: this);
-      }
-    }
-    if (slot == Slot.lower &&
-        geometryResolved &&
-        embeddedSlots.contains(slot) &&
-        part != null) {
-      throw const FormatException(
-        'El torso ya contiene las piernas. Elige un torso modular antes de añadir otro pantalón.',
-      );
-    }
-    return Appearance(
-      archetype,
-      {...selected, slot: part},
-      fullCostume: slot != Slot.upper && fullCostume,
-      geometryResolved: slot != Slot.upper && geometryResolved,
-      embeddedSlots: slot == Slot.upper ? const {} : embeddedSlots,
-      preset: [Slot.face, Slot.hair].contains(slot) ? preset : null,
-    );
-  }
-
-  List<PartRecord> get effective {
-    final out = <PartRecord>[];
-    for (final slot in Slot.values) {
-      if (slot == Slot.hair && selected[Slot.helmet] != null) continue;
-      final part = selected[slot];
-      if (part != null) {
-        out.add(part);
-        continue;
-      }
-      if (geometryResolved && embeddedSlots.contains(slot)) continue;
-      final fallback = archetype.base(slot);
-      if (fallback != null) out.add(fallback);
-    }
-    return out;
-  }
-}
-), '');
+    var n = name.toLowerCase();
+    if (n.endsWith('.3dc')) n = n.substring(0, n.length - 4);
     const tokens = <Slot, List<String>>{
       Slot.upper: ['upper', 'torso', 'body'],
       Slot.lower: ['lower', 'trousers', 'pants'],
@@ -517,9 +258,13 @@ class Appearance {
       Slot.face: ['face'],
       Slot.hair: ['hair'],
     };
+    final parts = n.split('_');
     for (final entry in tokens.entries) {
       for (final token in entry.value) {
-        if (RegExp('(^|_)$token(?=_|[0-9]|$)').hasMatch(n)) {
+        if (parts.any((part) =>
+            part == token ||
+            (part.startsWith(token) &&
+                int.tryParse(part.substring(token.length)) != null))) {
           return entry.key;
         }
       }
@@ -544,30 +289,31 @@ class Appearance {
       final file = baseName(meshPath);
       final lower = file.toLowerCase();
       final code = archetypeCodes
-          .where((c) => lower.startsWith('$c_'))
+          .where((value) => lower.startsWith(value + '_'))
           .firstOrNull;
       if (code == null || existing.contains(code)) continue;
 
       final slot = _spkSlotFromMeshName(file);
       if (slot == null) continue;
 
-      final root = meshPath.substring(0, meshPath.indexOf('/3dc/'));
+      final marker = meshPath.indexOf('/3dc/');
+      final root = meshPath.substring(0, marker);
       final stem = file.substring(0, file.length - 4);
       final texture = library.resolve(
-        '$stem.dds',
-        ['$root/dds'],
+        stem + '.dds',
+        [root + '/dds'],
         uniqueFallback: false,
       );
       if (texture == null) continue;
 
-      final parts = byCode.putIfAbsent(
+      final slotMap = byCode.putIfAbsent(
         code,
         () => <Slot, List<PartRecord>>{
-          for (final slot in Slot.values) slot: <PartRecord>[],
+          for (final value in Slot.values) value: <PartRecord>[],
         },
       );
       roots[code] = root;
-      final rows = parts[slot]!;
+      final rows = slotMap[slot]!;
       final raw = MaterialRecord(rows.length, file, baseName(texture), 0);
       rows.add(
         PartRecord(
@@ -581,15 +327,16 @@ class Appearance {
       );
     }
 
+    var added = 0;
     for (final entry in byCode.entries) {
       final upper = entry.value[Slot.upper] ?? const <PartRecord>[];
       if (upper.isEmpty) continue;
       final root = roots[entry.key]!;
+      final animationPrefix = root + '/ani/' + entry.key + '_';
       final animations = paths
           .where(
-            (p) =>
-                p.startsWith('$root/ani/${entry.key}_') &&
-                p.endsWith('.ani'),
+            (value) =>
+                value.startsWith(animationPrefix) && value.endsWith('.ani'),
           )
           .toList();
       archetypes.add(
@@ -601,19 +348,19 @@ class Appearance {
           animations,
         ),
       );
+      added++;
     }
 
-    if (byCode.isNotEmpty) {
+    if (added > 0) {
       warnings.add(
-        'SPK: se añadieron ${archetypes.length - existing.length} arquetipos '
-        'de vista previa usando únicamente parejas 3DC/DDS con el mismo nombre. '
-        'No se inventaron asociaciones aproximadas; los MLT seguirán teniendo '
-        'prioridad cuando se resuelvan.',
+        'SPK: se añadieron $added arquetipos de vista previa usando '
+        'únicamente parejas 3DC/DDS con el mismo nombre. No se inventaron '
+        'asociaciones aproximadas; los MLT siguen teniendo prioridad cuando '
+        'se resuelven.',
       );
       progress('SPK: ${archetypes.length} arquetipos disponibles para 3D');
     }
   }
-
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
     for (final p in paths.where(
