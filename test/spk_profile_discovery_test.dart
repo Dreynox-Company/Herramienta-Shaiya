@@ -15,7 +15,7 @@ void main() {
     expect(paths, contains(r'C:\Games\Shaiya\data.spk.profile.json'));
   });
 
-  test('SPK name map discovery includes packaged and hash-specific maps', () {
+  test('SPK name map discovery normalizes repeated separators', () {
     final paths = spkNameMapCandidatePaths(
       r'C:\\Games\\Shaiya\\data.spk',
       'a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f',
@@ -24,18 +24,16 @@ void main() {
     );
     expect(
       paths,
-      contains(r'C:\\Tools\\ShaiyaStudio\\profiles\\spk-name-map.json'),
+      contains(r'C:\Tools\ShaiyaStudio\profiles\spk-name-map.json'),
     );
     expect(
       paths,
-      contains(
-        r'C:\\Tools\\ShaiyaStudio\\profiles\\spk-name-map-a3ea7e3b.json',
-      ),
+      contains(r'C:\Tools\ShaiyaStudio\profiles\spk-name-map-a3ea7e3b.json'),
     );
-    expect(paths, contains(r'C:\\Games\\Shaiya\\data.spk.names.json'));
+    expect(paths, contains(r'C:\Games\Shaiya\data.spk.names.json'));
   });
 
-  test('SPK resource profile discovery includes V7 paths', () {
+  test('SPK resource profile discovery includes V8 paths', () {
     const indexHash =
         'a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f';
     const packaged =
@@ -52,5 +50,16 @@ void main() {
       contains(r'C:\Games\Shaiya\derived-resource-profile.json'),
     );
     expect(paths, contains(r'C:\Games\Shaiya\data.spk.resources.json'));
+  });
+
+  test('SPK ResourceProbe executable is resolved beside packaged Studio', () {
+    final path = spkResourceProbeExecutablePath(
+      executablePath: r'C:\Tools\ShaiyaStudio\herramienta_shaiya.exe',
+      separatorOverride: r'\',
+    );
+    expect(
+      path,
+      r'C:\Tools\ShaiyaStudio\Extras\SPK\Shaiya_SPK_ResourceProbe.exe',
+    );
   });
 }
