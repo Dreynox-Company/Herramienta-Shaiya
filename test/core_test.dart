@@ -76,6 +76,45 @@ Uint8List svmapNpcRouteFixture() {
   return bytes.takeBytes();
 }
 
+
+Uint8List dgFixture() {
+  final bytes=BytesBuilder();
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void u16(int x){final b=ByteData(2)..setUint16(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void vec(double x,double y,double z){f32(x);f32(y);f32(z);}
+  void str256(String value){
+    final out=Uint8List(256),raw=Uint8List.fromList(value.codeUnits);
+    out.setRange(0,raw.length.clamp(0,255),raw);
+    bytes.add(out);
+  }
+
+  vec(0,0,0);vec(10,5,10); // DG bbox.
+  i32(1);str256('DUN_LOGIN01.tga');
+  i32(0); // lightmap count.
+  i32(1); // root node present.
+
+  vec(5,2.5,5); // node center.
+  vec(0,0,0);vec(10,5,10); // view box.
+  vec(0,0,0);vec(10,5,10); // collision box.
+  i32(1); // mesh groups.
+  i32(0); // texture index.
+  i32(1); // meshes.
+  i32(-1); // lightmap index.
+  i32(3); // vertices.
+  for(final p in <List<double>>[[0,1,0],[1,1,0],[0,1,1]]){
+    vec(p[0],p[1],p[2]);
+    vec(0,1,0);
+    i32(-1);
+    f32(p[0]);f32(p[2]);
+    f32(0);f32(0);
+  }
+  i32(1);u16(0);u16(1);u16(2);
+  i32(0); // transparent/no collision mesh.
+  for(var i=0;i<8;i++)i32(0);
+  return bytes.takeBytes();
+}
+
 PartRecord part(Slot s, int id, String texture) => PartRecord(
   s,
   MaterialRecord(id, 'm.3dc', texture, 1),
@@ -196,6 +235,19 @@ void main() {
       final look=Appearance.initial(a);
       expect(look.selected[Slot.upper]!.key,'001');
       expect(look.selected[Slot.lower]!.key,'001');
+    });
+  });
+
+  group('DG dungeon', () {
+    test('lee nodos, textura y malla de Login.wld', () {
+      final dg=DgData.parse(dgFixture(),'DUN_LOGIN.dg');
+      expect(dg.parts.length,1);
+      expect(dg.parts.single.texture,'DUN_LOGIN01.tga');
+      expect(dg.parts.single.mesh.vertices,3);
+      expect(dg.parts.single.mesh.triangles,1);
+      expect(dg.center.x,closeTo(5,1e-6));
+      expect(dg.center.z,closeTo(5,1e-6));
+      expect(dg.floorAt(5,5),closeTo(1,1e-6));
     });
   });
 
