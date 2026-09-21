@@ -704,6 +704,50 @@ class _GameClientPageState extends State<GameClientPage> {
 
   PsCharacterSlot? get _selectedLiveSlot=>liveSlots.where((s)=>s.exists).firstOrNull;
 
+  int? _liveQuestNpcGlobalId(int id){
+    final rule=metadata?.quests[id],snapshot=liveSnapshot;
+    if(rule==null||snapshot==null)return null;
+    return snapshot.npcs
+      .where((p)=>p.type==rule.startNpcType&&p.typeId==rule.startNpcId)
+      .map((p)=>p.globalId)
+      .firstOrNull;
+  }
+
+  Future<void> _acceptCurrentQuest() async {
+    final q=catalog?.questText(uiLocale)?.quest(questId);
+    if(_qaVisual||liveWorld==null){
+      setState(()=>questOpen=false);
+      messages.insert(0,'[Misión] '+(q?.name??'Misión aceptada'));
+      return;
+    }
+    final snapshot=liveSnapshot;
+    if(snapshot?.quests.any((x)=>x.questId==questId)??false){
+      setState(()=>questOpen=false);
+      messages.insert(0,'[Misión] '+(q?.name??'Misión')+' ya estaba activa.');
+      return;
+    }
+    final npcId=_liveQuestNpcGlobalId(questId);
+    if(npcId==null){
+      messages.insert(0,'[Misión] El NPC inicial de '+questId.toString()+' no está en la celda cargada.');
+      if(mounted)setState((){});
+      return;
+    }
+    try{
+      await liveWorld!.startQuest(npcId,questId);
+      if(snapshot!=null){
+        liveSnapshot=PsWorldSnapshot(
+          self:snapshot.self,npcs:snapshot.npcs,mobs:snapshot.mobs,
+          quests:List.unmodifiable([...snapshot.quests,PsQuestProgress(questId,0,0,0,0)]),
+          finishedQuests:snapshot.finishedQuests,
+        );
+      }
+      messages.insert(0,'[Misión] '+(q?.name??'Misión')+' aceptada por World.');
+      if(mounted)setState(()=>questOpen=false);
+    }catch(e){
+      messages.insert(0,'[Misión] No se pudo aceptar: '+e.toString());
+      if(mounted)setState((){});
+    }
+  }
   Future<void> _toggleDeleteCharacter() async {
     if(_qaVisual){
       setState(()=>characterCreated=!characterCreated);
@@ -946,11 +990,7 @@ class _GameClientPageState extends State<GameClientPage> {
             messages:messages,
             questOpen:questOpen,
             questId:questId,
-            onAcceptQuest:(){
-              setState(()=>questOpen=false);
-              final q=catalog!.questText(uiLocale)?.quest(questId);
-              messages.insert(0,'[Misión] '+(q?.name??'Misión aceptada'));
-            },
+            onAcceptQuest:()=>unawaited(_acceptCurrentQuest()),
             onCancelQuest:()=>setState(()=>questOpen=false),
           ),
         }),
