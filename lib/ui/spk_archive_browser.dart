@@ -789,6 +789,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             : sha256.convert(archive.profile.effectiveResourceSecret!).toString(),
         'chunkNonceRule': archive.profile.chunkNonceRule,
         'validation': result,
+        'resourceFormats': archive.validatedFormatsJson,
         'diagnostics': archive.diagnostics(),
       }),
       flush: true,
