@@ -521,6 +521,21 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   }
 
+  Future<void> persistNameMapSidecar() async {
+    final target = File('${source.file.path}.names.json');
+    final temporary = File('${target.path}.tmp');
+    final body = <String, Object?>{
+      ...source.names.toJson(),
+      'spkIndexSha256': source.index.encryptedIndexSha256,
+    };
+    await temporary.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(body),
+      flush: true,
+    );
+    if (await target.exists()) await target.delete();
+    await temporary.rename(target.path);
+  }
+
   Future<void> exportNameMap() => runAction(() async {
     final location = await getSaveLocation(
       suggestedName: 'spk-name-map.json',
@@ -583,6 +598,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
     if (picked == null) return;
     await source.importNameMap(await File(picked.path).readAsString());
+    await persistNameMapSidecar();
     if (mounted) {
       setState(() {
         currentFolder = '';
@@ -608,7 +624,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   'Puedes inferir rápidamente rutas cuando el tamaño decodificado '
                   'es único, o confirmar rutas leyendo el recurso SPK y comparando '
                   'SHA-256 byte por byte contra la DATA de referencia.\n\n'
-                  'La verificación es más lenta, pero produce nombres confirmados.',
+                  'La verificación es más lenta, pero produce nombres confirmados. '
+                  'Si la fragmentación ya fue autenticada también confirma recursos fragmentados.',
                 ),
               ),
               actions: [
@@ -650,6 +667,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               });
             },
           );
+    await persistNameMapSidecar();
     if (!mounted) return;
     setState(() {
       currentFolder = '';
@@ -659,7 +677,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       SnackBar(
         content: Text(
           verify == true
-              ? '${result['confirmed']} rutas confirmadas por SHA-256.'
+              ? '${result['confirmed']} rutas confirmadas por SHA-256 · '
+                    '${result['simpleVerified']} simples · '
+                    '${result['fragmentedVerified']} fragmentadas'
+                    '${(result['fragmentedSkipped'] as int) > 0 ? ' · ${result['fragmentedSkipped']} fragmentadas pendientes' : ''}.'
               : '${result['strongInferred']} rutas con evidencia Zstandard + '
                     '${result['sizeOnlyInferred']} por tamaño único. '
                     'Se muestran como inferidas hasta confirmarlas.',
