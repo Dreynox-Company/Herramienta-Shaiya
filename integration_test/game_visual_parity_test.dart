@@ -116,7 +116,7 @@ void main(){
         'worldObjects':state.scene.world?.objects.length??0,
         'worldSky':state.scene.world?.skyFile??'',
         'svmapNpcGroups':state.svmap?.npcs.length??0,
-        'svmapNpcWaypoints':state.svmap?.npcs.fold<int>(0,(n,p)=>n+p.route.length)??0,
+        'svmapNpcWaypoints':state.svmap==null?0:(state.svmap.npcs as List).map<int>((dynamic p)=>(p.route as List).length).fold<int>(0,(int a,int b)=>a+b),
         'actors':state.scene.gameActors.length,
         'loadedWorldAssets':state.scene.loadedWorldAssets,
         'missingWorldAssets':state.scene.missingWorldAssets,
