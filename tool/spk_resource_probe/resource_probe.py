@@ -231,7 +231,10 @@ def main():
       nonlocal failure
       try:
        sink.accept(m,d)
-       if len(sink.valid_simple)>=4 and len(sink.valid_chunks)>=2:done.set()
+       # Cuatro recursos simples autenticados bastan para recuperar la clave/AAD.
+       # Studio valida de nuevo esa clave contra muestras distribuidas del SPK y
+       # deriva después la regla de chunks offline usando los tags auxiliares.
+       if len(sink.valid_simple)>=4:done.set()
       except Exception as e:failure=str(e);done.set()
     try:
       pid=dev.spawn([str(exe)],cwd=str(exe.parent));sess=dev.attach(pid);sess.on('detached',lambda *x:done.set());script=sess.create_script(agent);script.on('message',onmsg);script.load();dev.resume(pid)
@@ -246,7 +249,7 @@ def main():
     prof=derive_profile(sink.rows);prof['failure']=failure;(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2));(out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2))
     print(json.dumps(prof,ensure_ascii=False,indent=2));
     if prof['readyForFragmented']:print('ÉXITO: simples + fragmentos reproducidos offline.');return 0
-    if prof['readyForSimple']:print('Simples resueltos; faltan chunks o regla de nonce.');return 4
+    if prof['readyForSimple']:print('Simples autenticados; Shaiya Studio revalidará la clave y derivará los chunks offline.');return 4
     print('No se capturó aún un perfil de recurso válido.');return 3
 if __name__=='__main__':
   try:raise SystemExit(main())
