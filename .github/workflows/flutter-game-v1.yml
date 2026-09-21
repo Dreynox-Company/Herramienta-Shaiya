@@ -116,7 +116,9 @@ jobs:
           foreach($stage in @('faction','characterSelect','characterCreate','world')){
             $marker=(Join-Path (Resolve-Path qa-game) ($stage+'-ready.json'))
             if(Test-Path $marker){Remove-Item $marker -Force}
-            $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_FIXTURE","--qa-stage=$stage","--qa-marker=$marker") -PassThru
+            $env:SHAIYA_QA_READY_FILE=$marker
+            $env:SHAIYA_QA_DISABLE_BACKEND='1'
+            $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_FIXTURE","--qa-stage=$stage") -PassThru
             try{
               $deadline=(Get-Date).AddSeconds(90)
               while(!(Test-Path $marker)){
@@ -128,9 +130,10 @@ jobs:
               Start-Sleep 2
               Capture-Window $p $stage
               $state=Get-Content $marker -Raw | ConvertFrom-Json
+              if(!$state.ready){throw "$stage marker reports failure: $($state.error)"}
               if($state.loading){throw "$stage marker still reports loading"}
-              if(!$state.character){throw "$stage has no loaded character"}
-              if($stage -eq 'world' -and [string]::IsNullOrWhiteSpace($state.world)){throw 'world stage did not load a WLD'}
+              if(!$state.scene.character){throw "$stage has no loaded character"}
+              if($stage -eq 'world' -and [string]::IsNullOrWhiteSpace($state.scene.world)){throw 'world stage did not load a WLD'}
               $results+=@{stage=$stage;alive=$true;title=$p.MainWindowTitle;state=$state}
             }finally{
               $p.Refresh()
@@ -166,4 +169,180 @@ jobs:
         with:
           name: Flutter-Game-QA
           path: qa-game/
+          retention-days: 14
+
+
+  parity-real-data:
+    needs: windows
+    runs-on: windows-2022
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: Dreynox-Shaiya-Flutter-Game-Windows-x64
+          path: flutter-client
+      - uses: actions/download-artifact@v4
+        with:
+          name: Native-Windows-Interaction-Proof
+          run-id: 35541302782
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: native-reference
+      - name: Recover exact public ps0032 DATA used by native reference
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force public-client,proof | Out-Null
+          @'
+          import pathlib,tarfile,urllib.request,time
+          target=pathlib.Path('public-client')
+          wanted={'data.sah','data.saf'}
+          found=set();started=time.monotonic()
+          url='https://archive.openshaiya.org/api/build/shaiya-ga-ps0032.tar.gz'
+          with urllib.request.urlopen(url,timeout=180) as r:
+            with tarfile.open(fileobj=r,mode='r|gz') as t:
+              for entry in t:
+                if not entry.isfile(): continue
+                name=pathlib.PurePosixPath(entry.name.replace('\\','/')).name.lower()
+                if name not in wanted: continue
+                src=t.extractfile(entry)
+                if src is None: continue
+                dst=target/name
+                with dst.open('wb') as out:
+                  while True:
+                    block=src.read(8*1024*1024)
+                    if not block: break
+                    out.write(block)
+                found.add(name)
+                print(name,dst.stat().st_size)
+                if found==wanted: break
+          if found!=wanted: raise RuntimeError('public ps0032 SAH/SAF not found: '+repr(found))
+          print('download seconds',round(time.monotonic()-started,1))
+          '@ | Set-Content recover_public_data.py
+          python recover_public_data.py
+          if($LASTEXITCODE -ne 0){throw 'public data recovery failed'}
+          python native-ci/prepare_raw.py public-client/game.exe
+          if($LASTEXITCODE -ne 0){throw 'raw public DATA extraction failed'}
+          $data=(Resolve-Path public-client/data).Path
+          "SHAIYA_REAL_DATA=$data" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Get-ChildItem $data -Recurse -File | Measure-Object | Select-Object Count
+      - name: Capture the four Flutter states only after READY
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force parity-report | Out-Null
+          $exe=(Get-ChildItem flutter-client -Recurse -Filter herramienta_shaiya.exe | Select-Object -First 1).FullName
+          if(!$exe){throw 'Flutter executable missing'}
+          Add-Type -AssemblyName System.Drawing
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class ParityWindow {
+            [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left,Top,Right,Bottom; }
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd,out RECT rect);
+          }
+          '@
+          function Capture-Window($p,[string]$name){
+            $p.Refresh()
+            if($p.HasExited){throw "Flutter exited during $name"}
+            $r=New-Object ParityWindow+RECT
+            if(![ParityWindow]::GetWindowRect($p.MainWindowHandle,[ref]$r)){throw "GetWindowRect failed: $name"}
+            $w=$r.Right-$r.Left;$h=$r.Bottom-$r.Top
+            $im=New-Object System.Drawing.Bitmap $w,$h
+            $g=[System.Drawing.Graphics]::FromImage($im)
+            $g.CopyFromScreen($r.Left,$r.Top,0,0,$im.Size)
+            $im.Save((Join-Path (Resolve-Path parity-report) ('flutter-'+$name+'.png')),[System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose();$im.Dispose()
+          }
+          $states=@()
+          foreach($stage in @('faction','characterSelect','characterCreate','world')){
+            $marker=(Join-Path (Resolve-Path parity-report) ($stage+'-ready.json'))
+            if(Test-Path $marker){Remove-Item $marker -Force}
+            $env:SHAIYA_QA_READY_FILE=$marker
+            $env:SHAIYA_QA_DISABLE_BACKEND='1'
+            $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -ArgumentList @("--data=$env:SHAIYA_REAL_DATA","--qa-stage=$stage") -PassThru
+            try{
+              $deadline=(Get-Date).AddMinutes(6)
+              while(!(Test-Path $marker)){
+                $p.Refresh()
+                if($p.HasExited){throw "Flutter exited before $stage READY"}
+                if((Get-Date) -gt $deadline){throw "timeout waiting for real-DATA $stage"}
+                Start-Sleep -Milliseconds 750
+              }
+              $state=Get-Content $marker -Raw | ConvertFrom-Json
+              if(!$state.ready){throw "$stage failed: $($state.error)"}
+              Start-Sleep 3
+              Capture-Window $p $stage
+              $states+=@{stage=$stage;state=$state}
+            }finally{
+              $p.Refresh()
+              if(!$p.HasExited){
+                $p.CloseMainWindow()|Out-Null
+                Start-Sleep 4
+                $p.Refresh()
+                if(!$p.HasExited){$p.Kill();Start-Sleep 2}
+              }
+            }
+          }
+          $states | ConvertTo-Json -Depth 8 | Set-Content parity-report/flutter-states.json
+      - name: Compare native and Flutter scenes
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pillow numpy
+          @'
+          import json,pathlib
+          import numpy as np
+          from PIL import Image,ImageChops,ImageEnhance
+          root=pathlib.Path('parity-report')
+          native=pathlib.Path('native-reference')
+          mapping={
+            'faction':'03-faction-selected.png',
+            'characterSelect':'07-character-created.png',
+            'characterCreate':'05-character-editor.png',
+            'world':'09-world-entry.png',
+          }
+          def load(p):
+            im=Image.open(p).convert('RGB').resize((1024,768))
+            return np.asarray(im,dtype=np.float32)
+          report={}
+          for stage,refname in mapping.items():
+            fp=root/f'flutter-{stage}.png'
+            rp=next(native.rglob(refname))
+            a=load(fp);b=load(rp)
+            # Ignore the Windows title bar. It is not part of either game UI.
+            a=a[26:];b=b[26:]
+            mae=float(np.mean(np.abs(a-b))/255.0)
+            grayA=np.mean(a,axis=2);grayB=np.mean(b,axis=2)
+            ax=np.diff(grayA,axis=1,prepend=grayA[:,:1]);ay=np.diff(grayA,axis=0,prepend=grayA[:1])
+            bx=np.diff(grayB,axis=1,prepend=grayB[:,:1]);by=np.diff(grayB,axis=0,prepend=grayB[:1])
+            ea=np.hypot(ax,ay);eb=np.hypot(bx,by)
+            denom=float(np.linalg.norm(ea.ravel())*np.linalg.norm(eb.ravel()))
+            edge=float(np.dot(ea.ravel(),eb.ravel())/denom) if denom else 0.0
+            lum=float(np.corrcoef(grayA.ravel(),grayB.ravel())[0,1])
+            report[stage]={
+              'pixelSimilarity':round(1-mae,5),
+              'edgeCorrelation':round(edge,5),
+              'luminanceCorrelation':round(lum,5),
+              'native':str(rp),
+              'flutter':str(fp),
+            }
+            ia=Image.fromarray(a.astype('uint8'))
+            ib=Image.fromarray(b.astype('uint8'))
+            diff=ImageChops.difference(ia,ib)
+            ImageEnhance.Contrast(diff).enhance(2.0).save(root/f'diff-{stage}.png')
+          (root/'visual-parity.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          # Gross-regression gate: never accept loading/error/blank screens as parity evidence.
+          if any(v['pixelSimilarity']<0.18 for v in report.values()):
+            raise SystemExit('visual parity gross-regression gate failed')
+          '@ | Set-Content compare_parity.py
+          python compare_parity.py
+          if($LASTEXITCODE -ne 0){throw 'visual parity comparison failed'}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Flutter-Native-Visual-Parity
+          path: parity-report/
           retention-days: 14
