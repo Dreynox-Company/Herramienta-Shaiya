@@ -1124,9 +1124,29 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       ],
     );
     if (location == null) return;
+    final footer = await SpkArchiveSource.readRange(
+      source.file,
+      source.fileBytes - spkFooterBytes,
+      spkFooterBytes,
+      source.fileBytes,
+    );
+    final headerRaw = await SpkArchiveSource.readRange(
+      source.file,
+      0,
+      spkHeaderBytes,
+      source.fileBytes,
+    );
     final body = const JsonEncoder.withIndent('  ').convert({
-      'schema': 1,
+      'schema': 2,
       'source': source.file.path,
+      'containerEvidence': {
+        'headerBytes': spkHeaderBytes,
+        'headerSha256': sha256.convert(headerRaw).toString(),
+        'headerHex': spkHex(headerRaw),
+        'footerBytes': spkFooterBytes,
+        'footerSha256': sha256.convert(footer).toString(),
+        'footerHex': spkHex(footer),
+      },
       'diagnostics': source.diagnostics(),
       'nameMap': source.names.toJson(),
       'records': source.index.records
