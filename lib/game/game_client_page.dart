@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -198,10 +197,52 @@ class _GameClientPageState extends State<GameClientPage> {
         c.creatures.length.toString()+' criaturas · '+
         c.worlds.length.toString()+' mapas.',
     );
+    await _preloadStageUi();
     if(mounted)setState(()=>loading=false);
     await _signalQaReady();
     await _markQaReady();
     focus.requestFocus();
+  }
+
+  Future<void> _preloadStageUi() async {
+    final cache=ui;
+    if(cache==null)return;
+    final common=<String>[
+      'interface/charactermake/button/navi_zoomin.tga',
+      'interface/charactermake/button/navi_zoomout.tga',
+    ];
+    final paths=switch(stage){
+      GameStage.faction=><String>[
+        'interface/countryselect/bg.tga',
+        'interface/countryselect/light_select.tga',
+        'interface/countryselect/fury_select.tga',
+      ],
+      GameStage.characterSelect=><String>[
+        'interface/characterselect/selectbg.tga',
+        'interface/characterselect/button/selectbtn_fi.tga',
+        'interface/characterselect/button/selectbtn_disable.tga',
+        'interface/characterselect/button/select_start_spn.tga',
+      ],
+      GameStage.characterCreate||GameStage.characterMode=><String>[
+        'interface/charactermake/basicinfo_bg.tga',
+        'interface/charactermake/appearance_bg.tga',
+        'interface/charactermake/mode_bg.tga',
+        'interface/charactermake/classinfo/bg.tga',
+        'interface/charactermake/button/fighter_worrior.tga',
+        'interface/charactermake/button/defender_guardian.tga',
+        'interface/charactermake/button/priest_oracle.tga',
+        'interface/charactermake/button/ranger_assassin.tga',
+        'interface/charactermake/button/archer_hunter.tga',
+        'interface/charactermake/button/mage_pagan.tga',
+        'interface/charactermake/button/sexm.tga',
+        'interface/charactermake/button/sexw.tga',
+        'interface/charactermake/button/mode_basic.tga',
+        'interface/charactermake/button/mode_ultimate.tga',
+        ...common,
+      ],
+      GameStage.world=>const <String>[],
+    };
+    await cache.preload(paths);
   }
 
   Future<void> _markQaReady() async {
@@ -245,7 +286,11 @@ class _GameClientPageState extends State<GameClientPage> {
       ?wanted
       :c.worlds.where((p)=>baseName(p).toLowerCase()=='select_a.wld').firstOrNull;
     if(path!=null){
-      try{await scene.setWorld(path);}
+      try{
+        // Los objetos de select_A/select_B están concentrados alrededor de la plaza
+        // 235,164. El antiguo 512,512 mostraba solo terreno y filtraba edificios.
+        await scene.setWorld(path,x:235.2,z:164.2);
+      }
       catch(e){messages.insert(0,'[Selección] '+e.toString());}
     }else{
       await scene.setWorld(null);
