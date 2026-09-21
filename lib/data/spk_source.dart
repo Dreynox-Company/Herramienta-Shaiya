@@ -666,7 +666,7 @@ class SpkArchiveSource {
       return 'unsupported';
     }
     if (maxSamples < 1 || minimumAuthenticatedSamples < 1) {
-      throw const ArgumentError('Los límites de derivación deben ser positivos.');
+      throw ArgumentError('Los límites de derivación deben ser positivos.');
     }
 
     var candidates = supportedChunkNonceRules.toSet();
