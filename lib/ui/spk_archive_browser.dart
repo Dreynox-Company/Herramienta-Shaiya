@@ -358,7 +358,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Carpeta extraída: ' + result['folder'].toString()),
+          content: Text('Carpeta extraída: ${result['folder']}'),
         ),
       );
     }
