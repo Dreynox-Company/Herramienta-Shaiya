@@ -29,6 +29,8 @@ import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
+import 'data/spk_source.dart';
+import 'ui/spk_browser.dart';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -295,6 +297,14 @@ class _StudioState extends State<StudioPage> {
                   onTap: () => Navigator.pop(ctx, 'editor'),
                 ),
               ListTile(
+                leading: const Icon(Icons.folder_zip_outlined),
+                title: const Text('Archivo DATA.SPK'),
+                subtitle: const Text(
+                  'Índice autenticado, explorador técnico y extracción por demanda. Mantiene la DATA activa.',
+                ),
+                onTap: () => Navigator.pop(ctx, 'spk'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.translate),
                 title: const Text('Codificación de nombres'),
                 subtitle: Text(LegacyText.preferred.label),
@@ -322,12 +332,62 @@ class _StudioState extends State<StudioPage> {
     if (!mounted) return;
     if (mode == 'editor') {
       await openDataEditor();
+    } else if (mode == 'spk') {
+      await openSpkBrowser();
     } else if (mode == 'encoding') {
       await chooseNameEncoding();
     } else if (mode == 'report') {
       await act(exportArchiveReport);
     } else if (mode != null) {
       await connect(archive: mode == 'archive');
+    }
+  }
+
+  Future<void> openSpkBrowser() async {
+    if (importing || working) return;
+    final selected = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Contenedor Shaiya SPK', extensions: ['spk']),
+      ],
+      confirmButtonText: 'Abrir DATA.SPK',
+    );
+    if (selected == null) return;
+    scene.clearMovement();
+    focus.unfocus();
+    setState(() {
+      importing = true;
+      progress = 'Validando DATA.SPK…';
+    });
+    SpkSource? source;
+    try {
+      source = await SpkSource.open(
+        selected.path,
+        progress: (value) {
+          if (mounted) setState(() => progress = value);
+        },
+      );
+      if (!mounted) return;
+      diagnostics.insert(
+        0,
+        '${DateTime.now().toIso8601String()} · SPK: '
+        '${source.simpleCount} directos, ${source.chunkedCount} fragmentados, '
+        'perfil ${source.profile.id}',
+      );
+      setState(() {
+        importing = false;
+        progress =
+            'SPK: ${source!.resources.length} recursos técnicos · índice autenticado';
+      });
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => SpkBrowserPage(source: source!)),
+      );
+    } catch (e) {
+      showError(e);
+    } finally {
+      if (mounted) {
+        setState(() => importing = false);
+        focus.requestFocus();
+      }
     }
   }
 
