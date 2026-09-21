@@ -476,6 +476,24 @@ class SpkNameHint {
   };
 }
 
+class SpkNameHint {
+  final String path;
+  final String confidence;
+  final String evidence;
+
+  const SpkNameHint({
+    required this.path,
+    required this.confidence,
+    required this.evidence,
+  });
+
+  Map<String, Object?> toJson() => {
+    'path': path,
+    'confidence': confidence,
+    'evidence': evidence,
+  };
+}
+
 class SpkNameMap {
   final Map<int, String> paths;
   final Map<int, SpkNameHint> hints;
@@ -519,9 +537,7 @@ class SpkNameMap {
     final inferred = <int, SpkNameHint>{};
 
     for (final entry in confirmedRaw.entries) {
-      if (entry.key == 'schema' ||
-          entry.key == 'hints' ||
-          entry.key == 'stats') {
+      if (entry.key == 'schema' || entry.key == 'hints' || entry.key == 'stats') {
         continue;
       }
       final id = _id(entry.key);
@@ -557,10 +573,12 @@ class SpkNameMap {
   String? operator [](int id) => paths[id] ?? hints[id]?.path;
   bool isConfirmed(int id) => paths.containsKey(id);
   bool isInferred(int id) => !paths.containsKey(id) && hints.containsKey(id);
-  String confidence(int id) =>
-      isConfirmed(id) ? 'confirmed' : hints[id]?.confidence ?? 'unresolved';
-  String evidence(int id) =>
-      isConfirmed(id) ? 'confirmed-path' : hints[id]?.evidence ?? 'none';
+  String confidence(int id) => isConfirmed(id)
+      ? 'confirmed'
+      : hints[id]?.confidence ?? 'unresolved';
+  String evidence(int id) => isConfirmed(id)
+      ? 'confirmed-path'
+      : hints[id]?.evidence ?? 'none';
 
   void mergeConfirmed(Map<int, String> values) {
     for (final entry in values.entries) {
@@ -618,3 +636,4 @@ class SpkNameMap {
     },
   };
 }
+
