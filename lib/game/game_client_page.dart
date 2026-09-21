@@ -49,6 +49,10 @@ class _GameClientPageState extends State<GameClientPage> {
   String progress='Inicializando cliente Flutter…';
   int classIndex=0;
   int genderIndex=0;
+  int createTab=0;
+  int faceIndex=0;
+  int hairIndex=0;
+  int modeIndex=0;
   double gestureScale=1;
   final messages=<String>['[Notice] Laboratorio local'];
 
@@ -178,7 +182,8 @@ class _GameClientPageState extends State<GameClientPage> {
     await _applyDefaultAppearance();
 
     stage=widget.initialStage??GameStage.faction;
-    if(stage==GameStage.characterSelect||stage==GameStage.characterCreate){
+    if(stage==GameStage.characterSelect||stage==GameStage.characterCreate||stage==GameStage.characterMode){
+      if(stage==GameStage.characterMode){createTab=2;stage=GameStage.characterMode;}
       await _prepareSelectionWorld();
       characterCreated=stage==GameStage.characterSelect;
     }else if(stage==GameStage.world){
@@ -224,7 +229,12 @@ class _GameClientPageState extends State<GameClientPage> {
         ?['human','elf'].contains(x.race)
         :['vile','deatheater'].contains(x.race)).firstOrNull
       ??c.archetypes.first;
-    await scene.setAppearance(Appearance.initial(a));
+    var look=Appearance.initial(a);
+    final faces=a.parts[Slot.face]??const <PartRecord>[];
+    final hairs=a.parts[Slot.hair]??const <PartRecord>[];
+    if(faces.isNotEmpty){look=look.withPart(Slot.face,faces[faceIndex.clamp(0,faces.length-1)]);}
+    if(hairs.isNotEmpty){look=look.withPart(Slot.hair,hairs[hairIndex.clamp(0,hairs.length-1)]);}
+    await scene.setAppearance(look);
   }
 
   Future<void> _prepareSelectionWorld() async {
@@ -358,6 +368,18 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.updateCamera();
   }
 
+  Future<void> _changeFace(int value) async {
+    faceIndex=value;
+    await _applyDefaultAppearance();
+    if(mounted)setState((){});
+  }
+
+  Future<void> _changeHair(int value) async {
+    hairIndex=value;
+    await _applyDefaultAppearance();
+    if(mounted)setState((){});
+  }
+
   Widget _viewport()=>Positioned.fill(child:ViewportMovementInput(
     focusNode:focus,
     onChanged:(x,z,run){
@@ -466,13 +488,21 @@ class _GameClientPageState extends State<GameClientPage> {
             onStart:()=>unawaited(_enterWorld()),
             onBack:()=>unawaited(_goFaction()),
           ),
-          GameStage.characterCreate=>CharacterCreateScreen(
+          GameStage.characterCreate||GameStage.characterMode=>CharacterCreateScreen(
             ui:ui!,
             nameController:nameController,
             classIndex:classIndex,
             genderIndex:genderIndex,
+            tabIndex:createTab,
+            faceIndex:faceIndex,
+            hairIndex:hairIndex,
+            modeIndex:modeIndex,
             onClass:(value)=>setState(()=>classIndex=value),
             onGender:(value)=>unawaited(_changeGender(value)),
+            onTab:(value)=>setState(()=>createTab=value),
+            onFace:(value)=>unawaited(_changeFace(value)),
+            onHair:(value)=>unawaited(_changeHair(value)),
+            onMode:(value)=>setState(()=>modeIndex=value),
             onBack:()=>unawaited(_goSelect()),
             onCreate:()=>unawaited(_finishCreate()),
             onZoomIn:()=>scene.zoom(.9),
