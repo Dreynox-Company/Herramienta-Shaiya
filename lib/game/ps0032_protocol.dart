@@ -19,6 +19,7 @@ class PsPacketType {
   static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
+  static const characterItems=0x0106;
   static const characterSkills=0x0108;
   static const characterActiveBuffs=0x010A;
   static const characterSkillBar=0x010B;
@@ -402,6 +403,39 @@ class PsCharacterSlot {
   }
 }
 
+class PsInventoryItem {
+  final int bag,slot,type,typeId,quality,count;
+  final List<int> gems;
+  final String craftName;
+  final bool craftDisabled,isDyed;
+  const PsInventoryItem({
+    required this.bag,required this.slot,required this.type,required this.typeId,
+    required this.quality,required this.count,required this.gems,
+    required this.craftName,required this.craftDisabled,required this.isDyed,
+  });
+}
+List<PsInventoryItem> parseInventoryItems(PsPacket p){
+  if(p.type!=PsPacketType.characterItems||p.body.isEmpty)return const [];
+  const recordSize=102;
+  final count=p.body[0],needed=1+count*recordSize;
+  if(p.body.length<needed)throw FormatException('CHARACTER_ITEMS truncado: '+p.body.length.toString()+' < '+needed.toString());
+  final d=ByteData.sublistView(p.body),out=<PsInventoryItem>[];var o=1;
+  for(var i=0;i<count;i++,o+=recordSize){
+    final rawName=Uint8List.sublistView(p.body,o+31,o+51);
+    final zero=rawName.indexOf(0);
+    final nameBytes=zero<0?rawName:Uint8List.sublistView(rawName,0,zero);
+    out.add(PsInventoryItem(
+      bag:p.body[o],slot:p.body[o+1],type:p.body[o+2],typeId:p.body[o+3],
+      quality:d.getUint16(o+4,Endian.little),
+      gems:List<int>.generate(6,(g)=>d.getInt32(o+6+g*4,Endian.little),growable:false),
+      count:p.body[o+30],
+      craftName:latin1.decode(nameBytes,allowInvalid:true),
+      craftDisabled:p.body[o+51]!=0,
+      isDyed:p.body[o+75]!=0,
+    ));
+  }
+  return List.unmodifiable(out);
+}
 class PsLearnedSkill {
   final int skillId,level,number,cooldownSeconds;
   const PsLearnedSkill(this.skillId,this.level,this.number,this.cooldownSeconds);
