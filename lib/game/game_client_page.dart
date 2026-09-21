@@ -702,6 +702,35 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){stage=GameStage.characterSelect;loading=false;});
   }
 
+  PsCharacterSlot? get _selectedLiveSlot=>liveSlots.where((s)=>s.exists).firstOrNull;
+
+  Future<void> _toggleDeleteCharacter() async {
+    if(_qaVisual){
+      setState(()=>characterCreated=!characterCreated);
+      return;
+    }
+    if(mounted)setState(()=>loading=true);
+    try{
+      final connected=await _ensureLiveWorld();
+      final world=liveWorld,slot=_selectedLiveSlot;
+      if(!connected||world==null)throw StateError('World offline no disponible.');
+      if(slot==null)throw StateError('No hay personaje seleccionado.');
+      if(slot.isDelete){
+        await world.restoreCharacter(slot.id);
+        liveSlots=liveSlots.map((s)=>s.id==slot.id?s.withDelete(false):s).toList(growable:false);
+        messages.insert(0,'[ps0032] Personaje restaurado.');
+      }else{
+        await world.deleteCharacter(slot.id);
+        liveSlots=liveSlots.map((s)=>s.id==slot.id?s.withDelete(true):s).toList(growable:false);
+        messages.insert(0,'[ps0032] Personaje marcado para borrado.');
+      }
+      characterCreated=true;
+    }catch(e){
+      messages.insert(0,'[Selección] '+e.toString());
+    }finally{
+      if(mounted)setState(()=>loading=false);
+    }
+  }
   Future<void> _goCreate() async {
     if(mounted)setState(()=>loading=true);
     await _applyDefaultAppearance();
@@ -878,10 +907,11 @@ class _GameClientPageState extends State<GameClientPage> {
           GameStage.characterSelect=>CharacterSelectScreen(
             ui:ui!,
             created:characterCreated,
+            pendingDelete:_selectedLiveSlot?.isDelete??false,
             name:nameController.text,
             locale:uiLocale,
             onCreate:()=>unawaited(_goCreate()),
-            onDelete:()=>setState(()=>characterCreated=false),
+            onDelete:()=>unawaited(_toggleDeleteCharacter()),
             onStart:()=>unawaited(_enterWorld()),
             onBack:()=>unawaited(_goFaction()),
           ),
