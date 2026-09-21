@@ -360,14 +360,77 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (raw is! Map) {
       throw const FormatException('Perfil SPK JSON inválido.');
     }
-    final nextProfile = SpkCryptoProfile.fromJson(
-      Map<String, dynamic>.from(raw),
-    );
+    final data = Map<String, dynamic>.from(raw);
+    SpkCryptoProfile nextProfile;
+
+    final keyInfo = data['keyInfo'];
+    if (keyInfo is Map && keyInfo['secretHex'] is String) {
+      final resourceSecret = spkHexBytes(
+        keyInfo['secretHex'].toString(),
+        expectedBytes: 16,
+      );
+      var chunkRule = source.profile.chunkNonceRule;
+      final target = data['target'];
+      final auth = data['authenticatedCipherInfo'];
+      if (target is Map &&
+          target['kind'] == 'chunk' &&
+          auth is Map &&
+          auth['nonceHex'] is String) {
+        final parentOrdinal = int.tryParse(
+          target['parentOrdinal']?.toString() ?? '',
+        );
+        final auxiliaryOrdinal = int.tryParse(
+          target['ordinal']?.toString() ?? '',
+        );
+        if (parentOrdinal != null && auxiliaryOrdinal != null) {
+          chunkRule = source.identifyChunkNonceRule(
+            parentOrdinal: parentOrdinal,
+            auxiliaryOrdinal: auxiliaryOrdinal,
+            observedNonce: spkHexBytes(
+              auth['nonceHex'].toString(),
+              expectedBytes: 12,
+            ),
+          );
+        }
+      }
+      nextProfile = SpkCryptoProfile(
+        profileId: '${source.profile.profileId}-resources',
+        indexSha256: source.profile.indexSha256,
+        indexSecret: source.profile.indexSecret,
+        resourceSecret: resourceSecret,
+        resourceKeyIsIndexKey: false,
+        chunkNonceRule: chunkRule,
+      );
+    } else {
+      nextProfile = SpkCryptoProfile.fromJson(data);
+    }
+
     final next = await SpkArchiveSource.open(
       source.file.path,
       nextProfile,
       names: source.names,
     );
+
+    final persistent = File('${source.file.path}.profile.json');
+    await persistent.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'profileId': nextProfile.profileId,
+        'indexSha256': nextProfile.indexSha256,
+        'index': {
+          'algorithm': 'AES-GCM',
+          'secretHex': spkHex(nextProfile.indexSecret),
+        },
+        'resources': {
+          'algorithm': 'AES-GCM',
+          if (nextProfile.effectiveResourceSecret != null)
+            'secretHex': spkHex(nextProfile.effectiveResourceSecret!),
+          'useIndexKey': nextProfile.resourceKeyIsIndexKey,
+          'chunkNonceRule': nextProfile.chunkNonceRule,
+        },
+      }),
+      flush: true,
+    );
+
     if (!context.mounted) return;
     await Navigator.of(context).pushReplacement<void, void>(
       MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
