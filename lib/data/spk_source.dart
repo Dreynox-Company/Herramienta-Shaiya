@@ -443,12 +443,13 @@ class SpkSource {
           }
         }
         completed++;
-        manifest.add({
+        final manifestEntry = <String, Object?>{
           ...record.toJson(),
           'status': status,
-          if (relative != null) 'output': relative,
-          if (error != null) 'error': error,
-        });
+        };
+        if (relative != null) manifestEntry['output'] = relative;
+        if (error != null) manifestEntry['error'] = error;
+        manifest.add(manifestEntry);
         progress?.call(
           SpkExtractionProgress(
             completed: completed,
