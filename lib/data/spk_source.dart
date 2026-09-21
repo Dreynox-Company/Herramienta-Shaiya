@@ -517,7 +517,13 @@ class SpkArchiveSource {
       fileBytes,
     );
     return decodePayload(
-      await decryptGcm(cipher, key, record.nonce, record.tag),
+      await decryptGcm(
+        cipher,
+        key,
+        record.nonce,
+        record.tag,
+        aad: profile.resourceAad.isEmpty ? null : profile.resourceAad,
+      ),
       record.decodedBytes,
     );
   }
@@ -554,6 +560,7 @@ class SpkArchiveSource {
           key,
           _fragmentNonce(record, part, i),
           part.metadata,
+          aad: profile.resourceAad.isEmpty ? null : profile.resourceAad,
         ),
       );
     }
