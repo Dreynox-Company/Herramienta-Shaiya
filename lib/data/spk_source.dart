@@ -770,7 +770,8 @@ class SpkArchiveSource {
       final record = resources[i];
       try {
         final result = await readEntry(record, limit: limit);
-        if (result.bytes.length != record.decodedBytes) {
+        if (record.decodedBytes > 0 &&
+            result.bytes.length != record.decodedBytes) {
           throw FormatException(
             'Longitud decodificada inesperada: '
             '${result.bytes.length} != ${record.decodedBytes}.',
