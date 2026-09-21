@@ -443,8 +443,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   String operation = '';
   int operationDone = 0;
   int operationTotal = 0;
+  late SpkArchiveSource _source;
 
-  SpkArchiveSource get source => widget.source;
+  SpkArchiveSource get source => _source;
+
+  @override
+  void initState() {
+    super.initState();
+    _source = widget.source;
+  }
 
   @override
   void dispose() {
@@ -840,9 +847,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         duration: const Duration(seconds: 8),
       ),
     );
-    await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
-    );
+    setState(() {
+      _source = next;
+      currentFolder = '';
+      selected = null;
+    });
   });
 
   Future<void> loadResourceProfile() => runAction(() async {
@@ -893,9 +902,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
 
     if (!mounted) return;
-    await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => SpkArchiveBrowserPage(source: next)),
-    );
+    setState(() {
+      _source = next;
+      currentFolder = '';
+      selected = null;
+    });
   });
 
   Future<void> exportInventory() => runAction(() async {
@@ -1350,7 +1361,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ],
         ),
         actions: [
-          if (source.canExtractAll && strongInferred > 0)
+          if (source.canExtractAll &&
+              (source.names.paths.isNotEmpty || strongInferred > 0))
             FilledButton.tonalIcon(
               onPressed: busy
                   ? null
