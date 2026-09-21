@@ -73,3 +73,12 @@ La barra superior incluye un botón **SPK** independiente junto a **DATA**. El m
 ## 0.6.6 — perfil SPK empaquetado
 
 Shaiya Studio busca perfiles SPK no solo junto a `data.spk`, sino también en la carpeta `profiles` situada junto al ejecutable. Esto permite distribuir un perfil validado en el paquete Windows sin publicarlo dentro del repositorio. Un SPK con hash distinto sigue rechazándose por integridad y solicita un perfil compatible.
+
+
+## 0.6.7 — rutas SPK, tipos y extracción por carpeta
+
+El explorador DATA.SPK distingue rutas confirmadas, inferidas y pendientes. Puede cargar mapas junto al SPK o desde `profiles` junto al ejecutable; los mapas pueden estar vinculados al SHA-256 del índice para impedir aplicarlos a otra variante.
+
+**Nombres y rutas → Resolver con DATA de referencia** correlaciona el tamaño real y el tamaño Zstandard nivel 3 con la biblioteca conocida y conserva una inferencia separada de los nombres confirmados. Los recursos con ruta recuperada muestran su extensión/tipo real en vez de `.bin`.
+
+También se puede exportar el mapa actual y extraer una carpeta completa. La lectura de payloads sigue fail-closed cuando el perfil criptográfico de recursos o la regla de fragmentación no están validados: nunca se escribe ciphertext haciéndolo pasar por un recurso real.
