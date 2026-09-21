@@ -927,7 +927,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         '${summary['resources']} recursos · ${summary['fragmentedResources']} fragmentados · '
                         '${source.names.paths.length} confirmados · '
                         '${source.names.hints.length} inferidos · '
-                        '${summary['resources'] as int - source.names.paths.length - source.names.hints.length} sin resolver',
+                        '${(summary['resources'] as int) - source.names.paths.length - source.names.hints.length} sin resolver',
                         style: const TextStyle(
                           fontSize: 10,
                           color: Color(0xff92a0b7),
