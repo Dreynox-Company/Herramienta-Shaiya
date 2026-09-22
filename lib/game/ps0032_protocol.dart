@@ -857,6 +857,22 @@ class PsCharacterLevelUp {
   }
 }
 
+class PsCharacterSpeed {
+  final int characterId,attackSpeed,moveSpeed;
+  const PsCharacterSpeed(this.characterId,this.attackSpeed,this.moveSpeed);
+  bool get canAttack=>attackSpeed!=255;
+  bool get canMove=>moveSpeed!=255;
+  static PsCharacterSpeed parse(PsPacket p){
+    if(p.type!=PsPacketType.characterAttackMovementSpeed||p.body.length<6){
+      throw FormatException('CHARACTER_ATTACK_MOVEMENT_SPEED truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterSpeed(
+      d.getUint32(0,Endian.little),p.body[4],p.body[5],
+    );
+  }
+}
+
 class PsCharacterRecover {
   final int characterId,hp,mp,sp;
   const PsCharacterRecover(this.characterId,this.hp,this.mp,this.sp);
