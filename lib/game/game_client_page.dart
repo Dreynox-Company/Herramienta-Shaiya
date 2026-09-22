@@ -907,7 +907,63 @@ class _GameClientPageState extends State<GameClientPage> {
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
       return;
     }
-    if(_handleGuildPacket(packet)){
+    if(packet.type==PsPacketType.tradeRequest&&packet.body.length>=4){
+      pendingTradeRequesterId=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      _closeWorldPanels();tradeOpen=true;
+      messages.insert(0,'[Trade] Solicitud de '+_knownCharacterName(pendingTradeRequesterId!)+'.');
+    }else if(packet.type==PsPacketType.tradeStart&&packet.body.length>=4){
+      final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      _resetTrade(close:false);tradePartnerId=id;pendingTradeRequesterId=null;tradeOpen=true;inventoryOpen=true;
+      messages.insert(0,'[Trade] Intercambio iniciado con '+_knownCharacterName(id)+'.');
+    }else if(packet.type==PsPacketType.tradeOwnerAddItem&&packet.body.length>=4){
+      try{
+        final ack=PsTradeOwnerItemAck.parse(packet);
+        final item=liveInventory.where((i)=>i.bag==ack.bag&&i.slot==ack.slot).firstOrNull;
+        if(item!=null)localTradeItems[ack.tradeSlot]=_tradeItemFromInventory(item,ack.tradeSlot,ack.count);
+        localTradeDecided=remoteTradeDecided=localTradeConfirmed=remoteTradeConfirmed=false;
+      }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    }else if(packet.type==PsPacketType.tradeReceiverAddItem&&packet.body.length>=108){
+      try{
+        final item=PsTradeItem.parse(packet);remoteTradeItems[item.tradeSlot]=item;
+        localTradeDecided=remoteTradeDecided=localTradeConfirmed=remoteTradeConfirmed=false;
+      }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    }else if(packet.type==PsPacketType.tradeRemoveItem&&packet.body.isNotEmpty){
+      final byWho=packet.body[0];
+      if(byWho==2){
+        // Backend ps0032 no incluye el slot remoto retirado; vaciamos esa oferta
+        // para no dejar items visualmente aceptados que ya no están en World.
+        remoteTradeItems.clear();
+      }
+      localTradeDecided=remoteTradeDecided=localTradeConfirmed=remoteTradeConfirmed=false;
+    }else if(packet.type==PsPacketType.tradeAddMoney&&packet.body.length>=5){
+      try{
+        final money=PsTradeMoney.parse(packet);
+        if(money.byWho==1)localTradeMoney=money.money;else if(money.byWho==2)remoteTradeMoney=money.money;
+        localTradeDecided=remoteTradeDecided=localTradeConfirmed=remoteTradeConfirmed=false;
+      }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    }else if(packet.type==PsPacketType.tradeDecide&&packet.body.length>=2){
+      try{
+        final d=PsTradeDecision.parse(packet);
+        if(d.byWho==1)localTradeDecided=d.decided;else if(d.byWho==2)remoteTradeDecided=d.decided;
+        if(!d.decided)localTradeConfirmed=remoteTradeConfirmed=false;
+      }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    }else if(packet.type==PsPacketType.tradeFinish&&packet.body.length>=2){
+      try{
+        final f=PsTradeConfirmation.parse(packet);
+        if(f.declined){
+          localTradeConfirmed=remoteTradeConfirmed=false;
+        }else if(f.byWho==1){
+          localTradeConfirmed=true;
+        }else if(f.byWho==2){
+          remoteTradeConfirmed=true;
+        }
+      }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    }else if(packet.type==PsPacketType.tradeStop&&packet.body.isNotEmpty){
+      final reason=packet.body[0];
+      messages.insert(0,reason==0?'[Trade] Intercambio completado.':'[Trade] Intercambio cancelado.');
+      _resetTrade();
+      inventoryOpen=false;
+    }else if(_handleGuildPacket(packet)){
       // Guild packet consumed.
     }else if(packet.type==PsPacketType.friendList){
       try{liveFriends=parseFriendList(packet).toList();}
