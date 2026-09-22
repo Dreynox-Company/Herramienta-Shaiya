@@ -1436,35 +1436,59 @@ class _MiniMapPainter extends CustomPainter {
   final StudioScene scene;
   _MiniMapPainter(this.scene);
 
+  Offset _worldToMap(double worldX,double worldZ,Size size){
+    final worldSize=(scene.world?.size??0).toDouble();
+    if(worldSize<=0){
+      final x=((worldX-scene.originX)/120+.5).clamp(0.0,1.0);
+      final y=((worldZ-scene.originZ)/120+.5).clamp(0.0,1.0);
+      return Offset(x*size.width,y*size.height);
+    }
+    final x=(worldX/worldSize).clamp(0.0,1.0);
+    final y=(worldZ/worldSize).clamp(0.0,1.0);
+    return Offset(x*size.width,y*size.height);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0x5535452b),
-    );
-
-    for (final a in scene.gameActors) {
-      final x = (a.root.position.x / 120 + .5).clamp(0.0, 1.0);
-      final y = (a.root.position.z / 120 + .5).clamp(0.0, 1.0);
+    for(final label in scene.gameLabels){
+      final a=label.actor;
+      final worldX=scene.originX+a.root.position.x;
+      final worldZ=scene.originZ-a.root.position.z;
+      final p=_worldToMap(worldX,worldZ,size);
       canvas.drawCircle(
-        Offset(x * size.width, y * size.height),
-        2.2,
-        Paint()..color = const Color(0xffff3f27),
+        p,
+        label.mob?2.1:2.0,
+        Paint()..color=label.mob?const Color(0xffff3f27):const Color(0xff5be5ff),
       );
     }
 
-    canvas.drawCircle(
-      Offset(size.width * .5, size.height * .5),
-      4,
-      Paint()..color = const Color(0xffffdf2f),
-    );
-    canvas.drawCircle(
-      Offset(size.width * .5, size.height * .5),
-      7,
+    final me=scene.character;
+    final px=scene.originX+(me?.root.position.x??0);
+    final pz=scene.originZ-(me?.root.position.z??0);
+    final center=_worldToMap(px,pz,size);
+    final angle=-(me?.root.rotation.y??0);
+    const radius=6.0;
+    final path=Path()
+      ..moveTo(
+        center.dx+math.sin(angle)*radius,
+        center.dy-math.cos(angle)*radius,
+      )
+      ..lineTo(
+        center.dx+math.sin(angle+2.45)*radius*.78,
+        center.dy-math.cos(angle+2.45)*radius*.78,
+      )
+      ..lineTo(
+        center.dx+math.sin(angle-2.45)*radius*.78,
+        center.dy-math.cos(angle-2.45)*radius*.78,
+      )
+      ..close();
+    canvas.drawPath(path,Paint()..color=const Color(0xffffdf2f));
+    canvas.drawPath(
+      path,
       Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+        ..color=Colors.white
+        ..style=PaintingStyle.stroke
+        ..strokeWidth=1,
     );
   }
 
