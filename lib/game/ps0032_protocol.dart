@@ -52,6 +52,9 @@ class PsPacketType {
   static const targetBuffs=0x030B;
   static const targetBuffAdd=0x030C;
   static const targetBuffRemove=0x030D;
+  static const mapAddItem=0x0401;
+  static const mapRemoveItem=0x0402;
+  static const worldDay=0x0404;
   static const mapWeather=0x0451;
   static const inventoryMoveItem=0x0204;
   static const updateStats=0x0208;
@@ -470,6 +473,50 @@ class PsMobEnter {
       d.getFloat32(7,Endian.little),
       d.getFloat32(11,Endian.little),
     );
+  }
+}
+
+class PsMapItem {
+  final int id,kind,type,typeId,count,ownerId;
+  final double x,y,z;
+  const PsMapItem(this.id,this.kind,this.type,this.typeId,this.count,this.x,this.y,this.z,this.ownerId);
+  static PsMapItem parse(PsPacket p){
+    if(p.type!=PsPacketType.mapAddItem||p.body.length<24){
+      throw FormatException('MAP_ADD_ITEM truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMapItem(
+      d.getUint32(0,Endian.little),p.body[4],p.body[5],p.body[6],p.body[7],
+      d.getFloat32(8,Endian.little),d.getFloat32(12,Endian.little),d.getFloat32(16,Endian.little),
+      d.getUint32(20,Endian.little),
+    );
+  }
+}
+
+int parseMapItemRemove(PsPacket p){
+  if(p.type!=PsPacketType.mapRemoveItem||p.body.length<4){
+    throw FormatException('MAP_REMOVE_ITEM truncado: ${p.body.length}.');
+  }
+  return ByteData.sublistView(p.body).getUint32(0,Endian.little);
+}
+
+class PsWorldDay {
+  final int raw,year,month,day,hour,minute,second;
+  const PsWorldDay(this.raw,this.year,this.month,this.day,this.hour,this.minute,this.second);
+  static PsWorldDay parse(PsPacket p){
+    if(p.type!=PsPacketType.worldDay||p.body.length<4){
+      throw FormatException('WORLD_DAY truncado: ${p.body.length}.');
+    }
+    final raw=ByteData.sublistView(p.body).getInt32(0,Endian.little);
+    var value=raw;
+    final second=value&0x3f;value>>=6;
+    final minute=value&0x3f;value>>=6;
+    final hour=value&0x1f;value>>=5;
+    final day=value&0x1f;value>>=5;
+    final packedMonthYear=value;
+    final month=(packedMonthYear&0x1f)-512*(packedMonthYear>>9);
+    final year=(packedMonthYear>>9)+16;
+    return PsWorldDay(raw,year,month,day,hour,minute,second);
   }
 }
 
@@ -1651,17 +1698,20 @@ class PsWorldSnapshot {
   final List<PsEnteredMap> players;
   final List<PsNpcEnter> npcs;
   final List<PsMobEnter> mobs;
+  final List<PsMapItem> mapItems;
+  final PsWorldDay? worldDay;
   final List<PsQuestProgress> quests;
   final List<PsFinishedQuest> finishedQuests;
   const PsWorldSnapshot({
     required this.self,this.players=const <PsEnteredMap>[],required this.npcs,required this.mobs,
-    required this.quests,required this.finishedQuests,
+    this.mapItems=const <PsMapItem>[],this.worldDay,required this.quests,required this.finishedQuests,
   });
 
   factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets,{int? selfCharacterId}){
     PsEnteredMap? self;
     final playerById=<int,PsEnteredMap>{};
-    final npcs=<PsNpcEnter>[],mobs=<PsMobEnter>[],quests=<PsQuestProgress>[],finished=<PsFinishedQuest>[];
+    final npcs=<PsNpcEnter>[],mobs=<PsMobEnter>[],mapItems=<PsMapItem>[],quests=<PsQuestProgress>[],finished=<PsFinishedQuest>[];
+    PsWorldDay? worldDay;
     for(final p in packets){
       if(p.type==PsPacketType.characterEnteredMap){
         final entered=PsEnteredMap.parse(p);
@@ -1677,11 +1727,18 @@ class PsWorldSnapshot {
         playerById.remove(PsCharacterLeftMap.parse(p).characterId);
       }else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
       else if(p.type==PsPacketType.mobEnter)mobs.add(PsMobEnter.parse(p));
+      else if(p.type==PsPacketType.mapAddItem){
+        final item=PsMapItem.parse(p);
+        mapItems.removeWhere((x)=>x.id==item.id);mapItems.add(item);
+      }else if(p.type==PsPacketType.mapRemoveItem){
+        final id=parseMapItemRemove(p);mapItems.removeWhere((x)=>x.id==id);
+      }else if(p.type==PsPacketType.worldDay)worldDay=PsWorldDay.parse(p);
       else if(p.type==PsPacketType.questList)quests.addAll(parseQuestList(p));
       else if(p.type==PsPacketType.questFinishedList)finished.addAll(parseFinishedQuests(p));
     }
     return PsWorldSnapshot(
       self:self,players:List.unmodifiable(playerById.values),npcs:List.unmodifiable(npcs),mobs:List.unmodifiable(mobs),
+      mapItems:List.unmodifiable(mapItems),worldDay:worldDay,
       quests:List.unmodifiable(quests),finishedQuests:List.unmodifiable(finished),
     );
   }
@@ -2392,6 +2449,17 @@ class PsWorldSession {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar skills PvP.');
     await connection.send(PsPacketType.useCharacterTargetSkill,[skillNumber&0xff,..._u32Bytes(targetId)]);
   }
+  Future<void> pickUpMapItem(int mapItemId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de recoger objetos.');
+    await connection.send(PsPacketType.addItem,_u32Bytes(mapItemId));
+  }
+
+  Future<void> dropInventoryItem(int bag,int slot,int count) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de soltar objetos.');
+    for(final value in [bag,slot,count]){if(value<0||value>255)throw RangeError('DROP_ITEM fuera de byte.');}
+    await connection.send(PsPacketType.removeItem,[bag,slot,count]);
+  }
+
   Future<PsTargetMobHp> selectMobTarget(int globalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo.');
     final responseFuture=connection.waitStream((p)=>p.type==PsPacketType.targetMobHpUpdate&&p.body.length>=4&&ByteData.sublistView(p.body).getUint32(0,Endian.little)==globalId);
