@@ -1178,6 +1178,13 @@ class WorldHud extends StatelessWidget {
                           visualDensity:VisualDensity.compact,
                           icon:const Icon(Icons.group_add,size:17,color:Color(0xff86c8ff)),
                         ),
+                      if(f.online&&raid!=null&&(raidLeader||raidSubLeader))
+                        IconButton(
+                          tooltip:locale=='spn'?'Invitar a RAID':'Invite to RAID',
+                          onPressed:()=>onInviteRaid(f.id),
+                          visualDensity:VisualDensity.compact,
+                          icon:const Icon(Icons.groups,size:17,color:Color(0xffd5a4ff)),
+                        ),
                       if(f.online)
                         IconButton(
                           tooltip:locale=='spn'?'Intercambiar':'Trade',
@@ -1214,7 +1221,9 @@ class WorldHud extends StatelessWidget {
             const Icon(Icons.groups,size:15,color:Color(0xffffd070)),
             const SizedBox(width:5),
             Text(
-              (locale=='spn'?'Grupo':'Party')+' ('+(partyMembers.length+(partyMembers.isNotEmpty?1:0)).toString()+'/7)',
+              raid!=null
+                ?'RAID ('+raid!.members.length.toString()+'/30)'
+                :(locale=='spn'?'Grupo':'Party')+' ('+(partyMembers.length+(partyMembers.isNotEmpty?1:0)).toString()+'/7)',
               style:const TextStyle(fontSize:10,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
             ),
             const Spacer(),
