@@ -327,6 +327,33 @@ void main() {
         contains('_spk_sinnombre/0000000000001002.dds'),
       );
       expect(library.sourceDiagnostics['technicalMounted'], 2);
+
+      const technical = '_spk_sinnombre/0000000000001001.dds';
+      final original = await library.read(technical);
+      final replacement = Uint8List.fromList([
+        ...original.take(24),
+        0xde,
+        0xad,
+        0xbe,
+        0xef,
+      ]);
+      await library.writeSpkOverlay(
+        {technical: replacement},
+        expectedHashes: {
+          technical: sha256.convert(original).toString(),
+        },
+      );
+      expect(await library.read(technical), orderedEquals(replacement));
+      final manifest = jsonDecode(
+        await File(
+          '${root.path}/overlay/_SPK_OVERLAY.json',
+        ).readAsString(),
+      ) as Map<String, dynamic>;
+      final entries = Map<String, dynamic>.from(manifest['entries'] as Map);
+      expect(
+        (entries[technical] as Map)['nameAuthority'],
+        'technical-entry-id',
+      );
     } finally {
       await root.delete(recursive: true);
     }
