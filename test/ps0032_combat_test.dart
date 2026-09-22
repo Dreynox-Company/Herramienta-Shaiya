@@ -96,4 +96,27 @@ void main(){
     expect(p.spDamage,8);
     expect(p.mpDamage,9);
   });
+
+  test('parses character death and dead rebirth',(){
+    final death=Uint8List(9),dd=ByteData.sublistView(death);
+    dd.setUint32(0,123,Endian.little);
+    death[4]=2;
+    dd.setUint32(5,456,Endian.little);
+    final d=PsCharacterDeath.parse(PsPacket(PsPacketType.characterDeath,death));
+    expect((d.characterId,d.killerType,d.killerId),(123,2,456));
+
+    final rebirth=Uint8List(21),rd=ByteData.sublistView(rebirth);
+    rd.setUint32(0,123,Endian.little);
+    rebirth[4]=4;
+    rd.setUint32(5,7890,Endian.little);
+    rd.setFloat32(9,10.5,Endian.little);
+    rd.setFloat32(13,20.25,Endian.little);
+    rd.setFloat32(17,30.75,Endian.little);
+    final r=PsDeadRebirth.parse(PsPacket(PsPacketType.deadRebirth,rebirth));
+    expect((r.characterId,r.rebirthType,r.expLoss),(123,4,7890));
+    expect(r.x,closeTo(10.5,1e-6));
+    expect(r.y,closeTo(20.25,1e-6));
+    expect(r.z,closeTo(30.75,1e-6));
+  });
+
 }
