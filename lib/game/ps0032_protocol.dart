@@ -668,14 +668,60 @@ class PsCharacterSkillHit {
   });
   bool get success=>result==0||result==1||result==4;
   static PsCharacterSkillHit parse(PsPacket p){
-    if(p.type!=PsPacketType.useCharacterTargetSkill||p.body.length<19){
-      throw FormatException('USE_CHARACTER_TARGET_SKILL truncado: ${p.body.length}.');
+    if(!const <int>{PsPacketType.useCharacterTargetSkill,PsPacketType.useCharacterRangeSkill}.contains(p.type)||p.body.length<19){
+      throw FormatException('CHARACTER_SKILL_HIT truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
     }
     final d=ByteData.sublistView(p.body);
     return PsCharacterSkillHit(
       result:p.body[0],attackerId:d.getUint32(1,Endian.little),targetId:d.getUint32(5,Endian.little),
       skillId:d.getUint16(9,Endian.little),skillLevel:p.body[11],hpDamage:d.getUint16(12,Endian.little),
       spDamage:d.getUint16(14,Endian.little),mpDamage:d.getUint16(16,Endian.little),keepActivated:p.body[18]!=0,
+    );
+  }
+}
+
+class PsSkillCasting {
+  final int casterId,targetId,skillId,skillLevel;
+  const PsSkillCasting(this.casterId,this.targetId,this.skillId,this.skillLevel);
+  bool get hasExplicitTarget=>targetId!=0;
+  static PsSkillCasting parse(PsPacket p){
+    if(!const <int>{PsPacketType.characterSkillCasting,PsPacketType.mobSkillCasting}.contains(p.type)||p.body.length<11){
+      throw FormatException('SKILL_CASTING truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsSkillCasting(
+      d.getUint32(0,Endian.little),d.getUint32(4,Endian.little),
+      d.getUint16(8,Endian.little),p.body[10],
+    );
+  }
+}
+
+class PsSkillKeep {
+  final int characterId,skillId,skillLevel,hpDamage,spDamage,mpDamage;
+  const PsSkillKeep(this.characterId,this.skillId,this.skillLevel,this.hpDamage,this.spDamage,this.mpDamage);
+  static PsSkillKeep parse(PsPacket p){
+    if(p.type!=PsPacketType.characterSkillKeep||p.body.length<13){
+      throw FormatException('CHARACTER_SKILL_KEEP truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsSkillKeep(
+      d.getUint32(0,Endian.little),d.getUint16(4,Endian.little),p.body[6],
+      d.getUint16(7,Endian.little),d.getUint16(9,Endian.little),d.getUint16(11,Endian.little),
+    );
+  }
+}
+
+class PsSkillMirror {
+  final int targetId,senderId,hpDamage,spDamage,mpDamage;
+  const PsSkillMirror(this.targetId,this.senderId,this.hpDamage,this.spDamage,this.mpDamage);
+  static PsSkillMirror parse(PsPacket p){
+    if(!const <int>{PsPacketType.characterSkillMirror,PsPacketType.mobSkillMirror}.contains(p.type)||p.body.length<14){
+      throw FormatException('SKILL_MIRROR truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsSkillMirror(
+      d.getUint32(0,Endian.little),d.getUint32(4,Endian.little),
+      d.getUint16(8,Endian.little),d.getUint16(10,Endian.little),d.getUint16(12,Endian.little),
     );
   }
 }
