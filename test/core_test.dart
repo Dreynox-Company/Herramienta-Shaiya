@@ -110,7 +110,10 @@ Uint8List dgFixture() {
     f32(0);f32(0);
   }
   i32(1);u16(0);u16(1);u16(2);
-  i32(0); // transparent/no collision mesh.
+  i32(1); // native collision mesh.
+  i32(3);
+  vec(4,0,4);vec(4,2,4);vec(4,0,6);
+  i32(1);u16(0);u16(1);u16(2);
   for(var i=0;i<8;i++)i32(0);
   return bytes.takeBytes();
 }
@@ -262,6 +265,9 @@ void main() {
       expect(dg.parts.single.texture,'DUN_LOGIN01.tga');
       expect(dg.parts.single.mesh.vertices,3);
       expect(dg.parts.single.mesh.triangles,1);
+      expect(dg.collisions.length,1);
+      expect(dg.collisions.single.vertices.length,3);
+      expect(dg.collisions.single.indices,[0,1,2]);
       expect(dg.center.x,closeTo(5,1e-6));
       expect(dg.center.z,closeTo(5,1e-6));
       expect(dg.floorAt(5,5),closeTo(1,1e-6));
