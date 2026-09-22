@@ -589,6 +589,9 @@ class _GameClientPageState extends State<GameClientPage> {
       try{await scene.setWorld(world,x:x,z:z);}
       catch(e){messages.insert(0,'[Mapa] '+e.toString());}
     }
+    if(liveInventory.isNotEmpty){
+      await _syncVisibleEquipmentFromInventory();
+    }
 
     // Native map-1 proof faces toward increasing world Z (Dog / Guard route).
     // Three uses local Z = -(worldZ-originZ), so yaw 0 puts the camera behind
@@ -983,6 +986,37 @@ class _GameClientPageState extends State<GameClientPage> {
       liveHitpoints=PsHitpoints.parse(packet);
     }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
       liveAdditionalStats=PsAdditionalStats.parse(packet);
+    }else if(packet.type==PsPacketType.sendEquipment&&packet.body.length>=13){
+      try{
+        final change=PsEquipmentChange.parse(packet);
+        if(change.characterId==liveCharacter?.id){
+          unawaited(_applyEquipmentVisual(change));
+          final label=change.type==0||change.typeId==0
+            ?'slot '+change.slot.toString()+' vacío'
+            :catalog!.itemName(change.type,change.typeId,uiLocale);
+          messages.insert(0,'[Equipo] World confirmó '+label+'.');
+        }
+      }catch(e){messages.insert(0,'[Equipo] SEND_EQUIPMENT: '+e.toString());}
+    }else if(packet.type==PsPacketType.useItem&&packet.body.length>=9){
+      try{
+        final used=PsUsedItem.parse(packet);
+        if(used.characterId==liveCharacter?.id){
+          final index=liveInventory.indexWhere((x)=>x.bag==used.bag&&x.slot==used.slot);
+          if(index>=0){
+            final old=liveInventory[index];
+            if(used.count<=0){
+              liveInventory.removeAt(index);
+            }else{
+              liveInventory[index]=PsInventoryItem(
+                bag:old.bag,slot:old.slot,type:old.type,typeId:old.typeId,
+                quality:old.quality,count:used.count,gems:old.gems,
+                craftName:old.craftName,dyed:old.dyed,
+              );
+            }
+          }
+          messages.insert(0,'[Objeto] '+catalog!.itemName(used.type,used.typeId,uiLocale)+' usado · restantes '+used.count.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[Objeto] USE_ITEM: '+e.toString());}
     }else if(packet.type==PsPacketType.addItem&&packet.body.length>=106){
       try{
         _upsertInventoryItem(parseAddedInventoryItem(packet));
