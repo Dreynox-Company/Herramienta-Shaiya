@@ -865,6 +865,7 @@ class _GameClientPageState extends State<GameClientPage> {
         ),
         players:const <PsEnteredMap>[],
         npcs:const <PsNpcEnter>[],mobs:const <PsMobEnter>[],
+        mapItems:const <PsMapItem>[],worldDay:previous?.worldDay,
         quests:previous?.quests??const <PsQuestProgress>[],
         finishedQuests:previous?.finishedQuests??const <PsFinishedQuest>[],
       );
@@ -1163,7 +1164,8 @@ class _GameClientPageState extends State<GameClientPage> {
     liveSnapshot=PsWorldSnapshot(
       self:s.self,players:s.players,
       npcs:[...s.npcs.where((x)=>x.globalId!=npc.globalId),npc],
-      mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
+      mobs:s.mobs,mapItems:s.mapItems,worldDay:s.worldDay,
+      quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
 
@@ -1172,6 +1174,7 @@ class _GameClientPageState extends State<GameClientPage> {
     liveSnapshot=PsWorldSnapshot(
       self:s.self,players:s.players,npcs:s.npcs,
       mobs:[...s.mobs.where((x)=>x.globalId!=mob.globalId),mob],
+      mapItems:s.mapItems,worldDay:s.worldDay,
       quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
@@ -1182,6 +1185,7 @@ class _GameClientPageState extends State<GameClientPage> {
       self:s.self,players:s.players,
       npcs:mob?s.npcs:s.npcs.where((x)=>x.globalId!=globalId).toList(),
       mobs:mob?s.mobs.where((x)=>x.globalId!=globalId).toList():s.mobs,
+      mapItems:s.mapItems,worldDay:s.worldDay,
       quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
@@ -1217,7 +1221,8 @@ class _GameClientPageState extends State<GameClientPage> {
     liveSnapshot=PsWorldSnapshot(
       self:s.self,
       players:[...s.players.where((x)=>x.characterId!=player.characterId),player],
-      npcs:s.npcs,mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
+      npcs:s.npcs,mobs:s.mobs,mapItems:s.mapItems,worldDay:s.worldDay,
+      quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
 
@@ -1225,7 +1230,8 @@ class _GameClientPageState extends State<GameClientPage> {
     final s=liveSnapshot;if(s==null)return;
     liveSnapshot=PsWorldSnapshot(
       self:s.self,players:s.players.where((x)=>x.characterId!=characterId).toList(),
-      npcs:s.npcs,mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
+      npcs:s.npcs,mobs:s.mobs,mapItems:s.mapItems,worldDay:s.worldDay,
+      quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
 
@@ -3149,7 +3155,8 @@ class _GameClientPageState extends State<GameClientPage> {
     final current=liveSnapshot;
     if(current==null)return;
     liveSnapshot=PsWorldSnapshot(
-      self:current.self,npcs:current.npcs,mobs:current.mobs,
+      self:current.self,players:current.players,npcs:current.npcs,mobs:current.mobs,
+      mapItems:current.mapItems,worldDay:current.worldDay,
       quests:current.quests.where((q)=>q.questId!=id).toList(),
       finishedQuests:[
         ...current.finishedQuests.where((q)=>q.questId!=id),
@@ -3600,7 +3607,8 @@ class _GameClientPageState extends State<GameClientPage> {
       final current=liveSnapshot!;
       if(!current.quests.any((q)=>q.questId==questId)){
         liveSnapshot=PsWorldSnapshot(
-          self:current.self,npcs:current.npcs,mobs:current.mobs,
+          self:current.self,players:current.players,npcs:current.npcs,mobs:current.mobs,
+          mapItems:current.mapItems,worldDay:current.worldDay,
           quests:[...current.quests,PsQuestProgress(questId,0,0,0,0)],
           finishedQuests:current.finishedQuests,
         );
