@@ -12,6 +12,7 @@ import '../core/textures.dart';
 import '../core/combat.dart';
 import '../core/locomotion.dart';
 import '../core/attachment_pose.dart';
+import '../core/world_collision.dart';
 import '../data/library.dart';
 import '../data/catalog.dart';
 
@@ -86,7 +87,7 @@ class StudioScene extends ChangeNotifier {
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
-  WorldData? world;String? worldPath,effectPath,skyPath;
+  WorldData? world;WorldCollisionField? worldCollision;String? worldPath,effectPath,skyPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
   final Map<String,({double height,double forward})> _seats={};
@@ -789,12 +790,39 @@ class StudioScene extends ChangeNotifier {
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
-      final x=character!.root.position.x+direction.x*delta*speed;
-      final z=character!.root.position.z+direction.z*delta*speed;
+      final fromX=character!.root.position.x,fromZ=character!.root.position.z;
+      final x=fromX+direction.x*delta*speed;
+      final z=fromZ+direction.z*delta*speed;
       if(world==null||(x.abs()<72&&z.abs()<72)){
-        character!.root.position.x=x;
-        character!.root.position.z=z;
-        if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+        var nextX=x,nextZ=z;
+        final w=world,field=worldCollision;
+        if(w!=null&&field!=null&&!field.isEmpty){
+          final radius=mount==null?.34:.72,height=mount==null?1.7:2.3;
+          final targetY=w.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+          if(!field.allowsMove(
+            fromX:fromX,fromY:groundY,fromZ:fromZ,
+            toX:x,toY:targetY,toZ:z,radius:radius,height:height,
+          )){
+            final xY=w.heightAt(originX+x,originZ-fromZ,scale:.02,offset:-200);
+            final zY=w.heightAt(originX+fromX,originZ-z,scale:.02,offset:-200);
+            final allowX=field.allowsMove(
+              fromX:fromX,fromY:groundY,fromZ:fromZ,
+              toX:x,toY:xY,toZ:fromZ,radius:radius,height:height,
+            );
+            final allowZ=field.allowsMove(
+              fromX:fromX,fromY:groundY,fromZ:fromZ,
+              toX:fromX,toY:zY,toZ:z,radius:radius,height:height,
+            );
+            if(allowX&&!allowZ){nextZ=fromZ;}
+            else if(allowZ&&!allowX){nextX=fromX;}
+            else if(allowX&&allowZ){
+              if((x-fromX).abs()>=(z-fromZ).abs())nextZ=fromZ;else nextX=fromX;
+            }else{nextX=fromX;nextZ=fromZ;}
+          }
+        }
+        character!.root.position.x=nextX;
+        character!.root.position.z=nextZ;
+        if(world!=null)groundY=world!.heightAt(originX+nextX,originZ-nextZ,scale:.02,offset:-200);
       }
       character!.root.rotation.y=math.atan2(direction.x,direction.z);
     }
@@ -843,7 +871,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldCollision=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -893,7 +921,7 @@ class StudioScene extends ChangeNotifier {
         for(final p in environmentParts){p.dispose();}
         environmentParts..clear()..addAll(parts);
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
-        world=w;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);
+        world=w;worldCollision=null;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);
         character?.root.position.setValues(0,groundY,0);
         enemy?.root.position.setValues(1.8,groundY,0);
         distance=6;updateCamera();
@@ -914,6 +942,7 @@ class StudioScene extends ChangeNotifier {
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
       for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
       if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');var loaded=0;
+      final collisionTriangles=<WorldCollisionTriangle>[];
       final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree','Object'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
       for(final obj in nearby.take(80)){
         final model=lib.resolve(obj.asset,['entity/${obj.category}']);
@@ -922,7 +951,9 @@ class StudioScene extends ChangeNotifier {
           continue;
         }
         try{
-          final objects=readSmod(await lib.read(model),model),group=t.Group();
+          final smod=readSmodData(await lib.read(model),model),objects=smod.parts,group=t.Group();
+          final instanceMatrix=worldInstanceMatrix(obj,ox,oz);
+          collisionTriangles.addAll(transformSmodCollisions(smod.collisions,instanceMatrix));
           var pieceCount=0;
           for(final piece in objects){
             final requested=piece.texture.trim();
@@ -956,14 +987,14 @@ class StudioScene extends ChangeNotifier {
           }
           if(pieceCount==0){missingWorldAssets.add('empty:${obj.asset}');continue;}
           group.matrixAutoUpdate=false;
-          group.matrix.copyFromArray(worldInstanceMatrix(obj,ox,oz).storage);
+          group.matrix.copyFromArray(instanceMatrix.storage);
           group.matrixWorldNeedsUpdate=true;
           stage.add(group);loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
         }catch(e){missingWorldAssets.add('error:${obj.asset}:$e');report('Objeto $model: $e');}
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
-      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
+      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldCollision=WorldCollisionField(collisionTriangles);worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
       if(sky==null&&catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
@@ -971,7 +1002,7 @@ class StudioScene extends ChangeNotifier {
           ??catalog!.skies.first;
         try{await setSky(choice);}catch(e){report('Cielo: $e');}
       }
-      say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
+      say('Sector de 128 × 128 m · $loaded objetos · altura original · ${worldCollision?.triangles.length??0} triángulos de colisión SMOD.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
   @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
