@@ -57,10 +57,10 @@ var shops = parsed.Merchants.Select(m => new {
     type = 1,
     typeId = (int)m.TypeId,
     merchantType = (int)m.MerchantType,
-    products = m.Items.Select((item,index) => new {
+    products = m.SaleItems.Select((item,index) => new {
         index,
-        type = (int)item.ItemType,
-        id = (int)item.ItemTypeId,
+        type = (int)item.Type,
+        id = (int)item.TypeId,
     }).ToArray(),
 }).ToArray();
 
