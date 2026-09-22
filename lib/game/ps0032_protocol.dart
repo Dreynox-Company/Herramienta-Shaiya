@@ -97,8 +97,11 @@ class PsPacketType {
   static const characterDeath=0x0504;
   static const characterLevelUpSelf=0x0508;
   static const deadRebirth=0x0551;
-  static const useItem2=0x0557;
   static const rebirthNearestTown=0x0553;
+  static const useItem2=0x0557;
+  static const dyeConfirm=0x055B;
+  static const dyeReroll=0x055C;
+  static const dyeSelectItem=0x055D;
   static const characterLeaveDead=0x0406;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
@@ -2377,6 +2380,56 @@ class PsGemAddResult {
     );
   }
 }
+class PsDyeColor {
+  final bool enabled;
+  final int alpha,saturation,r,g,b;
+  const PsDyeColor(this.enabled,this.alpha,this.saturation,this.r,this.g,this.b);
+  int get argb=>((alpha&0xff)<<24)|((r&0xff)<<16)|((g&0xff)<<8)|(b&0xff);
+}
+
+class PsDyeSelectionResult {
+  final bool success;
+  const PsDyeSelectionResult(this.success);
+  static PsDyeSelectionResult parse(PsPacket p){
+    if(p.type!=PsPacketType.dyeSelectItem||p.body.isEmpty){
+      throw FormatException('DYE_SELECT_ITEM truncado: ${p.body.length}.');
+    }
+    return PsDyeSelectionResult(p.body[0]!=0);
+  }
+}
+
+class PsDyePalette {
+  final List<PsDyeColor> colors;
+  const PsDyePalette(this.colors);
+  static PsDyePalette parse(PsPacket p){
+    if(p.type!=PsPacketType.dyeReroll||p.body.isEmpty||p.body.length%27!=0){
+      throw FormatException('DYE_REROLL inválido: ${p.body.length} bytes.');
+    }
+    final out=<PsDyeColor>[];
+    for(var o=0;o<p.body.length;o+=27){
+      out.add(PsDyeColor(
+        p.body[o]!=0,p.body[o+1],p.body[o+2],p.body[o+3],p.body[o+4],p.body[o+5],
+      ));
+    }
+    return PsDyePalette(List.unmodifiable(out));
+  }
+}
+
+class PsDyeConfirmResult {
+  final bool success;
+  final PsDyeColor color;
+  const PsDyeConfirmResult(this.success,this.color);
+  static PsDyeConfirmResult parse(PsPacket p){
+    if(p.type!=PsPacketType.dyeConfirm||p.body.length<6){
+      throw FormatException('DYE_CONFIRM truncado: ${p.body.length}.');
+    }
+    return PsDyeConfirmResult(
+      p.body[0]!=0,
+      PsDyeColor(true,p.body[1],p.body[2],p.body[3],p.body[4],p.body[5]),
+    );
+  }
+}
+
 class PsEnchantRate {
   final List<int> lapisiaBag,lapisiaSlot,rates,gold;
   const PsEnchantRate(this.lapisiaBag,this.lapisiaSlot,this.rates,this.gold);
@@ -3238,6 +3291,37 @@ class PsWorldSession {
     final response=await responseFuture;
     return PsInventoryMove.parse(response);
   }
+  Future<PsDyeSelectionResult> selectDyeTarget({
+    required int dyeBag,required int dyeSlot,required int targetBag,required int targetSlot,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de teñir.');
+    for(final value in [dyeBag,dyeSlot,targetBag,targetSlot]){
+      if(value<0||value>255)throw RangeError('DYE_SELECT_ITEM bag/slot fuera de byte.');
+    }
+    final response=connection.waitStream((p)=>p.type==PsPacketType.dyeSelectItem);
+    await connection.send(PsPacketType.dyeSelectItem,[dyeBag,dyeSlot,targetBag,targetSlot]);
+    return PsDyeSelectionResult.parse(await response);
+  }
+
+  Future<PsDyePalette> rerollDyeColors() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de cambiar colores.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.dyeReroll);
+    await connection.send(PsPacketType.dyeReroll);
+    return PsDyePalette.parse(await response);
+  }
+
+  Future<PsDyeConfirmResult> confirmDye({
+    required int dyeBag,required int dyeSlot,required int targetBag,required int targetSlot,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de confirmar el tinte.');
+    for(final value in [dyeBag,dyeSlot,targetBag,targetSlot]){
+      if(value<0||value>255)throw RangeError('DYE_CONFIRM bag/slot fuera de byte.');
+    }
+    final response=connection.waitStream((p)=>p.type==PsPacketType.dyeConfirm);
+    await connection.send(PsPacketType.dyeConfirm,[dyeBag,dyeSlot,targetBag,targetSlot]);
+    return PsDyeConfirmResult.parse(await response);
+  }
+
   Future<PsEnchantRate> enchantRates({
     required int itemBag,required int itemSlot,required List<(int,int)> lapisias,
   }) async {
