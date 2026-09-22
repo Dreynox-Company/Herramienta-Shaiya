@@ -27,6 +27,7 @@ class WorldHud extends StatelessWidget {
   final List<PsTargetBuff> targetBuffs;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
+  final PsAutoStats? autoStats;
   final String? castingSkill;
   final double castingProgress;
   final List<PsInventoryItem> inventory,warehouse,guildWarehouse;
@@ -129,6 +130,7 @@ class WorldHud extends StatelessWidget {
     required this.targetBuffs,
     required this.skillBook,
     required this.skillBar,
+    required this.autoStats,
     required this.castingSkill,
     required this.castingProgress,
     required this.inventory,
@@ -2339,6 +2341,16 @@ class WorldHud extends StatelessWidget {
             'HP ${hitpoints?.hp??d?.maxHp??0}/${d?.maxHp??0} · MP ${hitpoints?.mp??d?.maxMp??0}/${d?.maxMp??0} · SP ${hitpoints?.sp??d?.maxSp??0}/${d?.maxSp??0}',
             style:const TextStyle(fontSize:8.5,color:Colors.white60),
           ),
+          if(autoStats!=null)...[
+            const SizedBox(height:4),
+            Text(
+              (locale=='spn'?'Auto-atributos: ':'Auto stats: ')+
+              'STR ${autoStats!.str} · DEX ${autoStats!.dex} · REC ${autoStats!.rec} · '+
+              'INT ${autoStats!.intl} · WIS ${autoStats!.wis} · LUC ${autoStats!.luc}',
+              maxLines:1,overflow:TextOverflow.ellipsis,
+              style:const TextStyle(fontSize:8,color:Color(0xffd6c193)),
+            ),
+          ],
         ]),
       ),
     );
