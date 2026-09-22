@@ -817,6 +817,25 @@ class StudioScene extends ChangeNotifier {
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas colocados desde SVMAP.');
   }
+  ({double x,double y})? projectWorldPoint(
+    double worldX,double worldY,double worldZ,double width,double height, {
+    double lift=0,
+  }){
+    final camera=view?.camera;
+    if(camera==null||width<=0||height<=0)return null;
+    final p=t.Vector3(
+      worldX-originX,
+      worldY+lift,
+      -(worldZ-originZ),
+    );
+    p.project(camera);
+    if(p.z<-1||p.z>1||p.x<-1.25||p.x>1.25||p.y<-1.25||p.y>1.25)return null;
+    return (
+      x:(p.x+1)*.5*width,
+      y:(1-p.y)*.5*height,
+    );
+  }
+
   List<ProjectedGameLabel> projectGameLabels(double width,double height){
     final camera=view?.camera;
     if(camera==null||width<=0||height<=0)return const [];
