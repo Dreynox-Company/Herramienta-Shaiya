@@ -316,6 +316,19 @@ class StudioScene extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> networkPlayerAttack(int targetGlobalId) async {
+    final a=character,target=networkMobActors[targetGlobalId];
+    if(a==null||target==null)return;
+    final dx=target.root.position.x-a.root.position.x;
+    final dz=target.root.position.z-a.root.position.z;
+    if(dx.abs()+dz.abs()>1e-5)a.root.rotation.y=math.atan2(dx,dz);
+    if(attackClips.isEmpty)await prepareWeaponMotions();
+    if(attackClips.isNotEmpty){
+      final clip=attackClips[attackCounter++%attackClips.length];
+      a.play(clip,repeat:false);
+    }
+    notifyListeners();
+  }
   Future<void> networkMobHit(int globalId,int damage) async {
     final a=networkMobActors[globalId];if(a==null)return;
     final clip=a.clips['Daño']??a.clips['Damage']??a.clips['Golpe'];
