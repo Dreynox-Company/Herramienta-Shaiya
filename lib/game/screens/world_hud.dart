@@ -28,6 +28,13 @@ class WorldHud extends StatelessWidget {
   final List<PsInventoryItem> inventory,warehouse;
   final List<PsFriend> friends;
   final List<PsPartyMember> partyMembers;
+  final List<PsGuildSummary> guildDirectory;
+  final List<PsGuildMember> guildMembers;
+  final List<PsGuildJoinApplicant> guildApplicants;
+  final int guildId,guildRank;
+  final String guildName;
+  final bool guildListLoading;
+  final PsGuildCreateInvite? pendingGuildCreateInvite;
   final int? partyLeaderId,selfCharacterId;
   final String? pendingFriendRequestName;
   final int? pendingPartyRequesterId;
@@ -40,18 +47,23 @@ class WorldHud extends StatelessWidget {
   final PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
   final PsLinkingPossibility? blacksmithExtractPossibility;
   final bool blacksmithBusy;
-  final bool inventoryOpen,socialOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
+  final bool inventoryOpen,socialOpen,guildOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
   final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem;
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
-  final VoidCallback onToggleInventory,onToggleSocial,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty;
+  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<String> onRequestFriend;
   final ValueChanged<bool> onRespondFriend,onRespondParty;
   final ValueChanged<PsFriend> onDeleteFriend,onInviteParty;
   final ValueChanged<PsPartyMember> onKickParty,onPromoteParty;
+  final ValueChanged<PsGuildSummary> onRequestGuildJoin;
+  final void Function(PsGuildJoinApplicant,bool) onRespondGuildApplicant;
+  final ValueChanged<PsGuildMember> onKickGuild,onPromoteGuild,onDemoteGuild;
+  final void Function(String,String) onCreateGuild;
+  final ValueChanged<bool> onRespondGuildCreate;
   final ValueChanged<PsLearnedSkill> onAssignSkill;
   final ValueChanged<String> onSendChat;
   final UiAssetCache ui;
@@ -91,6 +103,14 @@ class WorldHud extends StatelessWidget {
     required this.warehouse,
     required this.friends,
     required this.partyMembers,
+    required this.guildDirectory,
+    required this.guildMembers,
+    required this.guildApplicants,
+    required this.guildId,
+    required this.guildRank,
+    required this.guildName,
+    required this.guildListLoading,
+    required this.pendingGuildCreateInvite,
     required this.partyLeaderId,
     required this.selfCharacterId,
     required this.pendingFriendRequestName,
@@ -110,6 +130,7 @@ class WorldHud extends StatelessWidget {
     required this.blacksmithBusy,
     required this.inventoryOpen,
     required this.socialOpen,
+    required this.guildOpen,
     required this.statusOpen,
     required this.skillsOpen,
     required this.questLogOpen,
@@ -138,6 +159,7 @@ class WorldHud extends StatelessWidget {
     required this.onWithdrawWarehouse,
     required this.onToggleInventory,
     required this.onToggleSocial,
+    required this.onToggleGuild,
     required this.onToggleStatus,
     required this.onAddStat,
     required this.onToggleSkills,
@@ -152,6 +174,15 @@ class WorldHud extends StatelessWidget {
     required this.onLeaveParty,
     required this.onKickParty,
     required this.onPromoteParty,
+    required this.onRequestGuildJoin,
+    required this.onRespondGuildApplicant,
+    required this.onLeaveGuild,
+    required this.onKickGuild,
+    required this.onPromoteGuild,
+    required this.onDemoteGuild,
+    required this.onCreateGuild,
+    required this.onRespondGuildCreate,
+    required this.onDismantleGuild,
     required this.onAssignSkill,
     required this.onSendChat,
     required this.locale,
@@ -191,6 +222,8 @@ class WorldHud extends StatelessWidget {
           ..._worldLabels(),
           if(socialOpen)
             Positioned(right:180,top:165,width:390,height:480,child:_socialWindow()),
+          if(guildOpen)
+            Positioned(right:155,top:145,width:430,height:510,child:_guildWindow()),
           if(statusOpen)
             Positioned(right:198,top:210,width:318,height:420,child:_statusWindow()),
           if(skillsOpen)
@@ -788,7 +821,7 @@ class WorldHud extends StatelessWidget {
         _bottomButton('interface/main_bottom_btn_item.tga',onTap:onToggleInventory),
         _bottomButton('interface/main_bottom_btn_quest.tga',onTap:onToggleQuestLog),
         _bottomButton('interface/main_bottom_btn_sub.tga',onTap:onToggleSocial),
-        _bottomButton('interface/main_bottom_btn_guild.tga'),
+        _bottomButton('interface/main_bottom_btn_guild.tga',onTap:onToggleGuild),
         _bottomButton('interface/main_bottom_btn_shop.tga'),
         _bottomButton('interface/main_bottom_btn_option.tga'),
         _bottomButton('interface/main_bottom_btn_event.tga'),
