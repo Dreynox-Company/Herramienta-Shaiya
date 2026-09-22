@@ -60,6 +60,72 @@ class AnimatedWorldPart {
   }
 }
 
+class ActiveThreeDeEffect {
+  final t.Group root;
+  final t.Mesh mesh;
+  final t.Float32BufferAttribute position,uv;
+  final t.Texture texture;
+  final ThreeDeData data;
+  final List<EftOpacityFrameData> opacityFrames;
+  final double duration;
+  double time=0;
+  int frame=-1;
+
+  ActiveThreeDeEffect(
+    this.root,this.mesh,this.position,this.uv,this.texture,this.data,
+    this.opacityFrames,this.duration,
+  );
+
+  bool tick(double dt){
+    time+=dt;
+    if(data.frames.isNotEmpty){
+      final key=(time*30).round();
+      var selected=-1;
+      for(var i=0;i<data.frames.length;i++){
+        if(data.frames[i].keyframe<=key)selected=i;else break;
+      }
+      if(selected>=0&&selected!=frame){
+        frame=selected;
+        final f=data.frames[selected];
+        for(var i=0;i<data.vertices;i++){
+          position.setXYZ(i,f.positions[i*3],f.positions[i*3+1],f.positions[i*3+2]);
+          uv.setXY(i,f.uv[i*2],f.uv[i*2+1]);
+        }
+        position.needsUpdate=true;
+        uv.needsUpdate=true;
+      }
+    }
+    if(opacityFrames.isNotEmpty){
+      final material=mesh.material;
+      if(material!=null)material.opacity=_opacityAt(time);
+    }
+    return time<duration;
+  }
+
+  double _opacityAt(double value){
+    if(opacityFrames.isEmpty)return 1;
+    final rows=[...opacityFrames]..sort((a,b)=>a.time.compareTo(b.time));
+    if(value<=rows.first.time)return rows.first.opacity.clamp(0.0,1.0);
+    for(var i=1;i<rows.length;i++){
+      final a=rows[i-1],b=rows[i];
+      if(value<=b.time){
+        final span=b.time-a.time;
+        if(span<=1e-7)return b.opacity.clamp(0.0,1.0);
+        final t0=((value-a.time)/span).clamp(0.0,1.0);
+        return (a.opacity+(b.opacity-a.opacity)*t0).clamp(0.0,1.0);
+      }
+    }
+    return rows.last.opacity.clamp(0.0,1.0);
+  }
+
+  void dispose(){
+    root.removeFromParent();
+    mesh.geometry?.dispose();
+    mesh.material?.dispose();
+    texture.dispose();
+  }
+}
+
 class AnimatedWorldTransform {
   final t.Group group;
   final v.Matrix4 base;
@@ -143,6 +209,9 @@ class StudioScene extends ChangeNotifier {
   final List<AnimatedWorldTransform> animatedWorldTransforms=[];
   final Map<String,VaniData> _vaniCache=<String,VaniData>{};
   final Map<String,ManiData> _maniCache=<String,ManiData>{};
+  final Map<String,EftData> _eftCache=<String,EftData>{};
+  final Map<String,ThreeDeData> _threeDeCache=<String,ThreeDeData>{};
+  final List<ActiveThreeDeEffect> activeVisualEffects=[];
   WorldData? world;WorldCollisionField? worldCollision;String? worldPath,effectPath,skyPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
@@ -926,13 +995,129 @@ class StudioScene extends ChangeNotifier {
       _worldAudioBusy=false;
     }
   }
+  Future<void> playEft(
+    String rawPath,
+    v.Vector3 origin, {
+    String? sequenceHint,
+  }) async {
+    final lib=catalog?.library;
+    if(lib==null||rawPath.trim().isEmpty)return;
+    final eftPath=lib.resolve(
+      rawPath,
+      ['effect','effect/eft'],
+      uniqueFallback:true,
+    );
+    if(eftPath==null){
+      report('EFT no encontrado: $rawPath');
+      return;
+    }
+    try{
+      final data=_eftCache[eftPath]??=readEft(await lib.read(eftPath),eftPath);
+      EftSequenceData? sequence;
+      if(sequenceHint!=null){
+        final hint=sequenceHint.toLowerCase();
+        sequence=data.sequences.where((s)=>
+          s.name.toLowerCase()==hint||s.name.toLowerCase().contains(hint)
+        ).firstOrNull;
+      }
+      sequence??=data.sequences.firstOrNull;
+      final records=sequence?.records.isNotEmpty==true
+        ?sequence!.records
+        :List<EftSequenceRecordData>.generate(
+          data.effects.length,(i)=>EftSequenceRecordData(i,0),
+        );
+      for(final record in records){
+        if(record.effectId<0||record.effectId>=data.effects.length)continue;
+        final delay=Duration(milliseconds:math.max(0,(record.time*1000).round()));
+        unawaited(Future<void>.delayed(delay,() async {
+          if(disposed)return;
+          await _spawnEftEffect(data,data.effects[record.effectId],origin,eftPath);
+        }));
+      }
+    }catch(e){
+      report('EFT $rawPath: $e');
+    }
+  }
+
+  Future<void> _spawnEftEffect(
+    EftData eft,
+    EftEffectData effect,
+    v.Vector3 origin,
+    String source,
+  ) async {
+    final lib=catalog?.library;
+    if(lib==null||effect.meshIndex<0||effect.meshIndex>=eft.meshes.length)return;
+    final rawMesh=eft.meshes[effect.meshIndex];
+    final meshPath=lib.resolve(
+      rawMesh,
+      ['effect/3de','effect'],
+      uniqueFallback:true,
+    );
+    if(meshPath==null)return;
+    final data=_threeDeCache[meshPath]??=read3de(await lib.read(meshPath),meshPath);
+    String textureName=data.texture;
+    if(effect.textureIds.isNotEmpty){
+      final id=effect.textureIds.first;
+      if(id>=0&&id<eft.textures.length)textureName=eft.textures[id];
+    }
+    final texturePath=lib.resolve(
+      textureName,
+      ['effect/dds','effect/texture','effect'],
+      uniqueFallback:true,
+    );
+    if(texturePath==null)return;
+    final png=await compute(_decodeTexture,{
+      'bytes':await lib.read(texturePath),
+      'path':texturePath,
+      'opaque':false,
+    });
+    final texture=await t.TextureLoader(flipY:false).fromBytes(png);
+    if(texture==null)return;
+    texture.colorSpace=t.SRGBColorSpace;
+    final geometry=t.BufferGeometry(),
+      positions=t.Float32BufferAttribute.fromList(data.basePositions.toList(),3),
+      texcoords=t.Float32BufferAttribute.fromList(data.baseUv.toList(),2);
+    geometry.setAttributeFromString('position',positions);
+    geometry.setAttributeFromString('uv',texcoords);
+    geometry.setIndex(data.indices.toList());
+    final material=t.MeshBasicMaterial.fromMap({
+      'map':texture,
+      'color':0xffffff,
+      'side':t.DoubleSide,
+      'transparent':true,
+      'depthWrite':false,
+      'blending':t.AdditiveBlending,
+      'toneMapped':false,
+    });
+    final mesh=t.Mesh(geometry,material),root=t.Group();
+    mesh.frustumCulled=false;
+    root.add(mesh);
+    root.position.setValues(
+      origin.x+effect.position.x,
+      origin.y+effect.position.y,
+      origin.z-effect.position.z,
+    );
+    root.scale.z=-1;
+    view?.scene.add(root);
+    final frameDuration=data.maxKeyframe>0
+      ?data.maxKeyframe/30.0
+      :(data.frames.isEmpty?0.75:data.frames.last.keyframe/30.0);
+    final opacityDuration=effect.opacityFrames.isEmpty
+      ?0.0
+      :effect.opacityFrames.map((f)=>f.time).reduce(math.max);
+    final duration=math.max(.25,math.max(frameDuration,opacityDuration));
+    activeVisualEffects.add(ActiveThreeDeEffect(
+      root,mesh,positions,texcoords,texture,data,effect.opacityFrames,duration,
+    ));
+  }
+
   Future<void> setEffect(String path) async {
     final revision=++_effectRevision,lib=catalog!.library;final png=await compute(_decodeTexture,{'bytes':await lib.read(path),'path':path,'opaque':false});final texture=await t.TextureLoader(flipY:false).fromBytes(png);if(texture==null)return;if(disposed||revision!=_effectRevision){texture.dispose();return;}
     hitSprite?.removeFromParent();hitSprite?.material?.dispose();effectTexture?.dispose();effectTexture=texture;hitSprite=t.Sprite(t.SpriteMaterial.fromMap({'map':texture,'transparent':true,'depthWrite':false,'blending':t.AdditiveBlending,'color':0xffffff}));hitSprite!.visible=false;view!.scene.add(hitSprite!);effectPath=path;say('Textura de efecto seleccionada. La secuencia del laboratorio es una simulación.');
   }
   Future<void> _combatEvent(String who,String event) async {
     try{final a=who=='enemy'?enemy:character;if(a==null)return;
-      if(who=='enemy'){final key=event=='attack'?'Ataque 1':event=='death'?'Caída':'Daño';final c=a.clips[key];if(c!=null)a.play(c,repeat:false);final raw=enemyRecord?.sounds[key]??'';final s=catalog?.library.resolve(raw,['sound/monster','sound'],uniqueFallback:true);if(s!=null)unawaited(playSound(s));}
+      if(who=='enemy'){final key=event=='attack'?'Ataque 1':event=='death'?'Caída':'Daño';final c=a.clips[key];if(c!=null)a.play(c,repeat:false);final raw=enemyRecord?.sounds[key]??'';final s=catalog?.library.resolve(raw,['sound/monster','sound'],uniqueFallback:true);if(s!=null)unawaited(playSound(s));final eft=enemyRecord?.effects[key]??'';if(eft.isNotEmpty)unawaited(playEft(eft,a.root.position.clone(),sequenceHint:key));}
       else{ClipData? c;if(event=='attack'&&attackClips.isNotEmpty){c=attackClips[attackCounter++%attackClips.length];combat.attackDuration=attackClips[attackCounter%attackClips.length].duration;}else{final index=event=='death'?9:damageMotion(weaponFamily(weaponRecord));final candidates=animations.where((p)=>index!=null?motionIndex(p)==index:p.contains('damage')).toList();c=await firstCompatible(a,candidates);}if(c!=null&&a==character)a.play(c,repeat:false);}
       if(event=='death')a.idle=null;
       if(event=='hit'){hitLife=.65;lastImpact=who=='enemy'?'Impacto −${combat.damage.round()}':'Recibido −${combat.enemyDamage.round()}';if(hitSprite!=null){hitSprite!.visible=true;hitSprite!.position.setValues(a.root.position.x,a.root.position.y+1,-.1+a.root.position.z);}}
@@ -954,6 +1139,13 @@ class StudioScene extends ChangeNotifier {
     for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}
     for(final p in animatedWorldParts){p.tick(delta);}
     for(final p in animatedWorldTransforms){p.tick(delta);}
+    for(var i=activeVisualEffects.length-1;i>=0;i--){
+      final effect=activeVisualEffects[i];
+      if(!effect.tick(delta)){
+        effect.dispose();
+        activeVisualEffects.removeAt(i);
+      }
+    }
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
@@ -1223,7 +1415,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original · ${worldCollision?.triangles.length??0} triángulos de colisión SMOD.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;animatedWorldParts.clear();animatedWorldTransforms.clear();_vaniCache.clear();_maniCache.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;animatedWorldParts.clear();animatedWorldTransforms.clear();_vaniCache.clear();_maniCache.clear();_eftCache.clear();_threeDeCache.clear();for(final effect in activeVisualEffects){effect.dispose();}activeVisualEffects.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
