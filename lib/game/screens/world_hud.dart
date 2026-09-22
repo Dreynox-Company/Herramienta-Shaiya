@@ -44,6 +44,12 @@ class WorldHud extends StatelessWidget {
   final Map<int,PsTradeItem> localTradeItems,remoteTradeItems;
   final int localTradeMoney,remoteTradeMoney;
   final bool localTradeDecided,remoteTradeDecided,localTradeConfirmed,remoteTradeConfirmed;
+  final bool duelTradeOpen,duelStarted,duelReady;
+  final int? duelOpponentId,pendingDuelRequesterId;
+  final Map<int,PsTradeItem> localDuelItems,remoteDuelItems;
+  final int localDuelMoney,remoteDuelMoney;
+  final bool localDuelApproved,remoteDuelApproved;
+  final String duelResultText;
   final NpcShopRule? shop;
   final NpcGateRule? gate;
   final int blacksmithMode,blacksmithExtractPosition;
@@ -70,6 +76,10 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<int> onRequestTrade,onRemoveTradeItem,onSetTradeMoney,onFinishTrade;
   final ValueChanged<bool> onRespondTrade,onDecideTrade;
   final ValueChanged<PsInventoryItem> onTradeInventoryItem;
+  final ValueChanged<int> onRequestDuel,onRemoveDuelItem,onSetDuelMoney;
+  final ValueChanged<bool> onRespondDuel,onDecideDuel;
+  final ValueChanged<PsInventoryItem> onDuelInventoryItem;
+  final VoidCallback onCloseDuelTrade,onAdmitDuelDefeat;
   final void Function(String,String) onCreateGuild;
   final ValueChanged<bool> onRespondGuildCreate;
   final ValueChanged<PsLearnedSkill> onAssignSkill;
@@ -135,6 +145,18 @@ class WorldHud extends StatelessWidget {
     required this.remoteTradeDecided,
     required this.localTradeConfirmed,
     required this.remoteTradeConfirmed,
+    required this.duelTradeOpen,
+    required this.duelStarted,
+    required this.duelReady,
+    required this.duelOpponentId,
+    required this.pendingDuelRequesterId,
+    required this.localDuelItems,
+    required this.remoteDuelItems,
+    required this.localDuelMoney,
+    required this.remoteDuelMoney,
+    required this.localDuelApproved,
+    required this.remoteDuelApproved,
+    required this.duelResultText,
     required this.shop,
     required this.gate,
     required this.blacksmithMode,
@@ -209,6 +231,14 @@ class WorldHud extends StatelessWidget {
     required this.onSetTradeMoney,
     required this.onDecideTrade,
     required this.onFinishTrade,
+    required this.onRequestDuel,
+    required this.onRespondDuel,
+    required this.onDuelInventoryItem,
+    required this.onRemoveDuelItem,
+    required this.onSetDuelMoney,
+    required this.onDecideDuel,
+    required this.onCloseDuelTrade,
+    required this.onAdmitDuelDefeat,
     required this.onAssignSkill,
     required this.onSendChat,
     required this.locale,
