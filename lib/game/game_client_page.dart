@@ -809,6 +809,7 @@ class _GameClientPageState extends State<GameClientPage> {
       targetMobHp??=targetMobMaxHp;
     }
     try{
+      unawaited(scene.networkPlayerAttack(target));
       await liveWorld?.useMobSkill(learned.number,target);
       messages.insert(0,'[Combate] Skill ${learned.skillId} Lv.${learned.level} → mob $target.');
       if(mounted)setState((){});
