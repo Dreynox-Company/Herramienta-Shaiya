@@ -72,10 +72,16 @@ def nonce_rules(t:dict):
     if t['kind']!='chunk':return {}
     off=t['dataOffset']; local=t['localChunk']; aux=t['ordinal']; entry=int(t['entryId'],16)
     def q(v,n):return struct.pack('<QI',v,n)
+    parent=t['parentOrdinal']
     return {
       'offset_chunk0_le96':q(off,local), 'entry_id_chunk0_le':q(entry,local),
       'offset_aux_le96':q(off,aux), 'entry_id_aux_le':q(entry,aux),
       'offset_chunk1_le96':q(off,local+1), 'entry_id_chunk1_le':q(entry,local+1),
+      'record_ordinal_chunk_le96':q(parent,local),
+      'record_ordinal_aux_le96':q(parent,aux),
+      'record_ordinal_chunk1_le96':q(parent,local+1),
+      'aux_ordinal_chunk_le96':q(aux,local),
+      'aux_ordinal_zero_le96':q(aux,0),
     }
 
 class Sink:
