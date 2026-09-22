@@ -31,6 +31,7 @@ class PsPacketType {
   static const autoAttackStop=0x0212;
   static const setMoney=0x0213;
   static const inventorySort=0x021F;
+  static const changeAppearance=0x0226;
   static const useVehicle=0x0216;
   static const useVehicleReady=0x0217;
   static const useVehicle2=0x021C;
@@ -521,6 +522,12 @@ class PsPlayerShape {
     required this.partyDefinition,required this.mode,required this.kills,required this.equipment,
     required this.name,required this.guildFrame,required this.guildName,
   });
+  PsPlayerShape copyWith({int? hair,int? face,int? height,int? gender})=>PsPlayerShape(
+    characterId:characterId,dead:dead,motion:motion,country:country,race:race,
+    hair:hair??this.hair,face:face??this.face,height:height??this.height,
+    profession:profession,gender:gender??this.gender,partyDefinition:partyDefinition,
+    mode:mode,kills:kills,equipment:equipment,name:name,guildFrame:guildFrame,guildName:guildName,
+  );
   static PsPlayerShape parse(PsPacket p){
     if(p.type!=PsPacketType.characterShape||p.body.length<685){
       throw FormatException('CHARACTER_SHAPE US truncado: ${p.body.length}.');
@@ -613,6 +620,20 @@ class PsCharacterMotion {
       throw FormatException('CHARACTER_MOTION truncado: ${p.body.length}.');
     }
     return PsCharacterMotion(ByteData.sublistView(p.body).getUint32(0,Endian.little),p.body[4]);
+  }
+}
+
+class PsAppearanceChange {
+  final int characterId,hair,face,height,gender;
+  const PsAppearanceChange(this.characterId,this.hair,this.face,this.height,this.gender);
+  static PsAppearanceChange parse(PsPacket p){
+    if(p.type!=PsPacketType.changeAppearance||p.body.length<8){
+      throw FormatException('CHANGE_APPEARANCE truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsAppearanceChange(
+      d.getUint32(0,Endian.little),p.body[4],p.body[5],p.body[6],p.body[7],
+    );
   }
 }
 
