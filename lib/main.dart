@@ -32,6 +32,8 @@ import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
+const studioVersion = '0.6.19';
+
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
   final data = args.where((x) => x.startsWith('--data=')).firstOrNull;
@@ -497,7 +499,7 @@ class _StudioState extends State<StudioPage> {
       'diagnostico_archivo_${DateTime.now().millisecondsSinceEpoch}.json',
       const JsonEncoder.withIndent('  ').convert({
         'app': 'Shaiya Studio',
-        'version': '0.6.15',
+        'version': studioVersion,
         'platform': Platform.operatingSystem,
         'time': DateTime.now().toIso8601String(),
         'archive': report,
@@ -2509,7 +2511,7 @@ class _StudioState extends State<StudioPage> {
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
-        'version': '0.6.15',
+        'version': studioVersion,
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
         'resources': catalog?.library.files.length,
