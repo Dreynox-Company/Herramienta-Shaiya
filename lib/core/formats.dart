@@ -1014,6 +1014,164 @@ class WorldData {
 }
 
 
+class ThreeDeFrameData {
+  final int keyframe;
+  final Float32List positions,uv;
+  const ThreeDeFrameData(this.keyframe,this.positions,this.uv);
+}
+
+class ThreeDeData {
+  final String texture;
+  final Float32List basePositions,baseUv;
+  final Uint16List indices;
+  final int maxKeyframe;
+  final List<ThreeDeFrameData> frames;
+  const ThreeDeData(
+    this.texture,this.basePositions,this.baseUv,this.indices,
+    this.maxKeyframe,this.frames,
+  );
+
+  int get vertices=>basePositions.length~/3;
+  int get triangles=>indices.length~/3;
+}
+
+ThreeDeData read3de(Uint8List bytes,String source){
+  final r=Bin(bytes,source);
+  final texture=r.str();
+  final vertexCount=r.count(65536);
+  final basePositions=Float32List(vertexCount*3),baseUv=Float32List(vertexCount*2);
+  for(var i=0;i<vertexCount;i++){
+    final p=r.vec();
+    r.i32(); // 3DE bone id, normally -1.
+    final u=r.f32(),v0=r.f32();
+    basePositions[i*3]=p.x;basePositions[i*3+1]=p.y;basePositions[i*3+2]=p.z;
+    baseUv[i*2]=u;baseUv[i*2+1]=v0;
+  }
+  final faceCount=r.count(2000000);
+  r.need(faceCount*6);
+  final indices=Uint16List(faceCount*3);
+  for(var i=0;i<indices.length;i++){
+    final index=r.u16();
+    if(index>=vertexCount)r.fail('Triángulo 3DE fuera de la malla.');
+    indices[i]=index;
+  }
+  final maxKeyframe=r.i32();
+  final frameCount=r.count(100000),frames=<ThreeDeFrameData>[];
+  for(var frame=0;frame<frameCount;frame++){
+    final keyframe=r.i32();
+    final positions=Float32List(vertexCount*3),uv=Float32List(vertexCount*2);
+    for(var i=0;i<vertexCount;i++){
+      final p=r.vec(),u=r.f32(),v0=r.f32();
+      positions[i*3]=p.x;positions[i*3+1]=p.y;positions[i*3+2]=p.z;
+      uv[i*2]=u;uv[i*2+1]=v0;
+    }
+    frames.add(ThreeDeFrameData(keyframe,positions,uv));
+  }
+  r.end();
+  return ThreeDeData(
+    texture,basePositions,baseUv,indices,maxKeyframe,List.unmodifiable(frames),
+  );
+}
+
+enum EftFormat { eft,ef2,ef3 }
+
+class EftRotationData {
+  final v.Quaternion rotation;
+  final double time;
+  const EftRotationData(this.rotation,this.time);
+}
+
+class EftOpacityFrameData {
+  final double opacity,time;
+  const EftOpacityFrameData(this.opacity,this.time);
+}
+
+class EftEffectData {
+  final String name;
+  final int meshIndex;
+  final v.Vector3 position;
+  final List<EftRotationData> rotations;
+  final List<EftOpacityFrameData> opacityFrames;
+  final List<int> textureIds;
+  const EftEffectData(
+    this.name,this.meshIndex,this.position,this.rotations,this.opacityFrames,this.textureIds,
+  );
+}
+
+class EftSequenceRecordData {
+  final int effectId;
+  final double time;
+  const EftSequenceRecordData(this.effectId,this.time);
+}
+
+class EftSequenceData {
+  final String name;
+  final List<EftSequenceRecordData> records;
+  const EftSequenceData(this.name,this.records);
+}
+
+class EftData {
+  final EftFormat format;
+  final List<String> meshes,textures;
+  final List<EftEffectData> effects;
+  final List<EftSequenceData> sequences;
+  const EftData(this.format,this.meshes,this.textures,this.effects,this.sequences);
+}
+
+EftData readEft(Uint8List bytes,String source){
+  final r=Bin(bytes,source),signature=r.str(3);
+  final format=switch(signature){
+    'EFT'=>EftFormat.eft,
+    'EF2'=>EftFormat.ef2,
+    'EF3'=>EftFormat.ef3,
+    _=>r.fail('Firma EFT desconocida: $signature'),
+  };
+  List<String> names(){
+    final count=r.count(100000);
+    return List<String>.generate(count,(_)=>r.str(),growable:false);
+  }
+  final meshes=names(),textures=names();
+  final effectCount=r.count(100000),effects=<EftEffectData>[];
+  for(var i=0;i<effectCount;i++){
+    final name=r.str();
+    for(var j=0;j<8;j++)r.i32();
+    final meshIndex=r.i32();
+    r.i32();
+    for(var j=0;j<8;j++)r.f32();
+    r.vec();r.vec();
+    final position=r.vec();
+    r.vec();r.vec();
+    r.i32();r.i32();r.i32();
+    r.vec();
+    r.f32();r.i32();r.i32();r.f32();r.i32();
+    if(format==EftFormat.ef3){r.f32();r.f32();}
+    final rotationCount=r.count(100000),rotations=<EftRotationData>[];
+    for(var j=0;j<rotationCount;j++)rotations.add(EftRotationData(r.quat(),r.f32()));
+    final opacityCount=r.count(100000),opacity=<EftOpacityFrameData>[];
+    for(var j=0;j<opacityCount;j++)opacity.add(EftOpacityFrameData(r.f32(),r.f32()));
+    final sub3Count=r.count(100000);
+    for(var j=0;j<sub3Count;j++){r.f32();r.f32();r.f32();}
+    r.i32();r.i32();r.i32();r.i32();
+    final textureCount=r.count(100000),textureIds=<int>[];
+    for(var j=0;j<textureCount;j++)textureIds.add(r.i32());
+    effects.add(EftEffectData(
+      name,meshIndex,position,List.unmodifiable(rotations),
+      List.unmodifiable(opacity),List.unmodifiable(textureIds),
+    ));
+  }
+  final sequenceCount=r.count(100000),sequences=<EftSequenceData>[];
+  for(var i=0;i<sequenceCount;i++){
+    final name=r.str(),count=r.count(100000),records=<EftSequenceRecordData>[];
+    for(var j=0;j<count;j++)records.add(EftSequenceRecordData(r.i32(),r.f32()));
+    sequences.add(EftSequenceData(name,List.unmodifiable(records)));
+  }
+  r.end();
+  return EftData(
+    format,List.unmodifiable(meshes),List.unmodifiable(textures),
+    List.unmodifiable(effects),List.unmodifiable(sequences),
+  );
+}
+
 class WtrData {
   final double unknown1;
   final int unknown2,unknown3;
