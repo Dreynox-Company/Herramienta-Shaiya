@@ -138,6 +138,11 @@ var items = itemData?.Records.Select(i => new {
     count = (int)i.Count,
     duration = (int)i.Duration,
     grade = (int)i.Grade,
+    special = (int)i.Special,
+    hp = (int)i.ConstHp,
+    sp = (int)i.ConstSp,
+    mp = (int)i.ConstMp,
+    itemSkill = (int)i.ItemSkill,
     buy = i.Buy,
     sell = i.Sell,
 }).ToArray() ?? Array.Empty<object>();
