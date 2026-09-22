@@ -338,8 +338,11 @@ class StudioScene extends ChangeNotifier {
     final nx=worldX-originX,nz=-(worldZ-originZ);
     a.root.position.setValues(nx,worldY,nz);
     a.root.rotation.y=-angle*(math.pi*2/65536.0);
-    final moving=motion!=0;
-    final clip=moving?(motion==1?(a.run??a.walk):(a.walk??a.run)):(a.idle??a.normal);
+    final clip=motion==1
+      ?(a.run??a.walk)
+      :motion==0
+        ?(a.walk??a.run)
+        :(a.idle??a.normal);
     if(clip!=null&&a.clip!=clip)a.play(clip);
     notifyListeners();
   }
@@ -358,6 +361,19 @@ class StudioScene extends ChangeNotifier {
       if(d<best){best=d;bestId=p.globalId;}
     }
     return bestId;
+  }
+
+  ({int id,bool player})? pickNetworkCombatTarget(
+    double screenX,double screenY,double width,double height,{double radius=34}
+  ){
+    ({int id,bool player})? result;
+    var best=radius*radius;
+    for(final p in projectGameLabels(width,height)){
+      if(p.globalId==0||(!p.player&&!p.mob))continue;
+      final dx=p.x-screenX,dy=p.y-screenY,d=dx*dx+dy*dy;
+      if(d<best){best=d;result=(id:p.globalId,player:p.player);}
+    }
+    return result;
   }
 
   Future<void> networkPlayerAttackCharacter(int characterId) async {
