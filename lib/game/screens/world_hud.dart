@@ -840,6 +840,14 @@ class WorldHud extends StatelessWidget {
         ],
       );
 
+  Iterable<String> get _visibleChatMessages=>messages.where((m){
+    const hiddenPrefixes=<String>[
+      '[Backend]','[Mapa]','[Sistema]','[ps0032]','[Streaming]',
+      '[Mundo]','[Equipo 3D]','[Movimiento]','[QA]',
+    ];
+    return !hiddenPrefixes.any(m.startsWith);
+  });
+
   Widget _chat()=>Stack(children:[
     Positioned.fill(
       child:DataImage(
@@ -864,7 +872,7 @@ class WorldHud extends StatelessWidget {
       child:ListView(
         reverse:true,
         padding:EdgeInsets.zero,
-        children:messages.take(12).map((m)=>Padding(
+        children:_visibleChatMessages.take(12).map((m)=>Padding(
           padding:const EdgeInsets.only(bottom:5),
           child:Text(
             m,
