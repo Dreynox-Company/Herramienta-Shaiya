@@ -140,6 +140,10 @@ Future<SpkArchiveSource> _source(
     }
   }
   await source.validateSimpleResourceProfile();
+  await source.validateAllResources(
+    control: SpkExtractControl(),
+    progress: (_, _, _) {},
+  );
   return source;
 }
 
@@ -347,7 +351,7 @@ void main() {
           isA<SpkFailure>().having(
             (error) => error.code,
             'code',
-            'SPK_TABLE_DISCOVERY_PROFILE',
+            'SPK_TABLE_DISCOVERY_AUDIT',
           ),
         ),
       );
