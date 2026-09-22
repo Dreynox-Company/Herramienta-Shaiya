@@ -678,23 +678,17 @@ class WorldHud extends StatelessWidget {
           child:Row(
             mainAxisAlignment:MainAxisAlignment.spaceBetween,
             children:[
-              SizedBox(
-                width:78,height:31,
-                child:ShaiyaButton(
-                  label:questActive
-                    ?(locale=='spn'?'Completar':'Complete')
-                    :(locale=='spn'?'Aceptar':'Accept'),
-                  onPressed:onAcceptQuest,
-                  compact:true,
-                ),
+              shaiyaRedButton(
+                questActive
+                  ?(locale=='spn'?'Completar':'Complete')
+                  :(locale=='spn'?'Aceptar':'Accept'),
+                onAcceptQuest,
+                width:78,height:31,fontSize:10,
               ),
-              SizedBox(
-                width:78,height:31,
-                child:ShaiyaButton(
-                  label:locale=='spn'?'Cancelar':'Cancel',
-                  onPressed:onCancelQuest,
-                  compact:true,
-                ),
+              shaiyaRedButton(
+                locale=='spn'?'Cancelar':'Cancel',
+                onCancelQuest,
+                width:78,height:31,fontSize:10,
               ),
             ],
           ),
@@ -703,13 +697,10 @@ class WorldHud extends StatelessWidget {
         Positioned(
           left:35,right:35,bottom:18,
           child:Center(
-            child:SizedBox(
-              width:100,height:31,
-              child:ShaiyaButton(
-                label:locale=='spn'?'Cerrar':'Close',
-                onPressed:onCancelQuest,
-                compact:true,
-              ),
+            child:shaiyaRedButton(
+              locale=='spn'?'Cerrar':'Close',
+              onCancelQuest,
+              width:100,height:31,fontSize:10,
             ),
           ),
         ),
