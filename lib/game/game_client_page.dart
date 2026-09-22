@@ -48,6 +48,8 @@ class _GameClientPageState extends State<GameClientPage> {
   PsAdditionalStats? liveAdditionalStats;
   PsMapWeather? liveWeather;
   Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
+  List<PsTargetBuff> targetBuffs=<PsTargetBuff>[];
+  final Map<int,PsMapItem> liveMapItems=<int,PsMapItem>{};
   int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
   final Map<int,PsEnteredMap> remotePlayerEntries=<int,PsEnteredMap>{};
   final Map<int,PsPlayerShape> remotePlayerShapes=<int,PsPlayerShape>{};
@@ -1185,12 +1187,184 @@ class _GameClientPageState extends State<GameClientPage> {
     return catalog?.skillName(cast.skillId,cast.skillLevel,uiLocale)??('Skill '+cast.skillId.toString());
   }
 
+  PsCharacterDetails _detailsWith(
+    PsCharacterDetails d, {
+    int? statPoint,int? skillPoint,int? maxHp,int? maxMp,int? maxSp,
+    int? startExp,int? endExp,int? currentExp,int? gold,int? kills,
+  }){
+    return PsCharacterDetails(
+      strength:d.strength,dexterity:d.dexterity,reaction:d.reaction,
+      intelligence:d.intelligence,wisdom:d.wisdom,luck:d.luck,
+      statPoint:statPoint??d.statPoint,skillPoint:skillPoint??d.skillPoint,
+      maxHp:maxHp??d.maxHp,maxMp:maxMp??d.maxMp,maxSp:maxSp??d.maxSp,angle:d.angle,
+      startExp:startExp??d.startExp,endExp:endExp??d.endExp,currentExp:currentExp??d.currentExp,
+      gold:gold??d.gold,x:d.x,y:d.y,z:d.z,kills:kills??d.kills,
+      deaths:d.deaths,victories:d.victories,defeats:d.defeats,guildName:d.guildName,
+    );
+  }
+
+  void _setLiveCharacterLevel(int characterId,int level){
+    final current=liveCharacters.where((row)=>row.id==characterId).firstOrNull;
+    if(current==null)return;
+    final next=PsCharacterSlot(
+      slot:current.slot,id:current.id,mapId:current.mapId,level:level,
+      race:current.race,mode:current.mode,hair:current.hair,face:current.face,
+      height:current.height,profession:current.profession,gender:current.gender,
+      name:current.name,isDelete:current.isDelete,isRename:current.isRename,
+    );
+    liveCharacters=[
+      for(final row in liveCharacters) if(row.id==characterId)next else row,
+    ];
+    if(liveCharacter?.id==characterId)liveCharacter=next;
+  }
+
+  void _clearCombatTarget(){
+    targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+    targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;
+    targetPlayerName=null;
+    targetBuffs=<PsTargetBuff>[];
+  }
+
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if((mapSwitching||sectorStreaming)&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
     if(packet.type==PsPacketType.characterMapTeleport&&packet.body.length>=18){
       try{unawaited(_applyMapTeleport(PsMapTeleport.parse(packet)));}
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
+      return;
+    }
+    if(packet.type==PsPacketType.experienceGain&&packet.body.length>=8){
+      try{
+        final gain=PsExperienceGain.parse(packet),d=liveDetails;
+        if(d!=null){
+          liveDetails=_detailsWith(d,currentExp:d.currentExp+gain.exp);
+          messages.insert(0,'[EXP] +'+gain.exp.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[EXP] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.characterLevelUpMyself||packet.type==PsPacketType.characterLevelUpOther)&&packet.body.length>=18){
+      try{
+        final up=PsCharacterLevelUp.parse(packet),self=liveCharacter?.id;
+        _setLiveCharacterLevel(up.characterId,up.level);
+        if(up.characterId==self&&liveDetails!=null){
+          liveDetails=_detailsWith(
+            liveDetails!,
+            statPoint:up.statPoint,skillPoint:up.skillPoint,
+            startExp:up.minLevelExp,endExp:up.nextLevelExp,currentExp:up.minLevelExp,
+          );
+          messages.insert(0,'[Nivel] Nivel '+up.level.toString()+' alcanzado.');
+        }
+        _updatePartyMember(up.characterId,(m)=>m.copyWith(level:up.level));
+      }catch(e){messages.insert(0,'[Nivel] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterRecover&&packet.body.length>=16){
+      try{
+        final value=PsCharacterRecover.parse(packet);
+        if(value.characterId==liveCharacter?.id){
+          liveHitpoints=PsHitpoints(value.hp,value.mp,value.sp);
+        }
+      }catch(e){messages.insert(0,'[Recuperación] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterMaxHpMpSp&&packet.body.length>=16){
+      try{
+        final value=PsCharacterMaxVitals.parse(packet);
+        if(value.characterId==liveCharacter?.id&&liveDetails!=null){
+          liveDetails=_detailsWith(
+            liveDetails!,maxHp:value.maxHp,maxMp:value.maxMp,maxSp:value.maxSp,
+          );
+        }
+      }catch(e){messages.insert(0,'[Vitals] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterMaxHitpoints&&packet.body.length>=9){
+      try{
+        final value=PsCharacterMaxHitpoint.parse(packet),d=liveDetails;
+        if(value.characterId==liveCharacter?.id&&d!=null){
+          liveDetails=switch(value.type){
+            0=>_detailsWith(d,maxHp:value.value),
+            1=>_detailsWith(d,maxSp:value.value),
+            2=>_detailsWith(d,maxMp:value.value),
+            _=>d,
+          };
+        }
+      }catch(e){messages.insert(0,'[Vitals] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.setMoney&&packet.body.length>=4){
+      try{
+        liveGold=PsMoneyUpdate.parse(packet).gold;
+        final d=liveDetails;
+        if(d!=null)liveDetails=_detailsWith(d,gold:liveGold);
+      }catch(e){messages.insert(0,'[Oro] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterKillInfo&&packet.body.length>=8){
+      try{
+        final info=PsKillInfo.parse(packet),d=liveDetails;
+        if(info.characterId==liveCharacter?.id&&d!=null){
+          liveDetails=_detailsWith(d,kills:info.kills);
+        }
+      }catch(e){messages.insert(0,'[PvP] KillInfo: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.targetClear){
+      _clearCombatTarget();
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.targetBuffs&&packet.body.length>=6){
+      try{
+        final state=PsTargetBuffState.parse(packet);
+        final active=(targetPlayerId==state.targetId)||(targetMobGlobalId==state.targetId);
+        if(active)targetBuffs=state.buffs.toList();
+      }catch(e){messages.insert(0,'[Target Buff] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.targetBuffAdd||packet.type==PsPacketType.targetBuffRemove)&&packet.body.length>=8){
+      try{
+        final change=PsTargetBuffChange.parse(packet);
+        final active=(targetPlayerId==change.targetId)||(targetMobGlobalId==change.targetId);
+        if(active){
+          targetBuffs=[
+            ...targetBuffs.where((b)=>!(b.skillId==change.skillId&&b.skillLevel==change.skillLevel)),
+            if(packet.type==PsPacketType.targetBuffAdd)
+              PsTargetBuff(change.skillId,change.skillLevel,-1),
+          ];
+        }
+      }catch(e){messages.insert(0,'[Target Buff] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.mapAddItem&&packet.body.length>=24){
+      try{
+        final item=PsMapItem.parse(packet);
+        liveMapItems[item.globalId]=item;
+      }catch(e){messages.insert(0,'[Drop] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.mapRemoveItem&&packet.body.length>=4){
+      try{liveMapItems.remove(parseMapRemoveItem(packet));}
+      catch(e){messages.insert(0,'[Drop] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.mapNpcAttackPlayer||packet.type==PsPacketType.mapNpcAttackMob)&&packet.body.length>=11){
+      try{
+        final hit=PsNpcAttack.parse(packet);
+        if(hit.success&&hit.hpDamage>0){
+          if(packet.type==PsPacketType.mapNpcAttackPlayer&&hit.targetId==liveCharacter?.id){
+            final hp=liveHitpoints;
+            if(hp!=null)liveHitpoints=PsHitpoints(math.max(0,hp.hp-hit.hpDamage),hp.mp,hp.sp);
+            unawaited(scene.networkPlayerHit(hit.hpDamage));
+          }else if(packet.type==PsPacketType.mapNpcAttackMob){
+            unawaited(scene.networkMobHit(hit.targetId,hit.hpDamage));
+          }
+        }
+      }catch(e){messages.insert(0,'[NPC Combate] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.autoAttackStop){
+      scene.combat.automatic=false;
       return;
     }
     if(packet.type==PsPacketType.characterEnteredMap&&packet.body.length>=27){
@@ -1254,6 +1428,7 @@ class _GameClientPageState extends State<GameClientPage> {
         targetPlayerId=hp.targetId;targetPlayerMaxHp=hp.maxHp;targetPlayerHp=hp.currentHp;
         targetPlayerName=remotePlayerShapes[hp.targetId]?.name??_knownCharacterName(hp.targetId);
         targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+        targetBuffs=<PsTargetBuff>[];
       }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
       if(mounted)setState((){});
       return;

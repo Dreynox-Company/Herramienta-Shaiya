@@ -26,7 +26,11 @@ class PsPacketType {
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
   static const characterLeftMap=0x0202;
+  static const experienceGain=0x0207;
   static const runMode=0x0210;
+  static const autoAttackStop=0x0212;
+  static const setMoney=0x0213;
+  static const inventorySort=0x021F;
   static const useVehicle=0x0216;
   static const useVehicleReady=0x0217;
   static const useVehicle2=0x021C;
@@ -38,17 +42,30 @@ class PsPacketType {
   static const targetCharacterHpUpdate=0x0301;
   static const targetCharacterMaxHp=0x0302;
   static const characterShape=0x0303;
+  static const targetMobGetState=0x0304;
   static const targetMobHpUpdate=0x0305;
+  static const targetGetCharacterBuffs=0x0308;
+  static const targetGetMobBuffs=0x0309;
+  static const targetClear=0x030A;
+  static const targetBuffs=0x030B;
+  static const targetBuffAdd=0x030C;
+  static const targetBuffRemove=0x030D;
   static const mapWeather=0x0451;
   static const inventoryMoveItem=0x0204;
   static const updateStats=0x0208;
   static const learnNewSkill=0x0209;
   static const addItem=0x0205;
   static const removeItem=0x0206;
+  static const mapAddItem=0x0401;
+  static const mapRemoveItem=0x0402;
+  static const worldDay=0x0404;
   static const characterMove=0x0501;
   static const characterCharacterAutoAttack=0x0502;
   static const characterMobAutoAttack=0x0503;
+  static const characterRecover=0x0505;
   static const characterMotion=0x0506;
+  static const characterLevelUpMyself=0x0508;
+  static const characterMaxHitpoints=0x050B;
   static const sendEquipment=0x0507;
   static const useItem=0x050A;
   static const characterSkillKeep=0x050F;
@@ -62,6 +79,9 @@ class PsPacketType {
   static const mobSkillMirror=0x051B;
   static const characterAttackMovementSpeed=0x051C;
   static const characterShapeUpdate=0x051D;
+  static const characterLevelUpOther=0x051E;
+  static const characterMaxHpMpSp=0x051F;
+  static const characterKillInfo=0x0522;
   static const usedSpMp=0x050C;
   static const buffAdd=0x050D;
   static const buffRemove=0x050E;
@@ -190,6 +210,8 @@ class PsPacketType {
   static const mapNpcEnter=0x0E01;
   static const mapNpcLeave=0x0E02;
   static const mapNpcMove=0x0E03;
+  static const mapNpcAttackPlayer=0x0E05;
+  static const mapNpcAttackMob=0x0E06;
 }
 
 class PsPacket {
@@ -797,6 +819,196 @@ class PsUsualHit {
     );
   }
 }
+class PsExperienceGain {
+  final int exp,unknown;
+  const PsExperienceGain(this.exp,this.unknown);
+  static PsExperienceGain parse(PsPacket p){
+    if(p.type!=PsPacketType.experienceGain||p.body.length<8){
+      throw FormatException('EXPERIENCE_GAIN truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsExperienceGain(
+      d.getUint32(0,Endian.little),d.getUint32(4,Endian.little),
+    );
+  }
+}
+
+class PsCharacterLevelUp {
+  final int characterId,level,statPoint,skillPoint,minLevelExp,nextLevelExp;
+  const PsCharacterLevelUp(
+    this.characterId,this.level,this.statPoint,this.skillPoint,
+    this.minLevelExp,this.nextLevelExp,
+  );
+  static PsCharacterLevelUp parse(PsPacket p){
+    if(!const <int>{
+      PsPacketType.characterLevelUpMyself,PsPacketType.characterLevelUpOther,
+    }.contains(p.type)||p.body.length<18){
+      throw FormatException('CHARACTER_LEVEL_UP truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterLevelUp(
+      d.getUint32(0,Endian.little),
+      d.getUint16(4,Endian.little),
+      d.getUint16(6,Endian.little),
+      d.getUint16(8,Endian.little),
+      d.getUint32(10,Endian.little),
+      d.getUint32(14,Endian.little),
+    );
+  }
+}
+
+class PsCharacterRecover {
+  final int characterId,hp,mp,sp;
+  const PsCharacterRecover(this.characterId,this.hp,this.mp,this.sp);
+  static PsCharacterRecover parse(PsPacket p){
+    if(p.type!=PsPacketType.characterRecover||p.body.length<16){
+      throw FormatException('CHARACTER_RECOVER truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterRecover(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),d.getInt32(12,Endian.little),
+    );
+  }
+}
+
+class PsCharacterMaxVitals {
+  final int characterId,maxHp,maxMp,maxSp;
+  const PsCharacterMaxVitals(this.characterId,this.maxHp,this.maxMp,this.maxSp);
+  static PsCharacterMaxVitals parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMaxHpMpSp||p.body.length<16){
+      throw FormatException('CHARACTER_MAX_HP_MP_SP truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterMaxVitals(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),d.getInt32(12,Endian.little),
+    );
+  }
+}
+
+class PsCharacterMaxHitpoint {
+  final int characterId,type,value;
+  const PsCharacterMaxHitpoint(this.characterId,this.type,this.value);
+  static PsCharacterMaxHitpoint parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMaxHitpoints||p.body.length<9){
+      throw FormatException('CHARACTER_MAX_HITPOINTS truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterMaxHitpoint(
+      d.getUint32(0,Endian.little),p.body[4],d.getInt32(5,Endian.little),
+    );
+  }
+}
+
+class PsMoneyUpdate {
+  final int gold;
+  const PsMoneyUpdate(this.gold);
+  static PsMoneyUpdate parse(PsPacket p){
+    if(p.type!=PsPacketType.setMoney||p.body.length<4){
+      throw FormatException('SET_MONEY truncado: ${p.body.length}.');
+    }
+    return PsMoneyUpdate(ByteData.sublistView(p.body).getUint32(0,Endian.little));
+  }
+}
+
+class PsKillInfo {
+  final int characterId,kills;
+  const PsKillInfo(this.characterId,this.kills);
+  static PsKillInfo parse(PsPacket p){
+    if(p.type!=PsPacketType.characterKillInfo||p.body.length<8){
+      throw FormatException('CHARACTER_KILLINFO truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsKillInfo(d.getUint32(0,Endian.little),d.getUint32(4,Endian.little));
+  }
+}
+
+class PsTargetBuff {
+  final int skillId,skillLevel,countdownSeconds;
+  const PsTargetBuff(this.skillId,this.skillLevel,this.countdownSeconds);
+}
+
+class PsTargetBuffState {
+  final int targetType,targetId;
+  final List<PsTargetBuff> buffs;
+  const PsTargetBuffState(this.targetType,this.targetId,this.buffs);
+  static PsTargetBuffState parse(PsPacket p){
+    if(p.type!=PsPacketType.targetBuffs||p.body.length<6){
+      throw FormatException('TARGET_BUFFS truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b),count=b[5];
+    if(b.length<6+count*7){
+      throw FormatException('TARGET_BUFFS records truncados: count=$count bytes=${b.length}.');
+    }
+    final rows=<PsTargetBuff>[];
+    var o=6;
+    for(var i=0;i<count;i++,o+=7){
+      rows.add(PsTargetBuff(
+        d.getUint16(o,Endian.little),b[o+2],d.getInt32(o+3,Endian.little),
+      ));
+    }
+    return PsTargetBuffState(b[0],d.getUint32(1,Endian.little),List.unmodifiable(rows));
+  }
+}
+
+class PsTargetBuffChange {
+  final int targetType,targetId,skillId,skillLevel;
+  const PsTargetBuffChange(this.targetType,this.targetId,this.skillId,this.skillLevel);
+  static PsTargetBuffChange parse(PsPacket p){
+    if(!const <int>{PsPacketType.targetBuffAdd,PsPacketType.targetBuffRemove}.contains(p.type)||p.body.length<8){
+      throw FormatException('TARGET_BUFF_CHANGE truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsTargetBuffChange(
+      p.body[0],d.getUint32(1,Endian.little),d.getUint16(5,Endian.little),p.body[7],
+    );
+  }
+}
+
+class PsMapItem {
+  final int globalId,kind,type,typeId,count,ownerId;
+  final double x,y,z;
+  const PsMapItem(
+    this.globalId,this.kind,this.type,this.typeId,this.count,
+    this.x,this.y,this.z,this.ownerId,
+  );
+  static PsMapItem parse(PsPacket p){
+    if(p.type!=PsPacketType.mapAddItem||p.body.length<24){
+      throw FormatException('MAP_ADD_ITEM truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    return PsMapItem(
+      d.getUint32(0,Endian.little),b[4],b[5],b[6],b[7],
+      d.getFloat32(8,Endian.little),d.getFloat32(12,Endian.little),
+      d.getFloat32(16,Endian.little),d.getUint32(20,Endian.little),
+    );
+  }
+}
+
+int parseMapRemoveItem(PsPacket p){
+  if(p.type!=PsPacketType.mapRemoveItem||p.body.length<4){
+    throw FormatException('MAP_REMOVE_ITEM truncado: ${p.body.length}.');
+  }
+  return ByteData.sublistView(p.body).getUint32(0,Endian.little);
+}
+
+class PsNpcAttack {
+  final int result,npcId,targetId,hpDamage;
+  const PsNpcAttack(this.result,this.npcId,this.targetId,this.hpDamage);
+  bool get success=>result==0||result==1;
+  static PsNpcAttack parse(PsPacket p){
+    if(!const <int>{PsPacketType.mapNpcAttackPlayer,PsPacketType.mapNpcAttackMob}.contains(p.type)||p.body.length<11){
+      throw FormatException('MAP_NPC_ATTACK truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsNpcAttack(
+      p.body[0],d.getUint32(1,Endian.little),
+      d.getUint32(5,Endian.little),d.getUint16(9,Endian.little),
+    );
+  }
+}
+
 class PsMapWeather {
   final bool setType;
   final int state,power;
