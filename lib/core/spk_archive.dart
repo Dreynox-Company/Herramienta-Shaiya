@@ -730,6 +730,22 @@ class SpkNameMap {
     }
   }
 
+  int removeAmbiguousHints() {
+    final byPath = <String, List<int>>{};
+    for (final entry in hints.entries) {
+      final key = entry.value.path.replaceAll('\\', '/').toLowerCase();
+      byPath.putIfAbsent(key, () => <int>[]).add(entry.key);
+    }
+    final remove = <int>{};
+    for (final ids in byPath.values) {
+      if (ids.length > 1) remove.addAll(ids);
+    }
+    for (final id in remove) {
+      hints.remove(id);
+    }
+    return remove.length;
+  }
+
   Map<String, Object?> toJson() => {
     'schema': 2,
     'paths': {
