@@ -862,6 +862,15 @@ class PsWorldSession {
 
   Stream<PsPacket> get packets=>connection.packets;
 
+  Future<PsTargetMobHp> selectMobTarget(int globalId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo.');
+    await connection.send(PsPacketType.targetMobHpUpdate,_u32Bytes(globalId));
+    final response=await connection.nextType(PsPacketType.targetMobHpUpdate);
+    final hp=PsTargetMobHp.parse(response);
+    if(hp.targetId!=globalId)throw StateError('World devolvió otro target: ${hp.targetId}.');
+    return hp;
+  }
+
   Future<void> moveCharacter({
     required double x,
     required double y,
