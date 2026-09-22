@@ -41,6 +41,9 @@ const supportedExtensions = {
   '.smod',
   '.dg',
   '.eft',
+  '.vani',
+  '.mani',
+  '.wtr',
   '.sdata',
 };
 bool supportedPath(String p) {
