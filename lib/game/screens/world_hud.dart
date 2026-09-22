@@ -39,7 +39,8 @@ class WorldHud extends StatelessWidget {
   final PsGuildCreateInvite? pendingGuildCreateInvite;
   final int? partyLeaderId,selfCharacterId;
   final String? pendingFriendRequestName;
-  final int? pendingPartyRequesterId,pendingRaidRequesterId;
+  final int? pendingPartyRequesterId,pendingRaidRequesterId,pendingVehicleRequesterId;
+  final bool vehicleMounted,vehicleSummoning;
   final int gold;
   final bool tradeOpen;
   final int? tradePartnerId,pendingTradeRequesterId;
@@ -65,11 +66,11 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse,onStoreGuildWarehouse,onWithdrawGuildWarehouse;
-  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
+  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onToggleVehicle,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<String> onRequestFriend,onJoinRaid;
-  final ValueChanged<bool> onRespondFriend,onRespondParty,onRespondRaid;
+  final ValueChanged<bool> onRespondFriend,onRespondParty,onRespondRaid,onRespondVehicle;
   final ValueChanged<PsFriend> onDeleteFriend,onInviteParty;
   final ValueChanged<int> onInviteRaid,onChangeRaidLoot;
   final ValueChanged<PsPartyMember> onKickParty,onPromoteParty;
@@ -142,6 +143,9 @@ class WorldHud extends StatelessWidget {
     required this.pendingFriendRequestName,
     required this.pendingPartyRequesterId,
     required this.pendingRaidRequesterId,
+    required this.pendingVehicleRequesterId,
+    required this.vehicleMounted,
+    required this.vehicleSummoning,
     required this.gold,
     required this.tradeOpen,
     required this.tradePartnerId,
@@ -219,6 +223,7 @@ class WorldHud extends StatelessWidget {
     required this.onAddStat,
     required this.onToggleSkills,
     required this.onToggleQuestLog,
+    required this.onToggleVehicle,
     required this.onHotbar,
     required this.onOpenQuest,
     required this.onRequestFriend,
@@ -226,6 +231,7 @@ class WorldHud extends StatelessWidget {
     required this.onRespondFriend,
     required this.onRespondParty,
     required this.onRespondRaid,
+    required this.onRespondVehicle,
     required this.onDeleteFriend,
     required this.onInviteParty,
     required this.onInviteRaid,
@@ -916,6 +922,25 @@ class WorldHud extends StatelessWidget {
       ),
     ),
     Positioned(
+      right:326,bottom:3,
+      child:Tooltip(
+        message:vehicleSummoning
+          ?(locale=='spn'?'Invocando montura…':'Summoning mount…')
+          :(vehicleMounted?(locale=='spn'?'Bajar de la montura (M)':'Dismount (M)'):(locale=='spn'?'Usar montura (M)':'Use mount (M)')),
+        child:InkWell(
+          onTap:onToggleVehicle,
+          child:Container(
+            width:30,height:30,
+            decoration:BoxDecoration(
+              color:vehicleMounted?const Color(0xaa3b2d12):const Color(0x99110f0c),
+              border:Border.all(color:vehicleSummoning?const Color(0xffffd36b):const Color(0xff796750)),
+            ),
+            child:Icon(vehicleMounted?Icons.pets:Icons.directions_run,size:17,color:vehicleSummoning?const Color(0xffffd36b):Colors.white70),
+          ),
+        ),
+      ),
+    ),
+    Positioned(
       right:7,bottom:1,
       child:Row(children:[
         _bottomButton('interface/main_bottom_btn_status.tga',onTap:onToggleStatus),
@@ -1155,6 +1180,13 @@ class WorldHud extends StatelessWidget {
             subtitle:locale=='spn'?'Invitación a RAID':'RAID invitation',
             accept:()=>onRespondRaid(true),
             reject:()=>onRespondRaid(false),
+          ),
+        if(pendingVehicleRequesterId!=null)
+          _requestCard(
+            title:friends.where((f)=>f.id==pendingVehicleRequesterId).firstOrNull?.name??('#'+pendingVehicleRequesterId.toString()),
+            subtitle:locale=='spn'?'Invitación a montura compartida':'Shared mount invitation',
+            accept:()=>onRespondVehicle(true),
+            reject:()=>onRespondVehicle(false),
           ),
         Padding(
           padding:const EdgeInsets.fromLTRB(10,8,10,4),
