@@ -18,8 +18,8 @@ class DeliveryToolsTest(unittest.TestCase):
     def test_windows_package_readme_uses_pubspec_version(self):
         root = Path(__file__).resolve().parents[2]
         text = (root / 'ci' / 'package_windows.py').read_text(encoding='utf-8')
-        self.assertIn("SHAIYA STUDIO {version} - DATA.SPK V11", text)
-        self.assertNotIn("SHAIYA STUDIO 0.6.17 - DATA.SPK V11", text)
+        self.assertIn("SHAIYA STUDIO {version} - DATA.SPK V12", text)
+        self.assertNotIn("SHAIYA STUDIO 0.6.17 - DATA.SPK V11", text)\n        self.assertNotIn("SHAIYA STUDIO 0.6.18 - DATA.SPK V11", text)
 
     def test_unknown_platform_is_rejected_before_running_flutter(self):
         with patch.object(prepare.subprocess, 'run') as run:
