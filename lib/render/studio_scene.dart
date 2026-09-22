@@ -192,6 +192,8 @@ class ProjectedGameLabel {
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
   t.ThreeJS? view;Catalog? catalog;
+  t.AmbientLight? ambientLight;
+  t.DirectionalLight? sunLight;
   t.LineSegments? grid;
   bool gridVisible=true;
   Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];
@@ -233,15 +235,31 @@ class StudioScene extends ChangeNotifier {
   List<String> get animations=>appearance?.archetype.animations??[];
   Future<void> setup(t.ThreeJS three) async {
     view=three;three.scene=t.Scene();three.camera=t.PerspectiveCamera(45,three.width/three.height,.02,2500);three.scene.background=t.Color.fromHex32(0x11151e);three.scene.add(environment);
-    final ambient=t.AmbientLight(0xb8b8b8,1.0);
-    three.scene.add(ambient);
-    final sun=t.DirectionalLight(0xfff4e6,.82);
-    sun.position.setValues(-7,14,9);
-    three.scene.add(sun);
+    ambientLight=t.AmbientLight(0xb8b8b8,1.0);
+    three.scene.add(ambientLight!);
+    sunLight=t.DirectionalLight(0xfff4e6,.82);
+    sunLight!.position.setValues(-7,14,9);
+    three.scene.add(sunLight!);
     final points=<double>[];for(var i=-15;i<=15;i++){points.addAll([i.toDouble(),-.02,-15,i.toDouble(),-.02,15,-15,-.02,i.toDouble(),15,-.02,i.toDouble()]);}
     final gridGeometry=t.BufferGeometry()..setAttributeFromString('position',t.Float32BufferAttribute.fromList(points,3));grid=t.LineSegments(gridGeometry,t.LineBasicMaterial.fromMap({'color':0x323b4d}));grid!.visible=gridVisible;three.scene.add(grid!);
     combat.onEvent=(actor,event){unawaited(_combatEvent(actor,event));};three.addAnimationEvent(tick);ready=true;updateCamera();notifyListeners();
   }
+  void applyWorldClock(int hour,int minute){
+    final time=hour+minute/60.0;
+    final daylight=math.sin(((time-6)/12)*math.pi).clamp(0.0,1.0);
+    if(ambientLight!=null)ambientLight!.intensity=.42+.58*daylight;
+    if(sunLight!=null){
+      sunLight!.intensity=.08+.74*daylight;
+      final angle=(time/24)*math.pi*2-math.pi/2;
+      sunLight!.position.setValues(
+        math.cos(angle)*14,
+        math.max(1.5,math.sin(angle)*18),
+        9,
+      );
+    }
+    notifyListeners();
+  }
+
   double get _serverMoveMultiplier=>switch(serverMoveSpeedCategory){
     0=>.55,
     1=>.78,
