@@ -13,6 +13,8 @@ import 'spk_source.dart';
 class SpkWriterResult {
   final String file;
   final String profileFile;
+  final String namesFile;
+  final String auditFile;
   final int resources;
   final int replaced;
   final int bytes;
@@ -23,6 +25,8 @@ class SpkWriterResult {
   const SpkWriterResult({
     required this.file,
     required this.profileFile,
+    required this.namesFile,
+    required this.auditFile,
     required this.resources,
     required this.replaced,
     required this.bytes,
@@ -34,6 +38,8 @@ class SpkWriterResult {
   Map<String, Object?> toJson() => {
     'file': file,
     'profileFile': profileFile,
+    'namesFile': namesFile,
+    'auditFile': auditFile,
     'resources': resources,
     'replaced': replaced,
     'bytes': bytes,
@@ -367,6 +373,9 @@ class SpkWriter {
     final temp = File(
       '${target.path}.${DateTime.now().microsecondsSinceEpoch}.partial',
     );
+    final profileFile = File('${target.path}.profile.json');
+    final namesFile = File('${target.path}.names.json');
+    final auditFile = File('${target.path}.audit.json');
     if (await temp.exists()) await temp.delete();
 
     RandomAccessFile? input;
@@ -648,7 +657,6 @@ class SpkWriter {
       }
 
       await temp.rename(target.path);
-      final profileFile = File('${target.path}.profile.json');
       await profileFile.writeAsString(
         const JsonEncoder.withIndent('  ').convert({
           'profileId': candidateProfile.profileId,
@@ -669,9 +677,35 @@ class SpkWriter {
         flush: true,
       );
 
+      await namesFile.writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          ...source.names.toJson(),
+          'spkIndexSha256': indexHash,
+          'sourceRepackedFrom': source.index.encryptedIndexSha256,
+        }),
+        flush: true,
+      );
+      await auditFile.writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          'schema': 1,
+          'source': target.path,
+          'indexSha256': indexHash,
+          'profileId': candidateProfile.profileId,
+          'resourceKeySha256': sha256.convert(resourceKey).toString(),
+          'chunkNonceRule': candidateProfile.chunkNonceRule,
+          'validation': validation,
+          'resourceFormats': candidate.validatedFormatsJson,
+          'diagnostics': candidate.diagnostics(),
+          'footerPreservedSha256': sha256.convert(footer).toString(),
+        }),
+        flush: true,
+      );
+
       return SpkWriterResult(
         file: target.path,
         profileFile: profileFile.path,
+        namesFile: namesFile.path,
+        auditFile: auditFile.path,
         resources: resources.length,
         replaced: replacements.length,
         bytes: await target.length(),
@@ -691,6 +725,10 @@ class SpkWriter {
         } catch (_) {}
       }
       if (await temp.exists()) await temp.delete();
+      if (await target.exists()) await target.delete();
+      if (await profileFile.exists()) await profileFile.delete();
+      if (await namesFile.exists()) await namesFile.delete();
+      if (await auditFile.exists()) await auditFile.delete();
       rethrow;
     }
   }
