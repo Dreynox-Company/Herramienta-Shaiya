@@ -333,6 +333,25 @@ class _GameClientPageState extends State<GameClientPage> {
       liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
       if(liveWorld!.faction==0)faction='light';
       if(liveWorld!.faction==1)faction='fury';
+      if(liveCharacter==null&&
+          widget.initialStage==GameStage.world&&
+          Platform.environment['SHAIYA_QA_DISABLE_BACKEND']=='1'){
+        liveCharacters=await liveWorld!.createCharacter(
+          slot:0,
+          race:faction=='light'?0:2,
+          mode:2,
+          hair:0,
+          face:0,
+          height:2,
+          profession:0,
+          gender:0,
+          name:'DreynoxLocal',
+        );
+        liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+        if(liveCharacter!=null){
+          messages.insert(0,'[QA] Personaje real DreynoxLocal creado mediante ps0032.');
+        }
+      }
       characterCreated=liveCharacter!=null;
       messages.insert(0,'[ps0032] Sesión World real lista · ${liveCharacters.where((c)=>c.exists).length} personaje(s).');
     }catch(e){
