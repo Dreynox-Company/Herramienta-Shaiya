@@ -621,12 +621,59 @@ class _GameClientPageState extends State<GameClientPage> {
     lastNetworkMoving=lastNetworkRun=false;
   }
 
+  void _sortInventory(){
+    liveInventory.sort((a,b){
+      final bag=a.bag.compareTo(b.bag);
+      return bag!=0?bag:a.slot.compareTo(b.slot);
+    });
+  }
+
+  void _upsertInventoryItem(PsInventoryItem item){
+    liveInventory.removeWhere((x)=>x.bag==item.bag&&x.slot==item.slot);
+    if(item.type!=0&&item.typeId!=0&&item.count>0)liveInventory.add(item);
+    _sortInventory();
+  }
+
+  void _removeInventory(PsInventoryRemoval removed){
+    final index=liveInventory.indexWhere((x)=>x.bag==removed.bag&&x.slot==removed.slot);
+    if(index<0)return;
+    if(removed.fullRemove||removed.count<=0){
+      liveInventory.removeAt(index);
+      return;
+    }
+    final old=liveInventory[index];
+    liveInventory[index]=PsInventoryItem(
+      bag:old.bag,slot:old.slot,
+      type:removed.type==0?old.type:removed.type,
+      typeId:removed.typeId==0?old.typeId:removed.typeId,
+      quality:old.quality,count:removed.count,
+      gems:old.gems,craftName:old.craftName,dyed:old.dyed,
+    );
+  }
+
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
       liveHitpoints=PsHitpoints.parse(packet);
     }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
       liveAdditionalStats=PsAdditionalStats.parse(packet);
+    }else if(packet.type==PsPacketType.addItem&&packet.body.length>=106){
+      try{
+        _upsertInventoryItem(parseAddedInventoryItem(packet));
+        messages.insert(0,'[Inventario] Objeto añadido/actualizado.');
+      }catch(e){messages.insert(0,'[Inventario] ADD_ITEM: '+e.toString());}
+    }else if(packet.type==PsPacketType.removeItem&&packet.body.length>=5){
+      try{
+        _removeInventory(PsInventoryRemoval.parse(packet));
+        messages.insert(0,'[Inventario] Objeto retirado/actualizado.');
+      }catch(e){messages.insert(0,'[Inventario] REMOVE_ITEM: '+e.toString());}
+    }else if(packet.type==PsPacketType.inventoryMoveItem&&packet.body.length>=208){
+      try{
+        final move=PsInventoryMove.parse(packet);
+        _upsertInventoryItem(move.source);
+        _upsertInventoryItem(move.destination);
+        messages.insert(0,'[Inventario] Movimiento confirmado por World.');
+      }catch(e){messages.insert(0,'[Inventario] MOVE_ITEM: '+e.toString());}
     }else if(packet.type==PsPacketType.questStart&&packet.body.length>=6){
       final d=ByteData.sublistView(packet.body);
       final id=d.getInt16(4,Endian.little);
