@@ -53,6 +53,17 @@ Add(11, parsed.GuildMasters);
 Add(12, parsed.DeadNpcs);
 Add(13, parsed.CombatCommanders);
 
+var shops = parsed.Merchants.Select(m => new {
+    type = 1,
+    typeId = (int)m.TypeId,
+    merchantType = (int)m.MerchantType,
+    products = m.Items.Select((item,index) => new {
+        index,
+        type = (int)item.ItemType,
+        id = (int)item.ItemTypeId,
+    }).ToArray(),
+}).ToArray();
+
 var quests = parsed.Quests.Select(q => new {
     id = (int)q.Id,
     minLevel = (int)q.MinLevel,
@@ -145,14 +156,16 @@ var doc = new {
     mobCount = mobs.Length,
     itemCount = items.Length,
     skillCount = skills.Length,
+    shopCount = shops.Length,
     npcs = npc,
     quests,
     mobs,
     items,
     skills,
+    shops,
 };
 
 var json = JsonSerializer.Serialize(doc,new JsonSerializerOptions{WriteIndented=false});
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[1]))!);
 File.WriteAllText(args[1],json);
-Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" Items="+items.Length+" Skills="+skills.Length+" -> "+args[1]);
+Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" Items="+items.Length+" Skills="+skills.Length+" Shops="+shops.Length+" -> "+args[1]);
