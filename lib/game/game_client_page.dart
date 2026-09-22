@@ -55,6 +55,13 @@ class _GameClientPageState extends State<GameClientPage> {
   List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
   List<PsFriend> liveFriends=<PsFriend>[];
   List<PsPartyMember> livePartyMembers=<PsPartyMember>[];
+  List<PsGuildSummary> guildDirectory=<PsGuildSummary>[];
+  List<PsGuildMember> liveGuildMembers=<PsGuildMember>[];
+  List<PsGuildJoinApplicant> guildApplicants=<PsGuildJoinApplicant>[];
+  int liveGuildId=0,liveGuildRank=0;
+  String liveGuildName='';
+  bool guildListLoading=false;
+  PsGuildCreateInvite? pendingGuildCreateInvite;
   int? partyLeaderId,pendingPartyRequesterId,outgoingPartyInviteId;
   String? pendingFriendRequestName;
   StreamSubscription<PsPacket>? livePacketSubscription;
@@ -84,6 +91,7 @@ class _GameClientPageState extends State<GameClientPage> {
   int rewardNpcId=0;
   bool inventoryOpen=false;
   bool socialOpen=false;
+  bool guildOpen=false;
   bool statusOpen=false;
   bool skillsOpen=false;
   bool questLogOpen=false;
@@ -571,6 +579,9 @@ class _GameClientPageState extends State<GameClientPage> {
         if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
+        liveGuildId=networkSnapshot.self?.guildId??0;
+        liveGuildName=selected.details.guildName;
+        for(final p in <PsPacket>[...selected.packets,...entered]){_handleGuildPacket(p,notify:false);}
         mapId=current.mapId;
         x=networkSnapshot.self?.x??selected.details.x;
         z=networkSnapshot.self?.z??selected.details.z;
@@ -891,7 +902,9 @@ class _GameClientPageState extends State<GameClientPage> {
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
       return;
     }
-    if(packet.type==PsPacketType.friendList){
+    if(_handleGuildPacket(packet)){
+      // Guild packet consumed.
+    }else if(packet.type==PsPacketType.friendList){
       try{liveFriends=parseFriendList(packet).toList();}
       catch(e){messages.insert(0,'[Friends] '+e.toString());}
     }else if(packet.type==PsPacketType.friendRequest&&packet.body.length>=21){
@@ -1313,6 +1326,211 @@ class _GameClientPageState extends State<GameClientPage> {
     _upsertPartyMember(update(current));
   }
 
+  void _upsertGuildSummary(PsGuildSummary guild){
+    guildDirectory=[
+      ...guildDirectory.where((g)=>g.id!=guild.id),
+      guild,
+    ]..sort((a,b){
+      final rank=a.rank.compareTo(b.rank);
+      if(rank!=0)return rank;
+      return b.points.compareTo(a.points);
+    });
+  }
+
+  void _upsertGuildMember(PsGuildMember member){
+    liveGuildMembers=[
+      ...liveGuildMembers.where((m)=>m.id!=member.id),
+      member,
+    ]..sort((a,b){
+      if(a.online!=b.online)return a.online?-1:1;
+      final rank=a.rank.compareTo(b.rank);
+      if(rank!=0)return rank;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    if(member.id==liveCharacter?.id)liveGuildRank=member.rank;
+  }
+
+  void _clearGuildState(){
+    liveGuildId=0;liveGuildRank=0;liveGuildName='';
+    liveGuildMembers=[];guildApplicants=[];pendingGuildCreateInvite=null;
+  }
+
+  bool _handleGuildPacket(PsPacket packet,{bool notify=true}){
+    try{
+      if(packet.type==PsPacketType.guildListLoadingStart){
+        guildDirectory=[];guildListLoading=true;return true;
+      }
+      if(packet.type==PsPacketType.guildList){
+        for(final g in parseGuildList(packet))_upsertGuildSummary(g);
+        return true;
+      }
+      if(packet.type==PsPacketType.guildListLoadingEnd){
+        guildListLoading=false;return true;
+      }
+      if(packet.type==PsPacketType.guildListAdd&&packet.body.length>=185){
+        _upsertGuildSummary(PsGuildSummary.parseUnit(packet.body,0));return true;
+      }
+      if(packet.type==PsPacketType.guildListRemove&&packet.body.length>=4){
+        final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+        guildDirectory=guildDirectory.where((g)=>g.id!=id).toList();
+        return true;
+      }
+      if(packet.type==PsPacketType.guildUserListOnline||packet.type==PsPacketType.guildUserListNotOnline){
+        final online=packet.type==PsPacketType.guildUserListOnline;
+        for(final m in parseGuildMembers(packet,online:online))_upsertGuildMember(m);
+        return true;
+      }
+      if(packet.type==PsPacketType.guildUserListAdd&&packet.body.length>=30){
+        _upsertGuildMember(parseGuildMemberAdd(packet));return true;
+      }
+      if(packet.type==PsPacketType.guildJoinListAdd&&packet.body.length>=28){
+        final a=PsGuildJoinApplicant.parseUnit(packet.body,0);
+        guildApplicants=[...guildApplicants.where((x)=>x.id!=a.id),a];
+        if(notify)messages.insert(0,'[Guild] Solicitud de '+a.name+'.');
+        return true;
+      }
+      if(packet.type==PsPacketType.guildJoinListRemove&&packet.body.length>=4){
+        final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+        guildApplicants=guildApplicants.where((a)=>a.id!=id).toList();
+        return true;
+      }
+      if(packet.type==PsPacketType.guildJoinRequest&&packet.body.isNotEmpty){
+        if(notify)messages.insert(0,packet.body[0]!=0?'[Guild] Solicitud de ingreso enviada.':'[Guild] Solicitud de ingreso rechazada.');
+        return true;
+      }
+      if(packet.type==PsPacketType.guildJoinResultUser&&packet.body.length>=31){
+        final result=PsGuildJoinResult.parse(packet);
+        if(result.ok){
+          liveGuildId=result.guildId;liveGuildRank=result.rank;liveGuildName=result.name;
+          guildApplicants=[];
+          if(notify)messages.insert(0,'[Guild] Ingreso confirmado en '+result.name+'.');
+        }else if(notify){
+          messages.insert(0,'[Guild] Ingreso rechazado.');
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.guildUserState&&packet.body.length>=5){
+        final d=ByteData.sublistView(packet.body),state=packet.body[0],id=d.getUint32(1,Endian.little);
+        if(state==101){
+          _clearGuildState();
+          if(notify)messages.insert(0,'[Guild] Guild disuelta.');
+        }else if(state==102||state==103){
+          if(id==liveCharacter?.id)_clearGuildState();
+          else liveGuildMembers=liveGuildMembers.where((m)=>m.id!=id).toList();
+        }else if(state==104||state==105){
+          final m=liveGuildMembers.where((x)=>x.id==id).firstOrNull;
+          if(m!=null)_upsertGuildMember(m.copyWith(online:state==104));
+        }else if(state>=202&&state<=209){
+          final rank=state-200,m=liveGuildMembers.where((x)=>x.id==id).firstOrNull;
+          if(m!=null)_upsertGuildMember(m.copyWith(rank:rank));
+          if(id==liveCharacter?.id)liveGuildRank=rank;
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.guildLeave&&packet.body.isNotEmpty){
+        final ok=packet.body[0]!=0;
+        if(ok)_clearGuildState();
+        if(notify)messages.insert(0,ok?'[Guild] Saliste del guild.':'[Guild] No fue posible salir.');
+        return true;
+      }
+      if(packet.type==PsPacketType.guildKick&&packet.body.length>=5){
+        final ok=packet.body[0]!=0,id=ByteData.sublistView(packet.body).getUint32(1,Endian.little);
+        if(ok){
+          if(id==liveCharacter?.id)_clearGuildState();
+          else liveGuildMembers=liveGuildMembers.where((m)=>m.id!=id).toList();
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.guildCreate){
+        final result=PsGuildCreateResult.parse(packet);
+        if(result.success){
+          liveGuildId=result.guildId;liveGuildRank=result.rank;liveGuildName=result.name;
+          if(notify)messages.insert(0,'[Guild] '+result.name+' creado.');
+        }else if(notify){
+          messages.insert(0,'[Guild] Creación rechazada · código '+result.reason.toString()+'.');
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.guildCreateAgree&&packet.body.length>=94){
+        pendingGuildCreateInvite=PsGuildCreateInvite.parse(packet);
+        _closeWorldPanels();guildOpen=true;
+        if(notify)messages.insert(0,'[Guild] Invitación para crear '+pendingGuildCreateInvite!.name+'.');
+        return true;
+      }
+    }catch(e){
+      if(notify)messages.insert(0,'[Guild] '+e.toString());
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _requestGuildJoin(PsGuildSummary guild) async {
+    final session=liveWorld;if(session==null||liveGuildId!=0)return;
+    try{
+      await session.requestGuildJoin(guild.id);
+      messages.insert(0,'[Guild] Solicitud → '+guild.name+'.');
+    }catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondGuildApplicant(PsGuildJoinApplicant applicant,bool accepted) async {
+    final session=liveWorld;if(session==null||liveGuildId==0||liveGuildRank>3)return;
+    try{
+      await session.respondGuildJoin(applicant.id,accepted:accepted);
+      guildApplicants=guildApplicants.where((a)=>a.id!=applicant.id).toList();
+      messages.insert(0,'[Guild] '+applicant.name+(accepted?' aceptado.':' rechazado.'));
+    }catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _leaveGuild() async {
+    final session=liveWorld;if(session==null||liveGuildId==0)return;
+    try{await session.leaveGuild();messages.insert(0,'[Guild] Solicitud de salida enviada.');}
+    catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _kickGuildMember(PsGuildMember member) async {
+    final session=liveWorld;if(session==null||liveGuildRank>3)return;
+    try{await session.kickGuildMember(member.id);messages.insert(0,'[Guild] Expulsando a '+member.name+'…');}
+    catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _changeGuildMemberRank(PsGuildMember member,bool demote) async {
+    final session=liveWorld;if(session==null||liveGuildRank>3)return;
+    try{
+      await session.changeGuildRank(member.id,demote:demote);
+      messages.insert(0,'[Guild] '+(demote?'Descenso':'Ascenso')+' solicitado para '+member.name+'.');
+    }catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _createGuild(String name,String message) async {
+    final session=liveWorld;if(session==null||liveGuildId!=0)return;
+    try{await session.createGuild(name,message);messages.insert(0,'[Guild] Creación solicitada: '+name+'.');}
+    catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondGuildCreate(bool accepted) async {
+    final session=liveWorld,invite=pendingGuildCreateInvite;
+    if(session==null||invite==null)return;
+    try{
+      await session.respondGuildCreate(accepted);
+      messages.insert(0,'[Guild] Creación '+(accepted?'aceptada.':'rechazada.'));
+      pendingGuildCreateInvite=null;
+    }catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _dismantleGuild() async {
+    final session=liveWorld;if(session==null||liveGuildId==0||liveGuildRank!=1)return;
+    try{await session.dismantleGuild();messages.insert(0,'[Guild] Solicitud de disolución enviada.');}
+    catch(e){messages.insert(0,'[Guild] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
   Future<void> _requestFriend(String name) async {
     final session=liveWorld;if(session==null)return;
     try{
@@ -1506,6 +1724,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _closeWorldPanels(){
     inventoryOpen=false;
     socialOpen=false;
+    guildOpen=false;
     statusOpen=false;
     skillsOpen=false;
     questLogOpen=false;
@@ -1525,11 +1744,12 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   void _toggleWorldPanel(String panel){
-    final open=panel=='social'?socialOpen:panel=='status'?statusOpen:panel=='skills'?skillsOpen:panel=='quests'?questLogOpen:inventoryOpen;
+    final open=panel=='social'?socialOpen:panel=='guild'?guildOpen:panel=='status'?statusOpen:panel=='skills'?skillsOpen:panel=='quests'?questLogOpen:inventoryOpen;
     _closeWorldPanels();
     questOpen=false;
     if(!open){
       if(panel=='social')socialOpen=true;
+      else if(panel=='guild')guildOpen=true;
       else if(panel=='status')statusOpen=true;
       else if(panel=='skills')skillsOpen=true;
       else if(panel=='quests')questLogOpen=true;
@@ -2292,6 +2512,14 @@ class _GameClientPageState extends State<GameClientPage> {
             friends:liveFriends,
             partyMembers:livePartyMembers,
             partyLeaderId:partyLeaderId,
+            guildDirectory:guildDirectory,
+            guildMembers:liveGuildMembers,
+            guildApplicants:guildApplicants,
+            guildId:liveGuildId,
+            guildRank:liveGuildRank,
+            guildName:liveGuildName,
+            guildListLoading:guildListLoading,
+            pendingGuildCreateInvite:pendingGuildCreateInvite,
             selfCharacterId:liveCharacter?.id,
             pendingFriendRequestName:pendingFriendRequestName,
             pendingPartyRequesterId:pendingPartyRequesterId,
@@ -2340,6 +2568,16 @@ class _GameClientPageState extends State<GameClientPage> {
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
             onToggleInventory:()=>_toggleWorldPanel('inventory'),
             onToggleSocial:()=>_toggleWorldPanel('social'),
+            onToggleGuild:()=>_toggleWorldPanel('guild'),
+            onRequestGuildJoin:(guild)=>unawaited(_requestGuildJoin(guild)),
+            onRespondGuildApplicant:(entry,accepted)=>unawaited(_respondGuildApplicant(entry,accepted)),
+            onLeaveGuild:()=>unawaited(_leaveGuild()),
+            onKickGuild:(member)=>unawaited(_kickGuildMember(member)),
+            onPromoteGuild:(member)=>unawaited(_changeGuildMemberRank(member,false)),
+            onDemoteGuild:(member)=>unawaited(_changeGuildMemberRank(member,true)),
+            onCreateGuild:(name,message)=>unawaited(_createGuild(name,message)),
+            onRespondGuildCreate:(accepted)=>unawaited(_respondGuildCreate(accepted)),
+            onDismantleGuild:()=>unawaited(_dismantleGuild()),
             onRequestFriend:(name)=>unawaited(_requestFriend(name)),
             onRespondFriend:(accepted)=>unawaited(_respondFriend(accepted)),
             onDeleteFriend:(friend)=>unawaited(_deleteFriend(friend)),
