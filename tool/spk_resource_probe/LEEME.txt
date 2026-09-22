@@ -1,4 +1,4 @@
-SHAIYA SPK RESOURCE PROBE V11 - integrado en Shaiya Studio 0.6.17
+SHAIYA SPK RESOURCE PROBE V12 - integrado en Shaiya Studio 0.6.19
 
 Este auxiliar existe para cerrar la capa criptografica de payloads del DATA.SPK
 sin tratar ciphertext como si fuera un recurso valido.
@@ -19,7 +19,7 @@ USO RECOMENDADO
 EVIDENCIA
   derived-resource-profile.json contiene solamente evidencia que el helper pudo
   reproducir offline contra ciphertexts del SPK validado. La mera presencia de
-  una clave no habilita lectura en 0.6.17: Studio exige una segunda validacion
+  una clave no habilita lectura en 0.6.19: Studio exige una segunda validacion
   contra recursos simples reales. "Extraer todo" solo se habilita despues de
   reconstruir y validar tambien recursos fragmentados completos.
 
@@ -29,7 +29,7 @@ SEGURIDAD
   indice observado; otro SPK se rechaza.
 
 
-V11 endurece la captura de claves:
+V12 endurece la captura de claves:
 - observa BCryptGenerateSymmetricKey, BCryptImportKey y BCryptDuplicateKey;
 - si la creación de la clave ocurrió antes de instalar los hooks, intenta
   exportar de forma no destructiva el BCRYPT_KEY_DATA_BLOB desde el handle
@@ -39,7 +39,7 @@ V11 endurece la captura de claves:
 - game.exe y data.spk permanecen sin modificaciones.
 
 
-V11 agrega compatibilidad real con clientes Shaiya x86 y x64:
+V12 agrega compatibilidad real con clientes Shaiya x86 y x64:
 - detecta la arquitectura PE de game.exe antes de lanzar la captura;
 - interpreta BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO con layout correcto para
   32 y 64 bits;
@@ -47,8 +47,21 @@ V11 agrega compatibilidad real con clientes Shaiya x86 y x64:
 - conserva probe-console.log para diagnosticar una captura que no logre
   autenticar todavía la clave de recursos.
 
-V11 agrega un barrido estatico fail-closed antes de instrumentar el cliente:
+V12 agrega un barrido estatico fail-closed antes de instrumentar el cliente:
   - prueba derivaciones acotadas de la clave del indice;
   - busca constantes de 16/32 bytes cerca de la clave del indice y cadenas GCM/SPK;
   - una candidata solo se acepta si autentica por AES-GCM tres payloads simples reales;
   - si no hay coincidencia, se continua con la captura dinamica x86/x64 sin habilitar lectura.
+
+
+V12 amplia la recuperación sin relajar la validación:
+- las claves observadas al crear, importar, duplicar o exportar handles CNG se
+  prueban inmediatamente contra tres payloads simples reales del SPK;
+- observa salidas de BCryptKeyDerivation, BCryptDeriveKeyPBKDF2,
+  BCryptDeriveKeyCapi y BCryptFinishHash, pero nunca acepta una salida solo por
+  su tamaño: AES-GCM debe autenticar los ciphertexts y tags reales;
+- reconoce claves expuestas por OpenSSL mediante AES_set_* y EVP_*Init_ex/ex2;
+- candidate-keys.json guarda solo fuente, longitud, SHA-256 y resultado de la
+  prueba; las candidatas fallidas no se guardan en claro;
+- el barrido estático incluye cadenas ASCII/UTF-16 de AES, GCM, KeyDataBlob y
+  DATA.SPK con una ventana mayor, manteniendo el mismo oráculo fail-closed.
