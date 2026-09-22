@@ -1,0 +1,25 @@
+name: Editor asset reader tooling
+on:
+  push:
+    branches: [feat/studio-06-workbench-offline]
+    paths: [.github/workflows/editor-assets-tools.yml]
+permissions:
+  contents: read
+jobs:
+  reader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Package installed public archive reader, no user files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          tar -czf out/archive-reader.tar.gz -C /usr/lib 7zip
+          ldd /usr/lib/7zip/7z > out/dependencies.txt
+          sha256sum out/archive-reader.tar.gz > out/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Editor-archive-reader
+          path: out/
+          retention-days: 2

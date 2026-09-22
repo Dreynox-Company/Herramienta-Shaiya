@@ -1,0 +1,73 @@
+name: Compatibility validation toolchain
+on:
+  push:
+    branches: [feat/studio-061-spk-flight]
+    paths: [.github/workflows/compatibility-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Export exact source history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p transfer
+          flutter precache --linux
+          flutter --version --machine > transfer/toolchain.json
+          git archive --format=zip --output=transfer/project.zip HEAD
+          git bundle create transfer/history.bundle --all
+          git rev-parse HEAD > transfer/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Compatibility-source-history
+          path: |
+            transfer/project.zip
+            transfer/history.bundle
+            transfer/commit.txt
+            transfer/toolchain.json
+          retention-days: 30
+      - name: Package Linux validation SDK in bounded parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude='bin/cache/artifacts/engine/android*' --exclude='bin/cache/artifacts/engine/linux-arm64*' --exclude='bin/cache/downloads' --exclude='bin/cache/artifacts/gradle_wrapper' --exclude='bin/cache/artifacts/engine/web*' --exclude='bin/cache/flutter_web_sdk' -czf /tmp/sdk.tgz -C "$FLUTTER_ROOT" bin packages .git
+          split -b 350M -d /tmp/sdk.tgz transfer/sdk.part
+          sha256sum transfer/sdk.part* > transfer/SDK-SHA256.txt
+          ls -lh transfer/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Compatibility-sdk-0
+          path: |
+            transfer/sdk.part00
+            transfer/SDK-SHA256.txt
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Compatibility-sdk-1
+          path: transfer/sdk.part01
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Compatibility-sdk-2
+          path: transfer/sdk.part02
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Compatibility-sdk-3
+          path: transfer/sdk.part03
+          if-no-files-found: ignore
+          retention-days: 7

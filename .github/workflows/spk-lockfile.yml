@@ -1,0 +1,33 @@
+name: Resolve SPK dependency lockfile
+
+on:
+  push:
+    branches:
+      - feat/studio-063-spk-archive-browser
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Verify SPK packages resolved
+        run: |
+          grep -q '^  cryptography:' pubspec.lock
+          grep -q '^  zstandard:' pubspec.lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-pubspec-lock
+          path: pubspec.lock
+          if-no-files-found: error
+          retention-days: 7

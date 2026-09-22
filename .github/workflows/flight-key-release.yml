@@ -1,0 +1,136 @@
+name: ISO flight key - verified Windows suite
+on:
+  push:
+    branches: [feat/studio-061-spk-flight]
+    paths: [.github/workflows/flight-key-release.yml]
+permissions:
+  contents: read
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      source_commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Restore exact locally tested source patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64,hashlib,lzma,subprocess,tempfile
+          transfer=Path('ci/transfers/iso_flight.patch.xz.b64')
+          if transfer.exists():
+              decoder=lzma.LZMADecompressor(memlimit=64*1024*1024)
+              patch=decoder.decompress(base64.b64decode(transfer.read_text().strip(),validate=True),max_length=1024*1024)
+              if not decoder.eof or decoder.unused_data or hashlib.sha256(patch).hexdigest()!='632b59a748ece68232e2270342044e512f633b87f72928b5833864e98baa1646':
+                  raise RuntimeError('Incomplete or altered patch; nothing applied.')
+              with tempfile.TemporaryDirectory() as temp:
+                  target=Path(temp)/'source.patch';target.write_bytes(patch)
+                  subprocess.run(['git','apply','--check','--index',str(target)],check=True)
+                  subprocess.run(['git','apply','--index',str(target)],check=True)
+              subprocess.run(['git','rm','--',str(transfer)],check=True)
+      - name: Commit ordinary sources without force push
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shaiya Studio CI'
+          git config user.email 'studio-ci@users.noreply.github.com'
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: physical ISO flight key in editor and local game with focus and repeat guards'
+            git push origin HEAD:feat/studio-061-spk-flight
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  editor:
+    needs: integrate
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.integrate.outputs.source_commit }}
+  game:
+    needs: integrate
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.integrate.outputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Prepare synthetic fixtures and native renderer
+        run: |
+          python tool/prepare.py --platforms windows
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          $fixture = Join-Path $env:RUNNER_TEMP 'shaiya-flight-key-fixture'
+          python tool/make_native_fixture.py $fixture
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          New-Item -ItemType Directory -Force qa-game | Out-Null
+          "SHAIYA_FIXTURE_PATH=$fixture" | Out-File $env:GITHUB_ENV -Append
+          "SHAIYA_QA_PATH=$(Join-Path $env:GITHUB_WORKSPACE 'qa-game')" | Out-File $env:GITHUB_ENV -Append
+      - name: Test ISO key, movement, combat and persisted save reload
+        run: |
+          flutter test integration_test/local_game_test.dart -d windows --reporter expanded 2>&1 | Tee-Object qa-game/integration.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - name: Compile independent Flutter game.exe
+        run: |
+          python tool/prepare_local_game.py --platforms windows
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          Push-Location ingenieria_inversa/flutter_game
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          flutter build windows --release 2>&1 | Tee-Object ../../qa-game/build.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          Pop-Location
+          python ci/package_local_game.py
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Local-Flutter-Windows-ISO-Key
+          path: dist-game/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ISO-key-game-native-evidence
+          path: qa-game/
+          if-no-files-found: warn
+          retention-days: 30
+  sources:
+    needs: integrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.integrate.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Export source snapshot and history
+        run: |
+          mkdir -p sources
+          git archive --format=zip --output=sources/project.zip HEAD
+          git bundle create sources/history.bundle --all HEAD
+          git rev-parse HEAD > sources/commit.txt
+          sha256sum sources/project.zip sources/history.bundle > sources/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ISO-key-suite-source-and-history
+          path: sources/
+          if-no-files-found: error
+          retention-days: 30

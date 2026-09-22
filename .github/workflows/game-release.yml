@@ -1,0 +1,67 @@
+name: Independent Flutter game - Windows release
+on:
+  push:
+    branches: [release/studio-06-suite]
+    paths: [.github/workflows/game-release.yml]
+permissions:
+  contents: read
+jobs:
+  game:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Prepare original-format synthetic fixtures and native renderer
+        run: |
+          python tool/prepare.py --platforms windows
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          $fixture = Join-Path $env:RUNNER_TEMP 'shaiya-independent-fixture'
+          python tool/make_native_fixture.py $fixture
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          New-Item -ItemType Directory -Force qa-game | Out-Null
+          "SHAIYA_FIXTURE_PATH=$fixture" | Out-File $env:GITHUB_ENV -Append
+          "SHAIYA_QA_PATH=$(Join-Path $env:GITHUB_WORKSPACE 'qa-game')" | Out-File $env:GITHUB_ENV -Append
+      - name: Play, save, leave, reopen and verify real persisted scene
+        run: |
+          flutter test integration_test/local_game_test.dart -d windows --reporter expanded 2>&1 | Tee-Object qa-game/integration.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - name: Compile independent client entry point
+        run: |
+          python tool/prepare_local_game.py --platforms windows
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          Push-Location ingenieria_inversa/flutter_game
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          flutter build windows --release 2>&1 | Tee-Object ../../qa-game/build.log
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+          Pop-Location
+          python ci/package_local_game.py
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shaiya-Local-Flutter-Windows
+          path: dist-game/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Local-game-native-evidence
+          path: qa-game/
+          if-no-files-found: warn
+          retention-days: 30
