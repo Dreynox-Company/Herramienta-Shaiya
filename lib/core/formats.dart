@@ -825,9 +825,9 @@ class WorldData {
     readCategory('Building');
     readCategory('Shape');
     readCategory('Tree');
-    readCategory('Grass',keep:false);
-    readCategory('VAni',keep:false);
-    readCategory('VAni',keep:false);
+    readCategory('Grass');
+    readCategory('VAni');
+    readCategory('VAni');
     readCategory('dungeon',keep:false);
 
     var skyFile='',primaryCloud='',secondaryCloud='';
