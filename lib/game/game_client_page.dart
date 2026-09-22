@@ -913,7 +913,102 @@ class _GameClientPageState extends State<GameClientPage> {
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
       return;
     }
-    if(packet.type==PsPacketType.tradeRequest&&packet.body.length>=4){
+    if(packet.type==PsPacketType.duelRequest&&packet.body.length>=8){
+      try{
+        final req=PsDuelRequest.parse(packet),self=liveCharacter?.id??0;
+        duelOpponentId=req.starterId==self?req.opponentId:req.starterId;
+        if(req.opponentId==self&&req.starterId!=self){
+          pendingDuelRequesterId=req.starterId;
+          _closeWorldPanels();
+          messages.insert(0,'[Duel] '+_knownCharacterName(req.starterId)+' te ha desafiado.');
+        }else if(req.starterId==self){
+          outgoingDuelTargetId=req.opponentId;
+          messages.insert(0,'[Duel] Esperando respuesta de '+_knownCharacterName(req.opponentId)+'.');
+        }
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelResponse&&packet.body.length>=5){
+      try{
+        final response=PsDuelResponse.parse(packet);
+        if(response.accepted){
+          duelOpponentId=response.characterId==liveCharacter?.id?duelOpponentId:response.characterId;
+          messages.insert(0,'[Duel] Desafío aceptado.');
+        }else{
+          messages.insert(0,'[Duel] Desafío no aceptado ('+response.response.toString()+').');
+          _resetDuel();
+        }
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelTrade&&packet.body.length>=5){
+      try{
+        final open=PsDuelTradeOpen.parse(packet);
+        _resetDuel();
+        duelOpponentId=open.characterId;
+        duelTradeOpen=true;
+        inventoryOpen=true;
+        _closeWorldPanels();
+        duelTradeOpen=true;
+        inventoryOpen=true;
+        messages.insert(0,'[Duel] Ventana de apuesta abierta contra '+_knownCharacterName(open.characterId)+'.');
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelTradeAddItem&&packet.body.length>=4){
+      try{
+        final ack=PsDuelTradeItemAck.parse(packet);
+        final item=liveInventory.where((i)=>i.bag==ack.bag&&i.slot==ack.slot).firstOrNull;
+        if(item!=null)localDuelItems[ack.tradeSlot]=_duelItemFromInventory(item,ack.tradeSlot,ack.count);
+        localDuelApproved=remoteDuelApproved=false;
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelTradeOpponentAddItem&&packet.body.length>=108){
+      try{
+        final item=PsDuelTradeItem.parse(packet);
+        remoteDuelItems[item.tradeSlot]=_duelItemFromRemote(item);
+        localDuelApproved=remoteDuelApproved=false;
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelTradeRemoveItem&&packet.body.length>=2){
+      try{
+        final remove=PsDuelTradeRemove.parse(packet);
+        if(remove.senderType==1)localDuelItems.remove(remove.tradeSlot);
+        else if(remove.senderType==2)remoteDuelItems.remove(remove.tradeSlot);
+        localDuelApproved=remoteDuelApproved=false;
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelTradeAddMoney&&packet.body.length>=5){
+      try{
+        final money=PsDuelTradeMoney.parse(packet);
+        if(money.senderType==1)localDuelMoney=money.money;
+        else if(money.senderType==2)remoteDuelMoney=money.money;
+        localDuelApproved=remoteDuelApproved=false;
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelTradeOk&&packet.body.length>=2){
+      try{
+        final approval=PsDuelTradeApproval.parse(packet);
+        if(approval.senderType==1)localDuelApproved=approval.approved;
+        else if(approval.senderType==2)remoteDuelApproved=approval.approved;
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelReady&&packet.body.length>=8){
+      try{
+        final ready=PsDuelReady.parse(packet);
+        duelReady=true;duelTradeOpen=false;duelCenterX=ready.x;duelCenterZ=ready.z;
+        inventoryOpen=false;
+        messages.insert(0,'[Duel] Duelo listo · centro '+ready.x.toStringAsFixed(1)+', '+ready.z.toStringAsFixed(1)+'.');
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    }else if(packet.type==PsPacketType.duelCloseTrade&&packet.body.isNotEmpty){
+      duelTradeOpen=false;inventoryOpen=false;
+      messages.insert(0,'[Duel] Ventana de apuesta cerrada ('+packet.body[0].toString()+').');
+    }else if(packet.type==PsPacketType.duelStart){
+      duelStarted=true;duelReady=false;duelTradeOpen=false;inventoryOpen=false;
+      messages.insert(0,'[Duel] ¡COMIENZA EL DUELO!');
+    }else if(packet.type==PsPacketType.duelCancel&&packet.body.length>=5){
+      try{
+        final cancel=PsDuelCancel.parse(packet);
+        messages.insert(0,'[Duel] Cancelado · razón '+cancel.reason.toString()+' · jugador '+cancel.playerId.toString()+'.');
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+      _resetDuel();
+    }else if(packet.type==PsPacketType.duelWinLose&&packet.body.isNotEmpty){
+      try{
+        final result=PsDuelResult.parse(packet);
+        duelResultText=result.won?(uiLocale=='spn'?'VICTORIA':'VICTORY'):(uiLocale=='spn'?'DERROTA':'DEFEAT');
+        messages.insert(0,'[Duel] '+duelResultText+'.');
+      }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+      _resetDuel(keepResult:true);
+    }else if(packet.type==PsPacketType.tradeRequest&&packet.body.length>=4){
       pendingTradeRequesterId=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
       _closeWorldPanels();tradeOpen=true;
       messages.insert(0,'[Trade] Solicitud de '+_knownCharacterName(pendingTradeRequesterId!)+'.');
