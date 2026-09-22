@@ -87,8 +87,12 @@ class _GameClientPageState extends State<GameClientPage> {
   bool gateOpen=false;
   bool warehouseOpen=false;
   NpcShopRule? activeShop;
+  int blacksmithMode=0;
   PsInventoryItem? blacksmithItem,blacksmithGem,blacksmithHammer;
   PsLinkingPossibility? blacksmithPossibility;
+  PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
+  int blacksmithExtractPosition=0;
+  PsLinkingPossibility? blacksmithExtractPossibility;
   bool blacksmithBusy=false;
   NpcGateRule? activeGate;
   int? activeShopNpcGlobalId;
@@ -1287,8 +1291,11 @@ class _GameClientPageState extends State<GameClientPage> {
     gateOpen=false;
     warehouseOpen=false;
     activeShop=null;
+    blacksmithMode=0;
     blacksmithItem=blacksmithGem=blacksmithHammer=null;
-    blacksmithPossibility=null;blacksmithBusy=false;
+    blacksmithPossibility=null;
+    blacksmithExtractItem=blacksmithExtractHammer=null;
+    blacksmithExtractPosition=0;blacksmithExtractPossibility=null;blacksmithBusy=false;
     activeGate=null;
     activeShopNpcGlobalId=null;
     activeGateNpcGlobalId=null;
@@ -1493,6 +1500,100 @@ class _GameClientPageState extends State<GameClientPage> {
       messages.insert(0,'[Almacén] Objeto retirado a bag '+dest.bag.toString()+', slot '+dest.slot.toString()+'.');
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
+  }
+  void _setBlacksmithMode(int mode){
+    blacksmithMode=mode.clamp(0,1);
+    if(mounted)setState((){});
+  }
+
+  Future<void> _refreshExtractPossibility() async {
+    final item=blacksmithExtractItem,session=liveWorld;
+    blacksmithExtractPossibility=null;
+    if(item==null||session==null){if(mounted)setState((){});return;}
+    if(blacksmithExtractPosition<0||blacksmithExtractPosition>=item.gems.length||item.gems[blacksmithExtractPosition]<=0){
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final hammer=blacksmithExtractHammer;
+      blacksmithExtractPossibility=await session.gemRemovePossibility(
+        itemBag:item.bag,itemSlot:item.slot,specific:true,gemPosition:blacksmithExtractPosition,
+        hammerBag:hammer?.bag??0,hammerSlot:hammer?.slot??0,
+      );
+      final p=blacksmithExtractPossibility!;
+      messages.insert(0,'[Herrero] Extracción: '+p.rate.toStringAsFixed(2)+'% · '+p.gold.toString()+' oro.');
+    }catch(e){messages.insert(0,'[Herrero] '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+  }
+
+  void _selectExtractItem(PsInventoryItem? item){
+    blacksmithExtractItem=item;
+    if(item!=null){
+      final first=item.gems.indexWhere((g)=>g>0);
+      blacksmithExtractPosition=first<0?0:first;
+    }
+    unawaited(_refreshExtractPossibility());
+  }
+  void _selectExtractPosition(int position){
+    blacksmithExtractPosition=position;
+    unawaited(_refreshExtractPossibility());
+  }
+  void _selectExtractHammer(PsInventoryItem? item){
+    blacksmithExtractHammer=item;
+    unawaited(_refreshExtractPossibility());
+  }
+
+  void _upsertRecoveredGem(int bag,int slot,int typeId,int count){
+    if(bag<=0||typeId<=0||count<=0)return;
+    final index=liveInventory.indexWhere((x)=>x.bag==bag&&x.slot==slot);
+    if(index>=0){
+      final old=liveInventory[index];
+      liveInventory[index]=PsInventoryItem(
+        bag:bag,slot:slot,type:old.type==0?30:old.type,typeId:typeId,quality:old.quality,
+        count:count,gems:old.gems,craftName:old.craftName,dyed:old.dyed,
+      );
+    }else{
+      liveInventory.add(PsInventoryItem(
+        bag:bag,slot:slot,type:30,typeId:typeId,quality:0,count:count,
+        gems:const [0,0,0,0,0,0],craftName:'',dyed:false,
+      ));
+    }
+    _sortInventory();
+  }
+
+  Future<void> _extractSelectedGem() async {
+    final item=blacksmithExtractItem,session=liveWorld,p=blacksmithExtractPossibility;
+    if(item==null||session==null||p==null||blacksmithBusy)return;
+    if(!p.available||liveGold!=null&&liveGold!<p.gold){
+      messages.insert(0,'[Herrero] No se puede ejecutar la extracción con el estado actual.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final hammer=blacksmithExtractHammer;
+      final result=await session.removeGem(
+        itemBag:item.bag,itemSlot:item.slot,gemPosition:blacksmithExtractPosition,
+        hammerBag:hammer?.bag??0,hammerSlot:hammer?.slot??0,
+      );
+      liveGold=result.gold;
+      final itemIndex=liveInventory.indexWhere((x)=>x.bag==result.itemBag&&x.slot==result.itemSlot);
+      if(itemIndex>=0&&result.success){
+        final old=liveInventory[itemIndex],gems=[...old.gems];
+        if(result.gemPosition>=0&&result.gemPosition<gems.length)gems[result.gemPosition]=0;
+        liveInventory[itemIndex]=PsInventoryItem(
+          bag:old.bag,slot:old.slot,type:old.type,typeId:old.typeId,quality:old.quality,
+          count:old.count,gems:List.unmodifiable(gems),craftName:old.craftName,dyed:old.dyed,
+        );
+        blacksmithExtractItem=liveInventory[itemIndex];
+      }
+      for(var i=0;i<6;i++){
+        _upsertRecoveredGem(result.savedBags[i],result.savedSlots[i],result.savedTypeIds[i],result.savedCounts[i]);
+      }
+      blacksmithExtractPossibility=null;
+      messages.insert(0,result.success?'[Herrero] Lapis extraído según World.':'[Herrero] La extracción falló según World.');
+    }catch(e){messages.insert(0,'[Herrero] GEM_REMOVE: '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+    if(blacksmithExtractItem?.gems.any((g)=>g>0)==true)unawaited(_refreshExtractPossibility());
   }
   Future<void> _refreshBlacksmithPossibility() async {
     final item=blacksmithItem,gem=blacksmithGem,session=liveWorld;
@@ -1977,19 +2078,29 @@ class _GameClientPageState extends State<GameClientPage> {
             shopOpen:shopOpen,
             blacksmithOpen:blacksmithOpen,
             gateOpen:gateOpen,
+            blacksmithMode:blacksmithMode,
             blacksmithItem:blacksmithItem,
             blacksmithGem:blacksmithGem,
             blacksmithHammer:blacksmithHammer,
             blacksmithPossibility:blacksmithPossibility,
+            blacksmithExtractItem:blacksmithExtractItem,
+            blacksmithExtractHammer:blacksmithExtractHammer,
+            blacksmithExtractPosition:blacksmithExtractPosition,
+            blacksmithExtractPossibility:blacksmithExtractPossibility,
             blacksmithBusy:blacksmithBusy,
             onCloseShop:()=>setState(()=>shopOpen=false),
             onCloseBlacksmith:()=>setState(()=>blacksmithOpen=false),
             onCloseGate:()=>setState(()=>gateOpen=false),
             onCloseWarehouse:()=>setState(()=>warehouseOpen=false),
+            onBlacksmithMode:_setBlacksmithMode,
             onSelectBlacksmithItem:_selectBlacksmithItem,
             onSelectBlacksmithGem:_selectBlacksmithGem,
             onSelectBlacksmithHammer:_selectBlacksmithHammer,
+            onSelectExtractItem:_selectExtractItem,
+            onSelectExtractPosition:_selectExtractPosition,
+            onSelectExtractHammer:_selectExtractHammer,
             onLinkGem:()=>unawaited(_linkSelectedGem()),
+            onExtractGem:()=>unawaited(_extractSelectedGem()),
             onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
             onUseGate:(index)=>unawaited(_useGatekeeperTarget(index)),
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
