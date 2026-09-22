@@ -63,10 +63,12 @@ class _EditorSave extends Intent {
 class DataEditorPage extends StatefulWidget {
   final Library library;
   final GameTextEncoding initialEncoding;
+  final String? initialPath;
   const DataEditorPage({
     super.key,
     required this.library,
     this.initialEncoding = GameTextEncoding.automatic,
+    this.initialPath,
   });
   @override
   State<DataEditorPage> createState() => _DataEditorPageState();
@@ -201,6 +203,18 @@ class _DataEditorPageState extends State<DataEditorPage> {
     super.initState();
     encoding = widget.initialEncoding;
     _images = EditorImages(widget.library);
+    final initial = widget.initialPath;
+    if (initial != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final path = canon(initial);
+        if (widget.library.files.containsKey(path)) {
+          unawaited(openTable(path));
+        } else {
+          _note('La tabla inicial no está disponible en esta biblioteca: $path');
+        }
+      });
+    }
   }
 
   @override
