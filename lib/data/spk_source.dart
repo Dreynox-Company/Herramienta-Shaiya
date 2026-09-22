@@ -265,7 +265,9 @@ class SpkArchiveSource {
     final group = record.simple
         ? '_SPK_SinNombre/Simples'
         : '_SPK_SinNombre/Fragmentados';
-    return '$group/${record.idHex}.bin';
+    final format = validatedFormat(record.entryId);
+    final extension = format == null ? '.bin' : extensionFor(format);
+    return '$group/${record.idHex}$extension';
   }
 
   String nameConfidence(SpkRecord record) {
@@ -279,6 +281,8 @@ class SpkArchiveSource {
   String nameEvidence(SpkRecord record) => names.evidence(record.entryId);
 
   String displayType(SpkRecord record) {
+    final verified = validatedFormat(record.entryId);
+    if (verified != null && verified.isNotEmpty) return verified;
     final path = technicalPath(record);
     final ext = p.extension(path).replaceFirst('.', '').toUpperCase();
     if (ext.isNotEmpty && ext != 'BIN') return ext;
@@ -548,6 +552,88 @@ class SpkArchiveSource {
     for (final entry in _validatedFormats.entries)
       spkU64Hex(entry.key): entry.value,
   };
+
+  Map<String, Object?> validateInferredNamesByFormat() {
+    if (!fullyValidatedResources) {
+      throw const SpkFailure(
+        'SPK_NAME_FORMAT_AUDIT_REQUIRED',
+        'Primero debe completarse la auditoría integral de payloads.',
+      );
+    }
+
+    final knownExtensions = <String, Set<String>>{
+      '.dds': {'DDS'},
+      '.png': {'PNG'},
+      '.bmp': {'BMP'},
+      '.jpg': {'JPEG'},
+      '.jpeg': {'JPEG'},
+      '.gif': {'GIF'},
+      '.tga': {'TGA'},
+      '.ogg': {'OGG'},
+      '.wav': {'RIFF'},
+      '.zip': {'ZIP'},
+      '.exe': {'PE'},
+      '.eft': {'EFT'},
+      '.wld': {'WLD'},
+      '.3dc': {'3DC'},
+      '.3do': {'3DO'},
+      '.ani': {'ANI'},
+      '.mlt': {'MLT'},
+      '.itm': {'ITM'},
+      '.mon': {'MON'},
+      '.sdata': {'SDATA'},
+      '.xml': {'XML'},
+      '.json': {'JSON'},
+      '.ini': {'INI'},
+      '.txt': {'TXT'},
+    };
+
+    var validated = 0;
+    var rejected = 0;
+    var preservedUnknown = 0;
+    final updates = <int, SpkNameHint>{};
+    final removals = <int>[];
+
+    for (final entry in names.hints.entries.toList(growable: false)) {
+      final extension = p.extension(entry.value.path).toLowerCase();
+      final expected = knownExtensions[extension];
+      if (expected == null) {
+        preservedUnknown++;
+        continue;
+      }
+      final actual = _validatedFormats[entry.key];
+      if (actual == null || actual == 'BIN') {
+        preservedUnknown++;
+        continue;
+      }
+      if (expected.contains(actual)) {
+        updates[entry.key] = SpkNameHint(
+          path: entry.value.path,
+          confidence: 'validated-inferred',
+          evidence: '${entry.value.evidence}+payload-format:$actual',
+        );
+        validated++;
+      } else {
+        removals.add(entry.key);
+        rejected++;
+      }
+    }
+
+    names.mergeHintRecords(updates);
+    for (final id in removals) {
+      names.hints.remove(id);
+    }
+    final ambiguousRemoved = names.removeAmbiguousHints();
+
+    return {
+      'validated': validated,
+      'rejected': rejected,
+      'preservedUnknown': preservedUnknown,
+      'ambiguousRemoved': ambiguousRemoved,
+      'remainingHints': names.hints.length,
+      'method': 'full-payload-audit+extension-format-match',
+    };
+  }
 
   bool restoreFullResourceValidation(Map<String, dynamic> evidence) {
     if (!canExtractAll) return false;
