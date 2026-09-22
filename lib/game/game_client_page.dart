@@ -209,6 +209,7 @@ class _GameClientPageState extends State<GameClientPage> {
     });
     scene=StudioScene((s){if(mounted)setState(()=>progress=s);});
     scene.gridVisible=false;
+    scene.sound=Platform.environment['SHAIYA_QA_DISABLE_BACKEND']!='1';
     renderer=three.ThreeJS(
       settings:three.Settings(
         clearColor:0x000000,
