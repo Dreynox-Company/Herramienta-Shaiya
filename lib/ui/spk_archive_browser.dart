@@ -2274,6 +2274,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     final library = await Library.fromSpk(
       source,
+      requireCharacter: false,
       progress: (message) {
         if (mounted) setState(() => operation = message);
       },
@@ -2319,6 +2320,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final path = _editableLibraryPath(record);
     final library = await Library.fromSpk(
       source,
+      requireCharacter: false,
       progress: (message) {
         if (mounted) {
           setState(() => operation = message);
