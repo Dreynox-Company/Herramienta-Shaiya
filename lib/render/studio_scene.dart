@@ -1181,15 +1181,10 @@ class StudioScene extends ChangeNotifier {
         final n=entry.value.length~/3,no=Float32List(n*3);
         for(var i=0;i<n;i++){
           final localX=entry.value[i*3],localZ=entry.value[i*3+2];
-          final worldX=ox+localX,worldZ=oz-localZ,step=1.0;
-          final hL=w.heightAt(worldX-step,worldZ,scale:.02,offset:-200);
-          final hR=w.heightAt(worldX+step,worldZ,scale:.02,offset:-200);
-          final hD=w.heightAt(worldX,worldZ-step,scale:.02,offset:-200);
-          final hU=w.heightAt(worldX,worldZ+step,scale:.02,offset:-200);
-          var nx=-(hR-hL)/(2*step),ny=1.0,nz=(hU-hD)/(2*step);
-          final length=math.sqrt(nx*nx+ny*ny+nz*nz);
-          if(length>1e-8){nx/=length;ny/=length;nz/=length;}
-          no[i*3]=nx;no[i*3+1]=ny;no[i*3+2]=nz;
+          final normal=w.normalAt(
+            ox+localX,oz-localZ,scale:.02,offset:-200,step:1,
+          );
+          no[i*3]=normal.x;no[i*3+1]=normal.y;no[i*3+2]=normal.z;
         }
         final data=MeshData(
           Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),
