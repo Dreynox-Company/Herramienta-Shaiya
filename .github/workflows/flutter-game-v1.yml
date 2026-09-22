@@ -258,7 +258,7 @@ jobs:
           $env:SHAIYA_EXPECT_REAL_DATA='1'
           flutter test integration_test/game_visual_parity_test.dart -d windows --reporter expanded
           if($LASTEXITCODE -ne 0){throw 'real-DATA Flutter parity integration test failed'}
-          foreach($s in @('faction','characterSelect','characterCreate','characterMode','world')){
+          foreach($s in @('faction','characterSelect','characterCreate','characterMode','world','worldMoved')){
             if(!(Test-Path ("parity-report/"+$s+".png"))){throw "missing framebuffer: $s"}
           }
       - name: Capture actual Windows client surfaces
@@ -348,6 +348,7 @@ jobs:
             'characterCreate':'05-character-editor.png',
             'characterMode':'06c-mode-selected.png',
             'world':'09-world-entry.png',
+            'worldMoved':'11-after-movement.png',
           }
           def flutter_image(stage):
             os_capture=root/f'os-{stage}.png'
