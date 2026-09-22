@@ -2913,7 +2913,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 SizedBox(
                   width: 145,
                   child: DropdownButtonFormField<String>(
-                    value: formatFilter.isEmpty ? null : formatFilter,
+                    key: ValueKey(formatFilter),
+                    initialValue: formatFilter.isEmpty ? null : formatFilter,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       isDense: true,
