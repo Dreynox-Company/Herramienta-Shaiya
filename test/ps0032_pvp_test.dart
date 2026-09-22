@@ -116,4 +116,34 @@ void main(){
     expect(snapshot.self!.characterId,100);
     expect(snapshot.self!.x,closeTo(200,1e-6));
   });
+  test('parses authoritative PvP selection, remote move and leave',(){
+    final selected=Uint8List(12),sd=ByteData.sublistView(selected);
+    sd.setUint32(0,50,Endian.little);
+    sd.setInt32(4,4321,Endian.little);
+    sd.setInt32(8,1234,Endian.little);
+    final target=PsTargetCharacterSelection.parse(PsPacket(PsPacketType.targetCharacterMaxHp,selected));
+    expect((target.targetId,target.maxHp,target.currentHp),(50,4321,1234));
+
+    final moving=Uint8List(19),md=ByteData.sublistView(moving);
+    md.setUint32(0,50,Endian.little);
+    md.setUint16(4,32768,Endian.little);
+    moving[6]=2;
+    md.setFloat32(7,101.25,Endian.little);
+    md.setFloat32(11,5.5,Endian.little);
+    md.setFloat32(15,202.75,Endian.little);
+    final move=PsCharacterMove.parse(PsPacket(PsPacketType.characterMove,moving));
+    expect((move.characterId,move.angle,move.motion),(50,32768,2));
+    expect(move.moving,isTrue);
+    expect(move.x,closeTo(101.25,1e-6));
+    expect(move.y,closeTo(5.5,1e-6));
+    expect(move.z,closeTo(202.75,1e-6));
+
+    final left=Uint8List(4);
+    ByteData.sublistView(left).setUint32(0,50,Endian.little);
+    expect(
+      PsCharacterLeftMap.parse(PsPacket(PsPacketType.characterLeftMap,left)).characterId,
+      50,
+    );
+  });
+
 }
