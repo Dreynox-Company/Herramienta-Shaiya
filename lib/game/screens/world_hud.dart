@@ -18,6 +18,8 @@ class WorldHud extends StatelessWidget {
   final PsCharacterDetails? details;
   final PsAdditionalStats? additionalStats;
   final PsHitpoints? hitpoints;
+  final bool dead,rebirthPending;
+  final VoidCallback onRebirth;
   final List<PsActiveBuff> buffs;
   final PsMapWeather? weather;
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
@@ -58,6 +60,9 @@ class WorldHud extends StatelessWidget {
     required this.details,
     required this.additionalStats,
     required this.hitpoints,
+    required this.dead,
+    required this.rebirthPending,
+    required this.onRebirth,
     required this.buffs,
     required this.weather,
     required this.targetMobGlobalId,
@@ -150,7 +155,7 @@ class WorldHud extends StatelessWidget {
               right:198,top:250,width:292,height:390,
               child:_inventoryWindow(),
             ),
-          if (questOpen)
+          if (questOpen&&!dead)
             Positioned(
               left: 566,
               top: 118,
@@ -158,8 +163,54 @@ class WorldHud extends StatelessWidget {
               height: 505,
               child: _questWindow(),
             ),
+          if(dead||rebirthPending)
+            Positioned.fill(child:_deathOverlay()),
         ],
       );
+
+  Widget _deathOverlay()=>Container(
+    color:const Color(0x66000000),
+    alignment:Alignment.center,
+    child:Container(
+      width:330,
+      padding:const EdgeInsets.fromLTRB(20,18,20,18),
+      decoration:BoxDecoration(
+        color:const Color(0xf01b1410),
+        border:Border.all(color:const Color(0xff8f493e),width:2),
+        boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:18)],
+      ),
+      child:Column(mainAxisSize:MainAxisSize.min,children:[
+        const Icon(Icons.warning_amber_rounded,size:40,color:Color(0xffd9634f)),
+        const SizedBox(height:7),
+        Text(
+          locale=='spn'?'Has muerto':'You are dead',
+          style:const TextStyle(
+            color:Color(0xffffd4b0),fontSize:19,fontWeight:FontWeight.bold,
+            shadows:[Shadow(color:Colors.black,blurRadius:3)],
+          ),
+        ),
+        const SizedBox(height:6),
+        Text(
+          rebirthPending
+            ?(locale=='spn'?'World está procesando tu reaparición…':'World is processing your rebirth…')
+            :(locale=='spn'?'Puedes renacer en la ciudad segura más cercana.':'You can rebirth at the nearest safe town.'),
+          textAlign:TextAlign.center,
+          style:const TextStyle(fontSize:10.5,color:Colors.white70,height:1.35),
+        ),
+        const SizedBox(height:16),
+        SizedBox(
+          width:150,height:34,
+          child:ShaiyaButton(
+            label:rebirthPending
+              ?(locale=='spn'?'Renaciendo…':'Rebirthing…')
+              :(locale=='spn'?'Renacer en ciudad':'Rebirth in town'),
+            onPressed:rebirthPending?null:onRebirth,
+            compact:true,
+          ),
+        ),
+      ]),
+    ),
+  );
 
   List<Widget> _worldLabels(){
     final labels=scene.projectGameLabels(1024,742);
