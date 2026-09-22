@@ -167,7 +167,7 @@ class CharacterCreateScreen extends StatelessWidget {
   );
 
   Widget baseInfoContent()=>Padding(
-    padding:const EdgeInsets.fromLTRB(20,14,18,14),
+    padding:const EdgeInsets.fromLTRB(20,25,18,8),
     child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('Name',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
       const SizedBox(height:4),
@@ -184,7 +184,7 @@ class CharacterCreateScreen extends StatelessWidget {
         const SizedBox(width:8),
         shaiyaRedButton('Name Check',(){},width:88,height:29,fontSize:9),
       ]),
-      const SizedBox(height:13),
+      const SizedBox(height:16),
       const Text('Class',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
       const SizedBox(height:6),
       Wrap(spacing:4,runSpacing:4,children:[
@@ -195,7 +195,7 @@ class CharacterCreateScreen extends StatelessWidget {
         classButton(4,'Archer','interface/charactermake/button/archer_hunter.tga'),
         classButton(5,'Mage','interface/charactermake/button/mage_pagan.tga'),
       ]),
-      const SizedBox(height:8),
+      const SizedBox(height:10),
       const Text('Gender',style:TextStyle(color:Color(0xffffdc50),fontSize:10)),
       const SizedBox(height:5),
       Row(children:[
@@ -306,7 +306,7 @@ class CharacterCreateScreen extends StatelessWidget {
 
   @override Widget build(BuildContext context)=>Stack(children:[
     Positioned(
-      left:8,top:22,width:330,height:210,
+      left:8,top:22,width:330,height:250,
       child:Container(
         padding:const EdgeInsets.fromLTRB(24,18,22,18),
         decoration:BoxDecoration(
