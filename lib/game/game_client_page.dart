@@ -1853,7 +1853,43 @@ class _GameClientPageState extends State<GameClientPage> {
       if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' te golpea por '+hit.hpDamage.toString()+'.');}
     }else if(packet.type==PsPacketType.mobSkillUse&&packet.body.length>=19){
       final hit=PsMobSkillHit.parse(packet);
-      if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');}
+      if(hit.success){
+        if(hit.targetId==liveCharacter?.id){
+          final hp=liveHitpoints;
+          if(hp!=null)liveHitpoints=PsHitpoints(
+            math.max(0,hp.hp-hit.hpDamage),
+            math.max(0,hp.mp-hit.mpDamage),
+            math.max(0,hp.sp-hit.spDamage),
+          );
+          unawaited(scene.networkPlayerHit(hit.hpDamage));
+        }
+        messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');
+      }
+    }else if(packet.type==PsPacketType.mobRangeSkillUse&&packet.body.length>=19){
+      try{
+        final hit=PsMobRangeSkillHit.parse(packet),self=liveCharacter?.id;
+        if(hit.success){
+          if(hit.targetId==self){
+            final hp=liveHitpoints;
+            if(hp!=null)liveHitpoints=PsHitpoints(
+              math.max(0,hp.hp-hit.hpDamage),
+              math.max(0,hp.mp-hit.mpDamage),
+              math.max(0,hp.sp-hit.spDamage),
+            );
+            if(hit.hpDamage>0)unawaited(scene.networkPlayerHit(hit.hpDamage));
+          }else if(scene.networkPlayerActors.containsKey(hit.targetId)){
+            if(hit.hpDamage>0)unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+          }else if(scene.networkMobActors.containsKey(hit.targetId)){
+            if(hit.hpDamage>0)unawaited(scene.networkMobHit(hit.targetId,hit.hpDamage));
+          }
+        }
+        messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill de área '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');
+      }catch(e){messages.insert(0,'[Combate] MOB_RANGE_SKILL_USE: '+e.toString());}
+    }else if(packet.type==PsPacketType.mobSkillKeep&&packet.body.length>=13){
+      try{
+        final keep=PsSkillKeep.parse(packet);
+        messages.insert(0,'[Combate] Mob '+keep.senderId.toString()+' mantiene skill '+keep.skillId.toString()+'.');
+      }catch(e){messages.insert(0,'[Combate] MOB_SKILL_KEEP: '+e.toString());}
     }else if(packet.type==PsPacketType.mapWeather&&packet.body.length>=3){
       try{
         liveWeather=PsMapWeather.parse(packet);
