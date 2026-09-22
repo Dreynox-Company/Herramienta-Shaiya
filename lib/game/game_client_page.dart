@@ -2951,8 +2951,29 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _sendChat(String value) async {
     final session=liveWorld;if(session==null||stage!=GameStage.world)return;
-    try{await session.sendNormalChat(value);}
-    catch(e){messages.insert(0,'[Chat] '+e.toString());if(mounted)setState((){});}
+    final text=value.trim();if(text.isEmpty)return;
+    try{
+      final lower=text.toLowerCase();
+      if(lower.startsWith('/p ')){
+        await session.sendPartyChat(text.substring(3));
+      }else if(lower.startsWith('/g ')){
+        await session.sendGuildChat(text.substring(3));
+      }else if(lower.startsWith('/map ')){
+        await session.sendMapChat(text.substring(5));
+      }else if(lower.startsWith('/world ')){
+        await session.sendWorldChat(text.substring(7));
+      }else if(lower.startsWith('/w ')||lower.startsWith('/whisper ')){
+        final raw=text.substring(lower.startsWith('/w ')?3:9).trim();
+        final split=raw.indexOf(' ');
+        if(split<=0||split==raw.length-1){
+          messages.insert(0,'[Chat] Uso: /w Nombre mensaje');
+        }else{
+          await session.sendWhisper(raw.substring(0,split),raw.substring(split+1));
+        }
+      }else{
+        await session.sendNormalChat(text);
+      }
+    }catch(e){messages.insert(0,'[Chat] '+e.toString());if(mounted)setState((){});}
   }
   Future<void> _selectTargetAt(Offset position) async {
     if(stage!=GameStage.world||dead||rebirthPending)return;
