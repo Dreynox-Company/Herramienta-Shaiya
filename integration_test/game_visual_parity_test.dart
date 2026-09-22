@@ -129,6 +129,10 @@ void main(){
         'skyLayerPath':state.scene.skyPath,
         'primaryCloudLayerPath':state.scene.primaryCloudPath,
         'secondaryCloudLayerPath':state.scene.secondaryCloudPath,
+        'waterLayout':state.scene.world?.layout??'',
+        'waterTablePath':state.scene.waterPath,
+        'waterFrameCount':state.scene.waterAnimation?.textures.length??0,
+        'waterResolvedTextures':state.scene.waterTexturePaths,
         'mapTextureCandidates':state.catalog==null
           ?<String>[]
           :state.catalog!.library.files.keys.where((String path){
