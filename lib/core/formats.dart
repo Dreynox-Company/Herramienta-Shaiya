@@ -895,7 +895,8 @@ class DgData {
   final v.Vector3 lower,upper;
   final int lightmapCount;
   final List<DgPart> parts;
-  const DgData(this.lower,this.upper,this.lightmapCount,this.parts);
+  final List<SmodCollisionMesh> collisions;
+  const DgData(this.lower,this.upper,this.lightmapCount,this.parts,this.collisions);
 
   v.Vector3 get center=>(lower+upper)*.5;
 
@@ -956,6 +957,7 @@ class DgData {
     final lightmapCount=r.count(65536);
     final hasRoot=r.i32();
     final parts=<DgPart>[];
+    final collisions=<SmodCollisionMesh>[];
 
     void readNode(){
       r.skip(12+24+24); // center, view box, collision box.
@@ -974,10 +976,18 @@ class DgData {
       }
       final collisionType=r.i32();
       if(collisionType==1){
-        final vertices=r.count(2000000);
-        r.skip(vertices*12);
-        final faces=r.count(2000000);
-        r.skip(faces*6);
+        final vertexCount=r.count(2000000);
+        final vertices=<v.Vector3>[];
+        for(var i=0;i<vertexCount;i++)vertices.add(r.vec());
+        final faceCount=r.count(2000000);
+        r.need(faceCount*6);
+        final indices=Uint16List(faceCount*3);
+        for(var i=0;i<indices.length;i++){
+          final index=r.u16();
+          if(index>=vertexCount)r.fail('Triángulo de colisión DG fuera de la malla.');
+          indices[i]=index;
+        }
+        collisions.add(SmodCollisionMesh(List.unmodifiable(vertices),indices));
       }else if(collisionType!=0){
         r.fail('Tipo de colisión DG desconocido: $collisionType.');
       }
@@ -988,7 +998,9 @@ class DgData {
 
     if(hasRoot>0)readNode();
     r.end();
-    return DgData(lower,upper,lightmapCount,List.unmodifiable(parts));
+    return DgData(
+      lower,upper,lightmapCount,List.unmodifiable(parts),List.unmodifiable(collisions),
+    );
   }
 }
 
