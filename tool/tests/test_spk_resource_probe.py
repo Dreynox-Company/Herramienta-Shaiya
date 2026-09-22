@@ -12,7 +12,7 @@ SPEC.loader.exec_module(probe)
 
 
 class ResourceProbeContractTest(unittest.TestCase):
-    def test_v9_agent_can_recover_keys_from_live_bcrypt_handles(self):
+    def test_v10_agent_can_recover_keys_from_live_bcrypt_handles(self):
         text = AGENT.read_text(encoding='utf-8')
         self.assertIn("BCryptExportKey", text)
         self.assertIn("KeyDataBlob", text)
