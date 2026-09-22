@@ -87,7 +87,7 @@ class StudioScene extends ChangeNotifier {
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
-  WorldData? world;String? worldPath,effectPath,skyPath;
+  WorldData? world;DgData? dungeon;String? worldPath,effectPath,skyPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
   final WorldCollisionIndex worldCollision=WorldCollisionIndex();
@@ -783,7 +783,7 @@ class StudioScene extends ChangeNotifier {
   double get enemyDistance{if(enemy==null||character==null)return double.infinity;final dx=enemy!.root.position.x-character!.root.position.x,dz=enemy!.root.position.z-character!.root.position.z;return math.sqrt(dx*dx+dz*dz);}
   void resetCombat(){combat.reset();movementTransitions.invalidate();for(final a in [character,enemy]){if(a==null)continue;final c=a.clips['Respirar']??a.clips['Reposo']??a.normal;if(c!=null){a.idle=c;a.play(c);}}notifyListeners();}
   void setWireframe(bool value){wireframe=value;for(final a in [character,enemy,mount,wing]){for(final p in a?.parts??<RenderPart>[]){p.mesh.material?.wireframe=value;}}weapon?.mesh.material?.wireframe=value;secondWeapon?.mesh.material?.wireframe=value;notifyListeners();}
-  double _worldGroundAtLocal(double x,double z)=>world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+  double _worldGroundAtLocal(double x,double z)=>dungeon?.floorAt(originX+x,originZ-z)??world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
   bool _worldPositionBlocked(double x,double z){
     if(world==null||worldCollision.isEmpty)return false;
     final radius=mount==null?.32:.52;
@@ -864,7 +864,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -910,16 +910,21 @@ class StudioScene extends ChangeNotifier {
         // DG vertices use Shaiya's left-handed world coordinates.
         stage.scale.z=-1;
         stage.position.setValues(-ox,0,oz);
+        final collision=WorldCollisionIndex();
+        final collisionTransform=v.Matrix4.identity();
+        final cs=collisionTransform.storage;
+        cs[10]=-1;cs[12]=-ox;cs[14]=oz;
+        for(final mesh in dg.collisions){collision.addMesh(mesh,collisionTransform);}
 
         for(final p in environmentParts){p.dispose();}
         environmentParts..clear()..addAll(parts);
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
-        worldCollision.clear();world=w;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);
+        worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);
         character?.root.position.setValues(0,groundY,0);
         enemy?.root.position.setValues(1.8,groundY,0);
         distance=6;updateCamera();
         view!.scene.background=t.Color.fromHex32(0x090806);
-        say('Mazmorra ${w.layout} · $loaded submallas · ${dg.parts.fold<int>(0,(n,p)=>n+p.mesh.triangles)} triángulos.');
+        say('Mazmorra ${w.layout} · $loaded submallas · ${dg.parts.fold<int>(0,(n,p)=>n+p.mesh.triangles)} triángulos · ${worldCollision.triangleCount} triángulos de colisión nativos.');
         notifyListeners();
         return;
       }catch(_){
@@ -986,7 +991,7 @@ class StudioScene extends ChangeNotifier {
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
-      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);worldCollision.replaceWith(collision);world=w;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
+      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
       if(sky==null&&catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
