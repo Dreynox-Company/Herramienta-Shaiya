@@ -653,7 +653,7 @@ class WorldHud extends StatelessWidget {
           ),
           const SizedBox(height:5),
           Row(children:[
-            ...List.generate(rewards.length.clamp(0,4),(i)=>Padding(
+            ...List.generate(rewards.length>4?4:rewards.length,(i)=>Padding(
               padding:const EdgeInsets.only(right:6),
               child:_questRewardCell(rewards[i],i),
             )),
