@@ -862,6 +862,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'Con clave: ${diagnosis['rowsWithKey'] ?? 0}',
         'Con nonce/tag: ${diagnosis['rowsWithAuth'] ?? 0}',
         'Autenticación offline válida: ${diagnosis['offlineValid'] ?? 0}',
+        'Claves candidatas probadas: ${diagnosis['candidateKeysTested'] ?? 0}',
+        'Claves candidatas autenticadas: ${diagnosis['candidateKeysAuthenticated'] ?? 0}',
         if (diagnosis['events'] is List)
           'Eventos: ${(diagnosis['events'] as List).join(', ')}',
       ],
@@ -1317,6 +1319,24 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       for (final event in events.whereType<Map>())
         if (event['code'] != null) event['code'].toString(),
     };
+
+    var candidateKeysTested = 0;
+    var candidateKeysAuthenticated = 0;
+    final candidateEvidence = File(
+      p.join(output.path, 'candidate-keys.json'),
+    );
+    if (await candidateEvidence.exists()) {
+      try {
+        final raw = await readSpkJsonFile(candidateEvidence);
+        if (raw is Map) {
+          candidateKeysTested =
+              (raw['tested'] as num?)?.toInt() ?? 0;
+          candidateKeysAuthenticated =
+              (raw['authenticated'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+    }
+
     var withKey = 0;
     var withAuth = 0;
     var offlineValid = 0;
@@ -1344,13 +1364,24 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         (profile['simpleValidated'] as num?)?.toInt() ?? 0;
 
     String reason;
-    if (!eventCodes.contains('HOOK_READY')) {
+    if (!eventCodes.contains('HOOK_READY') &&
+        !eventCodes.contains('CANDIDATE_HOOK_READY')) {
       reason =
-          'ResourceProbe no confirmó el hook de BCrypt dentro de game.exe.';
+          'ResourceProbe no confirmó hooks criptográficos compatibles dentro '
+          'del proceso de game.exe.';
+    } else if (candidateKeysAuthenticated > 0) {
+      reason =
+          'Se autenticó una clave candidata contra payloads reales, pero el '
+          'perfil final no quedó marcado como listo; conserva la evidencia '
+          'para revisar esta inconsistencia.';
+    } else if (rows.isEmpty && candidateKeysTested > 0) {
+      reason =
+          'Se observaron ${candidateKeysTested} claves candidatas de CNG/OpenSSL, '
+          'pero ninguna autenticó los payloads AES-GCM reales del DATA.SPK.';
     } else if (rows.isEmpty) {
       reason =
-          'El cliente no descifró ninguno de los 55.457 ciphertexts objetivo '
-          'durante la ventana de captura.';
+          'El cliente no expuso ninguno de los 55.457 ciphertexts objetivo ni '
+          'una clave candidata autenticable durante la ventana de captura.';
     } else if (withKey == 0) {
       reason =
           'Se observaron payloads del SPK, pero no se pudo recuperar la clave '
@@ -1382,6 +1413,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       'rowsWithKey': withKey,
       'rowsWithAuth': withAuth,
       'offlineValid': offlineValid,
+      'candidateKeysTested': candidateKeysTested,
+      'candidateKeysAuthenticated': candidateKeysAuthenticated,
       'events': eventCodes.toList()..sort(),
       'profileReadyForSimple': profile['readyForSimple'] == true,
       'profileResourceKeys': profile['resourceKeys'],
@@ -1491,9 +1524,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         content: const SizedBox(
           width: 520,
           child: Text(
-            'Shaiya Studio abrirá una copia de game.exe e instrumentará solo '
-            'ese proceso para observar las llamadas AES-GCM que corresponden '
-            'exactamente a recursos del DATA.SPK ya validado.\n\n'
+            'Shaiya Studio abrirá game.exe de esa instalación e instrumentará '
+            'solo ese proceso. ResourceProbe V12 observa CNG/OpenSSL y valida '
+            'cualquier clave candidata exclusivamente contra ciphertexts AES-GCM '
+            'reales del DATA.SPK ya indexado.\n\n'
             'Desconecta Internet antes de continuar. No inicies sesión ni '
             'escribas credenciales. El aviso de servidor sin conexión es '
             'esperado. DATA.SPK y game.exe no se modifican.',
@@ -1522,7 +1556,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         DateTime.now().millisecondsSinceEpoch.toString(),
       ),
     );
-    operation = 'Preparando ResourceProbe V11…';
+    operation = 'Preparando ResourceProbe V12…';
     if (mounted) setState(() {});
 
     final process = await Process.start(
@@ -1573,7 +1607,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     await File(p.join(output.path, 'probe-console.log')).writeAsString(
       [
-        'Shaiya Studio ResourceProbe V11',
+        'Shaiya Studio ResourceProbe V12',
         'exitCode=$exitCode',
         'game=${game.path}',
         'data=${source.file.path}',
