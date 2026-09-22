@@ -21,6 +21,16 @@ def read_range(path:Path, off:int, n:int)->bytes:
     if len(b)!=n:raise IOError('Lectura SPK incompleta')
     return b
 
+def pe_arch(path:Path)->str:
+    with path.open('rb') as f:
+      mz=f.read(64)
+      if len(mz)<64 or mz[:2]!=b'MZ':return 'unknown'
+      pe=struct.unpack_from('<I',mz,0x3c)[0]
+      f.seek(pe); head=f.read(6)
+      if len(head)<6 or head[:4]!=b'PE\0\0':return 'unknown'
+      machine=struct.unpack_from('<H',head,4)[0]
+    return {0x014c:'x86',0x8664:'x64',0xaa64:'arm64'}.get(machine,f'0x{machine:04x}')
+
 def parse_spk(spk:Path):
     size=spk.stat().st_size
     head=read_range(spk,0,HEADER)
@@ -222,6 +232,8 @@ def main():
     except ImportError as e:raise RuntimeError('Ejecuta PREPARAR.cmd con Internet primero: '+str(e))
     exe=a.client.resolve();spk=exe.parent/'data.spk'
     if not exe.is_file() or not spk.is_file():raise FileNotFoundError('game.exe y data.spk deben estar juntos')
+    arch=pe_arch(exe)
+    if arch not in ('x86','x64'):raise RuntimeError('Arquitectura de game.exe no compatible: '+arch)
     out=a.out.resolve()
     if out.exists():raise FileExistsError('La carpeta de salida debe ser nueva')
     try:
@@ -231,7 +243,8 @@ def main():
       if str(e)=='La salida debe quedar fuera de la instalación del juego': raise
     out.mkdir(parents=True)
     print('Leyendo índice y construyendo mapa de 55.457 ciphertexts…',flush=True)
-    cat=parse_spk(spk);prefix,details=build_targets(spk,cat);(out/'target-summary.json').write_text(json.dumps({'spkBytes':cat['size'],'targets':len(prefix),'simple':48668,'chunks':6789},indent=2),encoding='utf-8')
+    cat=parse_spk(spk);prefix,details=build_targets(spk,cat);(out/'target-summary.json').write_text(json.dumps({'spkBytes':cat['size'],'targets':len(prefix),'simple':48668,'chunks':6789,'gameArch':arch},indent=2),encoding='utf-8')
+    print('game.exe detectado como',arch,'· objetivos SPK:',len(prefix),flush=True)
     print('Desconecta Internet. Se abrirá game.exe; NO inicies sesión.',flush=True)
     if not a.noninteractive:
       print('Escribe CAPTURAR para continuar:',flush=True)
