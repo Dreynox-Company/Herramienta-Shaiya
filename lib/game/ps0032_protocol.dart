@@ -116,6 +116,12 @@ class PsPacketType {
   static const chatMap=0x1111;
   static const gemAdd=0x0801;
   static const gemRemove=0x0802;
+  static const enchantAdd=0x0805;
+  static const itemCompose=0x0806;
+  static const runeSynthesize=0x080D;
+  static const enchantRate=0x0816;
+  static const itemComposeAbsolute=0x0834;
+  static const itemComposeAbsoluteSelect=0x0835;
   static const gemAddPossibility=0x0809;
   static const gemRemovePossibility=0x080A;
   static const npcBuyItem=0x0702;
@@ -2175,6 +2181,84 @@ class PsGemAddResult {
     );
   }
 }
+class PsEnchantRate {
+  final List<int> lapisiaBag,lapisiaSlot,rates,gold;
+  const PsEnchantRate(this.lapisiaBag,this.lapisiaSlot,this.rates,this.gold);
+  static PsEnchantRate parse(PsPacket p){
+    if(p.type!=PsPacketType.enchantRate||p.body.length<100){
+      throw FormatException('ENCHANT_RATE truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    return PsEnchantRate(
+      List<int>.unmodifiable(b.sublist(0,10)),
+      List<int>.unmodifiable(b.sublist(10,20)),
+      List<int>.unmodifiable(List<int>.generate(10,(i)=>d.getInt32(20+i*4,Endian.little))),
+      List<int>.unmodifiable(List<int>.generate(10,(i)=>d.getUint32(60+i*4,Endian.little))),
+    );
+  }
+}
+
+class PsEnchantResult {
+  final bool success,autoEnchant,safetyScrollLeft;
+  final int lapisiaBag,lapisiaSlot,lapisiaCount,itemBag,itemSlot,gold;
+  final String craftName;
+  const PsEnchantResult({
+    required this.success,required this.lapisiaBag,required this.lapisiaSlot,required this.lapisiaCount,
+    required this.itemBag,required this.itemSlot,required this.gold,required this.autoEnchant,
+    required this.safetyScrollLeft,required this.craftName,
+  });
+  static PsEnchantResult parse(PsPacket p){
+    if(p.type!=PsPacketType.enchantAdd||p.body.length<33){
+      throw FormatException('ENCHANT_ADD truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    final raw=b.sublist(12,32),zero=raw.indexOf(0);
+    final craft=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+    return PsEnchantResult(
+      success:b[0]!=0,lapisiaBag:b[1],lapisiaSlot:b[2],lapisiaCount:b[3],
+      itemBag:b[4],itemSlot:b[5],gold:d.getUint32(6,Endian.little),
+      autoEnchant:b[10]!=0,safetyScrollLeft:b[11]==0,craftName:craft,
+    );
+  }
+}
+
+class PsComposeResult {
+  final bool success,absolute;
+  final int bag,slot;
+  final String craftName;
+  const PsComposeResult(this.success,this.absolute,this.bag,this.slot,this.craftName);
+  static PsComposeResult parse(PsPacket p){
+    if(p.type==PsPacketType.itemCompose){
+      if(p.body.length<24)throw FormatException('ITEM_COMPOSE truncado: ${p.body.length}.');
+      final raw=p.body.sublist(3,23),zero=raw.indexOf(0);
+      return PsComposeResult(
+        p.body[0]==0,false,p.body[1],p.body[2],
+        utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true),
+      );
+    }
+    if(p.type==PsPacketType.itemComposeAbsolute){
+      if(p.body.length<23)throw FormatException('ITEM_COMPOSE_ABSOLUTE truncado: ${p.body.length}.');
+      final raw=p.body.sublist(1,21),zero=raw.indexOf(0);
+      return PsComposeResult(
+        p.body[0]==0,true,0,0,
+        utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true),
+      );
+    }
+    throw FormatException('Tipo de composición inesperado: 0x${p.type.toRadixString(16)}.');
+  }
+}
+
+class PsRuneSynthesizeResult {
+  final bool success;
+  const PsRuneSynthesizeResult(this.success);
+  static PsRuneSynthesizeResult parse(PsPacket p){
+    if(p.type!=PsPacketType.runeSynthesize||p.body.isEmpty){
+      throw FormatException('RUNE_SYNTHESIZE truncado: ${p.body.length}.');
+    }
+    return PsRuneSynthesizeResult(p.body[0]==0);
+  }
+}
+
 class PsLinkingPossibility {
   final bool available;
   final double rate;
@@ -2938,6 +3022,61 @@ class PsWorldSession {
     final response=await responseFuture;
     return PsInventoryMove.parse(response);
   }
+  Future<PsEnchantRate> enchantRates({
+    required int itemBag,required int itemSlot,required List<(int bag,int slot)> lapisias,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de consultar encantamiento.');
+    if(lapisias.length>10)throw RangeError('ENCHANT_RATE admite máximo 10 lapisias.');
+    final padded=<({int bag,int slot})>[
+      for(final x in lapisias)(bag:x.$1,slot:x.$2),
+      while(false)(bag:0,slot:0),
+    ];
+    while(padded.length<10)padded.add((bag:0,slot:0));
+    final response=connection.waitStream((p)=>p.type==PsPacketType.enchantRate);
+    await connection.send(PsPacketType.enchantRate,[
+      itemBag&0xff,itemSlot&0xff,
+      for(final x in padded)x.bag&0xff,
+      for(final x in padded)x.slot&0xff,
+    ]);
+    return PsEnchantRate.parse(await response);
+  }
+
+  Future<PsEnchantResult> enchantItem({
+    required int lapisiaBag,required int lapisiaSlot,required int itemBag,required int itemSlot,
+    bool autoEnchant=false,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de encantar.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.enchantAdd);
+    await connection.send(PsPacketType.enchantAdd,[
+      lapisiaBag&0xff,lapisiaSlot&0xff,itemBag&0xff,itemSlot&0xff,
+      ...List<int>.filled(9,0),autoEnchant?1:0,
+    ]);
+    return PsEnchantResult.parse(await response);
+  }
+
+  Future<PsComposeResult> composeItem({
+    required int runeBag,required int runeSlot,required int itemBag,required int itemSlot,
+    bool absolute=false,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de componer.');
+    final type=absolute?PsPacketType.itemComposeAbsolute:PsPacketType.itemCompose;
+    final response=connection.waitStream((p)=>p.type==type);
+    await connection.send(type,[runeBag&0xff,runeSlot&0xff,itemBag&0xff,itemSlot&0xff]);
+    return PsComposeResult.parse(await response);
+  }
+
+  Future<PsRuneSynthesizeResult> synthesizeRune({
+    required int runeBag,required int runeSlot,required int vialBag,required int vialSlot,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de sintetizar runa.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.runeSynthesize);
+    await connection.send(PsPacketType.runeSynthesize,[
+      runeBag&0xff,runeSlot&0xff,vialBag&0xff,vialSlot&0xff,
+      ..._i32Bytes(0),..._i32Bytes(0),
+    ]);
+    return PsRuneSynthesizeResult.parse(await response);
+  }
+
   Future<PsGemRemoveResult> removeGem({
     required int itemBag,required int itemSlot,required int gemPosition,
     int hammerBag=0,int hammerSlot=0,
