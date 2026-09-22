@@ -17,8 +17,10 @@ import '../data/library.dart';
 import '../data/catalog.dart';
 
 class RenderPart {
-  final MeshData data;final t.Mesh mesh;final t.Float32BufferAttribute position;final t.Texture texture;
-  RenderPart(this.data,this.mesh,this.position,this.texture);
+  final MeshData data;final t.Mesh mesh;
+  final t.Float32BufferAttribute position,normal,uv;
+  final t.Texture texture;
+  RenderPart(this.data,this.mesh,this.position,this.normal,this.uv,this.texture);
   void skin(List<v.Matrix4> world){
     if(data.inverses.isEmpty)return;
     final palette=List.generate(math.min(world.length,data.inverses.length),(i)=>(world[i]*data.inverses[i]).storage);
@@ -31,6 +33,33 @@ class RenderPart {
   }
   void dispose(){mesh.removeFromParent();mesh.geometry?.dispose();mesh.material?.dispose();texture.dispose();}
 }
+
+class AnimatedWorldPart {
+  final RenderPart render;
+  final VaniMeshData animation;
+  final double fps;
+  double time=0;
+  int frame=-1;
+  AnimatedWorldPart(this.render,this.animation,{this.fps=20});
+
+  void tick(double dt){
+    if(animation.frameCount<=1)return;
+    time+=dt;
+    final next=((time*fps).floor()%animation.frameCount);
+    if(next==frame)return;
+    frame=next;
+    final p=animation.positions[next],n=animation.normals[next],u=animation.uv[next];
+    for(var i=0;i<animation.vertices;i++){
+      render.position.setXYZ(i,p[i*3],p[i*3+1],p[i*3+2]);
+      render.normal.setXYZ(i,n[i*3],n[i*3+1],n[i*3+2]);
+      render.uv.setXY(i,u[i*2],u[i*2+1]);
+    }
+    render.position.needsUpdate=true;
+    render.normal.needsUpdate=true;
+    render.uv.needsUpdate=true;
+  }
+}
+
 class Actor {
   final t.Group root=t.Group();final List<RenderPart> parts=[];
   ClipData? clip,idle,normal,walk,run,riderIdle,riderMoving;
@@ -87,6 +116,8 @@ class StudioScene extends ChangeNotifier {
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
+  final List<AnimatedWorldPart> animatedWorldParts=[];
+  final Map<String,VaniData> _vaniCache=<String,VaniData>{};
   WorldData? world;WorldCollisionField? worldCollision;String? worldPath,effectPath,skyPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
@@ -125,9 +156,12 @@ class StudioScene extends ChangeNotifier {
     // the wrong polygons.  2D scene backdrops use their own loading path.
     final texture=await t.TextureLoader(flipY:false).fromBytes(png);if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
     texture.colorSpace=t.SRGBColorSpace;texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
-    final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3);
-    geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',t.Float32BufferAttribute.fromList(data.normals.toList(),3));geometry.setAttributeFromString('uv',t.Float32BufferAttribute.fromList(data.uv.toList(),2));geometry.setIndex(data.indices.toList());
-    final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,texture);
+    final geometry=t.BufferGeometry(),
+      positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),
+      normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),
+      texcoords=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
+    geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',normals);geometry.setAttributeFromString('uv',texcoords);geometry.setIndex(data.indices.toList());
+    final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,normals,texcoords,texture);
   }
   Future<RenderPart> skinned(String mesh,String texture,{int alpha=0}) async {final data=MeshData.skinned(await catalog!.library.read(mesh),mesh);for(final repair in data.repairs){report('$mesh · $repair');}return makePart(data,texture,opaque:alpha==1);}
   Future<ClipData> clip(String path)=>catalog!.library.read(path).then((b)=>ClipData.parse(b,path));
@@ -866,6 +900,7 @@ class StudioScene extends ChangeNotifier {
     final moving=walkX!=0||walkZ!=0;final transition=movementTransitions.update(x:walkX,z:walkZ,running:running,blocked:sceneCombatLocked);if(transition!=null)applyLocomotion(transition);final desired=movementClip(movementTransitions.requested);
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
     for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}
+    for(final p in animatedWorldParts){p.tick(delta);}
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
@@ -950,7 +985,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldCollision=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;unawaited(_stopWorldAudio());updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();animatedWorldParts.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldCollision=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;unawaited(_stopWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -997,6 +1032,7 @@ class StudioScene extends ChangeNotifier {
         stage.scale.z=-1;
         stage.position.setValues(-ox,0,oz);
 
+        animatedWorldParts.clear();
         for(final p in environmentParts){p.dispose();}
         environmentParts..clear()..addAll(parts);
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
@@ -1089,7 +1125,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original · ${worldCollision?.triangles.length??0} triángulos de colisión SMOD.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;animatedWorldParts.clear();_vaniCache.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
