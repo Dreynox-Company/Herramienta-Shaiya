@@ -35,10 +35,13 @@ class PsPacketType {
   static const runMode=0x0210;
   static const useVehicle=0x0216;
   static const useVehicleReady=0x0217;
+  static const setMoney=0x0213;
   static const useVehicle2=0x021C;
   static const vehicleRequest=0x021D;
   static const vehicleResponse=0x021E;
   static const inventorySort=0x021F;
+  static const itemExpiration=0x022E;
+  static const itemExpired=0x022F;
   static const characterEnteredPortal=0x020A;
   static const characterMapTeleport=0x020B;
   static const characterTeleportViaNpc=0x020C;
@@ -58,6 +61,7 @@ class PsPacketType {
   static const worldDay=0x0404;
   static const mapWeather=0x0451;
   static const inventoryMoveItem=0x0204;
+  static const experienceGain=0x0207;
   static const updateStats=0x0208;
   static const learnNewSkill=0x0209;
   static const addItem=0x0205;
@@ -80,11 +84,14 @@ class PsPacketType {
   static const mobSkillMirror=0x051B;
   static const characterAttackMovementSpeed=0x051C;
   static const characterShapeUpdate=0x051D;
+  static const characterLevelUpOther=0x051E;
+  static const characterMaxHpMpSp=0x051F;
   static const useMobTargetSkill=0x0517;
   static const usedSpMp=0x050C;
   static const buffAdd=0x050D;
   static const buffRemove=0x050E;
   static const characterDeath=0x0504;
+  static const characterLevelUpSelf=0x0508;
   static const deadRebirth=0x0551;
   static const useItem2=0x0557;
   static const rebirthNearestTown=0x0553;
@@ -1824,6 +1831,22 @@ class PsCharacterDetails {
     if(span<=0)return 0;
     return ((currentExp-startExp)/span).clamp(0.0,1.0);
   }
+  PsCharacterDetails copyWith({
+    int? strength,int? dexterity,int? reaction,int? intelligence,int? wisdom,int? luck,
+    int? statPoint,int? skillPoint,int? maxHp,int? maxMp,int? maxSp,int? angle,
+    int? startExp,int? endExp,int? currentExp,int? gold,
+    double? x,double? y,double? z,
+    int? kills,int? deaths,int? victories,int? defeats,String? guildName,
+  })=>PsCharacterDetails(
+    strength:strength??this.strength,dexterity:dexterity??this.dexterity,reaction:reaction??this.reaction,
+    intelligence:intelligence??this.intelligence,wisdom:wisdom??this.wisdom,luck:luck??this.luck,
+    statPoint:statPoint??this.statPoint,skillPoint:skillPoint??this.skillPoint,
+    maxHp:maxHp??this.maxHp,maxMp:maxMp??this.maxMp,maxSp:maxSp??this.maxSp,angle:angle??this.angle,
+    startExp:startExp??this.startExp,endExp:endExp??this.endExp,currentExp:currentExp??this.currentExp,gold:gold??this.gold,
+    x:x??this.x,y:y??this.y,z:z??this.z,
+    kills:kills??this.kills,deaths:deaths??this.deaths,victories:victories??this.victories,defeats:defeats??this.defeats,
+    guildName:guildName??this.guildName,
+  );
   static PsCharacterDetails parse(PsPacket p){
     if(p.type!=PsPacketType.characterDetails||p.body.length<74){
       throw FormatException('CHARACTER_DETAILS truncado: ${p.body.length}');
@@ -1918,6 +1941,86 @@ class PsHitpoints {
       d.getInt32(4,Endian.little),
       d.getInt32(8,Endian.little),
     );
+  }
+}
+
+class PsMoneyUpdate {
+  final int gold;
+  const PsMoneyUpdate(this.gold);
+  static PsMoneyUpdate parse(PsPacket p){
+    if(p.type!=PsPacketType.setMoney||p.body.length<4)throw FormatException('SET_MONEY truncado: ${p.body.length}.');
+    return PsMoneyUpdate(ByteData.sublistView(p.body).getUint32(0,Endian.little));
+  }
+}
+
+class PsMaxVitals {
+  final int characterId,maxHp,maxMp,maxSp;
+  const PsMaxVitals(this.characterId,this.maxHp,this.maxMp,this.maxSp);
+  static PsMaxVitals parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMaxHpMpSp||p.body.length<16){
+      throw FormatException('CHARACTER_MAX_HP_MP_SP truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMaxVitals(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),d.getInt32(12,Endian.little),
+    );
+  }
+}
+
+class PsExperienceGain {
+  final int amount,unknown;
+  const PsExperienceGain(this.amount,this.unknown);
+  static PsExperienceGain parse(PsPacket p){
+    if(p.type!=PsPacketType.experienceGain||p.body.length<8){
+      throw FormatException('EXPERIENCE_GAIN truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsExperienceGain(d.getUint32(0,Endian.little),d.getUint32(4,Endian.little));
+  }
+}
+
+class PsLevelUp {
+  final int characterId,level,statPoint,skillPoint,minExp,nextExp;
+  const PsLevelUp(this.characterId,this.level,this.statPoint,this.skillPoint,this.minExp,this.nextExp);
+  static PsLevelUp parse(PsPacket p){
+    if(!<int>{PsPacketType.characterLevelUpSelf,PsPacketType.characterLevelUpOther}.contains(p.type)||p.body.length<18){
+      throw FormatException('CHARACTER_LEVEL_UP truncado: type=0x${p.type.toRadixString(16)} bytes=${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsLevelUp(
+      d.getUint32(0,Endian.little),d.getUint16(4,Endian.little),
+      d.getUint16(6,Endian.little),d.getUint16(8,Endian.little),
+      d.getUint32(10,Endian.little),d.getUint32(14,Endian.little),
+    );
+  }
+}
+
+class PsItemExpiration {
+  final int bag,slot,creationTime,expirationTime,unknown;
+  const PsItemExpiration(this.bag,this.slot,this.creationTime,this.expirationTime,this.unknown);
+  String get key=>'$bag:$slot';
+  static PsItemExpiration parse(PsPacket p){
+    if(p.type!=PsPacketType.itemExpiration||p.body.length<14){
+      throw FormatException('ITEM_EXPIRATION truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsItemExpiration(
+      p.body[0],p.body[1],d.getInt32(2,Endian.little),
+      d.getInt32(6,Endian.little),d.getInt32(10,Endian.little),
+    );
+  }
+}
+
+class PsItemExpired {
+  final int bag,slot,type,typeId,remainingMinutes,expireType;
+  const PsItemExpired(this.bag,this.slot,this.type,this.typeId,this.remainingMinutes,this.expireType);
+  static PsItemExpired parse(PsPacket p){
+    if(p.type!=PsPacketType.itemExpired||p.body.length<7){
+      throw FormatException('ITEM_EXPIRED truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsItemExpired(p.body[0],p.body[1],p.body[2],p.body[3],p.body[4],d.getUint16(5,Endian.little));
   }
 }
 
