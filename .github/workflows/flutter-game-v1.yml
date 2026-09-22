@@ -350,16 +350,22 @@ jobs:
             'world':'09-world-entry.png',
           }
           def flutter_image(stage):
+            # The integration screenshot is captured from Flutter's own
+            # RepaintBoundary/framebuffer and includes the actual GPU scene.
+            # CopyFromScreen can lose ANGLE/Direct3D texture layers on Windows,
+            # so OS captures are retained as diagnostics but are not the
+            # canonical parity input.
+            framebuffer=root/f'{stage}.png'
             os_capture=root/f'os-{stage}.png'
-            source=os_capture if os_capture.exists() else root/f'{stage}.png'
-            return Image.open(source).convert('RGB').resize((1024,742))
+            source=framebuffer if framebuffer.exists() else os_capture
+            return Image.open(source).convert('RGB').resize((1024,742)),source
           def native_image(name):
             p=next(native.rglob(name))
             im=Image.open(p).convert('RGB').resize((1024,768))
             return im.crop((0,26,1024,768)),p
           report={}
           for stage,refname in mapping.items():
-            fa=flutter_image(stage)
+            fa,fp=flutter_image(stage)
             nb,rp=native_image(refname)
             a=np.asarray(fa,dtype=np.float32)
             b=np.asarray(nb,dtype=np.float32)
@@ -376,7 +382,8 @@ jobs:
               'edgeCorrelation':round(edge,5),
               'luminanceCorrelation':round(lum,5),
               'native':str(rp),
-              'flutter':str((root/f'os-{stage}.png') if (root/f'os-{stage}.png').exists() else (root/f'{stage}.png')),
+              'flutter':str(fp),
+              'osCapture':str(root/f'os-{stage}.png') if (root/f'os-{stage}.png').exists() else None,
             }
             diff=ImageChops.difference(fa,nb)
             ImageEnhance.Contrast(diff).enhance(2.0).save(root/f'diff-{stage}.png')
