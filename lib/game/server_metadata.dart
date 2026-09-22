@@ -111,6 +111,12 @@ class SkillRule {
     required this.targetType,required this.applyRange,required this.typeAttack,required this.typeEffect,
   });
   String get key=>'$id:$level';
+  int get castDurationMs=>castTime*250;
+  Duration get castDuration=>Duration(milliseconds:castDurationMs);
+  Duration get cooldownDuration=>Duration(seconds:cooldown);
+  bool get passiveTarget=>targetType==0;
+  bool get worldExpandsTarget=>const <int>{2,4,5,6,8}.contains(targetType);
+  bool get requiresSelectedTarget=>targetType==3||targetType==7;
   String? get iconPath=>image<=0?null:'interface/icon/${image.toString().padLeft(2,'0')}.tga';
   bool professionAllowed(int profession){
     final flags=[fighter,defender,ranger,archer,mage,priest];
