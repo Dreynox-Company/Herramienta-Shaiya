@@ -843,10 +843,10 @@ class WorldData {
     readCategory('Building');
     readCategory('Shape');
     readCategory('Tree');
-    readCategory('Grass',keep:false);
+    readCategory('Grass');
+    readCategory('VAni');
     readCategory('VAni',keep:false);
-    readCategory('VAni',keep:false);
-    readCategory('dungeon',keep:false);
+    readCategory('dungeon');
 
     var skyFile='',primaryCloud='',secondaryCloud='';
     var fog=v.Vector3.zero(),fogStart=0.0,fogEnd=0.0;
