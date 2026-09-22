@@ -26,6 +26,12 @@ class PsPacketType {
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
   static const characterLeftMap=0x0202;
+  static const runMode=0x0210;
+  static const useVehicle=0x0216;
+  static const useVehicleReady=0x0217;
+  static const useVehicle2=0x021C;
+  static const vehicleRequest=0x021D;
+  static const vehicleResponse=0x021E;
   static const characterEnteredPortal=0x020A;
   static const characterMapTeleport=0x020B;
   static const characterTeleportViaNpc=0x020C;
@@ -42,9 +48,12 @@ class PsPacketType {
   static const characterMove=0x0501;
   static const characterCharacterAutoAttack=0x0502;
   static const characterMobAutoAttack=0x0503;
+  static const characterMotion=0x0506;
   static const sendEquipment=0x0507;
   static const useItem=0x050A;
   static const useCharacterTargetSkill=0x0511;
+  static const characterAttackMovementSpeed=0x051C;
+  static const characterShapeUpdate=0x051D;
   static const useMobTargetSkill=0x0517;
   static const usedSpMp=0x050C;
   static const buffAdd=0x050D;
@@ -562,6 +571,68 @@ class PsCharacterLeftMap {
       throw FormatException('CHARACTER_LEFT_MAP truncado: ${p.body.length}.');
     }
     return PsCharacterLeftMap(ByteData.sublistView(p.body).getUint32(0,Endian.little));
+  }
+}
+
+class PsCharacterMotion {
+  final int characterId,motion;
+  const PsCharacterMotion(this.characterId,this.motion);
+  static PsCharacterMotion parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMotion||p.body.length<5){
+      throw FormatException('CHARACTER_MOTION truncado: ${p.body.length}.');
+    }
+    return PsCharacterMotion(ByteData.sublistView(p.body).getUint32(0,Endian.little),p.body[4]);
+  }
+}
+
+class PsCharacterSpeed {
+  final int characterId,attackSpeed,moveSpeed;
+  const PsCharacterSpeed(this.characterId,this.attackSpeed,this.moveSpeed);
+  static PsCharacterSpeed parse(PsPacket p){
+    if(p.type!=PsPacketType.characterAttackMovementSpeed||p.body.length<6){
+      throw FormatException('CHARACTER_ATTACK_MOVEMENT_SPEED truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterSpeed(d.getUint32(0,Endian.little),p.body[4],p.body[5]);
+  }
+}
+
+class PsShapeUpdate {
+  final int characterId,shape,param1,param2;
+  const PsShapeUpdate(this.characterId,this.shape,this.param1,this.param2);
+  bool get mounted=>const <int>{14,15,16,17,24,25,26,27,29,30,32,34,222}.contains(shape);
+  static PsShapeUpdate parse(PsPacket p){
+    if(p.type!=PsPacketType.characterShapeUpdate||p.body.length<13){
+      throw FormatException('CHARACTER_SHAPE_UPDATE truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsShapeUpdate(
+      d.getUint32(0,Endian.little),p.body[4],
+      d.getUint32(5,Endian.little),d.getUint32(9,Endian.little),
+    );
+  }
+}
+
+class PsUseVehicleState {
+  final bool success,mounted;
+  const PsUseVehicleState(this.success,this.mounted);
+  static PsUseVehicleState parse(PsPacket p){
+    if(p.type!=PsPacketType.useVehicle||p.body.length<2){
+      throw FormatException('USE_VEHICLE truncado: ${p.body.length}.');
+    }
+    return PsUseVehicleState(p.body[0]!=0,p.body[1]!=0);
+  }
+}
+
+class PsVehiclePassenger {
+  final int passengerId,vehicleCharacterId;
+  const PsVehiclePassenger(this.passengerId,this.vehicleCharacterId);
+  static PsVehiclePassenger parse(PsPacket p){
+    if(p.type!=PsPacketType.useVehicle2||p.body.length<8){
+      throw FormatException('USE_VEHICLE_2 truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsVehiclePassenger(d.getUint32(0,Endian.little),d.getUint32(4,Endian.little));
   }
 }
 
@@ -2133,6 +2204,26 @@ class PsWorldSession {
     }
     await connection.send(PsPacketType.characterSkillBar,body);
   }
+  Future<void> toggleVehicle() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar montura.');
+    await connection.send(PsPacketType.useVehicle);
+  }
+
+  Future<void> requestVehiclePassenger(int characterId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de invitar a una montura.');
+    await connection.send(PsPacketType.vehicleRequest,_u32Bytes(characterId));
+  }
+
+  Future<void> respondVehiclePassenger({required bool rejected}) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de responder la invitación de montura.');
+    await connection.send(PsPacketType.vehicleResponse,[rejected?1:0]);
+  }
+
+  Future<void> leaveVehiclePassenger() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de bajar de la montura compartida.');
+    await connection.send(PsPacketType.useVehicle2);
+  }
+
   Future<void> enterPortal(int portalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar portales.');
     if(portalId<0||portalId>255)throw RangeError('PortalId fuera de byte: $portalId');
