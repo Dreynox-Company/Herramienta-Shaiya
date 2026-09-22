@@ -24,6 +24,7 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
   static final _actionKeys = <LogicalKeyboardKey>{
     LogicalKeyboardKey.digit1, LogicalKeyboardKey.digit2,
     LogicalKeyboardKey.digit3, LogicalKeyboardKey.digit4, LogicalKeyboardKey.keyR,
+    LogicalKeyboardKey.keyE,
   };
   bool _active = true;
 
