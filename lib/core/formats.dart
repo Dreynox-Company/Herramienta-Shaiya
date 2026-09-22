@@ -680,6 +680,46 @@ class WorldLayer {
   WorldLayer(this.texture, this.tile, this.sound);
 }
 
+class WorldMusicZone {
+  final v.Vector3 lower, upper;
+  final double radius;
+  final int soundId, unknown;
+  const WorldMusicZone(this.lower, this.upper, this.radius, this.soundId, this.unknown);
+
+  bool contains(double x, double y, double z) {
+    final minX=math.min(lower.x,upper.x),maxX=math.max(lower.x,upper.x);
+    final minY=math.min(lower.y,upper.y),maxY=math.max(lower.y,upper.y);
+    final minZ=math.min(lower.z,upper.z),maxZ=math.max(lower.z,upper.z);
+    return x>=minX&&x<=maxX&&y>=minY&&y<=maxY&&z>=minZ&&z<=maxZ;
+  }
+}
+
+class WorldSoundZone {
+  final v.Vector3 lower, upper;
+  final List<int> identifiers;
+  const WorldSoundZone(this.lower, this.upper, this.identifiers);
+
+  bool contains(double x, double y, double z) {
+    final minX=math.min(lower.x,upper.x),maxX=math.max(lower.x,upper.x);
+    final minY=math.min(lower.y,upper.y),maxY=math.max(lower.y,upper.y);
+    final minZ=math.min(lower.z,upper.z),maxZ=math.max(lower.z,upper.z);
+    return x>=minX&&x<=maxX&&y>=minY&&y<=maxY&&z>=minZ&&z<=maxZ;
+  }
+}
+
+class WorldSoundEffect {
+  final int soundId;
+  final v.Vector3 center;
+  final double radius;
+  const WorldSoundEffect(this.soundId, this.center, this.radius);
+
+  bool contains(double x, double y, double z) {
+    if(radius<=0)return false;
+    final dx=x-center.x,dy=y-center.y,dz=z-center.z;
+    return dx*dx+dy*dy+dz*dz<=radius*radius;
+  }
+}
+
 class WorldInstance {
   final String category, asset;
   final v.Vector3 position, forward, up;
@@ -730,6 +770,10 @@ class WorldData {
   final List<WorldLayer> layers;
   final List<WorldInstance> objects;
   final String layout;
+  final List<String> musicNames, soundEffectNames;
+  final List<WorldMusicZone> musicZones;
+  final List<WorldSoundZone> soundZones;
+  final List<WorldSoundEffect> soundEffects;
   final String skyFile,primaryCloudFile,secondaryCloudFile;
   final v.Vector3 fogColor;
   final double fogStart,fogEnd;
@@ -740,6 +784,11 @@ class WorldData {
     this.layers,
     this.objects,
     this.layout,{
+    this.musicNames=const <String>[],
+    this.soundEffectNames=const <String>[],
+    this.musicZones=const <WorldMusicZone>[],
+    this.soundZones=const <WorldSoundZone>[],
+    this.soundEffects=const <WorldSoundEffect>[],
     this.skyFile='',
     this.primaryCloudFile='',
     this.secondaryCloudFile='',
@@ -784,10 +833,11 @@ class WorldData {
         if(keep)objects.add(WorldInstance(category, names[id], p, f, u));
       }
     }
-    void skipNames(){
+    List<String> readNames(){
       final n=r.count(20000);
-      for(var i=0;i<n;i++)r.str(256);
+      return List<String>.generate(n,(_)=>r.str(256),growable:false);
     }
+    void skipNames(){readNames();}
     void skipBox()=>r.skip(24);
 
     readCategory('Building');
@@ -800,6 +850,8 @@ class WorldData {
 
     var skyFile='',primaryCloud='',secondaryCloud='';
     var fog=v.Vector3.zero(),fogStart=0.0,fogEnd=0.0;
+    var musicNames=<String>[],soundEffectNames=<String>[];
+    var musicZones=<WorldMusicZone>[],soundZones=<WorldSoundZone>[],soundEffects=<WorldSoundEffect>[];
 
     // Full WLD tail.  Older lab fixtures intentionally ended after the seven
     // legacy categories, so keep that minimal form readable for unit tests.
@@ -813,17 +865,30 @@ class WorldData {
       // Entity/Object is a real render category used by the native client.
       readCategory('Object');
 
-      skipNames(); // music
-      final musicZones=r.count(1000000);r.skip(musicZones*36);
-      skipNames(); // sound effect assets
+      musicNames=readNames();
+      final musicZoneCount=r.count(1000000);
+      musicZones=List<WorldMusicZone>.generate(musicZoneCount,(_){
+        final lower=r.vec(),upper=r.vec(),radius=r.f32(),id=r.i32(),unknown=r.i32();
+        if(id<0||id>=musicNames.length)r.fail('MusicZone WLD refiere sonido inexistente: $id/${musicNames.length}.');
+        return WorldMusicZone(lower,upper,radius,id,unknown);
+      },growable:false);
 
-      final zones=r.count(1000000);
-      for(var i=0;i<zones;i++){
-        skipBox();
-        final ids=r.count(1000000);r.skip(ids*4);
+      soundEffectNames=readNames();
+      final zoneCount=r.count(1000000),parsedZones=<WorldSoundZone>[];
+      for(var i=0;i<zoneCount;i++){
+        final lower=r.vec(),upper=r.vec(),ids=r.count(1000000),identifiers=<int>[];
+        for(var j=0;j<ids;j++)identifiers.add(r.i32());
+        parsedZones.add(WorldSoundZone(lower,upper,List.unmodifiable(identifiers)));
       }
+      soundZones=List.unmodifiable(parsedZones);
 
-      final soundEffects=r.count(1000000);r.skip(soundEffects*20);
+      final soundEffectCount=r.count(1000000),parsedSoundEffects=<WorldSoundEffect>[];
+      for(var i=0;i<soundEffectCount;i++){
+        final id=r.i32(),center=r.vec(),radius=r.f32();
+        if(id<0||id>=soundEffectNames.length)r.fail('SoundEffect WLD refiere sonido inexistente: $id/${soundEffectNames.length}.');
+        parsedSoundEffects.add(WorldSoundEffect(id,center,radius));
+      }
+      soundEffects=List.unmodifiable(parsedSoundEffects);
       final restricted=r.count(1000000);r.skip(restricted*28);
       final portals=r.count(1000000);r.skip(portals*556);
       final spawns=r.count(1000000);r.skip(spawns*40);
@@ -855,6 +920,11 @@ class WorldData {
 
     return WorldData(
       size, heights, types, layers, objects, layout,
+      musicNames:List.unmodifiable(musicNames),
+      soundEffectNames:List.unmodifiable(soundEffectNames),
+      musicZones:List.unmodifiable(musicZones),
+      soundZones:List.unmodifiable(soundZones),
+      soundEffects:List.unmodifiable(soundEffects),
       skyFile:skyFile,
       primaryCloudFile:primaryCloud,
       secondaryCloudFile:secondaryCloud,
