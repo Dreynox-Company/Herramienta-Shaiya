@@ -1023,16 +1023,16 @@ class WorldHud extends StatelessWidget {
   }
 
   Widget _blacksmithTabs()=>Row(children:[
-    Expanded(child:ShaiyaButton(
-      label:locale=='spn'?'Enlazar':'Link',
-      onPressed:blacksmithMode==0?null:()=>onBlacksmithMode(0),
-      compact:true,
+    Expanded(child:shaiyaRedButton(
+      locale=='spn'?'Enlazar':'Link',
+      blacksmithMode==0?null:()=>onBlacksmithMode(0),
+      width:180,height:28,fontSize:9.5,
     )),
     const SizedBox(width:6),
-    Expanded(child:ShaiyaButton(
-      label:locale=='spn'?'Extraer':'Extract',
-      onPressed:blacksmithMode==1?null:()=>onBlacksmithMode(1),
-      compact:true,
+    Expanded(child:shaiyaRedButton(
+      locale=='spn'?'Extraer':'Extract',
+      blacksmithMode==1?null:()=>onBlacksmithMode(1),
+      width:180,height:28,fontSize:9.5,
     )),
   ]);
 
@@ -1090,9 +1090,10 @@ class WorldHud extends StatelessWidget {
         const Spacer(),
         SizedBox(
           width:92,height:29,
-          child:ShaiyaButton(
-            label:blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Enlazar':'Link'),
-            onPressed:canLink?onLinkGem:null,compact:true,
+          child:shaiyaRedButton(
+            blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Enlazar':'Link'),
+            canLink?onLinkGem:null,
+            width:92,height:29,fontSize:9,
           ),
         ),
       ]),
@@ -1177,9 +1178,10 @@ class WorldHud extends StatelessWidget {
         const Spacer(),
         SizedBox(
           width:92,height:29,
-          child:ShaiyaButton(
-            label:blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Extraer':'Extract'),
-            onPressed:canExtract?onExtractGem:null,compact:true,
+          child:shaiyaRedButton(
+            blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Extraer':'Extract'),
+            canExtract?onExtractGem:null,
+            width:92,height:29,fontSize:9,
           ),
         ),
       ]),
