@@ -126,7 +126,7 @@ Uint8List _u32Bytes(int value){
 }
 Uint8List _fixedStringBytes(String value,int length){
   final out=Uint8List(length),raw=utf8.encode(value);
-  final n=math.min(length,raw.length);
+  final n=min(length,raw.length);
   out.setRange(0,n,raw);
   return out;
 }
