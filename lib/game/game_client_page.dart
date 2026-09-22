@@ -68,6 +68,10 @@ class _GameClientPageState extends State<GameClientPage> {
   bool rewardSelection=false;
   int rewardNpcId=0;
   bool inventoryOpen=false;
+  bool shopOpen=false;
+  NpcShopRule? activeShop;
+  int? activeShopNpcGlobalId;
+  int? liveGold;
   String faction='light';
   String progress='Inicializando cliente Flutter…';
   int classIndex=0;
@@ -493,6 +497,7 @@ class _GameClientPageState extends State<GameClientPage> {
       try{
         final selected=await session.selectCharacter(current.id);
         liveDetails=selected.details;
+        liveGold=selected.details.gold;
         final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
         final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
         final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
@@ -856,12 +861,19 @@ class _GameClientPageState extends State<GameClientPage> {
 
     if(selectedQuest!=null){
       questId=selectedQuest;
-      rewardSelection=false;rewardNpcId=0;
+      rewardSelection=false;rewardNpcId=0;shopOpen=false;activeShop=null;activeShopNpcGlobalId=null;
       questOpen=true;
       messages.insert(0,'[NPC] '+npcName+' · misión '+selectedQuest.toString()+'.');
     }else{
-      final welcome=localized?.welcome.trim()??'';
-      messages.insert(0,'['+npcName+'] '+(welcome.isEmpty?(uiLocale=='spn'?'No tiene nada que decir ahora.':'Nothing to say right now.'):welcome));
+      final shop=metadata?.shop(logical.type,logical.typeId);
+      if(shop!=null&&shop.products.isNotEmpty){
+        activeShop=shop;activeShopNpcGlobalId=globalId;shopOpen=true;
+        inventoryOpen=false;
+        messages.insert(0,'[Tienda] '+npcName+' · '+shop.products.length.toString()+' productos.');
+      }else{
+        final welcome=localized?.welcome.trim()??'';
+        messages.insert(0,'['+npcName+'] '+(welcome.isEmpty?(uiLocale=='spn'?'No tiene nada que decir ahora.':'Nothing to say right now.'):welcome));
+      }
     }
     if(mounted)setState((){});
   }
@@ -893,6 +905,42 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Misión] QUEST_END_SELECT: '+e.toString());if(mounted)setState((){});}
   }
 
+  Future<void> _buyShopProduct(int index,{int count=1}) async {
+    final shop=activeShop,npc=activeShopNpcGlobalId,session=liveWorld;
+    if(shop==null||npc==null||session==null)return;
+    final product=shop.products.where((p)=>p.index==index).firstOrNull;
+    if(product==null)return;
+    try{
+      final result=await session.buyNpcItem(npc,index,count);
+      liveGold=result.gold;
+      final name=catalog?.itemName(product.type,product.id,uiLocale)??('${product.type}:${product.id}');
+      if(result.success){
+        messages.insert(0,'[Tienda] Comprado '+name+' x'+count.toString()+'.');
+      }else{
+        messages.insert(0,'[Tienda] Compra rechazada ('+result.result.toString()+') · '+name+'.');
+      }
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Tienda] '+e.toString());if(mounted)setState((){});}
+  }
+
+  Future<void> _sellInventoryItem(PsInventoryItem item,{int count=1}) async {
+    final session=liveWorld;
+    if(session==null||!shopOpen)return;
+    if(item.bag==0){messages.insert(0,'[Tienda] Debes desequipar el objeto antes de venderlo.');if(mounted)setState((){});return;}
+    final qty=count.clamp(1,item.count);
+    try{
+      final result=await session.sellNpcItem(item.bag,item.slot,qty);
+      liveGold=result.gold;
+      final name=catalog?.itemName(item.type,item.typeId,uiLocale)??item.key;
+      if(result.success){
+        _removeInventory(PsInventoryRemoval(result.bag,result.slot,result.type,result.typeId,result.count));
+        messages.insert(0,'[Tienda] Vendido '+name+' x'+qty.toString()+'.');
+      }else{
+        messages.insert(0,'[Tienda] Venta rechazada · '+name+'.');
+      }
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Tienda] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _acceptCurrentQuest() async {
     final text=catalog?.questText(uiLocale)?.quest(questId);
     final session=liveWorld;
@@ -1215,6 +1263,12 @@ class _GameClientPageState extends State<GameClientPage> {
             skillBar:liveSkillBar,
             inventory:liveInventory,
             inventoryOpen:inventoryOpen,
+            gold:liveGold??liveDetails?.gold??0,
+            shop:activeShop,
+            shopOpen:shopOpen,
+            onCloseShop:()=>setState(()=>shopOpen=false),
+            onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
+            onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
             onToggleInventory:()=>setState(()=>inventoryOpen=!inventoryOpen),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
