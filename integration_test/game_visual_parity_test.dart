@@ -123,6 +123,16 @@ void main(){
         'worldSky':state.scene.world?.skyFile??'',
         'worldPrimaryCloud':state.scene.world?.primaryCloudFile??'',
         'worldSecondaryCloud':state.scene.world?.secondaryCloudFile??'',
+        'skyLayerLoaded':state.scene.sky!=null,
+        'primaryCloudLayerLoaded':state.scene.primaryCloud!=null,
+        'secondaryCloudLayerLoaded':state.scene.secondaryCloud!=null,
+        'skyLayerPath':state.scene.skyPath,
+        'primaryCloudLayerPath':state.scene.primaryCloudPath,
+        'secondaryCloudLayerPath':state.scene.secondaryCloudPath,
+        'waterLayout':state.scene.world?.layout??'',
+        'waterTablePath':state.scene.waterPath,
+        'waterFrameCount':state.scene.waterAnimation?.textures.length??0,
+        'waterResolvedTextures':state.scene.waterTexturePaths,
         'mapTextureCandidates':state.catalog==null
           ?<String>[]
           :state.catalog!.library.files.keys.where((String path){

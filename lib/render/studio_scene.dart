@@ -132,22 +132,25 @@ class StudioScene extends ChangeNotifier {
   final Map<int,double> networkPlayerGroundY={},networkPlayerRiderHeight={};
   Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
-  RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
+  RenderPart? weapon,secondWeapon,sky,primaryCloud,secondaryCloud;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];final List<VaniActor> animatedWorldActors=[];final List<ManiActor> maniWorldActors=[];
-  WorldData? world;DgData? dungeon;String? worldPath,effectPath,skyPath;
+  WorldData? world;DgData? dungeon;WtrData? waterAnimation;
+  String? worldPath,effectPath,skyPath,primaryCloudPath,secondaryCloudPath,waterPath;
+  final List<String> waterTexturePaths=[];
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
   final WorldCollisionIndex worldCollision=WorldCollisionIndex();
   final Map<String,({double height,double forward})> _seats={};
   String lastImpact='';t.Sprite? hitSprite;t.Texture? effectTexture;double hitLife=0;
   final Combat combat=Combat();
-  AudioPlayer? _audio,_musicAudio,_ambientAudio;
+  AudioPlayer? _audio,_musicAudio,_ambientAudio,_footstepAudio;
   AudioPlayer get audio=>_audio??=AudioPlayer();
   AudioPlayer get musicAudio=>_musicAudio??=AudioPlayer();
   AudioPlayer get ambientAudio=>_ambientAudio??=AudioPlayer();
+  AudioPlayer get footstepAudio=>_footstepAudio??=AudioPlayer();
   final Map<String,String> _materializedAudio=<String,String>{};
   String? _worldMusicPath,_worldAmbientPath;
   bool _worldAudioSyncing=false;
@@ -155,7 +158,7 @@ class StudioScene extends ChangeNotifier {
   int _appearanceRevision=0,_creatureRevision=0,_mountRevision=0,_wingRevision=0,_worldRevision=0,_weaponRevision=0,_clipRevision=0,_effectRevision=0,_skyRevision=0;
   double yaw=.25,pitch=.18,distance=5.2,targetY=1.05,panX=0,panZ=0;
   double riderHeight=1.0,riderForward=0,wingHeight=1.3,wingDepth=.25,wingSize=1;
-  double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0,_worldAudioAccumulator=0;
+  double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0,_worldAudioAccumulator=0,_footstepAccumulator=0;
   String status='Selecciona la carpeta DATA.';
   List<String> get animations=>appearance?.archetype.animations??[];
   Future<void> setup(t.ThreeJS three) async {
@@ -201,6 +204,44 @@ class StudioScene extends ChangeNotifier {
     final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),uv=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
     geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',normals);geometry.setAttributeFromString('uv',uv);geometry.setIndex(data.indices.toList());
     final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,normals,uv,texture);
+  }
+  Future<RenderPart> _makeSkyLayer(
+    MeshData data,
+    String texturePath,{
+    required double radius,
+    required double opacity,
+    required int renderOrder,
+  }) async {
+    final bytes=await catalog!.library.read(texturePath);
+    final png=await compute(_decodeTexture,{'bytes':bytes,'path':texturePath,'opaque':opacity>=.999});
+    final texture=await t.TextureLoader(flipY:false).fromBytes(png);
+    if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
+    texture.colorSpace=t.SRGBColorSpace;
+    texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
+    final geometry=t.BufferGeometry(),
+      positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),
+      normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),
+      uv=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
+    geometry.setAttributeFromString('position',positions);
+    geometry.setAttributeFromString('normal',normals);
+    geometry.setAttributeFromString('uv',uv);
+    geometry.setIndex(data.indices.toList());
+    final material=t.MeshBasicMaterial.fromMap({
+      'map':texture,'color':0xffffff,'side':t.DoubleSide,
+      'transparent':opacity<.999,'opacity':opacity,
+      'alphaTest':opacity<.999 ? .02 : 0.0,
+      'depthWrite':false,'depthTest':false,'toneMapped':false,
+    });
+    final mesh=t.Mesh(geometry,material)..frustumCulled=false;
+    var sourceRadius=0.0;
+    for(final coordinate in data.positions){sourceRadius=math.max(sourceRadius,coordinate.abs());}
+    if(sourceRadius<1e-6){
+      texture.dispose();geometry.dispose();material.dispose();
+      throw const FormatException('Cúpula de cielo vacía.');
+    }
+    mesh.scale.setValues(radius/sourceRadius,radius/sourceRadius,-radius/sourceRadius);
+    mesh.renderOrder=renderOrder;
+    return RenderPart(data,mesh,positions,normals,uv,texture);
   }
   Future<RenderPart> skinned(String mesh,String texture,{int alpha=0}) async {final data=MeshData.skinned(await catalog!.library.read(mesh),mesh);for(final repair in data.repairs){report('$mesh · $repair');}return makePart(data,texture,opaque:alpha==1);}
   Future<ClipData> clip(String path)=>catalog!.library.read(path).then((b)=>ClipData.parse(b,path));
@@ -875,6 +916,20 @@ class StudioScene extends ChangeNotifier {
       await player.play(DeviceFileSource(await _materializeAudio(next)));
     }catch(e){report((music?'Música':'Ambiente')+': '+e.toString());}
   }
+  Future<void> _playTerrainFootstep() async {
+    if(!sound||catalog==null||world==null||character==null||mount!=null)return;
+    final a=character!,worldX=originX+a.root.position.x,worldZ=originZ-a.root.position.z;
+    final layer=world!.layerAt(worldX,worldZ),name=layer?.sound.trim()??'';
+    if(name.isEmpty)return;
+    final path=_resolveWorldAudioAsset(name,music:false);
+    if(path==null)return;
+    try{
+      await footstepAudio.stop();
+      await footstepAudio.setReleaseMode(ReleaseMode.stop);
+      await footstepAudio.play(DeviceFileSource(await _materializeAudio(path)));
+    }catch(e){report('Paso de terreno: '+e.toString());}
+  }
+
   Future<void> _syncWorldAudio() async {
     if(_worldAudioSyncing||catalog==null)return;
     _worldAudioSyncing=true;
@@ -971,11 +1026,18 @@ class StudioScene extends ChangeNotifier {
     }
     updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();
     _worldAudioAccumulator+=delta;if(_worldAudioAccumulator>.5){_worldAudioAccumulator=0;unawaited(_syncWorldAudio());}
+    if(moving&&!sceneCombatLocked&&mount==null){
+      _footstepAccumulator+=delta;
+      final cadence=running ? .34 : .48;
+      if(_footstepAccumulator>=cadence){_footstepAccumulator=0;unawaited(_playTerrainFootstep());}
+    }else{
+      _footstepAccumulator=0;
+    }
     if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
   }
   void orbit(double dx,double dy){yaw-=dx*.006;pitch=(pitch+dy*.006).clamp(-1.2,1.2);updateCamera();}
   void zoom(double amount){distance=(distance*amount).clamp(.4,250);updateCamera();}
-  void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));if(sky!=null)sky!.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}
+  void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));for(final layer in [sky,secondaryCloud,primaryCloud]){layer?.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}}
   Future<void> setBackdrop(String? path) async {
     backdropTexture?.dispose();
     backdropTexture=null;
@@ -997,26 +1059,66 @@ class StudioScene extends ChangeNotifier {
     view!.scene.background=texture;
   }
 
-  Future<void> setSky(String? path) async {
+  Future<void> setSky(
+    String? path,{
+    String? primaryCloudPath,
+    String? secondaryCloudPath,
+  }) async {
     final revision=++_skyRevision;
     if(path==null){
-      sky?.dispose();sky=null;skyPath=null;
+      sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();
+      sky=primaryCloud=secondaryCloud=null;
+      skyPath=this.primaryCloudPath=this.secondaryCloudPath=null;
       if(view!=null)view!.scene.background=t.Color.fromHex32(0x11151e);
       notifyListeners();return;
     }
-    final lib=catalog!.library,model=catalog!.library.resolve('sky.3do',['sky']);if(model==null)throw const FormatException('No se encuentra la cúpula original Sky/sky.3DO.');
+    final lib=catalog!.library,model=lib.resolve('sky.3do',['sky']);
+    if(model==null)throw const FormatException('No se encuentra la cúpula original Sky/sky.3DO.');
     final skyBytes=await lib.read(path);
     final background=await compute(_averageTextureColor,{'bytes':skyBytes,'path':path});
     if(view!=null)view!.scene.background=t.Color.fromHex32(background);
-    final binary=Bin(await lib.read(model),model);binary.str();final data=MeshData.rigid(binary);binary.end();final part=await makePart(data,path,opaque:true);
-    if(disposed||revision!=_skyRevision){part.dispose();return;}
-    var radius=0.0;for(final coordinate in data.positions){radius=math.max(radius,coordinate.abs());}if(radius<1e-6){part.dispose();throw const FormatException('Cúpula de cielo vacía.');}
-    part.mesh.scale.setValues(850/radius,850/radius,-850/radius);part.mesh.renderOrder=-1000;part.mesh.material?.depthWrite=false;part.mesh.material?.depthTest=false;
-    sky?.dispose();sky=part;skyPath=path;view!.scene.add(part.mesh);updateCamera();say('Cielo original: ${baseName(path)}');
+    final binary=Bin(await lib.read(model),model);
+    binary.str();
+    final data=MeshData.rigid(binary);
+    binary.end();
+
+    final stagedSky=await _makeSkyLayer(data,path,radius:850,opacity:1,renderOrder:-1000);
+    RenderPart? stagedPrimary,stagedSecondary;
+    try{
+      if(secondaryCloudPath!=null){
+        stagedSecondary=await _makeSkyLayer(
+          data,secondaryCloudPath,radius:844,opacity:.58,renderOrder:-999,
+        );
+      }
+      if(primaryCloudPath!=null){
+        stagedPrimary=await _makeSkyLayer(
+          data,primaryCloudPath,radius:840,opacity:.82,renderOrder:-998,
+        );
+      }
+    }catch(_){
+      stagedSky.dispose();stagedPrimary?.dispose();stagedSecondary?.dispose();
+      rethrow;
+    }
+    if(disposed||revision!=_skyRevision){
+      stagedSky.dispose();stagedPrimary?.dispose();stagedSecondary?.dispose();return;
+    }
+    sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();
+    sky=stagedSky;primaryCloud=stagedPrimary;secondaryCloud=stagedSecondary;
+    skyPath=path;
+    this.primaryCloudPath=primaryCloudPath;
+    this.secondaryCloudPath=secondaryCloudPath;
+    view!.scene.add(stagedSky.mesh);
+    if(stagedSecondary!=null)view!.scene.add(stagedSecondary.mesh);
+    if(stagedPrimary!=null)view!.scene.add(stagedPrimary.mesh);
+    updateCamera();
+    say('Cielo original: ${baseName(path)}'+
+      (primaryCloudPath==null?'':' · nube 1 ${baseName(primaryCloudPath)}')+
+      (secondaryCloudPath==null?'':' · nube 2 ${baseName(secondaryCloudPath)}'));
   }
+
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();waterAnimation=null;waterPath=null;waterTexturePaths.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -1073,6 +1175,7 @@ class StudioScene extends ChangeNotifier {
         for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();
         for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
+        waterAnimation=null;waterPath=null;waterTexturePaths.clear();
         worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);_applyWorldFog(w);
         character?.root.position.setValues(0,groundY,0);
         enemy?.root.position.setValues(1.8,groundY,0);
@@ -1088,11 +1191,52 @@ class StudioScene extends ChangeNotifier {
     }
 
     if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
+    waterAnimation=null;waterPath=null;waterTexturePaths.clear();
+    if(w.layout.toLowerCase().endsWith('.wtr')){
+      final candidate=lib.resolve(w.layout,['entity/water','world/water'],uniqueFallback:true);
+      if(candidate!=null){
+        try{
+          final table=WtrData.parse(await lib.read(candidate),candidate);
+          waterAnimation=table;waterPath=candidate;
+          for(final name in table.textures){
+            final lower=name.toLowerCase();
+            final dds=lower.endsWith('.tga')||lower.endsWith('.jpg')||lower.endsWith('.bmp')
+              ?name.substring(0,name.length-4)+'.dds'
+              :name;
+            final texture=lib.resolve(
+              dds,['entity/water','world/water'],uniqueFallback:true,
+            )??lib.resolve(name,['entity/water','world/water'],uniqueFallback:true);
+            if(texture!=null)waterTexturePaths.add(texture);
+          }
+        }catch(e){report('WTR ${w.layout}: $e');}
+      }
+    }
     final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[],animated=<VaniActor>[],maniAnimated=<ManiActor>[],collision=WorldCollisionIndex();
     try{
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
-      for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
+      for(final entry in grouped.entries){
+        if(w.layers.isEmpty)break;
+        final layer=w.layers[entry.key],tex=lib.resolve(
+          w.layers[entry.key].texture,
+          ['terrain','terrain/texture','terrain/dds'],
+          uniqueFallback:true,
+        );
+        if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}
+        final n=entry.value.length~/3,no=Float32List(n*3);
+        for(var i=0;i<n;i++){
+          final localX=entry.value[i*3],localZ=entry.value[i*3+2];
+          final normal=w.normalAt(
+            ox+localX,oz-localZ,scale:.02,offset:-200,step:1,
+          );
+          no[i*3]=normal.x;no[i*3+1]=normal.y;no[i*3+2]=normal.z;
+        }
+        final data=MeshData(
+          Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),
+          Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path,
+        );
+        final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);
+      }
       if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');
       var loaded=0;
       final loadedByCategory=<String,int>{};
@@ -1277,18 +1421,23 @@ class StudioScene extends ChangeNotifier {
       maniWorldActors..clear()..addAll(maniAnimated);
       environment.removeFromParent();environment=stage;view!.scene.add(stage);
       worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
-      if(sky==null&&catalog!.skies.isNotEmpty){
+      if(catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
           ??lib.resolve('sky.bmp',['sky'])
           ??catalog!.skies.first;
-        try{await setSky(choice);}catch(e){report('Cielo: $e');}
+        final cloud1=w.primaryCloudFile.isEmpty?null:lib.resolve(w.primaryCloudFile,['sky'],uniqueFallback:true);
+        final cloud2=w.secondaryCloudFile.isEmpty?null:lib.resolve(w.secondaryCloudFile,['sky'],uniqueFallback:true);
+        if(skyPath!=choice||primaryCloudPath!=cloud1||secondaryCloudPath!=cloud2){
+          try{await setSky(choice,primaryCloudPath:cloud1,secondaryCloudPath:cloud2);}
+          catch(e){report('Cielo/nubes: $e');}
+        }
       }
       final mix=loadedByCategory.entries.map((e)=>'${e.key}=${e.value}').join(' · ');
-      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · ${worldCollision.triangleCount} triángulos de colisión nativos.');
+      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · WTR ${waterTexturePaths.length}/${waterAnimation?.textures.length??0} · ${worldCollision.triangleCount} triángulos de colisión nativos.');
     }catch(_){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}for(final a in maniAnimated){a.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);

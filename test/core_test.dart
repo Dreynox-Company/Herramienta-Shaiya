@@ -160,6 +160,20 @@ Uint8List maniFixture(){
   return bytes.takeBytes();
 }
 
+Uint8List wtrFixture(){
+  final bytes=BytesBuilder();
+  void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void str256(String value){
+    final out=Uint8List(256),raw=Uint8List.fromList(value.codeUnits);
+    out.setRange(0,raw.length.clamp(0,255),raw);bytes.add(out);
+  }
+  f32(64);u32(9);i32(-2);u32(3);
+  str256('water01.tga');str256('water02.tga');str256('water03.tga');
+  return bytes.takeBytes();
+}
+
 Uint8List worldAudioFixture(){
   final bytes=BytesBuilder();
   void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
@@ -395,6 +409,63 @@ void main() {
 
 
 
+  group('WLD terrain normals',(){
+    test('flat height field points straight up',(){
+      final w=WorldData(
+        4,
+        Uint16List.fromList(List<int>.filled(9,100)),
+        Uint8List(9),
+        const <WorldLayer>[],
+        const <WorldInstance>[],
+        '',
+      );
+      final n=w.normalAt(2,2,scale:.01,offset:0);
+      expect(n.x,closeTo(0,1e-6));
+      expect(n.y,closeTo(1,1e-6));
+      expect(n.z,closeTo(0,1e-6));
+    });
+    test('x slope produces normalized native-space surface normal',(){
+      final w=WorldData(
+        4,
+        Uint16List.fromList(<int>[
+          0,100,200,
+          0,100,200,
+          0,100,200,
+        ]),
+        Uint8List(9),
+        const <WorldLayer>[],
+        const <WorldInstance>[],
+        '',
+      );
+      final n=w.normalAt(2,2,scale:.01,offset:0,step:1);
+      expect(n.length,closeTo(1,1e-6));
+      expect(n.x,lessThan(0));
+      expect(n.y,greaterThan(0));
+      expect(n.z,closeTo(0,1e-6));
+    });
+    test('terrain layer lookup follows native half-resolution type map',(){
+      final w=WorldData(
+        4,
+        Uint16List.fromList(List<int>.filled(9,100)),
+        Uint8List.fromList(<int>[
+          0,1,1,
+          0,1,0,
+          0,0,0,
+        ]),
+        <WorldLayer>[
+          WorldLayer('grass.tga',4,'step_grass.wav'),
+          WorldLayer('stone.tga',4,'step_stone.wav'),
+        ],
+        const <WorldInstance>[],
+        '',
+      );
+      expect(w.layerIndexAt(2,0),1);
+      expect(w.layerAt(2,0)!.sound,'step_stone.wav');
+      expect(w.layerAt(0,0)!.sound,'step_grass.wav');
+      expect(w.layerIndexAt(999,999),0);
+    });
+  });
+
   group('VAni',(){
     test('decodifica frames, UV y triángulos de animación de vértices',(){
       final vani=VaniData.parse(vaniFixture(),'grass.vani');
@@ -426,6 +497,20 @@ void main() {
       final bytes=maniFixture();
       ByteData.sublistView(bytes).setInt32(0,0x20,Endian.little);
       expect(()=>ManiData.parse(bytes,'bad.mani'),throwsFormatException);
+    });
+  });
+
+  group('WTR',(){
+    test('decodifica tabla exacta de animación de agua',(){
+      final wtr=WtrData.parse(wtrFixture(),'world.wtr');
+      expect(wtr.tileSize,closeTo(64,1e-6));
+      expect(wtr.unknown2,9);
+      expect(wtr.unknown3,-2);
+      expect(wtr.textures,['water01.tga','water02.tga','water03.tga']);
+    });
+    test('rechaza WTR truncado',(){
+      final bytes=wtrFixture().sublist(0,20);
+      expect(()=>WtrData.parse(Uint8List.fromList(bytes),'bad.wtr'),throwsFormatException);
     });
   });
 

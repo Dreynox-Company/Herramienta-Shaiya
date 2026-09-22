@@ -687,6 +687,22 @@ class WorldLayer {
   WorldLayer(this.texture, this.tile, this.sound);
 }
 
+class WtrData {
+  final double tileSize;
+  final int unknown2,unknown3;
+  final List<String> textures;
+  const WtrData(this.tileSize,this.unknown2,this.unknown3,this.textures);
+
+  static WtrData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final tileSize=r.f32(),unknown2=r.u32(),unknown3=r.i32();
+    final count=r.count(256);
+    final textures=List<String>.generate(count,(_)=>r.str(256),growable:false);
+    r.end();
+    return WtrData(tileSize,unknown2,unknown3,List.unmodifiable(textures));
+  }
+}
+
 class WorldBounds {
   final v.Vector3 lower,upper;
   const WorldBounds(this.lower,this.upper);
@@ -973,6 +989,20 @@ class WorldData {
     );
   }
 
+  int layerIndexAt(double x,double z){
+    if(size==0||types.isEmpty||layers.isEmpty)return 0;
+    final width=size~/2+1;
+    final ix=(x/2).floor().clamp(0,width-1).toInt();
+    final iz=(z/2).floor().clamp(0,width-1).toInt();
+    final raw=types[iz*width+ix];
+    return raw<layers.length?raw:0;
+  }
+
+  WorldLayer? layerAt(double x,double z){
+    if(layers.isEmpty)return null;
+    return layers[layerIndexAt(x,z)];
+  }
+
   double heightAt(
     double x,
     double z, {
@@ -990,6 +1020,23 @@ class WorldData {
     double h(int i, int j) => heights[j * width + i] * scale + offset;
     return (h(a, b) * (1 - tx) + h(a + 1, b) * tx) * (1 - tz) +
         (h(a, b + 1) * (1 - tx) + h(a + 1, b + 1) * tx) * tz;
+  }
+
+  v.Vector3 normalAt(
+    double x,
+    double z, {
+    double scale=.02,
+    double offset=-200,
+    double step=1,
+  }){
+    if(size==0||step<=0)return v.Vector3(0,1,0);
+    final hL=heightAt(x-step,z,scale:scale,offset:offset);
+    final hR=heightAt(x+step,z,scale:scale,offset:offset);
+    final hD=heightAt(x,z-step,scale:scale,offset:offset);
+    final hU=heightAt(x,z+step,scale:scale,offset:offset);
+    final out=v.Vector3(-(hR-hL)/(2*step),1,(hU-hD)/(2*step));
+    if(out.length2<1e-12)return v.Vector3(0,1,0);
+    return out..normalize();
   }
 }
 
