@@ -78,16 +78,6 @@ int weaponFamilyForItemType(int type){
   };
 }
 
-Slot? appearanceSlotForEquipmentSlot(int slot)=>switch(slot){
-  0=>Slot.helmet,
-  1=>Slot.upper,
-  2=>Slot.lower,
-  3=>Slot.hand,
-  4=>Slot.foot,
-  15=>Slot.upper,
-  _=>null,
-};
-
 List<int> equipmentSlotsForItemType(int type){
   if((type>=1&&type<=15)||(type>=45&&type<=65))return const [5];
   if(const {16,31,66,72,81,87}.contains(type))return const [0];
