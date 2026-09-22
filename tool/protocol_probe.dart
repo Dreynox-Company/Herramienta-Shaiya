@@ -46,7 +46,23 @@ Future<void> main() async {
     final quickbar=barPacket==null?null:PsSkillBar.parse(barPacket);
     final inventoryPackets=selected.packets.where((p)=>p.type==PsPacketType.characterItems).toList();
     final inventory=inventoryPackets.expand(parseInventoryItems).toList();
+
+    final blessPacket=selected.packets.where((p)=>p.type==PsPacketType.blessInit).lastOrNull;
+    final bless=blessPacket==null?null:PsBlessState.parse(blessPacket);
+    final bankPacket=selected.packets.where((p)=>p.type==PsPacketType.bankItemList).lastOrNull;
+    final bankItems=bankPacket==null?null:parseBankItems(bankPacket);
+    final savedPacket=selected.packets.where((p)=>p.type==PsPacketType.teleportSavePositionList).lastOrNull;
+    final savedPositions=savedPacket==null?null:parseTeleportSavedPositions(savedPacket);
+    final accountPacket=selected.packets.where((p)=>p.type==PsPacketType.accountPoints).lastOrNull;
+    final account=accountPacket==null?null:PsAccountPoints.parse(accountPacket);
+
     stdout.writeln('Inventory packets='+inventoryPackets.length.toString()+' items='+inventory.length.toString());
+    stdout.writeln(
+      'Passive selected: bless='+(bless?.amount.toString()??'missing')+
+      ' bank='+(bankItems?.length.toString()??'missing')+
+      ' saved='+(savedPositions?.length.toString()??'missing')+
+      ' points='+(account?.points.toString()??'missing')
+    );
     stdout.writeln(
       'Vitals hp=${currentHp?.hp}/${selected.details.maxHp} '
       'mp=${currentHp?.mp}/${selected.details.maxMp} '
@@ -60,6 +76,18 @@ Future<void> main() async {
     final all=<PsPacket>[...selected.packets,...entered];
     final snapshot=PsWorldSnapshot.fromPackets(all);
     int count(int type)=>all.where((p)=>p.type==type).length;
+
+    final obeliskPacket=entered.where((p)=>p.type==PsPacketType.obeliskList).lastOrNull;
+    final obelisks=obeliskPacket==null?null:parseObeliskList(obeliskPacket);
+    final noticePacket=entered.where((p)=><int>{
+      PsPacketType.noticeAdmins,PsPacketType.noticeFaction,PsPacketType.noticePlayer,
+      PsPacketType.noticeMap,PsPacketType.noticeWorld,
+    }.contains(p.type)).lastOrNull;
+    final notice=noticePacket==null?null:PsNotice.parse(noticePacket);
+    stdout.writeln(
+      'Passive entered: obelisks='+(obelisks?.length.toString()??'missing')+
+      ' notice='+(notice?.message??'missing')
+    );
 
     if(snapshot.self==null)throw StateError('No CHARACTER_ENTERED_MAP snapshot.');
     final moveX=snapshot.self!.x+.25;
@@ -109,6 +137,16 @@ Future<void> main() async {
         'existingNameAvailable':existingNameAvailable,
       },
       'inventorySort':{'emptyRoundTripConfirmed':true},
+      'passiveSession':{
+        'bless':bless==null?null:{
+          'country':bless.country,'amount':bless.amount,'remainingTime':bless.remainingTime,
+        },
+        'bankItems':bankItems?.map((x)=>{'slot':x.slot,'type':x.type,'typeId':x.typeId,'count':x.count}).toList(),
+        'savedPositions':savedPositions?.map((x)=>{'index':x.index,'mapId':x.mapId,'x':x.x,'y':x.y,'z':x.z}).toList(),
+        'accountPoints':account?.points,
+        'obelisks':obelisks?.map((x)=>{'id':x.id,'country':x.country,'x':x.x,'z':x.z}).toList(),
+        'notice':notice==null?null:{'type':hexType(notice.type),'message':notice.message},
+      },
       'details':{
         'x':selected.details.x,'y':selected.details.y,'z':selected.details.z,'angle':selected.details.angle,
         'maxHp':selected.details.maxHp,'maxMp':selected.details.maxMp,'maxSp':selected.details.maxSp,
@@ -175,6 +213,12 @@ Future<void> main() async {
     if(skillBook==null)throw StateError('CHARACTER_SKILLS missing.');
     if(quickbar==null)throw StateError('CHARACTER_SKILL_BAR missing.');
     if(inventoryPackets.isEmpty)throw StateError('CHARACTER_ITEMS missing.');
+    if(bless==null)throw StateError('BLESS_INIT missing or invalid.');
+    if(bankItems==null)throw StateError('BANK_ITEM_LIST missing or invalid.');
+    if(savedPositions==null)throw StateError('TELEPORT_SAVE_POSITION_LIST missing or invalid.');
+    if(account==null)throw StateError('ACCOUNT_POINTS missing or invalid.');
+    if(obelisks==null)throw StateError('OBELISK_LIST missing or invalid.');
+    if(notice==null||notice.message.isEmpty)throw StateError('NOTICE packet missing or invalid.');
     if(existingNameAvailable)throw StateError('CHECK_CHARACTER_AVAILABLE_NAME incorrectly accepted an existing character name.');
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
