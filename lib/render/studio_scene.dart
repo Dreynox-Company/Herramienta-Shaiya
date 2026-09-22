@@ -132,12 +132,12 @@ class StudioScene extends ChangeNotifier {
   final Map<int,double> networkPlayerGroundY={},networkPlayerRiderHeight={};
   Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
-  RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
+  RenderPart? weapon,secondWeapon,sky,primaryCloud,secondaryCloud;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];final List<VaniActor> animatedWorldActors=[];final List<ManiActor> maniWorldActors=[];
-  WorldData? world;DgData? dungeon;String? worldPath,effectPath,skyPath;
+  WorldData? world;DgData? dungeon;String? worldPath,effectPath,skyPath,primaryCloudPath,secondaryCloudPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
   final WorldCollisionIndex worldCollision=WorldCollisionIndex();
@@ -201,6 +201,44 @@ class StudioScene extends ChangeNotifier {
     final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),uv=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
     geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',normals);geometry.setAttributeFromString('uv',uv);geometry.setIndex(data.indices.toList());
     final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,normals,uv,texture);
+  }
+  Future<RenderPart> _makeSkyLayer(
+    MeshData data,
+    String texturePath,{
+    required double radius,
+    required double opacity,
+    required int renderOrder,
+  }) async {
+    final bytes=await catalog!.library.read(texturePath);
+    final png=await compute(_decodeTexture,{'bytes':bytes,'path':texturePath,'opaque':opacity>=.999});
+    final texture=await t.TextureLoader(flipY:false).fromBytes(png);
+    if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
+    texture.colorSpace=t.SRGBColorSpace;
+    texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
+    final geometry=t.BufferGeometry(),
+      positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),
+      normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),
+      uv=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
+    geometry.setAttributeFromString('position',positions);
+    geometry.setAttributeFromString('normal',normals);
+    geometry.setAttributeFromString('uv',uv);
+    geometry.setIndex(data.indices.toList());
+    final material=t.MeshBasicMaterial.fromMap({
+      'map':texture,'color':0xffffff,'side':t.DoubleSide,
+      'transparent':opacity<.999,'opacity':opacity,
+      'alphaTest':opacity<.999?.02:0.0,
+      'depthWrite':false,'depthTest':false,'toneMapped':false,
+    });
+    final mesh=t.Mesh(geometry,material)..frustumCulled=false;
+    var sourceRadius=0.0;
+    for(final coordinate in data.positions){sourceRadius=math.max(sourceRadius,coordinate.abs());}
+    if(sourceRadius<1e-6){
+      texture.dispose();geometry.dispose();material.dispose();
+      throw const FormatException('Cúpula de cielo vacía.');
+    }
+    mesh.scale.setValues(radius/sourceRadius,radius/sourceRadius,-radius/sourceRadius);
+    mesh.renderOrder=renderOrder;
+    return RenderPart(data,mesh,positions,normals,uv,texture);
   }
   Future<RenderPart> skinned(String mesh,String texture,{int alpha=0}) async {final data=MeshData.skinned(await catalog!.library.read(mesh),mesh);for(final repair in data.repairs){report('$mesh · $repair');}return makePart(data,texture,opaque:alpha==1);}
   Future<ClipData> clip(String path)=>catalog!.library.read(path).then((b)=>ClipData.parse(b,path));
@@ -975,7 +1013,7 @@ class StudioScene extends ChangeNotifier {
   }
   void orbit(double dx,double dy){yaw-=dx*.006;pitch=(pitch+dy*.006).clamp(-1.2,1.2);updateCamera();}
   void zoom(double amount){distance=(distance*amount).clamp(.4,250);updateCamera();}
-  void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));if(sky!=null)sky!.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}
+  void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));for(final layer in [sky,secondaryCloud,primaryCloud]){layer?.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}}
   Future<void> setBackdrop(String? path) async {
     backdropTexture?.dispose();
     backdropTexture=null;
@@ -997,23 +1035,63 @@ class StudioScene extends ChangeNotifier {
     view!.scene.background=texture;
   }
 
-  Future<void> setSky(String? path) async {
+  Future<void> setSky(
+    String? path,{
+    String? primaryCloudPath,
+    String? secondaryCloudPath,
+  }) async {
     final revision=++_skyRevision;
     if(path==null){
-      sky?.dispose();sky=null;skyPath=null;
+      sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();
+      sky=primaryCloud=secondaryCloud=null;
+      skyPath=this.primaryCloudPath=this.secondaryCloudPath=null;
       if(view!=null)view!.scene.background=t.Color.fromHex32(0x11151e);
       notifyListeners();return;
     }
-    final lib=catalog!.library,model=catalog!.library.resolve('sky.3do',['sky']);if(model==null)throw const FormatException('No se encuentra la cúpula original Sky/sky.3DO.');
+    final lib=catalog!.library,model=lib.resolve('sky.3do',['sky']);
+    if(model==null)throw const FormatException('No se encuentra la cúpula original Sky/sky.3DO.');
     final skyBytes=await lib.read(path);
     final background=await compute(_averageTextureColor,{'bytes':skyBytes,'path':path});
     if(view!=null)view!.scene.background=t.Color.fromHex32(background);
-    final binary=Bin(await lib.read(model),model);binary.str();final data=MeshData.rigid(binary);binary.end();final part=await makePart(data,path,opaque:true);
-    if(disposed||revision!=_skyRevision){part.dispose();return;}
-    var radius=0.0;for(final coordinate in data.positions){radius=math.max(radius,coordinate.abs());}if(radius<1e-6){part.dispose();throw const FormatException('Cúpula de cielo vacía.');}
-    part.mesh.scale.setValues(850/radius,850/radius,-850/radius);part.mesh.renderOrder=-1000;part.mesh.material?.depthWrite=false;part.mesh.material?.depthTest=false;
-    sky?.dispose();sky=part;skyPath=path;view!.scene.add(part.mesh);updateCamera();say('Cielo original: ${baseName(path)}');
+    final binary=Bin(await lib.read(model),model);
+    binary.str();
+    final data=MeshData.rigid(binary);
+    binary.end();
+
+    final stagedSky=await _makeSkyLayer(data,path,radius:850,opacity:1,renderOrder:-1000);
+    RenderPart? stagedPrimary,stagedSecondary;
+    try{
+      if(secondaryCloudPath!=null){
+        stagedSecondary=await _makeSkyLayer(
+          data,secondaryCloudPath,radius:844,opacity:.58,renderOrder:-999,
+        );
+      }
+      if(primaryCloudPath!=null){
+        stagedPrimary=await _makeSkyLayer(
+          data,primaryCloudPath,radius:840,opacity:.82,renderOrder:-998,
+        );
+      }
+    }catch(_){
+      stagedSky.dispose();stagedPrimary?.dispose();stagedSecondary?.dispose();
+      rethrow;
+    }
+    if(disposed||revision!=_skyRevision){
+      stagedSky.dispose();stagedPrimary?.dispose();stagedSecondary?.dispose();return;
+    }
+    sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();
+    sky=stagedSky;primaryCloud=stagedPrimary;secondaryCloud=stagedSecondary;
+    skyPath=path;
+    this.primaryCloudPath=primaryCloudPath;
+    this.secondaryCloudPath=secondaryCloudPath;
+    view!.scene.add(stagedSky.mesh);
+    if(stagedSecondary!=null)view!.scene.add(stagedSecondary.mesh);
+    if(stagedPrimary!=null)view!.scene.add(stagedPrimary.mesh);
+    updateCamera();
+    say('Cielo original: ${baseName(path)}'+
+      (primaryCloudPath==null?'':' · nube 1 ${baseName(primaryCloudPath)}')+
+      (secondaryCloudPath==null?'':' · nube 2 ${baseName(secondaryCloudPath)}'));
   }
+
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
     if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
@@ -1277,18 +1355,23 @@ class StudioScene extends ChangeNotifier {
       maniWorldActors..clear()..addAll(maniAnimated);
       environment.removeFromParent();environment=stage;view!.scene.add(stage);
       worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
-      if(sky==null&&catalog!.skies.isNotEmpty){
+      if(catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
           ??lib.resolve('sky.bmp',['sky'])
           ??catalog!.skies.first;
-        try{await setSky(choice);}catch(e){report('Cielo: $e');}
+        final cloud1=w.primaryCloudFile.isEmpty?null:lib.resolve(w.primaryCloudFile,['sky'],uniqueFallback:true);
+        final cloud2=w.secondaryCloudFile.isEmpty?null:lib.resolve(w.secondaryCloudFile,['sky'],uniqueFallback:true);
+        if(skyPath!=choice||primaryCloudPath!=cloud1||secondaryCloudPath!=cloud2){
+          try{await setSky(choice,primaryCloudPath:cloud1,secondaryCloudPath:cloud2);}
+          catch(e){report('Cielo/nubes: $e');}
+        }
       }
       final mix=loadedByCategory.entries.map((e)=>'${e.key}=${e.value}').join(' · ');
       say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · ${worldCollision.triangleCount} triángulos de colisión nativos.');
     }catch(_){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}for(final a in maniAnimated){a.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
