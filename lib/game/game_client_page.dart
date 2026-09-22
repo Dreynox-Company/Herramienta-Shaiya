@@ -41,7 +41,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsWorldSnapshot? liveSnapshot;
   int liveMapId=0;
   SvmapData? liveSvmap;
-  bool mapSwitching=false;
+  bool mapSwitching=false,sectorStreaming=false;
   final List<PsPacket> pendingMapActorPackets=<PsPacket>[];
   PsCharacterDetails? liveDetails;
   PsHitpoints? liveHitpoints;
@@ -1064,7 +1064,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
-    if(mapSwitching&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
+    if((mapSwitching||sectorStreaming)&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
     if(packet.type==PsPacketType.characterMapTeleport&&packet.body.length>=18){
       try{unawaited(_applyMapTeleport(PsMapTeleport.parse(packet)));}
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
@@ -1791,6 +1791,50 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Portal] '+e.toString());if(mounted)setState((){});}
   }
+  Future<void> _streamWorldSectorIfNeeded(double worldX,double worldY,double worldZ) async {
+    if(sectorStreaming||mapSwitching||stage!=GameStage.world)return;
+    final w=scene.world,path=scene.worldPath,a=scene.character;
+    if(w==null||w.size==0||path==null||a==null)return;
+    if(a.root.position.x.abs()<44&&a.root.position.z.abs()<44)return;
+    sectorStreaming=true;
+    final mapAtStart=liveMapId;
+    try{
+      await scene.setWorld(path,x:worldX,z:worldZ);
+      if(mapSwitching||liveMapId!=mapAtStart||scene.worldPath!=path)return;
+
+      final snapshot=liveSnapshot,meta=metadata;
+      final questNpcKeys=meta==null
+        ?null
+        :meta.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
+      if(snapshot!=null){
+        await scene.spawnGameActorsFromNetwork(
+          npcs:snapshot.npcs.map((p)=>RuntimeNpcSpawn(
+            p.type,p.typeId,p.x,p.y,p.z,p.angle,p.globalId,
+          )).toList(),
+          mobs:snapshot.mobs.map((p)=>RuntimeMobSpawn(p.mobId,p.x,p.z,p.globalId)).toList(),
+          npcModels:meta?.npcModels,mobModels:meta?.mobModels,
+          questNpcKeys:questNpcKeys,locale:uiLocale,
+        );
+      }
+      for(final entered in remotePlayerEntries.values.toList()){
+        final shape=remotePlayerShapes[entered.characterId];
+        if(shape!=null){
+          await _renderRemotePlayer(entered,shape);
+        }else{
+          unawaited(_ensureRemotePlayer(entered));
+        }
+      }
+      messages.insert(0,'[Streaming] Sector continuo → '+worldX.toStringAsFixed(1)+', '+worldZ.toStringAsFixed(1)+'.');
+    }catch(e){
+      messages.insert(0,'[Streaming] '+e.toString());
+    }finally{
+      sectorStreaming=false;
+      final queued=List<PsPacket>.from(pendingMapActorPackets);pendingMapActorPackets.clear();
+      for(final packet in queued){_handleLivePacket(packet);}
+      if(mounted)setState((){});
+    }
+  }
+
   Future<void> _syncMovement() async {
     if(movementSending||stage!=GameStage.world||dead||rebirthPending)return;
     final session=liveWorld,a=scene.character;
@@ -1801,6 +1845,7 @@ class _GameClientPageState extends State<GameClientPage> {
     final y=a.root.position.y;
     final run=scene.running;
     unawaited(_checkPhysicalPortal(x,y,z));
+    unawaited(_streamWorldSectorIfNeeded(x,y,z));
     final changed=lastNetworkX==null||
       ((x-lastNetworkX!)*(x-lastNetworkX!)+(z-lastNetworkZ!)*(z-lastNetworkZ!))>.01||
       moving!=lastNetworkMoving||run!=lastNetworkRun;
