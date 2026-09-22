@@ -226,7 +226,7 @@ class StudioScene extends ChangeNotifier {
     final material=t.MeshBasicMaterial.fromMap({
       'map':texture,'color':0xffffff,'side':t.DoubleSide,
       'transparent':opacity<.999,'opacity':opacity,
-      'alphaTest':opacity<.999?.02:0.0,
+      'alphaTest':opacity<.999 ? .02 : 0.0,
       'depthWrite':false,'depthTest':false,'toneMapped':false,
     });
     final mesh=t.Mesh(geometry,material)..frustumCulled=false;
