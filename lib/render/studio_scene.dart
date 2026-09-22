@@ -156,7 +156,7 @@ class Actor {
   double time=0,speed=1;bool playing=true,loop=true;
   List<v.Matrix4> world=[];final Map<String,ClipData> clips={};
   void pose(){if(clip==null)return;world=clip!.pose(time,loop:loop);for(final p in parts){p.skin(world);}}
-  void tick(double dt){if(playing)time+=dt*speed;if(!loop&&clip!=null&&time>clip!.duration&&idle!=null)play(idle!);pose();}
+  void tick(double dt){if(playing)time+=dt*speed;if(!loop&&clip!=null&&time>clip!.duration&&idle!=null){speed=1;play(idle!);}pose();}
   void play(ClipData c,{bool repeat=true}){clip=c;time=0;loop=repeat;playing=true;pose();}
   int get requiredBones=>parts.fold(0,(n,p)=>math.max(n,p.data.requiredBones));
   double get height=>parts.isEmpty?2:parts.map((p)=>p.data.maxY).reduce(math.max);
@@ -203,6 +203,7 @@ class StudioScene extends ChangeNotifier {
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
   bool running=false,touchRun=false;
+  int serverMoveSpeedCategory=2,serverAttackSpeedCategory=5;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
   final List<AnimatedWorldPart> animatedWorldParts=[];
@@ -241,6 +242,34 @@ class StudioScene extends ChangeNotifier {
     final gridGeometry=t.BufferGeometry()..setAttributeFromString('position',t.Float32BufferAttribute.fromList(points,3));grid=t.LineSegments(gridGeometry,t.LineBasicMaterial.fromMap({'color':0x323b4d}));grid!.visible=gridVisible;three.scene.add(grid!);
     combat.onEvent=(actor,event){unawaited(_combatEvent(actor,event));};three.addAnimationEvent(tick);ready=true;updateCamera();notifyListeners();
   }
+  double get _serverMoveMultiplier=>switch(serverMoveSpeedCategory){
+    0=>.55,
+    1=>.78,
+    2=>1.0,
+    3=>1.25,
+    4=>1.55,
+    255=>0.0,
+    _=>1.0,
+  };
+  double get _serverAttackMultiplier=>switch(serverAttackSpeedCategory){
+    1=>.55,
+    2=>.68,
+    3=>.8,
+    4=>.9,
+    5=>1.0,
+    6=>1.12,
+    7=>1.28,
+    8=>1.5,
+    9=>1.8,
+    255=>0.0,
+    _=>1.0,
+  };
+  void applyLocalSpeedCategories({int? attack,int? move}){
+    if(attack!=null)serverAttackSpeedCategory=attack;
+    if(move!=null)serverMoveSpeedCategory=move;
+    notifyListeners();
+  }
+
   void say(String value){status=value;report(value);if(!disposed)notifyListeners();}
   void setGridVisible(bool value){gridVisible=value;if(grid!=null)grid!.visible=value;notifyListeners();}
   Future<RenderPart> makePart(MeshData data,String texturePath,{bool opaque=false}) async {
@@ -576,7 +605,7 @@ class StudioScene extends ChangeNotifier {
     final dx=target.root.position.x-a.root.position.x,dz=target.root.position.z-a.root.position.z;
     if(dx.abs()+dz.abs()>1e-5)a.root.rotation.y=math.atan2(dx,dz);
     if(attackClips.isEmpty)await prepareWeaponMotions();
-    if(attackClips.isNotEmpty)a.play(attackClips[attackCounter++%attackClips.length],repeat:false);
+    if(attackClips.isNotEmpty){a.speed=_serverAttackMultiplier;a.play(attackClips[attackCounter++%attackClips.length],repeat:false);}
     notifyListeners();
   }
 
@@ -686,6 +715,7 @@ class StudioScene extends ChangeNotifier {
     if(attackClips.isEmpty)await prepareWeaponMotions();
     if(attackClips.isNotEmpty){
       final clip=attackClips[attackCounter++%attackClips.length];
+      a.speed=_serverAttackMultiplier;
       a.play(clip,repeat:false);
     }
     notifyListeners();
@@ -1167,7 +1197,7 @@ class StudioScene extends ChangeNotifier {
     }
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
-      final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
+      final speed=(mount!=null?(running?7.0:3.5):(running?4.0:2.0))*_serverMoveMultiplier;
       final fromX=character!.root.position.x,fromZ=character!.root.position.z;
       final x=fromX+direction.x*delta*speed;
       final z=fromZ+direction.z*delta*speed;
