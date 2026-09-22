@@ -26,6 +26,7 @@ class PsPacketType {
   static const characterEnteredMap=0x0201;
   static const targetMobHpUpdate=0x0305;
   static const inventoryMoveItem=0x0204;
+  static const updateStats=0x0208;
   static const addItem=0x0205;
   static const removeItem=0x0206;
   static const characterMove=0x0501;
@@ -972,6 +973,19 @@ class PsWorldSession {
     return hp;
   }
 
+  Future<List<int>> updateStats({int str=0,int dex=0,int rec=0,int intl=0,int wis=0,int luc=0}) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de actualizar atributos.');
+    final values=[str,dex,rec,intl,wis,luc];
+    if(values.any((v)=>v<0||v>65535))throw RangeError('Incremento de atributo fuera de ushort.');
+    final response=connection.nextType(PsPacketType.updateStats,timeout:const Duration(seconds:5));
+    await connection.send(PsPacketType.updateStats,[
+      for(final v in values)..._u16Bytes(v),
+    ]);
+    final packet=await response;
+    if(packet.body.length<12)throw FormatException('UPDATE_STATS response truncado: ${packet.body.length}.');
+    final d=ByteData.sublistView(packet.body);
+    return List<int>.generate(6,(i)=>d.getUint16(i*2,Endian.little));
+  }
   Future<void> saveSkillBar(List<PsQuickSlot> slots) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de guardar la barra rápida.');
     if(slots.length>254)throw RangeError('Demasiados elementos en la barra rápida.');
