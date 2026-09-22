@@ -735,6 +735,44 @@ PsPartyMember parsePartyEnter(PsPacket p){
   return _parsePartyMember(p.body,0).member;
 }
 
+class PsPartyVitals {
+  final int id,hp,sp,mp;
+  const PsPartyVitals(this.id,this.hp,this.sp,this.mp);
+  static PsPartyVitals parse(PsPacket p,{required bool maximum}){
+    final expected=maximum?PsPacketType.partyMemberMaxHpSpMp:PsPacketType.partyMemberHpSpMp;
+    if(p.type!=expected||p.body.length<16)throw FormatException('PARTY vitals truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsPartyVitals(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),d.getInt32(12,Endian.little),
+    );
+  }
+}
+
+class PsPartySingleValue {
+  final int id,type,value;
+  const PsPartySingleValue(this.id,this.type,this.value);
+  static PsPartySingleValue parse(PsPacket p){
+    if((p.type!=PsPacketType.partyCharacterSpMp&&p.type!=PsPacketType.partySetMax)||p.body.length<9){
+      throw FormatException('PARTY single value truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsPartySingleValue(d.getUint32(0,Endian.little),p.body[4],d.getInt32(5,Endian.little));
+  }
+}
+
+class PsPartyBuffChange {
+  final int id,skillId,skillLevel;
+  const PsPartyBuffChange(this.id,this.skillId,this.skillLevel);
+  static PsPartyBuffChange parse(PsPacket p){
+    if((p.type!=PsPacketType.partyAddedBuff&&p.type!=PsPacketType.partyRemovedBuff)||p.body.length<7){
+      throw FormatException('PARTY buff change truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsPartyBuffChange(d.getUint32(0,Endian.little),d.getUint16(4,Endian.little),p.body[6]);
+  }
+}
+
 class PsQuestProgress {
   final int questId,remaining,count1,count2,count3;
   const PsQuestProgress(this.questId,this.remaining,this.count1,this.count2,this.count3);
