@@ -927,7 +927,7 @@ class _GameClientPageState extends State<GameClientPage> {
     final session=liveWorld;
     if(session==null||!shopOpen)return;
     if(item.bag==0){messages.insert(0,'[Tienda] Debes desequipar el objeto antes de venderlo.');if(mounted)setState((){});return;}
-    final qty=count.clamp(1,item.count);
+    final qty=count.clamp(1,item.count).toInt();
     try{
       final result=await session.sellNpcItem(item.bag,item.slot,qty);
       liveGold=result.gold;
