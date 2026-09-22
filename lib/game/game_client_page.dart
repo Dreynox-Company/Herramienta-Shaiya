@@ -1190,9 +1190,13 @@ class _GameClientPageState extends State<GameClientPage> {
       messages.insert(0,'[NPC] '+npcName+' · misión '+selectedQuest.toString()+'.');
     }else{
       final shop=metadata?.shop(logical.type,logical.typeId);
+      final gate=metadata?.gatekeeper(logical.type,logical.typeId);
       if(shop!=null&&shop.products.isNotEmpty){
         _closeWorldPanels();activeShop=shop;activeShopNpcGlobalId=globalId;shopOpen=true;
         messages.insert(0,'[Tienda] '+npcName+' · '+shop.products.length.toString()+' productos.');
+      }else if(gate!=null&&gate.targets.any((g)=>g.mapId>0)){
+        _closeWorldPanels();activeGate=gate;activeGateNpcGlobalId=globalId;gateOpen=true;
+        messages.insert(0,'[Gatekeeper] '+npcName+' · '+gate.targets.where((g)=>g.mapId>0).length.toString()+' destinos.');
       }else if(logical.type==6){
         _closeWorldPanels();warehouseOpen=true;
         messages.insert(0,'[Almacén] '+npcName+' · '+liveWarehouse.length.toString()+' objetos.');
@@ -1267,6 +1271,27 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
   }
+  Future<void> _useGatekeeperTarget(int index) async {
+    final gate=activeGate,npc=activeGateNpcGlobalId,session=liveWorld;
+    if(gate==null||npc==null||session==null)return;
+    final target=gate.targets.where((g)=>g.index==index).firstOrNull;
+    if(target==null)return;
+    try{
+      final result=await session.teleportViaNpc(npc,index);
+      liveGold=result.gold;
+      if(result.success){
+        messages.insert(0,'[Gatekeeper] Destino mapa '+target.mapId.toString()+' autorizado.');
+        gateOpen=false;
+      }else{
+        messages.insert(0,'[Gatekeeper] Teleport rechazado ('+result.reason.toString()+').');
+      }
+      if(mounted)setState((){});
+    }catch(e){
+      messages.insert(0,'[Gatekeeper] '+e.toString());
+      if(mounted)setState((){});
+    }
+  }
+
   Future<void> _buyShopProduct(int index,{int count=1}) async {
     final shop=activeShop,npc=activeShopNpcGlobalId,session=liveWorld;
     if(shop==null||npc==null||session==null)return;
@@ -1637,10 +1662,14 @@ class _GameClientPageState extends State<GameClientPage> {
             finishedQuests:liveSnapshot?.finishedQuests??const <PsFinishedQuest>[],
             gold:liveGold??liveDetails?.gold??0,
             shop:activeShop,
+            gate:activeGate,
             shopOpen:shopOpen,
+            gateOpen:gateOpen,
             onCloseShop:()=>setState(()=>shopOpen=false),
+            onCloseGate:()=>setState(()=>gateOpen=false),
             onCloseWarehouse:()=>setState(()=>warehouseOpen=false),
             onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
+            onUseGate:(index)=>unawaited(_useGatekeeperTarget(index)),
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
             onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
