@@ -76,6 +76,34 @@ void main() {
       source.dispose();
     });
   }
+  testWidgets('SPK quick editor opens on requested semantic field group', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = lib();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: DataEditorPage(
+          library: source,
+          initialPath: 'binarysdata/dbmonsterdata.sdata',
+          initialFieldGroup: 'Botín y oro',
+        ),
+      ),
+    );
+    await settleIo(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Botín y oro'), findsWidgets);
+    expect(find.textContaining('Tasa de botín'), findsWidgets);
+    expect(find.textContaining('Oro mínimo'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    source.dispose();
+  });
+
   testWidgets('editor button centered on main toolbar', (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;
