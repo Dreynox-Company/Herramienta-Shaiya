@@ -24,6 +24,8 @@ class PsPacketType {
   static const characterActiveBuffs=0x010A;
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
+  static const autoStatsList=0x0120;
+  static const autoStatsSet=0x0121;
   static const characterEnteredMap=0x0201;
   static const characterLeftMap=0x0202;
   static const experienceGain=0x0207;
@@ -213,6 +215,22 @@ class PsPacketType {
   static const mapNpcMove=0x0E03;
   static const mapNpcAttackPlayer=0x0E05;
   static const mapNpcAttackMob=0x0E06;
+}
+
+class PsAutoStats {
+  final int str,dex,rec,intl,wis,luc;
+  const PsAutoStats(this.str,this.dex,this.rec,this.intl,this.wis,this.luc);
+  int get total=>str+dex+rec+intl+wis+luc;
+  List<int> get values=>[str,dex,rec,intl,wis,luc];
+
+  static PsAutoStats parse(PsPacket p){
+    if(p.type!=PsPacketType.autoStatsList||p.body.length<6){
+      throw FormatException('AUTO_STATS_LIST truncado: ${p.body.length}.');
+    }
+    return PsAutoStats(
+      p.body[0],p.body[1],p.body[2],p.body[3],p.body[4],p.body[5],
+    );
+  }
 }
 
 class PsPacket {
@@ -2354,6 +2372,7 @@ class PsWorldSession {
   final Uint8List xorKey;
   final List<PsPacket> initialPackets;
   bool _expanded=false;
+  int? _selectedCharacterId;
 
   PsWorldSession(this.connection,this.faction,this.maxMode,this.xorKey,this.initialPackets);
 
@@ -2426,6 +2445,7 @@ class PsWorldSession {
     }
     if(details==null)throw StateError('No llegó CHARACTER_DETAILS.');
     if(!_expanded)throw StateError('No llegó CHARACTER_SKILL_BAR/cambio de cifrado.');
+    _selectedCharacterId=characterId;
     return (details:details,packets:packets);
   }
 
@@ -2858,6 +2878,37 @@ class PsWorldSession {
     final text=message.trim();if(text.isEmpty)return;
     if(text.length>255)throw RangeError('El mensaje supera 255 caracteres.');
     await connection.send(type,[text.length,..._utf16Le(text)]);
+  }
+
+  Future<PsAutoStats> requestAutoStats() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de consultar auto-stats.');
+    final response=connection.waitStream(
+      (p)=>p.type==PsPacketType.autoStatsList&&p.body.length>=6,
+      timeout:const Duration(seconds:5),
+    );
+    await connection.send(PsPacketType.autoStatsList);
+    return PsAutoStats.parse(await response);
+  }
+
+  Future<PsAutoStats> setAutoStats({
+    required int str,required int dex,required int rec,
+    required int intl,required int wis,required int luc,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de configurar auto-stats.');
+    final id=_selectedCharacterId;
+    if(id==null)throw StateError('No hay personaje seleccionado para AUTO_STATS_SET.');
+    final values=[str,dex,rec,intl,wis,luc];
+    if(values.any((v)=>v<0||v>255))throw RangeError('Auto-stat fuera de byte.');
+    final response=connection.waitStream(
+      (p)=>p.type==PsPacketType.autoStatsList&&p.body.length>=6,
+      timeout:const Duration(seconds:5),
+    );
+    // Client packet order from AutoStatsSettingsPacket is
+    // characterId, STR, DEX, REC, INT, LUC, WIS.
+    await connection.send(PsPacketType.autoStatsSet,[
+      ..._u32Bytes(id),str,dex,rec,intl,luc,wis,
+    ]);
+    return PsAutoStats.parse(await response);
   }
 
   Future<void> sendNormalChat(String message)=>_sendChatMessage(PsPacketType.chatNormal,message);
