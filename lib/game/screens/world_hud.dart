@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../data/catalog.dart';
 import '../../render/studio_scene.dart';
 import '../ps0032_protocol.dart';
+import '../server_metadata.dart';
 import '../shaiya_widgets.dart';
 import '../ui_asset.dart';
 
 class WorldHud extends StatelessWidget {
   final StudioScene scene;
   final Catalog catalog;
+  final ServerMetadata? metadata;
   final String characterName,locale;
   final int level;
   final PsCharacterDetails? details;
@@ -30,6 +32,7 @@ class WorldHud extends StatelessWidget {
     super.key,
     required this.scene,
     required this.catalog,
+    required this.metadata,
     required this.characterName,
     required this.level,
     required this.details,
@@ -203,6 +206,9 @@ class WorldHud extends StatelessWidget {
     final learned=slot!=null&&slot.isSkill?skillBook?.bySkillId(slot.number):null;
     final skillName=learned==null?null:catalog.skillName(learned.skillId,learned.level,locale);
     final skillText=learned==null?null:catalog.skillText(learned.skillId,learned.level,locale);
+    final skillRule=learned==null?null:metadata?.skill(learned.skillId,learned.level);
+    final itemRule=slot!=null&&!slot.isSkill?metadata?.item(slot.bag,slot.number):null;
+    final iconPath=slot==null?null:(slot.isSkill?skillRule?.iconPath:itemRule?.iconPath);
     final label=slot==null
       ?''
       :slot.isSkill
@@ -222,11 +228,22 @@ class WorldHud extends StatelessWidget {
           child:Center(
             child:slot==null
               ?const SizedBox.shrink()
-              :Icon(
-                  slot.isSkill?Icons.auto_fix_high:Icons.inventory_2,
-                  color:slot.isSkill?const Color(0xffffdfa0):const Color(0xffd7c18b),
-                  size:21,
-                ),
+              :iconPath!=null
+                ?DataImage(
+                    cache:ui,
+                    path:iconPath,
+                    fit:BoxFit.contain,
+                    fallback:Icon(
+                      slot.isSkill?Icons.auto_fix_high:Icons.inventory_2,
+                      color:slot.isSkill?const Color(0xffffdfa0):const Color(0xffd7c18b),
+                      size:21,
+                    ),
+                  )
+                :Icon(
+                    slot.isSkill?Icons.auto_fix_high:Icons.inventory_2,
+                    color:slot.isSkill?const Color(0xffffdfa0):const Color(0xffd7c18b),
+                    size:21,
+                  ),
           ),
         ),
         Positioned(
@@ -473,6 +490,8 @@ class WorldHud extends StatelessWidget {
                 final localized=catalog.itemText(item.type,item.typeId,locale);
                 final itemName=catalog.itemName(item.type,item.typeId,locale);
                 final description=localized?.text.trim()??'';
+                final rule=metadata?.item(item.type,item.typeId);
+                final iconPath=rule?.iconPath;
                 return Tooltip(
                   waitDuration:const Duration(milliseconds:250),
                   message:itemName+
@@ -487,10 +506,22 @@ class WorldHud extends StatelessWidget {
                       border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
                     ),
                     child:Stack(children:[
-                      Center(child:Icon(
-                        item.type<=16?Icons.shield:Icons.inventory_2,
-                        size:26,color:item.quality>0?const Color(0xffffd177):const Color(0xffc0b49d),
-                      )),
+                      Center(
+                        child:iconPath!=null
+                          ?DataImage(
+                              cache:ui,
+                              path:iconPath,
+                              fit:BoxFit.contain,
+                              fallback:Icon(
+                                item.type<=16?Icons.shield:Icons.inventory_2,
+                                size:26,color:item.quality>0?const Color(0xffffd177):const Color(0xffc0b49d),
+                              ),
+                            )
+                          :Icon(
+                              item.type<=16?Icons.shield:Icons.inventory_2,
+                              size:26,color:item.quality>0?const Color(0xffffd177):const Color(0xffc0b49d),
+                            ),
+                      ),
                       Positioned(left:2,top:1,child:Text(
                         '${item.type}:${item.typeId}',
                         style:const TextStyle(fontSize:6.5,color:Colors.white54),
