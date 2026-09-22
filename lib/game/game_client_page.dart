@@ -83,9 +83,13 @@ class _GameClientPageState extends State<GameClientPage> {
   bool skillsOpen=false;
   bool questLogOpen=false;
   bool shopOpen=false;
+  bool blacksmithOpen=false;
   bool gateOpen=false;
   bool warehouseOpen=false;
   NpcShopRule? activeShop;
+  PsInventoryItem? blacksmithItem,blacksmithGem,blacksmithHammer;
+  PsLinkingPossibility? blacksmithPossibility;
+  bool blacksmithBusy=false;
   NpcGateRule? activeGate;
   int? activeShopNpcGlobalId;
   int? activeGateNpcGlobalId;
@@ -1279,9 +1283,12 @@ class _GameClientPageState extends State<GameClientPage> {
     skillsOpen=false;
     questLogOpen=false;
     shopOpen=false;
+    blacksmithOpen=false;
     gateOpen=false;
     warehouseOpen=false;
     activeShop=null;
+    blacksmithItem=blacksmithGem=blacksmithHammer=null;
+    blacksmithPossibility=null;blacksmithBusy=false;
     activeGate=null;
     activeShopNpcGlobalId=null;
     activeGateNpcGlobalId=null;
@@ -1363,6 +1370,9 @@ class _GameClientPageState extends State<GameClientPage> {
       }else if(gate!=null&&gate.targets.any((g)=>g.mapId>0)){
         _closeWorldPanels();activeGate=gate;activeGateNpcGlobalId=globalId;gateOpen=true;
         messages.insert(0,'[Gatekeeper] '+npcName+' · '+gate.targets.where((g)=>g.mapId>0).length.toString()+' destinos.');
+      }else if(logical.type==3){
+        _closeWorldPanels();blacksmithOpen=true;
+        messages.insert(0,'[Herrero] '+npcName+' · Linking disponible.');
       }else if(logical.type==6){
         _closeWorldPanels();warehouseOpen=true;
         messages.insert(0,'[Almacén] '+npcName+' · '+liveWarehouse.length.toString()+' objetos.');
@@ -1483,6 +1493,88 @@ class _GameClientPageState extends State<GameClientPage> {
       messages.insert(0,'[Almacén] Objeto retirado a bag '+dest.bag.toString()+', slot '+dest.slot.toString()+'.');
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
+  }
+  Future<void> _refreshBlacksmithPossibility() async {
+    final item=blacksmithItem,gem=blacksmithGem,session=liveWorld;
+    blacksmithPossibility=null;
+    if(item==null||gem==null||session==null){if(mounted)setState((){});return;}
+    final itemRule=metadata?.item(item.type,item.typeId),gemRule=metadata?.item(gem.type,gem.typeId);
+    if(itemRule==null||itemRule.slot<=0||gemRule==null||gem.type!=30){
+      messages.insert(0,'[Herrero] Selección de objeto/lapis inválida.');
+      if(mounted)setState((){});return;
+    }
+    final usedSockets=item.gems.where((g)=>g>0).length;
+    if(usedSockets>=itemRule.slot){
+      messages.insert(0,'[Herrero] El objeto no tiene huecos de lapis libres.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final hammer=blacksmithHammer;
+      blacksmithPossibility=await session.gemAddPossibility(
+        gemBag:gem.bag,gemSlot:gem.slot,itemBag:item.bag,itemSlot:item.slot,
+        hammerBag:hammer?.bag??0,hammerSlot:hammer?.slot??0,
+      );
+      final p=blacksmithPossibility!;
+      messages.insert(0,'[Herrero] Enlace: '+p.rate.toStringAsFixed(2)+'% · '+p.gold.toString()+' oro.');
+    }catch(e){messages.insert(0,'[Herrero] '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+  }
+
+  void _selectBlacksmithItem(PsInventoryItem? item){
+    blacksmithItem=item;unawaited(_refreshBlacksmithPossibility());
+  }
+  void _selectBlacksmithGem(PsInventoryItem? item){
+    blacksmithGem=item;unawaited(_refreshBlacksmithPossibility());
+  }
+  void _selectBlacksmithHammer(PsInventoryItem? item){
+    blacksmithHammer=item;unawaited(_refreshBlacksmithPossibility());
+  }
+
+  void _replaceInventoryCount(int bag,int slot,int count){
+    final index=liveInventory.indexWhere((x)=>x.bag==bag&&x.slot==slot);
+    if(index<0)return;
+    final old=liveInventory[index];
+    if(count<=0){liveInventory.removeAt(index);return;}
+    liveInventory[index]=PsInventoryItem(
+      bag:old.bag,slot:old.slot,type:old.type,typeId:old.typeId,quality:old.quality,
+      count:count,gems:old.gems,craftName:old.craftName,dyed:old.dyed,
+    );
+  }
+
+  Future<void> _linkSelectedGem() async {
+    final item=blacksmithItem,gem=blacksmithGem,session=liveWorld,p=blacksmithPossibility;
+    if(item==null||gem==null||session==null||p==null||blacksmithBusy)return;
+    if(!p.available||liveGold!=null&&liveGold!<p.gold){
+      messages.insert(0,'[Herrero] No se puede ejecutar el enlace con el estado actual.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final hammer=blacksmithHammer;
+      final result=await session.addGem(
+        gemBag:gem.bag,gemSlot:gem.slot,itemBag:item.bag,itemSlot:item.slot,
+        hammerBag:hammer?.bag??0,hammerSlot:hammer?.slot??0,
+      );
+      liveGold=result.gold;
+      _replaceInventoryCount(result.gemBag,result.gemSlot,result.gemCount);
+      final itemIndex=liveInventory.indexWhere((x)=>x.bag==result.itemBag&&x.slot==result.itemSlot);
+      if(itemIndex>=0&&result.success&&result.linkSlot>=0&&result.linkSlot<6){
+        final old=liveInventory[itemIndex],gems=[...old.gems];
+        while(gems.length<6){gems.add(0);}
+        gems[result.linkSlot]=result.gemTypeId;
+        liveInventory[itemIndex]=PsInventoryItem(
+          bag:old.bag,slot:old.slot,type:old.type,typeId:old.typeId,quality:old.quality,
+          count:old.count,gems:List.unmodifiable(gems),craftName:old.craftName,dyed:old.dyed,
+        );
+        blacksmithItem=liveInventory[itemIndex];
+      }
+      blacksmithGem=liveInventory.where((x)=>x.bag==result.gemBag&&x.slot==result.gemSlot).firstOrNull;
+      blacksmithPossibility=null;
+      messages.insert(0,result.success?'[Herrero] Lapis enlazado correctamente.':'[Herrero] El enlace falló según World.');
+    }catch(e){messages.insert(0,'[Herrero] GEM_ADD: '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+    if(blacksmithGem!=null)unawaited(_refreshBlacksmithPossibility());
   }
   Future<void> _useGatekeeperTarget(int index) async {
     final gate=activeGate,npc=activeGateNpcGlobalId,session=liveWorld;
@@ -1883,10 +1975,21 @@ class _GameClientPageState extends State<GameClientPage> {
             shop:activeShop,
             gate:activeGate,
             shopOpen:shopOpen,
+            blacksmithOpen:blacksmithOpen,
             gateOpen:gateOpen,
+            blacksmithItem:blacksmithItem,
+            blacksmithGem:blacksmithGem,
+            blacksmithHammer:blacksmithHammer,
+            blacksmithPossibility:blacksmithPossibility,
+            blacksmithBusy:blacksmithBusy,
             onCloseShop:()=>setState(()=>shopOpen=false),
+            onCloseBlacksmith:()=>setState(()=>blacksmithOpen=false),
             onCloseGate:()=>setState(()=>gateOpen=false),
             onCloseWarehouse:()=>setState(()=>warehouseOpen=false),
+            onSelectBlacksmithItem:_selectBlacksmithItem,
+            onSelectBlacksmithGem:_selectBlacksmithGem,
+            onSelectBlacksmithHammer:_selectBlacksmithHammer,
+            onLinkGem:()=>unawaited(_linkSelectedGem()),
             onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
             onUseGate:(index)=>unawaited(_useGatekeeperTarget(index)),
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
