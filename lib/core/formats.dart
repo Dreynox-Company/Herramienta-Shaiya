@@ -1151,6 +1151,80 @@ class StaticPart {
   StaticPart(this.texture, this.mesh);
 }
 
+class VaniMeshData {
+  final String texture,source;
+  final Uint16List indices;
+  final List<Float32List> positions,normals,uv;
+  const VaniMeshData(this.texture,this.indices,this.positions,this.normals,this.uv,this.source);
+  int get frameCount=>positions.length;
+  int get vertices=>positions.isEmpty?0:positions.first.length~/3;
+  MeshData frame(int index){
+    if(frameCount==0)throw FormatException('$source · VAni sin frames.');
+    final i=index%frameCount;
+    return MeshData(
+      Float32List.fromList(positions[i]),
+      Float32List.fromList(normals[i]),
+      Float32List.fromList(uv[i]),
+      Uint16List.fromList(indices),
+      Uint8List(0),
+      Float32List(0),
+      const [],
+      source,
+    );
+  }
+}
+
+class VaniData {
+  final v.Vector3 center,lower,upper,lower2,upper2;
+  final double radius;
+  final int frameCount,unknown1,unknown2;
+  final List<VaniMeshData> meshes;
+  const VaniData(
+    this.center,this.radius,this.lower,this.upper,this.frameCount,this.unknown1,
+    this.meshes,this.lower2,this.upper2,this.unknown2,
+  );
+  static VaniData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final center=r.vec(),radius=r.f32(),lower=r.vec(),upper=r.vec();
+    final meshCount=r.count(10000),frameCount=r.count(10000),unknown1=r.i32();
+    if(frameCount==0)r.fail('VAni sin frames.');
+    final meshes=<VaniMeshData>[];
+    for(var meshIndex=0;meshIndex<meshCount;meshIndex++){
+      final texture=r.str();
+      final faceCount=r.count(2000000);
+      r.need(faceCount*6);
+      final rawIndices=Uint16List(faceCount*3);
+      for(var i=0;i<rawIndices.length;i++)rawIndices[i]=r.u16();
+      final vertexCount=r.count(65535);
+      final total=vertexCount*frameCount;
+      if(total>50000000)r.fail('VAni excede el límite de vertices animados: $total.');
+      final positions=List.generate(frameCount,(_)=>Float32List(vertexCount*3));
+      final normals=List.generate(frameCount,(_)=>Float32List(vertexCount*3));
+      final uv=List.generate(frameCount,(_)=>Float32List(vertexCount*2));
+      for(var frame=0;frame<frameCount;frame++){
+        for(var vertex=0;vertex<vertexCount;vertex++){
+          final p=positions[frame],n=normals[frame],t=uv[frame],po=vertex*3,to=vertex*2;
+          p[po]=r.f32();p[po+1]=r.f32();p[po+2]=r.f32();
+          n[po]=r.rawFloat();n[po+1]=r.rawFloat();n[po+2]=r.rawFloat();
+          r.i32(); // VAni bone id; native files use -1.
+          t[to]=r.f32();t[to+1]=r.f32();
+        }
+      }
+      for(final index in rawIndices){if(index>=vertexCount)r.fail('Triángulo VAni fuera de la malla.');}
+      meshes.add(VaniMeshData(
+        texture,rawIndices,List.unmodifiable(positions),List.unmodifiable(normals),
+        List.unmodifiable(uv),'$source#$meshIndex',
+      ));
+    }
+    final lower2=r.vec(),upper2=r.vec(),unknown2=r.i32();
+    r.end();
+    return VaniData(
+      center,radius,lower,upper,frameCount,unknown1,List.unmodifiable(meshes),
+      lower2,upper2,unknown2,
+    );
+  }
+}
+
 class SmodCollisionMesh {
   final List<v.Vector3> vertices;
   final Uint16List indices;
