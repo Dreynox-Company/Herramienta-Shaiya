@@ -931,6 +931,26 @@ class PsInventoryMove {
   }
 }
 
+class PsGemAddResult {
+  final bool success;
+  final int gemBag,gemSlot,gemCount,itemBag,itemSlot,linkSlot,gemTypeId,gold,hammerBag,hammerSlot;
+  const PsGemAddResult({
+    required this.success,required this.gemBag,required this.gemSlot,required this.gemCount,
+    required this.itemBag,required this.itemSlot,required this.linkSlot,required this.gemTypeId,
+    required this.gold,required this.hammerBag,required this.hammerSlot,
+  });
+  static PsGemAddResult parse(PsPacket p){
+    if(p.type!=PsPacketType.gemAdd||p.body.length<17){
+      throw FormatException('GEM_ADD truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsGemAddResult(
+      success:p.body[0]!=0,gemBag:p.body[1],gemSlot:p.body[2],gemCount:p.body[3],
+      itemBag:p.body[4],itemSlot:p.body[5],linkSlot:p.body[6],gemTypeId:p.body[7],
+      gold:d.getUint32(11,Endian.little),hammerBag:p.body[15],hammerSlot:p.body[16],
+    );
+  }
+}
 class PsLinkingPossibility {
   final bool available;
   final double rate;
@@ -1364,6 +1384,14 @@ class PsWorldSession {
     await connection.send(PsPacketType.inventoryMoveItem,[currentBag,currentSlot,destinationBag,destinationSlot]);
     final response=await responseFuture;
     return PsInventoryMove.parse(response);
+  }
+  Future<PsGemAddResult> addGem({
+    required int gemBag,required int gemSlot,required int itemBag,required int itemSlot,
+    int hammerBag=0,int hammerSlot=0,
+  }) async {
+    final response=connection.waitStream((p)=>p.type==PsPacketType.gemAdd);
+    await connection.send(PsPacketType.gemAdd,[gemBag,gemSlot,itemBag,itemSlot,hammerBag,hammerSlot]);
+    return PsGemAddResult.parse(await response);
   }
   Future<PsLinkingPossibility> gemAddPossibility({
     required int gemBag,required int gemSlot,required int itemBag,required int itemSlot,
