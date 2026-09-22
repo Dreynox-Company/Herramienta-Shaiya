@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/formats.dart';
 import '../core/spk_archive.dart';
+import '../core/textures.dart';
 import '../data/spk_source.dart';
 import '../data/spk_table_discovery.dart';
 
@@ -1436,6 +1438,174 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  Widget _inspectionPreview(SpkReadResult result, String path) {
+    Widget preview;
+    try {
+      switch (result.format) {
+        case 'DDS':
+        case 'PNG':
+        case 'BMP':
+        case 'JPEG':
+        case 'GIF':
+        case 'TGA':
+          final pixels = Pixels.decode(result.bytes, path);
+          preview = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${pixels.width} × ${pixels.height} píxeles',
+                style: const TextStyle(fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(color: Color(0xff0b1018)),
+                  child: InteractiveViewer(
+                    minScale: .25,
+                    maxScale: 8,
+                    child: Center(
+                      child: Image.memory(
+                        pixels.png(),
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+          break;
+        case 'XML':
+        case 'JSON':
+        case 'INI':
+        case 'TXT':
+          final limit = result.bytes.length < 262144
+              ? result.bytes.length
+              : 262144;
+          final text = utf8.decode(
+            result.bytes.sublist(0, limit),
+            allowMalformed: true,
+          );
+          preview = Scrollbar(
+            child: SingleChildScrollView(
+              child: SelectableText(
+                text +
+                    (limit < result.bytes.length
+                        ? '\n\n… vista limitada a 256 KiB …'
+                        : ''),
+                style: const TextStyle(
+                  fontFamily: 'Consolas',
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          );
+          break;
+        case 'MLT':
+          final rows = readMlt(result.bytes, path);
+          preview = SelectableText(
+            [
+              'Materiales: ${rows.length}',
+              '',
+              ...rows.take(300).map(
+                (row) =>
+                    '#${row.id} · ${row.mesh} → ${row.texture} · alpha=${row.alpha}',
+              ),
+              if (rows.length > 300) '… ${rows.length - 300} registros más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'ITM':
+          final rows = readItm(result.bytes, path);
+          preview = SelectableText(
+            [
+              'Modelos de objetos/armas: ${rows.length}',
+              '',
+              ...rows.take(300).map(
+                (row) =>
+                    '#${row.id} · ${row.mesh} → ${row.texture} · '
+                    'transformaciones=${row.transforms.length}',
+              ),
+              if (rows.length > 300) '… ${rows.length - 300} registros más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'MON':
+          final rows = readMon(result.bytes, path);
+          preview = SelectableText(
+            [
+              'Criaturas/modelos: ${rows.length}',
+              '',
+              ...rows.take(300).map(
+                (row) =>
+                    '#${row.id} · ${row.name} · partes=${row.parts.length} · '
+                    'animaciones=${row.animations.length}',
+              ),
+              if (rows.length > 300) '… ${rows.length - 300} registros más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case '3DC':
+          final mesh = MeshData.skinned(result.bytes, path);
+          preview = SelectableText(
+            'Malla 3DC válida\n\n'
+            'Vértices: ${mesh.vertices}\n'
+            'Triángulos: ${mesh.triangles}\n'
+            'Huesos requeridos: ${mesh.requiredBones}\n'
+            'Matrices inversas: ${mesh.inverses.length}\n'
+            'Reparaciones: ${mesh.repairs.isEmpty ? 'ninguna' : mesh.repairs.join(', ')}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case '3DO':
+          final mesh = MeshData.object(result.bytes, path);
+          preview = SelectableText(
+            'Malla 3DO válida\n\n'
+            'Vértices: ${mesh.vertices}\n'
+            'Triángulos: ${mesh.triangles}\n'
+            'Reparaciones: ${mesh.repairs.isEmpty ? 'ninguna' : mesh.repairs.join(', ')}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'ANI':
+          final clip = ClipData.parse(result.bytes, path);
+          preview = SelectableText(
+            'Animación válida\n\n'
+            'Duración: ${clip.duration.toStringAsFixed(3)} s\n'
+            'Huesos/pistas: ${clip.bones.length}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'SDATA':
+          preview = const SelectableText(
+            'Tabla SData autenticada.\n\n'
+            'Usa “Preparar Studio” para abrirla en el editor estructurado '
+            'con columnas, relaciones y guardado por overlay.',
+            style: TextStyle(fontSize: 12),
+          );
+          break;
+        default:
+          preview = SelectableText(
+            'Primeros 256 bytes:\n'
+            '${spkHex(result.bytes.take(256))}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+      }
+    } catch (error) {
+      preview = SelectableText(
+        'El payload fue autenticado, pero la vista estructurada falló:\n'
+        '$error\n\n'
+        'Primeros 256 bytes:\n${spkHex(result.bytes.take(256))}',
+        style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+      );
+    }
+    return preview;
+  }
+
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
     if (!source.canReadRecord(record)) {
       throw const SpkFailure(
@@ -1446,15 +1616,28 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     final result = await source.readEntry(record);
     if (!mounted) return;
+    final path = source.technicalPath(record);
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(fileName(record)),
         content: SizedBox(
-          width: 590,
-          child: SelectableText(
-            'ID: ${record.idHex}\nFormato: ${result.format}\nOffset: ${record.dataOffset}\nAlmacenado: ${bytesLabel(record.storedBytes)}\nDecodificado: ${bytesLabel(result.bytes.length)}\nSHA-256: ${sha256.convert(result.bytes)}\n\nPrimeros 64 bytes:\n${spkHex(result.bytes.take(64))}',
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          width: 820,
+          height: 620,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SelectableText(
+                'ID: ${record.idHex} · Formato: ${result.format} · '
+                'Almacenado: ${bytesLabel(record.storedBytes)} · '
+                'Decodificado: ${bytesLabel(result.bytes.length)}\n'
+                'SHA-256: ${sha256.convert(result.bytes)}\n'
+                'Ruta: $path',
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
+              ),
+              const Divider(height: 20),
+              Expanded(child: _inspectionPreview(result, path)),
+            ],
           ),
         ),
         actions: [
