@@ -69,6 +69,9 @@ class _GameClientPageState extends State<GameClientPage> {
   bool rewardSelection=false;
   int rewardNpcId=0;
   bool inventoryOpen=false;
+  bool statusOpen=false;
+  bool skillsOpen=false;
+  bool questLogOpen=false;
   bool shopOpen=false;
   bool warehouseOpen=false;
   NpcShopRule? activeShop;
@@ -857,6 +860,39 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
   }
+  void _closeWorldPanels(){
+    inventoryOpen=false;
+    statusOpen=false;
+    skillsOpen=false;
+    questLogOpen=false;
+    shopOpen=false;
+    warehouseOpen=false;
+    activeShop=null;
+    activeShopNpcGlobalId=null;
+  }
+
+  void _toggleWorldPanel(String panel){
+    final open=panel=='status'?statusOpen:panel=='skills'?skillsOpen:panel=='quests'?questLogOpen:inventoryOpen;
+    _closeWorldPanels();
+    questOpen=false;
+    if(!open){
+      if(panel=='status')statusOpen=true;
+      else if(panel=='skills')skillsOpen=true;
+      else if(panel=='quests')questLogOpen=true;
+      else inventoryOpen=true;
+    }
+    if(mounted)setState((){});
+  }
+
+  void _openQuestFromLog(int id){
+    _closeWorldPanels();
+    questId=id;
+    rewardSelection=false;
+    rewardNpcId=0;
+    questOpen=true;
+    if(mounted)setState((){});
+  }
+
   Future<void> _interactNearestNpc() async {
     if(stage!=GameStage.world)return;
     final globalId=scene.nearestNetworkNpcId();
@@ -897,19 +933,18 @@ class _GameClientPageState extends State<GameClientPage> {
     }
 
     if(selectedQuest!=null){
+      _closeWorldPanels();
       questId=selectedQuest;
-      rewardSelection=false;rewardNpcId=0;shopOpen=false;warehouseOpen=false;activeShop=null;activeShopNpcGlobalId=null;
+      rewardSelection=false;rewardNpcId=0;
       questOpen=true;
       messages.insert(0,'[NPC] '+npcName+' · misión '+selectedQuest.toString()+'.');
     }else{
       final shop=metadata?.shop(logical.type,logical.typeId);
       if(shop!=null&&shop.products.isNotEmpty){
-        activeShop=shop;activeShopNpcGlobalId=globalId;shopOpen=true;warehouseOpen=false;
-        inventoryOpen=false;
+        _closeWorldPanels();activeShop=shop;activeShopNpcGlobalId=globalId;shopOpen=true;
         messages.insert(0,'[Tienda] '+npcName+' · '+shop.products.length.toString()+' productos.');
       }else if(logical.type==6){
-        warehouseOpen=true;shopOpen=false;activeShop=null;activeShopNpcGlobalId=null;
-        inventoryOpen=false;
+        _closeWorldPanels();warehouseOpen=true;
         messages.insert(0,'[Almacén] '+npcName+' · '+liveWarehouse.length.toString()+' objetos.');
       }else{
         final welcome=localized?.welcome.trim()??'';
@@ -1331,6 +1366,7 @@ class _GameClientPageState extends State<GameClientPage> {
             characterName:nameController.text,
             level:liveCharacter?.level??1,
             details:liveDetails,
+            additionalStats:liveAdditionalStats,
             hitpoints:liveHitpoints,
             targetMobGlobalId:targetMobGlobalId,
             targetMobId:targetMobTypeId,
@@ -1341,7 +1377,12 @@ class _GameClientPageState extends State<GameClientPage> {
             inventory:liveInventory,
             warehouse:liveWarehouse,
             inventoryOpen:inventoryOpen,
+            statusOpen:statusOpen,
+            skillsOpen:skillsOpen,
+            questLogOpen:questLogOpen,
             warehouseOpen:warehouseOpen,
+            openQuests:liveSnapshot?.quests??const <PsQuestProgress>[],
+            finishedQuests:liveSnapshot?.finishedQuests??const <PsFinishedQuest>[],
             gold:liveGold??liveDetails?.gold??0,
             shop:activeShop,
             shopOpen:shopOpen,
@@ -1351,7 +1392,11 @@ class _GameClientPageState extends State<GameClientPage> {
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
             onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
-            onToggleInventory:()=>setState((){inventoryOpen=!inventoryOpen;if(inventoryOpen){shopOpen=false;warehouseOpen=false;questOpen=false;}}),
+            onToggleInventory:()=>_toggleWorldPanel('inventory'),
+            onToggleStatus:()=>_toggleWorldPanel('status'),
+            onToggleSkills:()=>_toggleWorldPanel('skills'),
+            onToggleQuestLog:()=>_toggleWorldPanel('quests'),
+            onOpenQuest:_openQuestFromLog,
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             onSendChat:(text)=>unawaited(_sendChat(text)),
             questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
