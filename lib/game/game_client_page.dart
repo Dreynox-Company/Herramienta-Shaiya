@@ -66,6 +66,12 @@ class _GameClientPageState extends State<GameClientPage> {
   int localTradeMoney=0,remoteTradeMoney=0;
   bool localTradeDecided=false,remoteTradeDecided=false,localTradeConfirmed=false,remoteTradeConfirmed=false;
   int? tradePartnerId,pendingTradeRequesterId,outgoingTradeTargetId;
+  final Map<int,PsTradeItem> localDuelItems=<int,PsTradeItem>{},remoteDuelItems=<int,PsTradeItem>{};
+  int localDuelMoney=0,remoteDuelMoney=0;
+  bool localDuelApproved=false,remoteDuelApproved=false,duelTradeOpen=false,duelStarted=false,duelReady=false;
+  int? duelOpponentId,pendingDuelRequesterId,outgoingDuelTargetId;
+  double duelCenterX=0,duelCenterZ=0;
+  String duelResultText='';
   int? partyLeaderId,pendingPartyRequesterId,outgoingPartyInviteId;
   String? pendingFriendRequestName;
   StreamSubscription<PsPacket>? livePacketSubscription;
@@ -1395,6 +1401,26 @@ class _GameClientPageState extends State<GameClientPage> {
     return '#'+id.toString();
   }
 
+  void _resetDuel({bool keepResult=false}){
+    localDuelItems.clear();remoteDuelItems.clear();
+    localDuelMoney=remoteDuelMoney=0;
+    localDuelApproved=remoteDuelApproved=false;
+    duelTradeOpen=false;duelStarted=false;duelReady=false;
+    duelOpponentId=null;pendingDuelRequesterId=null;outgoingDuelTargetId=null;
+    duelCenterX=duelCenterZ=0;
+    if(!keepResult)duelResultText='';
+  }
+
+  PsTradeItem _duelItemFromInventory(PsInventoryItem item,int tradeSlot,int count)=>PsTradeItem(
+    tradeSlot:tradeSlot,type:item.type,typeId:item.typeId,count:count,quality:item.quality,
+    gems:item.gems,craftName:item.craftName,dyed:item.dyed,
+  );
+
+  PsTradeItem _duelItemFromRemote(PsDuelTradeItem item)=>PsTradeItem(
+    tradeSlot:item.tradeSlot,type:item.type,typeId:item.typeId,count:item.count,quality:item.quality,
+    gems:item.gems,craftName:item.craftName,dyed:item.dyed,
+  );
+
   void _resetTrade({bool close=true}){
     localTradeItems.clear();remoteTradeItems.clear();
     localTradeMoney=remoteTradeMoney=0;
@@ -1407,6 +1433,84 @@ class _GameClientPageState extends State<GameClientPage> {
     tradeSlot:tradeSlot,type:item.type,typeId:item.typeId,count:count,quality:item.quality,
     gems:item.gems,craftName:item.craftName,dyed:item.dyed,
   );
+
+  Future<void> _requestDuel(int characterId) async {
+    final session=liveWorld;
+    if(session==null||characterId==liveCharacter?.id||duelStarted||duelTradeOpen)return;
+    try{
+      outgoingDuelTargetId=characterId;
+      await session.requestDuel(characterId);
+      messages.insert(0,'[Duel] Desafío enviado a '+_knownCharacterName(characterId)+'.');
+    }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondDuel(bool accepted) async {
+    final session=liveWorld,id=pendingDuelRequesterId;
+    if(session==null||id==null)return;
+    try{
+      await session.respondDuel(accepted);
+      if(accepted){
+        duelOpponentId=id;
+        messages.insert(0,'[Duel] Desafío aceptado contra '+_knownCharacterName(id)+'.');
+      }else{
+        messages.insert(0,'[Duel] Desafío rechazado.');
+        _resetDuel();
+      }
+      pendingDuelRequesterId=null;
+    }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _addInventoryToDuel(PsInventoryItem item) async {
+    final session=liveWorld;
+    if(session==null||!duelTradeOpen||duelOpponentId==null||item.bag==0)return;
+    final occupied=localDuelItems.keys.toSet();
+    int? tradeSlot;
+    for(var i=0;i<8;i++){if(!occupied.contains(i)){tradeSlot=i;break;}}
+    if(tradeSlot==null){messages.insert(0,'[Duel] No hay slots de apuesta libres.');if(mounted)setState((){});return;}
+    try{
+      await session.addDuelItem(item.bag,item.slot,item.count,tradeSlot);
+      messages.insert(0,'[Duel] Apostando '+(catalog?.itemName(item.type,item.typeId,uiLocale)??item.key)+'…');
+    }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _removeDuelItem(int tradeSlot) async {
+    final session=liveWorld;if(session==null||!duelTradeOpen)return;
+    try{
+      await session.removeDuelItem(tradeSlot);
+      localDuelItems.remove(tradeSlot);
+      localDuelApproved=remoteDuelApproved=false;
+    }catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _setDuelMoney(int value) async {
+    final session=liveWorld;if(session==null||!duelTradeOpen)return;
+    final amount=value.clamp(0,liveGold??0).toInt();
+    try{await session.addDuelMoney(amount);}
+    catch(e){messages.insert(0,'[Duel] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _decideDuel(bool ready) async {
+    final session=liveWorld;if(session==null||!duelTradeOpen)return;
+    try{await session.decideDuelTrade(ready?0:1);}
+    catch(e){messages.insert(0,'[Duel] '+e.toString());}
+  }
+
+  Future<void> _closeDuelTrade() async {
+    final session=liveWorld;if(session==null||!duelTradeOpen)return;
+    try{await session.decideDuelTrade(2);}
+    catch(e){messages.insert(0,'[Duel] '+e.toString());}
+  }
+
+  Future<void> _admitDuelDefeat() async {
+    final session=liveWorld;if(session==null||!duelStarted)return;
+    try{await session.admitDuelDefeat();}
+    catch(e){messages.insert(0,'[Duel] '+e.toString());}
+  }
 
   Future<void> _requestTrade(int characterId) async {
     final session=liveWorld;
