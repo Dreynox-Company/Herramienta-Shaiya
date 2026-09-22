@@ -15,6 +15,7 @@ class WorldHud extends StatelessWidget {
   final int level;
   final PsCharacterDetails? details;
   final PsHitpoints? hitpoints;
+  final int? targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
   final List<PsInventoryItem> inventory;
@@ -39,6 +40,9 @@ class WorldHud extends StatelessWidget {
     required this.level,
     required this.details,
     required this.hitpoints,
+    required this.targetMobId,
+    required this.targetHp,
+    required this.targetMaxHp,
     required this.skillBook,
     required this.skillBar,
     required this.inventory,
@@ -63,6 +67,8 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 8, top: 3, width: 216, height: 79, child: _playerHud()),
           Positioned(left: 215, top: 5, width: 520, height: 48, child: _topHotbar()),
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
+          if(targetMobId!=null)
+            Positioned(left:390,top:60,width:245,height:48,child:_targetHud()),
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           ..._worldLabels(),
@@ -310,6 +316,60 @@ class WorldHud extends StatelessWidget {
       ),
     ),
   ]);
+
+  Widget _targetHud(){
+    final id=targetMobId!;
+    final rule=metadata?.mobs[id];
+    final name=catalog.monsterName(id,locale);
+    final max=targetMaxHp??rule?.hp??1;
+    final hp=(targetHp??max).clamp(0,max);
+    final ratio=max<=0?0.0:hp/max;
+    return Container(
+      padding:const EdgeInsets.fromLTRB(5,4,5,4),
+      decoration:BoxDecoration(
+        color:const Color(0xaa120f0b),
+        border:Border.all(color:const Color(0xff7d6b4f)),
+        boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:5)],
+      ),
+      child:Row(children:[
+        SizedBox(
+          width:32,height:32,
+          child:DataImage(
+            cache:ui,path:'interface/monster_show.tga',fit:BoxFit.contain,
+            fallback:const Icon(Icons.pest_control,color:Color(0xffffd45f),size:24),
+          ),
+        ),
+        const SizedBox(width:5),
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Row(children:[
+            Expanded(child:Text(
+              name,
+              maxLines:1,overflow:TextOverflow.ellipsis,
+              style:const TextStyle(fontSize:10.5,color:Color(0xffffee74),fontWeight:FontWeight.w600,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+            )),
+            Text('Lv.${rule?.level??0}',style:const TextStyle(fontSize:8,color:Colors.white60)),
+          ]),
+          const SizedBox(height:2),
+          SizedBox(
+            height:8,
+            child:Stack(children:[
+              Positioned.fill(child:DataImage(cache:ui,path:'interface/monster_hpbar_bg.tga',fit:BoxFit.fill)),
+              Positioned.fill(child:Align(
+                alignment:Alignment.centerLeft,
+                widthFactor:ratio,
+                child:DataImage(cache:ui,path:'interface/monster_hpbar.tga',fit:BoxFit.fill),
+              )),
+            ]),
+          ),
+          const SizedBox(height:1),
+          Text(
+            '$hp / $max',
+            style:const TextStyle(fontSize:7.5,color:Colors.white70),
+          ),
+        ])),
+      ]),
+    );
+  }
 
   Widget _minimap() => Stack(
         children: [
