@@ -1087,6 +1087,13 @@ class WorldHud extends StatelessWidget {
                           visualDensity:VisualDensity.compact,
                           icon:const Icon(Icons.handshake,size:17,color:Color(0xffffd373)),
                         ),
+                      if(f.online)
+                        IconButton(
+                          tooltip:locale=='spn'?'Retar a duelo':'Challenge to duel',
+                          onPressed:()=>onRequestDuel(f.id),
+                          visualDensity:VisualDensity.compact,
+                          icon:const Icon(Icons.sports_martial_arts,size:17,color:Color(0xffff7568)),
+                        ),
                       IconButton(
                         tooltip:locale=='spn'?'Eliminar amigo':'Delete friend',
                         onPressed:()=>onDeleteFriend(f),
@@ -1147,6 +1154,12 @@ class WorldHud extends StatelessWidget {
                         onPressed:()=>onRequestTrade(m.id),
                         visualDensity:VisualDensity.compact,
                         icon:const Icon(Icons.handshake,size:16,color:Color(0xffffd373)),
+                      ),
+                      IconButton(
+                        tooltip:locale=='spn'?'Retar a duelo':'Challenge to duel',
+                        onPressed:()=>onRequestDuel(m.id),
+                        visualDensity:VisualDensity.compact,
+                        icon:const Icon(Icons.sports_martial_arts,size:16,color:Color(0xffff7568)),
                       ),
                       if(selfLeader&&!leader)
                         IconButton(
@@ -1659,6 +1672,13 @@ class WorldHud extends StatelessWidget {
                 onPressed:()=>onRequestTrade(m.id),
                 visualDensity:VisualDensity.compact,
                 icon:const Icon(Icons.handshake,size:16,color:Color(0xffffd373)),
+              ),
+            if(m.online&&!self)
+              IconButton(
+                tooltip:locale=='spn'?'Retar a duelo':'Challenge to duel',
+                onPressed:()=>onRequestDuel(m.id),
+                visualDensity:VisualDensity.compact,
+                icon:const Icon(Icons.sports_martial_arts,size:16,color:Color(0xffff7568)),
               ),
             if(admin&&!self&&m.rank>2)
               IconButton(
