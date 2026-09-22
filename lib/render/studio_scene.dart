@@ -154,6 +154,26 @@ class StudioScene extends ChangeNotifier {
     final gridGeometry=t.BufferGeometry()..setAttributeFromString('position',t.Float32BufferAttribute.fromList(points,3));grid=t.LineSegments(gridGeometry,t.LineBasicMaterial.fromMap({'color':0x323b4d}));grid!.visible=gridVisible;three.scene.add(grid!);
     combat.onEvent=(actor,event){unawaited(_combatEvent(actor,event));};three.addAnimationEvent(tick);ready=true;updateCamera();notifyListeners();
   }
+  int _fogColor(WorldData data){
+    int channel(double value){
+      final scaled=value<=1.0001?value*255:value;
+      return scaled.round().clamp(0,255);
+    }
+    final r=channel(data.fogColor.x),g=channel(data.fogColor.y),b=channel(data.fogColor.z);
+    return (r<<16)|(g<<8)|b;
+  }
+  void _applyWorldFog(WorldData? data){
+    final scene=view?.scene;
+    if(scene==null)return;
+    if(data==null||!data.fogStart.isFinite||!data.fogEnd.isFinite||
+      data.fogEnd<=data.fogStart||data.fogEnd<=0){
+      scene.fog=null;
+      return;
+    }
+    final near=math.max(.1,data.fogStart),far=math.max(near+.1,data.fogEnd);
+    scene.fog=t.Fog(_fogColor(data),near,far);
+  }
+
   void say(String value){status=value;report(value);if(!disposed)notifyListeners();}
   void setGridVisible(bool value){gridVisible=value;if(grid!=null)grid!.visible=value;notifyListeners();}
   Future<RenderPart> makePart(MeshData data,String texturePath,{bool opaque=false}) async {
@@ -981,7 +1001,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -1037,7 +1057,7 @@ class StudioScene extends ChangeNotifier {
         environmentParts..clear()..addAll(parts);
         for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
-        worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);
+        worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);_applyWorldFog(w);
         character?.root.position.setValues(0,groundY,0);
         enemy?.root.position.setValues(1.8,groundY,0);
         distance=6;updateCamera();
@@ -1179,7 +1199,7 @@ class StudioScene extends ChangeNotifier {
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}return;}
-      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);for(final a in animatedWorldActors){a.dispose();}animatedWorldActors..clear()..addAll(animated);environment.removeFromParent();environment=stage;view!.scene.add(stage);worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
+      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);for(final a in animatedWorldActors){a.dispose();}animatedWorldActors..clear()..addAll(animated);environment.removeFromParent();environment=stage;view!.scene.add(stage);worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
       if(sky==null&&catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
