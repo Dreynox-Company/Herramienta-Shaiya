@@ -133,7 +133,7 @@ void main(){
       if(requireReal&&stage==GameStage.world){
         final actor=state.scene.character!;
         final fromX=actor.root.position.x,fromZ=actor.root.position.z;
-        state.scene.setMovement(0,1);
+        state.scene.setMovement(0.0,1.0);
         for(var i=0;i<60;i++)state.scene.tick(1/30);
         state.scene.clearMovement();
         state.scene.tick(1/30);
