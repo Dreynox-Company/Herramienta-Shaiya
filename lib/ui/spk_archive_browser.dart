@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:three_js/three_js.dart' as t;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -814,6 +815,78 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return path.split('/').last;
   }
 
+  Future<void> _showProbeFailure(SpkFailure error) async {
+    if (!mounted) return;
+    final diagnosis = error.report['diagnosis'];
+    final output = error.report['output']?.toString();
+    final consoleLog = error.report['consoleLog']?.toString();
+    final diagnosisFile = error.report['diagnosisFile']?.toString();
+
+    final lines = <String>[
+      error.message,
+      if (diagnosis is Map) ...[
+        '',
+        'Capturas: ${diagnosis['rows'] ?? 0}',
+        'Simples detectados: ${diagnosis['simpleHits'] ?? 0}',
+        'Chunks detectados: ${diagnosis['chunkHits'] ?? 0}',
+        'Con clave: ${diagnosis['rowsWithKey'] ?? 0}',
+        'Con nonce/tag: ${diagnosis['rowsWithAuth'] ?? 0}',
+        'Autenticación offline válida: ${diagnosis['offlineValid'] ?? 0}',
+        if (diagnosis['events'] is List)
+          'Eventos: ${(diagnosis['events'] as List).join(', ')}',
+      ],
+      if (diagnosisFile != null && diagnosisFile.isNotEmpty) ...[
+        '',
+        'Diagnóstico: $diagnosisFile',
+      ],
+      if (consoleLog != null && consoleLog.isNotEmpty)
+        'Log: $consoleLog',
+      if (output != null && output.isNotEmpty && diagnosisFile == null)
+        'Carpeta: $output',
+    ];
+    final text = lines.join('\n');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('AutoPerfil SPK no pudo cerrar el perfil'),
+        content: SizedBox(
+          width: 650,
+          child: SelectableText(
+            text,
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: text));
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('Diagnóstico copiado.')),
+                );
+              }
+            },
+            icon: const Icon(Icons.copy_all_outlined, size: 17),
+            label: const Text('Copiar diagnóstico'),
+          ),
+          if (Platform.isWindows && output != null && output.isNotEmpty)
+            TextButton.icon(
+              onPressed: () async {
+                await Process.run('explorer.exe', [output]);
+              },
+              icon: const Icon(Icons.folder_open_outlined, size: 17),
+              label: const Text('Abrir carpeta'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _friendlyError(Object error) {
     if (error is SpkFailure) {
       final output = error.report['output']?.toString();
@@ -845,12 +918,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       await action();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_friendlyError(error)),
-            duration: const Duration(seconds: 9),
-          ),
-        );
+        if (error is SpkFailure && error.code.startsWith('SPK_PROBE_')) {
+          await _showProbeFailure(error);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_friendlyError(error)),
+              duration: const Duration(seconds: 9),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {
