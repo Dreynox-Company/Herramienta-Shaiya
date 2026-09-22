@@ -723,13 +723,53 @@ class WorldSoundEffect {
 class WorldInstance {
   final String category, asset;
   final v.Vector3 position, forward, up;
+  final int sourceIndex;
   WorldInstance(
     this.category,
     this.asset,
     this.position,
     this.forward,
-    this.up,
+    this.up, {
+    this.sourceIndex=-1,
+  });
+}
+
+class WorldManiBinding {
+  final int buildingIndex;
+  final String asset;
+  final v.Vector3 position, forward, up;
+  const WorldManiBinding(
+    this.buildingIndex,this.asset,this.position,this.forward,this.up,
   );
+}
+
+class ManiData {
+  final int version;
+  final bool rotationEnabled;
+  final v.Vector3 rotationAxis;
+  final double animationSpeed;
+  const ManiData(this.version,this.rotationEnabled,this.rotationAxis,this.animationSpeed);
+}
+
+ManiData readMani(Uint8List bytes,String source){
+  final r=Bin(bytes,source);
+  final version=r.i32();
+  if(version!=0x21)r.fail('Versión MAni no soportada: $version.');
+  r.i32();
+  r.vec();
+  r.f32();r.f32();r.f32();
+  r.i32();r.i32();
+  r.vec();
+  r.f32();r.f32();
+  final enabled=r.i32()!=0;
+  final axis=r.vec();
+  final speed=r.f32();
+  r.u16();r.u16();
+  r.vec();
+  r.f32();r.f32();
+  r.i32();
+  r.end();
+  return ManiData(version,enabled,axis,speed);
 }
 
 v.Matrix4 worldInstanceMatrix(WorldInstance obj,double originX,double originZ){
@@ -770,6 +810,7 @@ class WorldData {
   final List<WorldLayer> layers;
   final List<WorldInstance> objects;
   final String layout;
+  final List<WorldManiBinding> maniBindings;
   final List<String> musicNames, soundEffectNames;
   final List<WorldMusicZone> musicZones;
   final List<WorldSoundZone> soundZones;
@@ -784,6 +825,7 @@ class WorldData {
     this.layers,
     this.objects,
     this.layout,{
+    this.maniBindings=const <WorldManiBinding>[],
     this.musicNames=const <String>[],
     this.soundEffectNames=const <String>[],
     this.musicZones=const <WorldMusicZone>[],
@@ -830,7 +872,7 @@ class WorldData {
       for (var i = 0; i < n; i++) {
         final id = r.i32(), p = r.vec(), f = r.vec(), u = r.vec();
         if (id < 0 || id >= names.length) r.fail('Objeto WLD no definido.');
-        if(keep)objects.add(WorldInstance(category, names[id], p, f, u));
+        if(keep)objects.add(WorldInstance(category, names[id], p, f, u,sourceIndex:i));
       }
     }
     List<String> readNames(){
@@ -844,10 +886,11 @@ class WorldData {
     readCategory('Shape');
     readCategory('Tree');
     readCategory('Grass');
-    readCategory('VAni');
-    readCategory('VAni',keep:false);
+    readCategory('VAni1');
+    readCategory('VAni2');
     readCategory('dungeon');
 
+    var maniBindings=<WorldManiBinding>[];
     var skyFile='',primaryCloud='',secondaryCloud='';
     var fog=v.Vector3.zero(),fogStart=0.0,fogEnd=0.0;
     var musicNames=<String>[],soundEffectNames=<String>[];
@@ -856,8 +899,14 @@ class WorldData {
     // Full WLD tail.  Older lab fixtures intentionally ended after the seven
     // legacy categories, so keep that minimal form readable for unit tests.
     if(r.offset < bytes.length){
-      skipNames(); // MAni asset names.
-      final mani=r.count(1000000);r.skip(mani*44);
+      final maniNames=readNames();
+      final maniCount=r.count(1000000),parsedMani=<WorldManiBinding>[];
+      for(var i=0;i<maniCount;i++){
+        final buildingIndex=r.i32(),id=r.i32(),p=r.vec(),forward=r.vec(),up=r.vec();
+        if(id<0||id>=maniNames.length)r.fail('MAni WLD refiere recurso inexistente: $id/${maniNames.length}.');
+        parsedMani.add(WorldManiBinding(buildingIndex,maniNames[id],p,forward,up));
+      }
+      maniBindings=List.unmodifiable(parsedMani);
       r.str(256); // EFT file.
       final effects=r.count(1000000);r.skip(effects*40);
       r.skip(12); // Unknown1..3.
@@ -920,6 +969,7 @@ class WorldData {
 
     return WorldData(
       size, heights, types, layers, objects, layout,
+      maniBindings:List.unmodifiable(maniBindings),
       musicNames:List.unmodifiable(musicNames),
       soundEffectNames:List.unmodifiable(soundEffectNames),
       musicZones:List.unmodifiable(musicZones),
