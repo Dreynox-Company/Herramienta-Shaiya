@@ -15,7 +15,7 @@ class WorldHud extends StatelessWidget {
   final int level;
   final PsCharacterDetails? details;
   final PsHitpoints? hitpoints;
-  final int? targetMobId,targetHp,targetMaxHp;
+  final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
   final List<PsInventoryItem> inventory;
@@ -40,6 +40,7 @@ class WorldHud extends StatelessWidget {
     required this.level,
     required this.details,
     required this.hitpoints,
+    required this.targetMobGlobalId,
     required this.targetMobId,
     required this.targetHp,
     required this.targetMaxHp,
@@ -91,14 +92,27 @@ class WorldHud extends StatelessWidget {
   List<Widget> _worldLabels(){
     final labels=scene.projectGameLabels(1024,742);
     return labels.map((label){
-      final color=label.mob?const Color(0xffffec3b):const Color(0xff58d7ff);
+      final selected=label.mob&&label.globalId!=0&&label.globalId==targetMobGlobalId;
+      final color=selected
+        ?const Color(0xffff6b56)
+        :label.mob
+          ?const Color(0xffffec3b)
+          :const Color(0xff58d7ff);
       return Positioned(
         left:(label.x-90).clamp(0.0,844.0),
-        top:(label.y-30).clamp(0.0,680.0),
+        top:(label.y-34).clamp(0.0,676.0),
         width:180,
         child:IgnorePointer(
           child:Column(mainAxisSize:MainAxisSize.min,children:[
-            if(label.quest)
+            if(selected)
+              SizedBox(
+                width:18,height:18,
+                child:DataImage(
+                  cache:ui,path:'interface/monster_show_high.tga',fit:BoxFit.contain,
+                  fallback:const Icon(Icons.arrow_drop_down,color:Color(0xffff5847),size:18),
+                ),
+              )
+            else if(label.quest)
               const Text(
                 '!',
                 style:TextStyle(
@@ -116,7 +130,7 @@ class WorldHud extends StatelessWidget {
               textAlign:TextAlign.center,
               style:TextStyle(
                 color:color,
-                fontSize:10,
+                fontSize:selected?10.5:10,
                 fontWeight:FontWeight.w600,
                 shadows:const [
                   Shadow(color:Colors.black,offset:Offset(1,1),blurRadius:2),
