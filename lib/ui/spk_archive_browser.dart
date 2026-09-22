@@ -1744,9 +1744,25 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       spkHeaderBytes,
       source.fileBytes,
     );
+    Map<String, dynamic>? studioBuild;
+    try {
+      final executable = File(Platform.resolvedExecutable);
+      final provenance = File(
+        p.join(executable.parent.path, 'build-provenance.json'),
+      );
+      if (await provenance.exists()) {
+        final raw = await readSpkJsonFile(provenance);
+        if (raw is Map) {
+          studioBuild = Map<String, dynamic>.from(raw);
+        }
+      }
+    } catch (_) {
+      // En debug o instalaciones manuales puede no existir provenance.
+    }
     final body = const JsonEncoder.withIndent('  ').convert({
-      'schema': 2,
+      'schema': 3,
       'source': source.file.path,
+      'studioBuild': studioBuild,
       'containerEvidence': {
         'headerBytes': spkHeaderBytes,
         'headerSha256': sha256.convert(headerRaw).toString(),
