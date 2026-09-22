@@ -12,7 +12,7 @@ class WorldHud extends StatelessWidget {
   final Catalog catalog;
   final ServerMetadata? metadata;
   final String characterName,locale;
-  final int level;
+  final int mapId,level;
   final PsCharacterDetails? details;
   final PsAdditionalStats? additionalStats;
   final PsHitpoints? hitpoints;
@@ -50,6 +50,7 @@ class WorldHud extends StatelessWidget {
     required this.catalog,
     required this.metadata,
     required this.characterName,
+    required this.mapId,
     required this.level,
     required this.details,
     required this.additionalStats,
@@ -538,7 +539,7 @@ class WorldHud extends StatelessWidget {
                     Positioned.fill(
                       child:DataImage(
                         cache:ui,
-                        path:'interface/minimap/1.tga',
+                        path:'interface/minimap/'+mapId.toString()+'.tga',
                         fit:BoxFit.fill,
                       ),
                     ),
