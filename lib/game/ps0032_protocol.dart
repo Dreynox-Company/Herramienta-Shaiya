@@ -514,8 +514,11 @@ class PsWorldDay {
     final hour=value&0x1f;value>>=5;
     final day=value&0x1f;value>>=5;
     final packedMonthYear=value;
-    final month=(packedMonthYear&0x1f)-512*(packedMonthYear>>9);
-    final year=(packedMonthYear>>9)+16;
+    final month=packedMonthYear&0x0f;
+    // ps0032 stores only the low 6 bits of (Gregorian year - 16) in this
+    // 32-bit packed value, so this is the native year code rather than a
+    // lossless Gregorian year for modern dates.
+    final year=((packedMonthYear>>4)&0x3f)+16;
     return PsWorldDay(raw,year,month,day,hour,minute,second);
   }
 }
