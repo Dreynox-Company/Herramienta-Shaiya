@@ -160,6 +160,20 @@ Uint8List maniFixture(){
   return bytes.takeBytes();
 }
 
+Uint8List wtrFixture(){
+  final bytes=BytesBuilder();
+  void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void str256(String value){
+    final out=Uint8List(256),raw=Uint8List.fromList(value.codeUnits);
+    out.setRange(0,raw.length.clamp(0,255),raw);bytes.add(out);
+  }
+  f32(64);u32(9);i32(-2);u32(3);
+  str256('water01.tga');str256('water02.tga');str256('water03.tga');
+  return bytes.takeBytes();
+}
+
 Uint8List worldAudioFixture(){
   final bytes=BytesBuilder();
   void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
@@ -483,6 +497,20 @@ void main() {
       final bytes=maniFixture();
       ByteData.sublistView(bytes).setInt32(0,0x20,Endian.little);
       expect(()=>ManiData.parse(bytes,'bad.mani'),throwsFormatException);
+    });
+  });
+
+  group('WTR',(){
+    test('decodifica tabla exacta de animación de agua',(){
+      final wtr=WtrData.parse(wtrFixture(),'world.wtr');
+      expect(wtr.tileSize,closeTo(64,1e-6));
+      expect(wtr.unknown2,9);
+      expect(wtr.unknown3,-2);
+      expect(wtr.textures,['water01.tga','water02.tga','water03.tga']);
+    });
+    test('rechaza WTR truncado',(){
+      final bytes=wtrFixture().sublist(0,20);
+      expect(()=>WtrData.parse(Uint8List.fromList(bytes),'bad.wtr'),throwsFormatException);
     });
   });
 
