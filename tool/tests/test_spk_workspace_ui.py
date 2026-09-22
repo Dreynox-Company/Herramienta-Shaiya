@@ -28,6 +28,11 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("'schema': 3", browser)
         self.assertIn("studioBuildLabel", browser)
         self.assertIn("_loadStudioBuildLabel", browser)
+        self.assertIn("visor HEX + ASCII", browser)
+        self.assertIn("CADENAS DETECTADAS", browser)
+        self.assertIn("Reemplazar en overlay", browser)
+        self.assertIn("writeSpkOverlay", browser)
+        self.assertIn("SPK_REPLACEMENT_FORMAT", browser)
 
     def test_name_resolution_stays_one_to_one(self):
         source = (ROOT / 'lib' / 'data' / 'spk_source.dart').read_text(
