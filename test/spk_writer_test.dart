@@ -315,7 +315,9 @@ Future<_Fixture> _fixture(Directory root) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('SPK writer rebuilds, edits and self-validates simple + fragmented payloads', () async {
+  test(
+    'SPK writer rebuilds, edits and self-validates simple + fragmented payloads',
+    () async {
     final root = await Directory.systemTemp.createTemp('spk-writer-');
     try {
       final fixture = await _fixture(root);
@@ -410,9 +412,15 @@ void main() {
     } finally {
       await root.delete(recursive: true);
     }
-  });
+  },
+    skip: !Platform.isWindows
+        ? 'Requiere zstandard_windows.dll; se ejecuta en el gate nativo Windows.'
+        : false,
+  );
 
-  test('SPK writer refuses unknown replacement IDs and never overwrites source', () async {
+  test(
+    'SPK writer refuses unknown replacement IDs and never overwrites source',
+    () async {
     final root = await Directory.systemTemp.createTemp('spk-writer-guards-');
     try {
       final fixture = await _fixture(root);
@@ -449,5 +457,9 @@ void main() {
     } finally {
       await root.delete(recursive: true);
     }
-  });
+  },
+    skip: !Platform.isWindows
+        ? 'Requiere zstandard_windows.dll; se ejecuta en el gate nativo Windows.'
+        : false,
+  );
 }
