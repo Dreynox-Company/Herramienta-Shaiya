@@ -541,10 +541,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   String _friendlyError(Object error) {
     if (error is SpkFailure) {
       final output = error.report['output']?.toString();
+      final consoleLog = error.report['consoleLog']?.toString();
       final failure = error.report['failure']?.toString();
       final details = <String>[
         if (failure != null && failure.isNotEmpty) failure,
-        if (output != null && output.isNotEmpty) 'Diagnóstico: $output',
+        if (consoleLog != null && consoleLog.isNotEmpty)
+          'Log: $consoleLog'
+        else if (output != null && output.isNotEmpty)
+          'Diagnóstico: $output',
       ];
       return '${error.code}: ${error.message}'
           '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
@@ -1029,9 +1033,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       },
     );
     final recent = <String>[];
+    final console = <String>[];
     void reportLine(String line) {
       final clean = line.trim();
       if (clean.isEmpty) return;
+      console.add(clean);
+      if (console.length > 5000) console.removeAt(0);
       recent.add(clean);
       if (recent.length > 12) recent.removeAt(0);
       if (mounted) {
@@ -1049,6 +1056,21 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         .forEach(reportLine);
     final exitCode = await process.exitCode;
     await Future.wait([stdoutDone, stderrDone]);
+    if (!await output.exists()) {
+      await output.create(recursive: true);
+    }
+    await File(p.join(output.path, 'probe-console.log')).writeAsString(
+      [
+        'Shaiya Studio ResourceProbe V10',
+        'exitCode=$exitCode',
+        'game=${game.path}',
+        'data=${source.file.path}',
+        '',
+        ...console,
+        '',
+      ].join('\n'),
+      flush: true,
+    );
 
     final profileFile = File(p.join(output.path, 'derived-resource-profile.json'));
     if (!await profileFile.exists()) {
@@ -1059,6 +1081,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'exitCode': exitCode,
           'output': output.path,
           'logTail': recent,
+          'consoleLog': p.join(output.path, 'probe-console.log'),
         },
       );
     }
@@ -1076,6 +1099,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'output': output.path,
           if (data['failure'] != null) 'failure': data['failure'],
           'logTail': recent,
+          'consoleLog': p.join(output.path, 'probe-console.log'),
         },
       );
     }
