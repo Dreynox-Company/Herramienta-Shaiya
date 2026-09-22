@@ -2418,6 +2418,31 @@ class PsWorldSession {
     return PsPlayerShape.parse(await response);
   }
 
+  Future<void> clearTarget() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de limpiar objetivo.');
+    await connection.send(PsPacketType.targetClear);
+  }
+
+  Future<PsTargetBuffState> requestCharacterTargetBuffs(int characterId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de consultar buffs PvP.');
+    final response=connection.waitStream((p)=>
+      p.type==PsPacketType.targetBuffs&&p.body.length>=5&&
+      ByteData.sublistView(p.body).getUint32(1,Endian.little)==characterId
+    );
+    await connection.send(PsPacketType.targetGetCharacterBuffs,_u32Bytes(characterId));
+    return PsTargetBuffState.parse(await response);
+  }
+
+  Future<PsTargetBuffState> requestMobTargetBuffs(int globalId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de consultar buffs del mob.');
+    final response=connection.waitStream((p)=>
+      p.type==PsPacketType.targetBuffs&&p.body.length>=5&&
+      ByteData.sublistView(p.body).getUint32(1,Endian.little)==globalId
+    );
+    await connection.send(PsPacketType.targetGetMobBuffs,_u32Bytes(globalId));
+    return PsTargetBuffState.parse(await response);
+  }
+
   Future<PsTargetCharacterSelection> selectCharacterTarget(int characterId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo PvP.');
     final response=connection.waitStream((p)=>
