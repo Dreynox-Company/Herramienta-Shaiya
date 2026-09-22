@@ -243,6 +243,9 @@ class PsConnection {
   }
 
   Stream<PsPacket> get packets=>_packets.stream;
+  Future<PsPacket> waitStream(bool Function(PsPacket) test,{Duration timeout=const Duration(seconds:8)})=>
+    packets.firstWhere(test).timeout(timeout,onTimeout:()=>throw TimeoutException('Timeout esperando paquete ps0032 en stream.'));
+
 
   void _emit(PsPacket packet){
     if(!_packets.isClosed)_packets.add(packet);
@@ -966,8 +969,9 @@ class PsWorldSession {
 
   Future<PsTargetMobHp> selectMobTarget(int globalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo.');
+    final responseFuture=connection.waitStream((p)=>p.type==PsPacketType.targetMobHpUpdate&&p.body.length>=4&&ByteData.sublistView(p.body).getUint32(0,Endian.little)==globalId);
     await connection.send(PsPacketType.targetMobHpUpdate,_u32Bytes(globalId));
-    final response=await connection.nextType(PsPacketType.targetMobHpUpdate);
+    final response=await responseFuture;
     final hp=PsTargetMobHp.parse(response);
     if(hp.targetId!=globalId)throw StateError('World devolvió otro target: ${hp.targetId}.');
     return hp;
@@ -977,7 +981,7 @@ class PsWorldSession {
     if(!_expanded)throw StateError('Selecciona un personaje antes de actualizar atributos.');
     final values=[str,dex,rec,intl,wis,luc];
     if(values.any((v)=>v<0||v>65535))throw RangeError('Incremento de atributo fuera de ushort.');
-    final response=connection.nextType(PsPacketType.updateStats,timeout:const Duration(seconds:5));
+    final response=connection.waitStream((p)=>p.type==PsPacketType.updateStats,timeout:const Duration(seconds:5));
     await connection.send(PsPacketType.updateStats,[
       for(final v in values)..._u16Bytes(v),
     ]);
@@ -1020,11 +1024,16 @@ class PsWorldSession {
 
   Future<void> startQuest(int npcGlobalId,int questId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de iniciar una misión.');
+    final response=connection.waitStream((p){
+      if(p.type!=PsPacketType.questStart||p.body.length<6)return false;
+      final d=ByteData.sublistView(p.body);
+      return d.getUint32(0,Endian.little)==npcGlobalId&&d.getInt16(4,Endian.little)==questId;
+    });
     await connection.send(PsPacketType.questStart,[
       ..._u32Bytes(npcGlobalId),
       ..._i16Bytes(questId),
     ]);
-    final result=await connection.nextType(PsPacketType.questStart);
+    final result=await response;
     if(result.body.length<6)throw FormatException('QUEST_START response truncado.');
     final npc=ByteData.sublistView(result.body).getUint32(0,Endian.little);
     final quest=ByteData.sublistView(result.body).getInt16(4,Endian.little);
@@ -1033,13 +1042,24 @@ class PsWorldSession {
 
   Future<PsQuestFinishResult> finishQuest(int npcGlobalId,int questId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de finalizar una misión.');
+    final response=connection.waitStream((p){
+      if(p.type==PsPacketType.questEndSelect&&p.body.length>=2){
+        return ByteData.sublistView(p.body).getInt16(0,Endian.little)==questId;
+      }
+      if(p.type==PsPacketType.questEnd&&p.body.length>=6){
+        return ByteData.sublistView(p.body).getInt16(4,Endian.little)==questId;
+      }
+      return false;
+    });
     await connection.send(PsPacketType.questEnd,[
       ..._u32Bytes(npcGlobalId),
       ..._i16Bytes(questId),
     ]);
     final deadline=DateTime.now().add(const Duration(seconds:8));
+    var first=true;
     while(DateTime.now().isBefore(deadline)){
-      final p=await connection.next(timeout:deadline.difference(DateTime.now()));
+      final p=first?await response:await connection.waitStream((p)=>p.type==PsPacketType.questEnd||p.type==PsPacketType.questEndSelect,timeout:deadline.difference(DateTime.now()));
+      first=false;
       if(p.type==PsPacketType.questEndSelect){
         if(p.body.length<6)throw FormatException('QUEST_END_SELECT truncado: '+p.body.length.toString()+'.');
         final d=ByteData.sublistView(p.body);
@@ -1091,22 +1111,25 @@ class PsWorldSession {
     for(final value in [currentBag,currentSlot,destinationBag,destinationSlot]){
       if(value<0||value>255)throw RangeError('Bag/slot fuera de byte: $value');
     }
+    final responseFuture=connection.waitStream((p)=>p.type==PsPacketType.inventoryMoveItem);
     await connection.send(PsPacketType.inventoryMoveItem,[currentBag,currentSlot,destinationBag,destinationSlot]);
-    final response=await connection.nextType(PsPacketType.inventoryMoveItem);
+    final response=await responseFuture;
     return PsInventoryMove.parse(response);
   }
   Future<PsNpcTradeResult> buyNpcItem(int npcGlobalId,int productIndex,int count) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de comprar.');
     if(productIndex<0||productIndex>255||count<=0||count>255)throw RangeError('Índice/cantidad de compra inválidos.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.npcBuyItem);
     await connection.send(PsPacketType.npcBuyItem,[..._u32Bytes(npcGlobalId),productIndex,count]);
-    return PsNpcTradeResult.parse(await connection.nextType(PsPacketType.npcBuyItem));
+    return PsNpcTradeResult.parse(await response);
   }
 
   Future<PsNpcTradeResult> sellNpcItem(int bag,int slot,int count) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de vender.');
     if(bag<=0||bag>255||slot<0||slot>255||count<=0||count>255)throw RangeError('Bag/slot/cantidad de venta inválidos.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.npcSellItem);
     await connection.send(PsPacketType.npcSellItem,[bag,slot,count]);
-    return PsNpcTradeResult.parse(await connection.nextType(PsPacketType.npcSellItem));
+    return PsNpcTradeResult.parse(await response);
   }
   Future<void> useMobSkill(int skillNumber,int targetGlobalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar skills.');
