@@ -1641,6 +1641,7 @@ class _GameClientPageState extends State<GameClientPage> {
             catalog:catalog!,
             metadata:metadata,
             characterName:nameController.text,
+            mapId:liveMapId,
             level:liveCharacter?.level??1,
             details:liveDetails,
             additionalStats:liveAdditionalStats,
