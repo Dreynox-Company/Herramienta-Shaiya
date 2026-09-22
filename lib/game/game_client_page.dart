@@ -835,6 +835,30 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Target] '+e.toString());}
     if(mounted)setState((){});
   }
+  Future<void> _addStat(int index) async {
+    final d=liveDetails,session=liveWorld;
+    if(d==null||session==null||stage!=GameStage.world)return;
+    if(d.statPoint<=0){messages.insert(0,'[Estado] No hay puntos de atributo disponibles.');if(mounted)setState((){});return;}
+    try{
+      final result=await session.updateStats(
+        str:index==0?1:0,dex:index==1?1:0,rec:index==2?1:0,
+        intl:index==3?1:0,wis:index==4?1:0,luc:index==5?1:0,
+      );
+      final spent=result.fold<int>(0,(sum,v)=>sum+v);
+      if(spent<=0){messages.insert(0,'[Estado] World no aplicó el punto.');if(mounted)setState((){});return;}
+      liveDetails=PsCharacterDetails(
+        strength:d.strength+result[0],dexterity:d.dexterity+result[1],reaction:d.reaction+result[2],
+        intelligence:d.intelligence+result[3],wisdom:d.wisdom+result[4],luck:d.luck+result[5],
+        statPoint:math.max(0,d.statPoint-spent),skillPoint:d.skillPoint,
+        maxHp:d.maxHp,maxMp:d.maxMp,maxSp:d.maxSp,angle:d.angle,
+        startExp:d.startExp,endExp:d.endExp,currentExp:d.currentExp,gold:d.gold,
+        x:d.x,y:d.y,z:d.z,kills:d.kills,deaths:d.deaths,victories:d.victories,defeats:d.defeats,
+        guildName:d.guildName,
+      );
+      messages.insert(0,'[Estado] Atributo actualizado por World.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Estado] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _assignSkillToHotbar(PsLearnedSkill skill) async {
     final session=liveWorld;
     if(session==null||stage!=GameStage.world)return;
@@ -1418,6 +1442,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
             onToggleInventory:()=>_toggleWorldPanel('inventory'),
             onToggleStatus:()=>_toggleWorldPanel('status'),
+            onAddStat:(index)=>unawaited(_addStat(index)),
             onToggleSkills:()=>_toggleWorldPanel('skills'),
             onToggleQuestLog:()=>_toggleWorldPanel('quests'),
             onOpenQuest:_openQuestFromLog,
