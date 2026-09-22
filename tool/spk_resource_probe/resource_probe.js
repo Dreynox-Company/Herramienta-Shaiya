@@ -38,23 +38,57 @@ function location(pointer) {
       : {module: null, address: pointer.toString()};
 }
 
+function align(value, boundary) {
+  return Math.ceil(value / boundary) * boundary;
+}
+
 function authenticatedInfo(pointer) {
   try {
     if (pointer.isNull()) return null;
     const cbSize = pointer.readU32();
     const version = pointer.add(4).readU32();
-    if (cbSize < 80 || cbSize > 128) return null;
-    const noncePtr = pointer.add(8).readPointer();
-    const nonceBytes = pointer.add(16).readU32();
-    const aadPtr = pointer.add(24).readPointer();
-    const aadBytes = pointer.add(32).readU32();
-    const tagPtr = pointer.add(40).readPointer();
-    const tagBytes = pointer.add(48).readU32();
-    const macPtr = pointer.add(56).readPointer();
-    const macBytes = pointer.add(64).readU32();
+    const ps = Process.pointerSize;
+    // Windows x86 uses a 64-byte structure; x64 uses 88 bytes.
+    if (cbSize < 56 || cbSize > 128) return null;
+
+    let off = 8;
+    const noncePtr = pointer.add(off).readPointer();
+    off += ps;
+    const nonceBytes = pointer.add(off).readU32();
+    off += 4;
+    off = align(off, ps);
+
+    const aadPtr = pointer.add(off).readPointer();
+    off += ps;
+    const aadBytes = pointer.add(off).readU32();
+    off += 4;
+    off = align(off, ps);
+
+    const tagPtr = pointer.add(off).readPointer();
+    off += ps;
+    const tagBytes = pointer.add(off).readU32();
+    off += 4;
+    off = align(off, ps);
+
+    const macPtr = pointer.add(off).readPointer();
+    off += ps;
+    const macBytes = pointer.add(off).readU32();
+    off += 4;
+
+    const cbAAD = pointer.add(off).readU32();
+    off += 4;
+    // ULONGLONG keeps 8-byte alignment with the default Windows packing.
+    off = align(off, 8);
+    const cbData = pointer.add(off).readU64().toString();
+    off += 8;
+    const flags = pointer.add(off).readU32();
+
+    if (off + 4 > cbSize) return null;
     return {
       cbSize,
       version,
+      pointerSize: ps,
+      targetArch: Process.arch,
       nonceHex: safe(noncePtr, nonceBytes, 256),
       nonceBytes,
       authDataHex: safe(aadPtr, aadBytes, 8192),
@@ -63,9 +97,9 @@ function authenticatedInfo(pointer) {
       tagBytes,
       macContextHex: safe(macPtr, macBytes, 512),
       macContextBytes: macBytes,
-      cbAAD: pointer.add(68).readU32(),
-      cbData: pointer.add(72).readU64().toString(),
-      flags: pointer.add(80).readU32(),
+      cbAAD,
+      cbData,
+      flags,
     };
   } catch (_) {
     return null;
@@ -463,8 +497,11 @@ function attach(module) {
   });
 }
 
-if (Process.platform !== 'windows' || Process.arch !== 'x64') {
-  throw new Error('Windows x64 requerido');
+if (
+  Process.platform !== 'windows' ||
+  !['x64', 'ia32'].includes(Process.arch)
+) {
+  throw new Error('Windows x86/x64 requerido');
 }
 
 observer = Process.attachModuleObserver({
@@ -497,4 +534,6 @@ rpc.exports = {
 event('READY', {
   scope: 'exact-SPK-resource-ciphertexts-only',
   liveHandleKeyExport: true,
+  targetArch: Process.arch,
+  pointerSize: Process.pointerSize,
 });
