@@ -1050,7 +1050,8 @@ class StudioScene extends ChangeNotifier {
       for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
       if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');var loaded=0;
       final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree','Grass','VAni','Object'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
-      for(final obj in nearby.take(140)){
+      for(final obj in nearby){
+        if(loaded>=140)break;
         final model=lib.resolve(obj.asset,['entity/${obj.category}']);
         if(model==null){
           missingWorldAssets.add('${obj.category}:${obj.asset}');
