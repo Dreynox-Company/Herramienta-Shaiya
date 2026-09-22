@@ -19,6 +19,8 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn("BCryptImportKey", text)
         self.assertIn("BCryptDuplicateKey", text)
         self.assertIn("KEY_EXPORTED_FROM_LIVE_HANDLE", text)
+        self.assertIn("['x64', 'ia32'].includes(Process.arch)", text)
+        self.assertIn("pointerSize: Process.pointerSize", text)
 
     def test_windows_probe_and_studio_force_utf8_safe_evidence(self):
         probe_text = MODULE.read_text(encoding='utf-8')
