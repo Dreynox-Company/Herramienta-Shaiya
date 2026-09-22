@@ -52,8 +52,7 @@ class SpkWriterResult {
 class SpkWriter {
   static final Random _random = Random.secure();
 
-  static int _u64(int value) =>
-      value < 0 ? value + 0x10000000000000000 : value;
+  static int _u64(int value) => value.toUnsigned(64);
 
   static Uint8List _nonce() =>
       Uint8List.fromList(List<int>.generate(12, (_) => _random.nextInt(256)));
