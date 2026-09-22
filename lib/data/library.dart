@@ -23,6 +23,7 @@ String canon(String path) {
 const supportedExtensions = {
   '.3dc',
   '.3do',
+  '.3de',
   '.ani',
   '.mlt',
   '.alt',
