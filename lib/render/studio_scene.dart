@@ -1026,7 +1026,7 @@ class StudioScene extends ChangeNotifier {
     _worldAudioAccumulator+=delta;if(_worldAudioAccumulator>.5){_worldAudioAccumulator=0;unawaited(_syncWorldAudio());}
     if(moving&&!sceneCombatLocked&&mount==null){
       _footstepAccumulator+=delta;
-      final cadence=running?.34:.48;
+      final cadence=running ? .34 : .48;
       if(_footstepAccumulator>=cadence){_footstepAccumulator=0;unawaited(_playTerrainFootstep());}
     }else{
       _footstepAccumulator=0;
