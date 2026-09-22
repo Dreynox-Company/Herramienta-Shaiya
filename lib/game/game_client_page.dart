@@ -82,6 +82,8 @@ class _GameClientPageState extends State<GameClientPage> {
   String duelResultText='';
   int? partyLeaderId,pendingPartyRequesterId,outgoingPartyInviteId;
   int? pendingRaidRequesterId;
+  int? pendingVehicleRequesterId,vehiclePassengerId;
+  bool vehicleMounted=false,vehicleSummoning=false;
   String? pendingFriendRequestName;
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
@@ -850,6 +852,39 @@ class _GameClientPageState extends State<GameClientPage> {
     try{await scene.selectCreature(record,'wing');}catch(e){messages.insert(0,'[Equipo 3D] '+e.toString());}
   }
 
+  CreatureRecord? _mountRecordForItem(int type,int typeId){
+    final rule=metadata?.item(type,typeId);
+    if(rule==null)return null;
+    return catalog?.mounts.where((m)=>m.id==rule.image).firstOrNull;
+  }
+
+  Future<void> _applyMountVisual(bool mounted,{int? type,int? typeId}) async {
+    if(!mounted){await scene.selectCreature(null,'mount');return;}
+    PsInventoryItem? item;
+    if(type==null||typeId==null||type==0||typeId==0)item=_equippedItem(13);
+    final record=(type!=null&&typeId!=null&&type!=0&&typeId!=0)
+      ?_mountRecordForItem(type,typeId)
+      :(item==null?null:_mountRecordForItem(item.type,item.typeId));
+    if(record==null){
+      messages.insert(0,'[Montura] No se encontró el modelo MON de la montura equipada.');
+      await scene.selectCreature(null,'mount');
+      return;
+    }
+    try{await scene.selectCreature(record,'mount');}
+    catch(e){messages.insert(0,'[Montura] '+e.toString());}
+  }
+
+  CreatureRecord? _remoteMountRecord(int characterId,int type,int typeId){
+    if(type!=0&&typeId!=0){
+      final direct=_mountRecordForItem(type,typeId);
+      if(direct!=null)return direct;
+    }
+    final shape=remotePlayerShapes[characterId];
+    final equipment=shape?.equipment.where((e)=>e.slot==13&&!e.empty).firstOrNull;
+    if(equipment==null)return null;
+    return _mountRecordForItem(equipment.type,equipment.typeId);
+  }
+
   Future<void> _syncVisibleEquipmentFromInventory() async {
     // Primary body slots first, costume last so its full-set semantics can override armor.
     for(final slot in const [0,1,2,3,4]){
@@ -862,12 +897,18 @@ class _GameClientPageState extends State<GameClientPage> {
     await _applyWeaponVisual(weaponItem==null?null:metadata?.item(weaponItem.type,weaponItem.typeId));
     final wingItem=_equippedItem(16);
     await _applyWingVisual(wingItem==null?null:metadata?.item(wingItem.type,wingItem.typeId));
+    if(vehicleMounted)await _applyMountVisual(true);
   }
 
   Future<void> _applyEquipmentVisual(PsEquipmentChange change) async {
     if(change.characterId!=liveCharacter?.id)return;
     final rule=(change.type==0||change.typeId==0)?null:metadata?.item(change.type,change.typeId);
     if(change.slot==5){await _applyWeaponVisual(rule);return;}
+    if(change.slot==13){
+      if(rule==null){vehicleMounted=false;vehicleSummoning=false;await _applyMountVisual(false);}
+      else if(vehicleMounted){await _applyMountVisual(true,type:change.type,typeId:change.typeId);}
+      return;
+    }
     if(change.slot==16){await _applyWingVisual(rule);return;}
     if(_appearanceSlotForEquipmentSlot(change.slot)!=null){
       // Costume removal restores the ordinary upper armor from live bag-0 state.
@@ -1183,6 +1224,83 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
       return;
     }
+    if(packet.type==PsPacketType.characterMotion&&packet.body.length>=5){
+      try{
+        final motion=PsCharacterMotion.parse(packet);
+        if(motion.characterId!=liveCharacter?.id)unawaited(scene.applyNetworkPlayerMotion(motion.characterId,motion.motion));
+      }catch(e){messages.insert(0,'[Movimiento] MOTION: '+e.toString());}
+      return;
+    }else if(packet.type==PsPacketType.characterShapeUpdate&&packet.body.length>=13){
+      try{
+        final update=PsShapeUpdate.parse(packet),self=liveCharacter?.id;
+        if(update.characterId==self){
+          if(update.mounted){
+            vehicleMounted=true;vehicleSummoning=false;
+            unawaited(_applyMountVisual(true,type:update.param1,typeId:update.param2));
+          }else if(update.shape==0){
+            vehicleMounted=false;vehicleSummoning=false;vehiclePassengerId=null;
+            unawaited(_applyMountVisual(false));
+          }
+        }else if(remotePlayerEntries.containsKey(update.characterId)){
+          if(update.mounted){
+            final record=_remoteMountRecord(update.characterId,update.param1,update.param2);
+            if(record!=null)unawaited(scene.setNetworkPlayerMount(update.characterId,record));
+          }else if(update.shape==0){
+            unawaited(scene.setNetworkPlayerMount(update.characterId,null));
+          }
+        }
+      }catch(e){messages.insert(0,'[Montura] SHAPE_UPDATE: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.useVehicleReady&&packet.body.length>=4){
+      final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      if(id==liveCharacter?.id){
+        vehicleSummoning=true;
+        messages.insert(0,'[Montura] Invocando montura…');
+      }
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.useVehicle&&packet.body.length>=2){
+      try{
+        final state=PsUseVehicleState.parse(packet);
+        vehicleSummoning=false;
+        if(state.success){
+          vehicleMounted=state.mounted;
+          unawaited(_applyMountVisual(state.mounted));
+          messages.insert(0,state.mounted?'[Montura] Montura activa.':'[Montura] Has bajado de la montura.');
+        }else{
+          messages.insert(0,'[Montura] World rechazó el uso de la montura.');
+        }
+      }catch(e){messages.insert(0,'[Montura] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.vehicleRequest&&packet.body.length>=4){
+      pendingVehicleRequesterId=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      messages.insert(0,'[Montura] '+_knownCharacterName(pendingVehicleRequesterId!)+' te invita a subir.');
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.vehicleResponse&&packet.body.isNotEmpty){
+      final status=packet.body[0];
+      if(status==0)messages.insert(0,'[Montura] Invitación de pasajero aceptada.');
+      else if(status==1)messages.insert(0,'[Montura] Invitación de pasajero rechazada.');
+      else messages.insert(0,'[Montura] No se pudo compartir la montura.');
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.useVehicle2&&packet.body.length>=8){
+      try{
+        final passenger=PsVehiclePassenger.parse(packet),self=liveCharacter?.id;
+        if(passenger.passengerId==self){
+          vehiclePassengerId=passenger.vehicleCharacterId==0?null:passenger.vehicleCharacterId;
+          vehicleMounted=vehiclePassengerId!=null;
+          messages.insert(0,vehiclePassengerId==null?'[Montura] Has bajado de la montura compartida.':'[Montura] Pasajero de '+_knownCharacterName(vehiclePassengerId!)+'.');
+        }else if(passenger.vehicleCharacterId==self){
+          messages.insert(0,passenger.passengerId==0?'[Montura] Pasajero retirado.':'[Montura] Pasajero #'+passenger.passengerId.toString()+' subió.');
+        }
+      }catch(e){messages.insert(0,'[Montura] Pasajero: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }
+
     if(packet.type==PsPacketType.duelRequest&&packet.body.length>=8){
       try{
         final req=PsDuelRequest.parse(packet),self=liveCharacter?.id??0;
@@ -2466,6 +2584,37 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<void> _toggleVehicle() async {
+    final session=liveWorld;
+    if(session==null||stage!=GameStage.world||dead||rebirthPending)return;
+    if(vehiclePassengerId!=null){
+      try{await session.leaveVehiclePassenger();}
+      catch(e){messages.insert(0,'[Montura] '+e.toString());}
+      return;
+    }
+    final mount=_equippedItem(13);
+    if(!vehicleMounted&&mount==null){
+      messages.insert(0,'[Montura] Equipa una montura en el slot correspondiente.');
+      if(mounted)setState((){});
+      return;
+    }
+    try{
+      await session.toggleVehicle();
+      messages.insert(0,vehicleMounted?'[Montura] Bajando…':'[Montura] Solicitud de invocación enviada.');
+    }catch(e){messages.insert(0,'[Montura] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondVehicleRequest(bool accepted) async {
+    if(pendingVehicleRequesterId==null||liveWorld==null)return;
+    try{
+      await liveWorld!.respondVehiclePassenger(rejected:!accepted);
+      messages.insert(0,accepted?'[Montura] Invitación aceptada.':'[Montura] Invitación rechazada.');
+      pendingVehicleRequesterId=null;
+    }catch(e){messages.insert(0,'[Montura] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
   Future<void> _sendChat(String value) async {
     final session=liveWorld;if(session==null||stage!=GameStage.world)return;
     try{await session.sendNormalChat(value);}
@@ -3304,6 +3453,7 @@ class _GameClientPageState extends State<GameClientPage> {
       if(stage!=GameStage.world||dead||rebirthPending)return;
       if(key==LogicalKeyboardKey.keyR){scene.resetCombat();return;}
       if(key==LogicalKeyboardKey.keyE){unawaited(_interactNearestNpc());return;}
+      if(key==LogicalKeyboardKey.keyM){unawaited(_toggleVehicle());return;}
       final keys=<LogicalKeyboardKey>[
         LogicalKeyboardKey.digit1,LogicalKeyboardKey.digit2,
         LogicalKeyboardKey.digit3,LogicalKeyboardKey.digit4,
@@ -3468,6 +3618,11 @@ class _GameClientPageState extends State<GameClientPage> {
             partyMembers:livePartyMembers,
             raid:liveRaid,
             pendingRaidRequesterId:pendingRaidRequesterId,
+            pendingVehicleRequesterId:pendingVehicleRequesterId,
+            vehicleMounted:vehicleMounted,
+            vehicleSummoning:vehicleSummoning,
+            onToggleVehicle:()=>unawaited(_toggleVehicle()),
+            onRespondVehicle:_respondVehicleRequest,
             partyLeaderId:partyLeaderId,
             guildDirectory:guildDirectory,
             guildMembers:liveGuildMembers,
