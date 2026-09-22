@@ -46,6 +46,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsCharacterDetails? liveDetails;
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
+  PsMapWeather? liveWeather;
   Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
   int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
   PsSkillBook? liveSkills;
@@ -540,6 +541,8 @@ class _GameClientPageState extends State<GameClientPage> {
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
         if(barPacket!=null)liveSkillBar=PsSkillBar.parse(barPacket);
         final entered=await session.enterMap(collect:const Duration(seconds:5));
+        final weatherPacket=entered.where((p)=>p.type==PsPacketType.mapWeather).lastOrNull;
+        if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
         mapId=current.mapId;
@@ -841,6 +844,11 @@ class _GameClientPageState extends State<GameClientPage> {
     }else if(packet.type==PsPacketType.mobSkillUse&&packet.body.length>=19){
       final hit=PsMobSkillHit.parse(packet);
       if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');}
+    }else if(packet.type==PsPacketType.mapWeather&&packet.body.length>=3){
+      try{
+        liveWeather=PsMapWeather.parse(packet);
+        messages.insert(0,'[Clima] '+(liveWeather!.rain?'Lluvia':liveWeather!.snow?'Nieve':'Despejado')+' · intensidad '+liveWeather!.power.toString()+'.');
+      }catch(e){messages.insert(0,'[Clima] '+e.toString());}
     }else if(packet.type==PsPacketType.buffAdd&&packet.body.length>=11){
       try{
         final buff=parseBuffAdd(packet);liveBuffs[buff.id]=buff;
@@ -1647,6 +1655,7 @@ class _GameClientPageState extends State<GameClientPage> {
             additionalStats:liveAdditionalStats,
             hitpoints:liveHitpoints,
             buffs:liveBuffs.values.toList(),
+            weather:liveWeather,
             targetMobGlobalId:targetMobGlobalId,
             targetMobId:targetMobTypeId,
             targetHp:targetMobHp,
