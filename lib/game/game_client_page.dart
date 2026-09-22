@@ -53,6 +53,10 @@ class _GameClientPageState extends State<GameClientPage> {
   PsSkillBar? liveSkillBar;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
   List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
+  List<PsFriend> liveFriends=<PsFriend>[];
+  List<PsPartyMember> livePartyMembers=<PsPartyMember>[];
+  int? partyLeaderId,pendingPartyRequesterId,outgoingPartyInviteId;
+  String? pendingFriendRequestName;
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
   bool movementSending=false;
@@ -79,6 +83,7 @@ class _GameClientPageState extends State<GameClientPage> {
   bool rewardSelection=false;
   int rewardNpcId=0;
   bool inventoryOpen=false;
+  bool socialOpen=false;
   bool statusOpen=false;
   bool skillsOpen=false;
   bool questLogOpen=false;
@@ -527,6 +532,8 @@ class _GameClientPageState extends State<GameClientPage> {
         final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
         final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
         final buffsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterActiveBuffs).firstOrNull;
+        final friendsPacket=selected.packets.where((p)=>p.type==PsPacketType.friendList).lastOrNull;
+        final partyPacket=selected.packets.where((p)=>p.type==PsPacketType.partyList).lastOrNull;
         final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
         final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
         liveInventory=selected.packets
@@ -549,6 +556,14 @@ class _GameClientPageState extends State<GameClientPage> {
           for(final buff in buffsPacket==null?const <PsActiveBuff>[]:parseActiveBuffs(buffsPacket))
             buff.id:buff,
         };
+        if(friendsPacket!=null)liveFriends=parseFriendList(friendsPacket).toList();
+        if(partyPacket!=null){
+          final party=PsPartyList.parse(partyPacket);
+          livePartyMembers=party.members.toList();
+          if(partyLeaderId==null&&party.leaderIndex<party.members.length){
+            partyLeaderId=party.members[party.leaderIndex].id;
+          }
+        }
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
         if(barPacket!=null)liveSkillBar=PsSkillBar.parse(barPacket);
         final entered=await session.enterMap(collect:const Duration(seconds:5));
@@ -1171,6 +1186,109 @@ class _GameClientPageState extends State<GameClientPage> {
     }
   }
 
+  void _upsertFriend(PsFriend friend){
+    liveFriends=[
+      ...liveFriends.where((f)=>f.id!=friend.id),
+      friend,
+    ]..sort((a,b){
+      if(a.online!=b.online)return a.online?-1:1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+  }
+
+  void _upsertPartyMember(PsPartyMember member){
+    livePartyMembers=[
+      ...livePartyMembers.where((m)=>m.id!=member.id),
+      member,
+    ];
+  }
+
+  void _updatePartyMember(int id,PsPartyMember Function(PsPartyMember) update){
+    final current=livePartyMembers.where((m)=>m.id==id).firstOrNull;
+    if(current==null)return;
+    _upsertPartyMember(update(current));
+  }
+
+  Future<void> _requestFriend(String name) async {
+    final session=liveWorld;if(session==null)return;
+    try{
+      await session.requestFriend(name);
+      messages.insert(0,'[Friends] Solicitud enviada a '+name.trim()+'.');
+    }catch(e){messages.insert(0,'[Friends] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondFriend(bool accepted) async {
+    final session=liveWorld,name=pendingFriendRequestName;
+    if(session==null||name==null)return;
+    try{
+      await session.respondFriend(accepted);
+      messages.insert(0,'[Friends] '+(accepted?'Aceptaste a ':'Rechazaste a ')+name+'.');
+      pendingFriendRequestName=null;
+    }catch(e){messages.insert(0,'[Friends] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _deleteFriend(PsFriend friend) async {
+    final session=liveWorld;if(session==null)return;
+    try{
+      await session.deleteFriend(friend.id);
+      messages.insert(0,'[Friends] Eliminando '+friend.name+'…');
+    }catch(e){messages.insert(0,'[Friends] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _inviteFriendToParty(PsFriend friend) async {
+    final session=liveWorld;if(session==null||!friend.online)return;
+    try{
+      outgoingPartyInviteId=friend.id;
+      if(livePartyMembers.isEmpty)partyLeaderId=liveCharacter?.id;
+      await session.requestParty(friend.id);
+      messages.insert(0,'[Party] Invitación enviada a '+friend.name+'.');
+    }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondParty(bool accepted) async {
+    final session=liveWorld,id=pendingPartyRequesterId;
+    if(session==null||id==null)return;
+    try{
+      if(accepted)partyLeaderId=id;
+      await session.respondParty(id,declined:!accepted);
+      messages.insert(0,'[Party] Invitación '+(accepted?'aceptada.':'rechazada.'));
+      pendingPartyRequesterId=null;
+    }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _leaveParty() async {
+    final session=liveWorld;if(session==null)return;
+    try{
+      await session.leaveParty();
+      livePartyMembers=[];partyLeaderId=null;
+      messages.insert(0,'[Party] Has salido del grupo.');
+    }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _kickPartyMember(PsPartyMember member) async {
+    final session=liveWorld;if(session==null||partyLeaderId!=liveCharacter?.id)return;
+    try{
+      await session.kickPartyMember(member.id);
+      messages.insert(0,'[Party] Expulsando a '+member.name+'…');
+    }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _promotePartyMember(PsPartyMember member) async {
+    final session=liveWorld;if(session==null||partyLeaderId!=liveCharacter?.id)return;
+    try{
+      await session.changePartyLeader(member.id);
+      messages.insert(0,'[Party] Cambio de líder solicitado → '+member.name+'.');
+    }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
   Future<void> _sendChat(String value) async {
     final session=liveWorld;if(session==null||stage!=GameStage.world)return;
     try{await session.sendNormalChat(value);}
@@ -1283,6 +1401,7 @@ class _GameClientPageState extends State<GameClientPage> {
   }
   void _closeWorldPanels(){
     inventoryOpen=false;
+    socialOpen=false;
     statusOpen=false;
     skillsOpen=false;
     questLogOpen=false;
@@ -1302,11 +1421,12 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   void _toggleWorldPanel(String panel){
-    final open=panel=='status'?statusOpen:panel=='skills'?skillsOpen:panel=='quests'?questLogOpen:inventoryOpen;
+    final open=panel=='social'?socialOpen:panel=='status'?statusOpen:panel=='skills'?skillsOpen:panel=='quests'?questLogOpen:inventoryOpen;
     _closeWorldPanels();
     questOpen=false;
     if(!open){
-      if(panel=='status')statusOpen=true;
+      if(panel=='social')socialOpen=true;
+      else if(panel=='status')statusOpen=true;
       else if(panel=='skills')skillsOpen=true;
       else if(panel=='quests')questLogOpen=true;
       else inventoryOpen=true;
@@ -2065,7 +2185,14 @@ class _GameClientPageState extends State<GameClientPage> {
             skillBar:liveSkillBar,
             inventory:liveInventory,
             warehouse:liveWarehouse,
+            friends:liveFriends,
+            partyMembers:livePartyMembers,
+            partyLeaderId:partyLeaderId,
+            selfCharacterId:liveCharacter?.id,
+            pendingFriendRequestName:pendingFriendRequestName,
+            pendingPartyRequesterId:pendingPartyRequesterId,
             inventoryOpen:inventoryOpen,
+            socialOpen:socialOpen,
             statusOpen:statusOpen,
             skillsOpen:skillsOpen,
             questLogOpen:questLogOpen,
@@ -2108,6 +2235,15 @@ class _GameClientPageState extends State<GameClientPage> {
             onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
             onToggleInventory:()=>_toggleWorldPanel('inventory'),
+            onToggleSocial:()=>_toggleWorldPanel('social'),
+            onRequestFriend:(name)=>unawaited(_requestFriend(name)),
+            onRespondFriend:(accepted)=>unawaited(_respondFriend(accepted)),
+            onDeleteFriend:(friend)=>unawaited(_deleteFriend(friend)),
+            onInviteParty:(friend)=>unawaited(_inviteFriendToParty(friend)),
+            onRespondParty:(accepted)=>unawaited(_respondParty(accepted)),
+            onLeaveParty:()=>unawaited(_leaveParty()),
+            onKickParty:(member)=>unawaited(_kickPartyMember(member)),
+            onPromoteParty:(member)=>unawaited(_promotePartyMember(member)),
             onToggleStatus:()=>_toggleWorldPanel('status'),
             onAddStat:(index)=>unawaited(_addStat(index)),
             onToggleSkills:()=>_toggleWorldPanel('skills'),
