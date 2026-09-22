@@ -59,6 +59,7 @@ class _GameClientPageState extends State<GameClientPage> {
   String? targetPlayerName;
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
+  PsAutoStats? liveAutoStats;
   PsSkillCasting? liveSkillCasting;
   DateTime? liveSkillCastStartedAt,liveSkillCastEndsAt;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
@@ -629,6 +630,11 @@ class _GameClientPageState extends State<GameClientPage> {
         }
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
         if(barPacket!=null)liveSkillBar=PsSkillBar.parse(barPacket);
+        try{
+          liveAutoStats=await session.requestAutoStats();
+        }catch(e){
+          messages.insert(0,'[AutoStats] '+e.toString());
+        }
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         final weatherPacket=entered.where((p)=>p.type==PsPacketType.mapWeather).lastOrNull;
         if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
@@ -4136,6 +4142,7 @@ class _GameClientPageState extends State<GameClientPage> {
             targetBuffs:targetBuffs,
             skillBook:liveSkills,
             skillBar:liveSkillBar,
+            autoStats:liveAutoStats,
             castingSkill:_skillCastLabel,
             castingProgress:_skillCastProgress,
             inventory:liveInventory,
