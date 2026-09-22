@@ -176,6 +176,15 @@ void main(){
         'waterTablePath':state.scene.waterPath,
         'waterFrameCount':state.scene.waterAnimation?.textures.length??0,
         'waterResolvedTextures':state.scene.waterTexturePaths,
+        'uiSystemCandidates':stage!=GameStage.world
+          ?<String,List<String>>{}
+          :<String,List<String>>{
+            for(final keyword in <String>['bless','bank','obelisk','teleport','market','shop','guild','party','raid'])
+              keyword:state.catalog!.library.files.keys.where((String path){
+                final p=path.toLowerCase();
+                return p.startsWith('interface/')&&p.contains(keyword);
+              }).take(80).toList(),
+          },
         'mapTextureCandidates':state.catalog==null
           ?<String>[]
           :state.catalog!.library.files.keys.where((String path){
