@@ -24,6 +24,7 @@ class PsPacketType {
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
+  static const targetMobHpUpdate=0x0305;
   static const inventoryMoveItem=0x0204;
   static const addItem=0x0205;
   static const removeItem=0x0206;
@@ -34,7 +35,9 @@ class PsPacketType {
   static const mobEnter=0x0601;
   static const mobLeave=0x0602;
   static const mobMove=0x0603;
+  static const mobAttack=0x0605;
   static const mobDeath=0x0606;
+  static const mobSkillUse=0x060B;
   static const questList=0x0901;
   static const questStart=0x0902;
   static const questEnd=0x0903;
@@ -315,6 +318,79 @@ class PsEnteredMap {
       d.getFloat32(15,Endian.little),
       d.getUint32(19,Endian.little),
       d.getUint32(23,Endian.little),
+    );
+  }
+}
+
+class PsTargetMobHp {
+  final int targetId,currentHp,attackSpeed,moveSpeed;
+  const PsTargetMobHp(this.targetId,this.currentHp,this.attackSpeed,this.moveSpeed);
+  static PsTargetMobHp parse(PsPacket p){
+    if(p.type!=PsPacketType.targetMobHpUpdate||p.body.length<10){
+      throw FormatException('TARGET_MOB_HP_UPDATE truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsTargetMobHp(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),p.body[8],p.body[9],
+    );
+  }
+}
+
+class PsSkillHit {
+  final int result,attackerId,targetId,skillId,skillLevel,hpDamage,spDamage,mpDamage;
+  final bool keepActivated;
+  const PsSkillHit({
+    required this.result,required this.attackerId,required this.targetId,
+    required this.skillId,required this.skillLevel,required this.hpDamage,
+    required this.spDamage,required this.mpDamage,required this.keepActivated,
+  });
+  bool get success=>result==0||result==1||result==4;
+  static PsSkillHit parse(PsPacket p){
+    if(p.type!=PsPacketType.useMobTargetSkill||p.body.length<19){
+      throw FormatException('USE_MOB_TARGET_SKILL response truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsSkillHit(
+      result:p.body[0],attackerId:d.getUint32(1,Endian.little),targetId:d.getUint32(5,Endian.little),
+      skillId:d.getUint16(9,Endian.little),skillLevel:p.body[11],
+      hpDamage:d.getUint16(12,Endian.little),spDamage:d.getUint16(14,Endian.little),
+      mpDamage:d.getUint16(16,Endian.little),keepActivated:p.body[18]!=0,
+    );
+  }
+}
+
+class PsMobAttack {
+  final int result,mobId,targetId,hpDamage,spDamage,mpDamage;
+  const PsMobAttack(this.result,this.mobId,this.targetId,this.hpDamage,this.spDamage,this.mpDamage);
+  bool get success=>result==0||result==1;
+  static PsMobAttack parse(PsPacket p){
+    if(p.type!=PsPacketType.mobAttack||p.body.length<15){
+      throw FormatException('MOB_ATTACK truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMobAttack(
+      p.body[0],d.getUint32(1,Endian.little),d.getUint32(5,Endian.little),
+      d.getUint16(9,Endian.little),d.getUint16(11,Endian.little),d.getUint16(13,Endian.little),
+    );
+  }
+}
+
+class PsMobSkillHit {
+  final int result,mobId,targetId,attackType,skillId,skillLevel,hpDamage,spDamage,mpDamage;
+  const PsMobSkillHit({
+    required this.result,required this.mobId,required this.targetId,required this.attackType,
+    required this.skillId,required this.skillLevel,required this.hpDamage,required this.spDamage,required this.mpDamage,
+  });
+  bool get success=>result==0||result==1;
+  static PsMobSkillHit parse(PsPacket p){
+    if(p.type!=PsPacketType.mobSkillUse||p.body.length<19){
+      throw FormatException('MOB_SKILL_USE truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMobSkillHit(
+      result:p.body[0],mobId:d.getUint32(1,Endian.little),targetId:d.getUint32(5,Endian.little),
+      attackType:p.body[9],skillId:d.getUint16(10,Endian.little),skillLevel:p.body[12],
+      hpDamage:d.getUint16(13,Endian.little),spDamage:d.getUint16(15,Endian.little),mpDamage:d.getUint16(17,Endian.little),
     );
   }
 }
