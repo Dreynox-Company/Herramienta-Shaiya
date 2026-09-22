@@ -685,6 +685,33 @@ class _GameClientPageState extends State<GameClientPage> {
     );
   }
 
+  void _snapshotAddNpc(PsNpcEnter npc){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,
+      npcs:[...s.npcs.where((x)=>x.globalId!=npc.globalId),npc],
+      mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
+  void _snapshotAddMob(PsMobEnter mob){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,npcs:s.npcs,
+      mobs:[...s.mobs.where((x)=>x.globalId!=mob.globalId),mob],
+      quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
+  void _snapshotRemoveActor(int globalId,{required bool mob}){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,
+      npcs:mob?s.npcs:s.npcs.where((x)=>x.globalId!=globalId).toList(),
+      mobs:mob?s.mobs.where((x)=>x.globalId!=globalId).toList():s.mobs,
+      quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if([
@@ -801,6 +828,23 @@ class _GameClientPageState extends State<GameClientPage> {
       final d=ByteData.sublistView(packet.body);
       final id=d.getInt16(4,Endian.little),ok=packet.body[6]!=0;
       messages.insert(0,'[Misión] '+id.toString()+(ok?' completada.':' aún no puede completarse.'));
+    }else if(packet.type==PsPacketType.mobEnter&&packet.body.length>=15){
+      try{
+        final mob=PsMobEnter.parse(packet);_snapshotAddMob(mob);
+        unawaited(scene.addNetworkMob(
+          RuntimeMobSpawn(mob.mobId,mob.x,mob.z,mob.globalId),
+          mobModels:metadata?.mobModels,locale:uiLocale,
+        ));
+      }catch(e){messages.insert(0,'[Mundo] MOB_ENTER: '+e.toString());}
+    }else if(packet.type==PsPacketType.mapNpcEnter&&packet.body.length>=21){
+      try{
+        final npc=PsNpcEnter.parse(packet);_snapshotAddNpc(npc);
+        final keys=metadata?.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet();
+        unawaited(scene.addNetworkNpc(
+          RuntimeNpcSpawn(npc.type,npc.typeId,npc.x,npc.y,npc.z,npc.angle,npc.globalId),
+          npcModels:metadata?.npcModels,questNpcKeys:keys,locale:uiLocale,
+        ));
+      }catch(e){messages.insert(0,'[Mundo] MAP_NPC_ENTER: '+e.toString());}
     }else if(packet.type==PsPacketType.mobMove&&packet.body.length>=13){
       final d=ByteData.sublistView(packet.body);
       scene.moveNetworkMob(
@@ -814,11 +858,11 @@ class _GameClientPageState extends State<GameClientPage> {
         d.getFloat32(9,Endian.little),d.getFloat32(13,Endian.little),packet.body[4],
       );
     }else if(packet.type==PsPacketType.mobLeave&&packet.body.length>=4){
-      final d=ByteData.sublistView(packet.body);
-      scene.removeNetworkActor(d.getUint32(0,Endian.little),mob:true);
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little);
+      _snapshotRemoveActor(id,mob:true);scene.removeNetworkActor(id,mob:true);
     }else if(packet.type==PsPacketType.mapNpcLeave&&packet.body.length>=4){
-      final d=ByteData.sublistView(packet.body);
-      scene.removeNetworkActor(d.getUint32(0,Endian.little),mob:false);
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little);
+      _snapshotRemoveActor(id,mob:false);scene.removeNetworkActor(id,mob:false);
     }else if(packet.type==PsPacketType.mobDeath&&packet.body.length>=4){
       final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little);
       if(targetMobGlobalId==id)targetMobHp=0;
