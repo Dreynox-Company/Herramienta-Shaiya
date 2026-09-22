@@ -46,6 +46,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
+  List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
   bool movementSending=false;
@@ -69,6 +70,7 @@ class _GameClientPageState extends State<GameClientPage> {
   int rewardNpcId=0;
   bool inventoryOpen=false;
   bool shopOpen=false;
+  bool warehouseOpen=false;
   NpcShopRule? activeShop;
   int? activeShopNpcGlobalId;
   int? liveGold;
@@ -507,6 +509,15 @@ class _GameClientPageState extends State<GameClientPage> {
           .expand(parseInventoryItems)
           .toList()
           ..sort((a,b){final bag=a.bag.compareTo(b.bag);return bag!=0?bag:a.slot.compareTo(b.slot);});
+        liveWarehouse=selected.packets
+          .where((p)=>p.type==PsPacketType.warehouseItemList)
+          .expand(parseWarehouseItems)
+          .map((w)=>PsInventoryItem(
+            bag:100,slot:w.slot,type:w.type,typeId:w.typeId,quality:w.quality,
+            count:w.count,gems:w.gems,craftName:w.craftName,dyed:w.dyed,
+          ))
+          .toList()
+          ..sort((a,b)=>a.slot.compareTo(b.slot));
         if(hpPacket!=null)liveHitpoints=PsHitpoints.parse(hpPacket);
         if(statsPacket!=null)liveAdditionalStats=PsAdditionalStats.parse(statsPacket);
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
@@ -637,10 +648,16 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   void _upsertInventoryItem(PsInventoryItem item){
-    liveInventory.removeWhere((x)=>x.bag==item.bag&&x.slot==item.slot);
-    if(item.type!=0&&item.typeId!=0&&item.count>0)liveInventory.add(item);
-    _sortInventory();
+    final target=item.bag==100?liveWarehouse:liveInventory;
+    target.removeWhere((x)=>x.bag==item.bag&&x.slot==item.slot);
+    if(item.type!=0&&item.typeId!=0&&item.count>0)target.add(item);
+    if(item.bag==100){
+      liveWarehouse.sort((a,b)=>a.slot.compareTo(b.slot));
+    }else{
+      _sortInventory();
+    }
   }
+
 
   void _removeInventory(PsInventoryRemoval removed){
     final index=liveInventory.indexWhere((x)=>x.bag==removed.bag&&x.slot==removed.slot);
@@ -705,7 +722,8 @@ class _GameClientPageState extends State<GameClientPage> {
         final move=PsInventoryMove.parse(packet);
         _upsertInventoryItem(move.source);
         _upsertInventoryItem(move.destination);
-        messages.insert(0,'[Inventario] Movimiento confirmado por World.');
+        liveGold=move.gold;
+        messages.insert(0,'[Inventario/Almacén] Movimiento confirmado por World.');
       }catch(e){messages.insert(0,'[Inventario] MOVE_ITEM: '+e.toString());}
     }else if(packet.type==PsPacketType.questStart&&packet.body.length>=6){
       final d=ByteData.sublistView(packet.body);
@@ -867,9 +885,13 @@ class _GameClientPageState extends State<GameClientPage> {
     }else{
       final shop=metadata?.shop(logical.type,logical.typeId);
       if(shop!=null&&shop.products.isNotEmpty){
-        activeShop=shop;activeShopNpcGlobalId=globalId;shopOpen=true;
+        activeShop=shop;activeShopNpcGlobalId=globalId;shopOpen=true;warehouseOpen=false;
         inventoryOpen=false;
         messages.insert(0,'[Tienda] '+npcName+' · '+shop.products.length.toString()+' productos.');
+      }else if(logical.type==6){
+        warehouseOpen=true;shopOpen=false;activeShop=null;activeShopNpcGlobalId=null;
+        inventoryOpen=false;
+        messages.insert(0,'[Almacén] '+npcName+' · '+liveWarehouse.length.toString()+' objetos.');
       }else{
         final welcome=localized?.welcome.trim()??'';
         messages.insert(0,'['+npcName+'] '+(welcome.isEmpty?(uiLocale=='spn'?'No tiene nada que decir ahora.':'Nothing to say right now.'):welcome));
@@ -905,6 +927,42 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Misión] QUEST_END_SELECT: '+e.toString());if(mounted)setState((){});}
   }
 
+  ({int bag,int slot})? _firstFreeInventorySlot(){
+    final occupied={<int>{for(final i in liveInventory.where((i)=>i.bag>=1&&i.bag<=5))i.bag*100+i.slot};
+    for(var bag=1;bag<=5;bag++){for(var slot=0;slot<24;slot++){if(!occupied.contains(bag*100+slot))return (bag:bag,slot:slot);}}
+    return null;
+  }
+
+  int? _firstFreeWarehouseSlot(){
+    final occupied={for(final i in liveWarehouse)i.slot};
+    for(var slot=0;slot<120;slot++){if(!occupied.contains(slot))return slot;}
+    return null;
+  }
+
+  Future<void> _storeInWarehouse(PsInventoryItem item) async {
+    final session=liveWorld,slot=_firstFreeWarehouseSlot();
+    if(session==null||!warehouseOpen)return;
+    if(item.bag==0){messages.insert(0,'[Almacén] Debes desequipar el objeto primero.');if(mounted)setState((){});return;}
+    if(slot==null){messages.insert(0,'[Almacén] No hay slots libres.');if(mounted)setState((){});return;}
+    try{
+      final move=await session.moveItem(item.bag,item.slot,100,slot);
+      _upsertInventoryItem(move.source);_upsertInventoryItem(move.destination);liveGold=move.gold;
+      messages.insert(0,'[Almacén] Objeto guardado en slot '+slot.toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
+  }
+
+  Future<void> _withdrawWarehouse(PsInventoryItem item) async {
+    final session=liveWorld,dest=_firstFreeInventorySlot();
+    if(session==null||!warehouseOpen)return;
+    if(dest==null){messages.insert(0,'[Almacén] Inventario lleno.');if(mounted)setState((){});return;}
+    try{
+      final move=await session.moveItem(100,item.slot,dest.bag,dest.slot);
+      _upsertInventoryItem(move.source);_upsertInventoryItem(move.destination);liveGold=move.gold;
+      messages.insert(0,'[Almacén] Objeto retirado a bag '+dest.bag.toString()+', slot '+dest.slot.toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _buyShopProduct(int index,{int count=1}) async {
     final shop=activeShop,npc=activeShopNpcGlobalId,session=liveWorld;
     if(shop==null||npc==null||session==null)return;
@@ -1262,13 +1320,18 @@ class _GameClientPageState extends State<GameClientPage> {
             skillBook:liveSkills,
             skillBar:liveSkillBar,
             inventory:liveInventory,
+            warehouse:liveWarehouse,
             inventoryOpen:inventoryOpen,
+            warehouseOpen:warehouseOpen,
             gold:liveGold??liveDetails?.gold??0,
             shop:activeShop,
             shopOpen:shopOpen,
             onCloseShop:()=>setState(()=>shopOpen=false),
+            onCloseWarehouse:()=>setState(()=>warehouseOpen=false),
             onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
+            onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
+            onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
             onToggleInventory:()=>setState(()=>inventoryOpen=!inventoryOpen),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
