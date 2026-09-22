@@ -14,6 +14,7 @@ class WorldHud extends StatelessWidget {
   final String characterName,locale;
   final int level;
   final PsCharacterDetails? details;
+  final PsAdditionalStats? additionalStats;
   final PsHitpoints? hitpoints;
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
@@ -21,15 +22,17 @@ class WorldHud extends StatelessWidget {
   final List<PsInventoryItem> inventory,warehouse;
   final int gold;
   final NpcShopRule? shop;
-  final bool inventoryOpen,shopOpen,warehouseOpen;
+  final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,warehouseOpen;
   final VoidCallback onCloseShop,onCloseWarehouse;
   final ValueChanged<int> onBuyShopProduct;
   final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
-  final VoidCallback onToggleInventory;
-  final ValueChanged<int> onHotbar;
+  final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
+  final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<String> onSendChat;
   final UiAssetCache ui;
   final List<String> messages;
+  final List<PsQuestProgress> openQuests;
+  final List<PsFinishedQuest> finishedQuests;
   final bool questOpen;
   final bool questActive,rewardSelection;
   final int questId;
@@ -45,6 +48,7 @@ class WorldHud extends StatelessWidget {
     required this.characterName,
     required this.level,
     required this.details,
+    required this.additionalStats,
     required this.hitpoints,
     required this.targetMobGlobalId,
     required this.targetMobId,
@@ -57,6 +61,9 @@ class WorldHud extends StatelessWidget {
     required this.gold,
     required this.shop,
     required this.inventoryOpen,
+    required this.statusOpen,
+    required this.skillsOpen,
+    required this.questLogOpen,
     required this.shopOpen,
     required this.warehouseOpen,
     required this.onCloseShop,
@@ -66,11 +73,17 @@ class WorldHud extends StatelessWidget {
     required this.onStoreWarehouse,
     required this.onWithdrawWarehouse,
     required this.onToggleInventory,
+    required this.onToggleStatus,
+    required this.onToggleSkills,
+    required this.onToggleQuestLog,
     required this.onHotbar,
+    required this.onOpenQuest,
     required this.onSendChat,
     required this.locale,
     required this.ui,
     required this.messages,
+    required this.openQuests,
+    required this.finishedQuests,
     required this.questOpen,
     required this.questActive,
     required this.rewardSelection,
@@ -91,6 +104,12 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           ..._worldLabels(),
+          if(statusOpen)
+            Positioned(right:198,top:210,width:318,height:420,child:_statusWindow()),
+          if(skillsOpen)
+            Positioned(right:198,top:190,width:350,height:455,child:_skillsWindow()),
+          if(questLogOpen)
+            Positioned(right:198,top:205,width:340,height:430,child:_questLogWindow()),
           if(shopOpen&&shop!=null)
             Positioned(
               right:198,top:250,width:292,height:390,
@@ -558,10 +577,10 @@ class WorldHud extends StatelessWidget {
     Positioned(
       right:7,bottom:1,
       child:Row(children:[
-        _bottomButton('interface/main_bottom_btn_status.tga'),
-        _bottomButton('interface/main_bottom_btn_skill.tga'),
+        _bottomButton('interface/main_bottom_btn_status.tga',onTap:onToggleStatus),
+        _bottomButton('interface/main_bottom_btn_skill.tga',onTap:onToggleSkills),
         _bottomButton('interface/main_bottom_btn_item.tga',onTap:onToggleInventory),
-        _bottomButton('interface/main_bottom_btn_quest.tga'),
+        _bottomButton('interface/main_bottom_btn_quest.tga',onTap:onToggleQuestLog),
         _bottomButton('interface/main_bottom_btn_sub.tga'),
         _bottomButton('interface/main_bottom_btn_guild.tga'),
         _bottomButton('interface/main_bottom_btn_shop.tga'),
