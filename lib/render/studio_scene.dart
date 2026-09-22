@@ -388,6 +388,40 @@ class StudioScene extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> networkPlayerDeath() async {
+    final a=character;if(a==null)return;
+    clearMovement();
+    final candidates=animations.where((p)=>motionIndex(p)==9||p.toLowerCase().contains('death')||p.toLowerCase().contains('dead')).toList();
+    final clip=await firstCompatible(a,candidates);
+    if(clip!=null){
+      a.idle=null;
+      a.play(clip,repeat:false);
+    }else{
+      a.playing=false;
+    }
+    lastImpact='Has muerto';
+    hitLife=0;
+    if(hitSprite!=null)hitSprite!.visible=false;
+    notifyListeners();
+  }
+
+  Future<void> networkPlayerRebirth(double worldX,double worldY,double worldZ) async {
+    final a=character;if(a==null)return;
+    a.root.position.setValues(worldX-originX,worldY,-(worldZ-originZ));
+    groundY=worldY;
+    movementTransitions.invalidate();
+    final idle=a.clips['Respirar']??a.clips['Reposo']??a.normal;
+    if(idle!=null){
+      a.idle=idle;
+      a.play(idle);
+    }else{
+      a.playing=true;
+    }
+    updateAttachments();
+    updateCamera();
+    notifyListeners();
+  }
+
   Future<void> networkPlayerHit(int damage) async {
     final a=character;if(a==null)return;
     final index=damageMotion(weaponFamily(weaponRecord));
