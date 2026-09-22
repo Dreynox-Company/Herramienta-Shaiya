@@ -652,8 +652,13 @@ class _GameClientPageState extends State<GameClientPage> {
           '${networkSnapshot.mobs.length} mobs · ${networkSnapshot.quests.length} quests abiertas.',
         );
       }catch(e){
-        messages.insert(0,'[ps0032] Entrada real falló; se conserva fallback SVMAP: '+e.toString());
-        networkSnapshot=null;
+        messages.insert(0,'[ps0032] Entrada autoritativa falló: '+e.toString());
+        liveSnapshot=null;
+        if(mounted)setState((){
+          loading=false;
+          progress='World rechazó la entrada; no se simulará una sesión falsa.';
+        });
+        return;
       }
     }
 
@@ -666,7 +671,15 @@ class _GameClientPageState extends State<GameClientPage> {
     svmap=await _loadSvmap(mapId);
     liveMapId=mapId;liveSvmap=svmap;
     var world=c.worlds.where((p)=>baseName(p).toLowerCase()==mapId.toString()+'.wld').firstOrNull;
-    world??=c.worlds.firstOrNull;
+    if(world==null&&session==null)world=c.worlds.firstOrNull;
+    if(world==null&&session!=null){
+      messages.insert(0,'[Mapa] Falta world/$mapId.wld requerido por World; entrada cancelada.');
+      if(mounted)setState((){
+        loading=false;
+        progress='Falta el mapa autoritativo $mapId en DATA.';
+      });
+      return;
+    }
 
     x??=create?.x;
     z??=create?.z;
@@ -681,7 +694,16 @@ class _GameClientPageState extends State<GameClientPage> {
 
     if(world!=null){
       try{await scene.setWorld(world,x:x,z:z);}
-      catch(e){messages.insert(0,'[Mapa] '+e.toString());}
+      catch(e){
+        messages.insert(0,'[Mapa] '+e.toString());
+        if(session!=null){
+          if(mounted)setState((){
+            loading=false;
+            progress='No se pudo cargar el mapa autoritativo.';
+          });
+          return;
+        }
+      }
     }
     if(liveInventory.isNotEmpty){
       await _syncVisibleEquipmentFromInventory();
