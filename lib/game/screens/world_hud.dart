@@ -1103,7 +1103,12 @@ class WorldHud extends StatelessWidget {
     final requester=pendingPartyRequesterId==null
       ?null
       :friends.where((f)=>f.id==pendingPartyRequesterId).firstOrNull;
+    final raidRequester=pendingRaidRequesterId==null
+      ?null
+      :friends.where((f)=>f.id==pendingRaidRequesterId).firstOrNull;
     final selfLeader=partyLeaderId!=null&&partyLeaderId==selfCharacterId;
+    final raidLeader=raid?.leader?.member.id==selfCharacterId;
+    final raidSubLeader=raid?.subLeader?.member.id==selfCharacterId;
     return _panelShell(
       locale=='spn'?'Social · Amigos / Grupo':'Social · Friends / Party',
       Column(children:[
@@ -1120,6 +1125,13 @@ class WorldHud extends StatelessWidget {
             subtitle:locale=='spn'?'Invitación a grupo':'Party invitation',
             accept:()=>onRespondParty(true),
             reject:()=>onRespondParty(false),
+          ),
+        if(pendingRaidRequesterId!=null)
+          _requestCard(
+            title:raidRequester?.name??('#'+pendingRaidRequesterId.toString()),
+            subtitle:locale=='spn'?'Invitación a RAID':'RAID invitation',
+            accept:()=>onRespondRaid(true),
+            reject:()=>onRespondRaid(false),
           ),
         Padding(
           padding:const EdgeInsets.fromLTRB(10,8,10,4),
