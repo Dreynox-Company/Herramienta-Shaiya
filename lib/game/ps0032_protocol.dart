@@ -144,6 +144,8 @@ class PsPacketType {
   static const tradeAddMoney=0x0A08;
   static const tradeReceiverAddItem=0x0A09;
   static const tradeDecide=0x0A0A;
+  static const partySearchRegistration=0x220C;
+  static const partySearchList=0x220D;
   static const guildDismantle=0x0D03;
   static const guildJoinRequest=0x0D07;
   static const guildJoinResultUser=0x0D08;
@@ -175,6 +177,7 @@ class PsPacketType {
   static const partyKick=0x0B06;
   static const partyChangeLeader=0x0B07;
   static const partyMemberGetItem=0x0B08;
+  static const partySearchInvite=0x0B09;
   static const partyCharacterSpMp=0x0C01;
   static const partySetMax=0x0C02;
   static const partyMemberHpSpMp=0x0C03;
@@ -1686,6 +1689,42 @@ class PsPartyBuff {
   const PsPartyBuff(this.skillId,this.skillLevel,this.countdownSeconds);
 }
 
+class PsPartySearchMember {
+  final int level,profession;
+  final String name;
+  const PsPartySearchMember(this.level,this.profession,this.name);
+}
+
+class PsPartySearchRegistration {
+  final bool success;
+  const PsPartySearchRegistration(this.success);
+  static PsPartySearchRegistration parse(PsPacket p){
+    if(p.type!=PsPacketType.partySearchRegistration||p.body.isEmpty){
+      throw FormatException('PARTY_SEARCH_REGISTRATION truncado: ${p.body.length}.');
+    }
+    return PsPartySearchRegistration(p.body[0]!=0);
+  }
+}
+
+List<PsPartySearchMember> parsePartySearchList(PsPacket p){
+  if(p.type!=PsPacketType.partySearchList||p.body.isEmpty){
+    throw FormatException('PARTY_SEARCH_LIST inválido: ${p.body.length}.');
+  }
+  final count=p.body[0],expected=1+count*23;
+  if(p.body.length<expected){
+    throw FormatException('PARTY_SEARCH_LIST truncado: count=$count bytes=${p.body.length}.');
+  }
+  final out=<PsPartySearchMember>[];
+  for(var i=0;i<count;i++){
+    final o=1+i*23,raw=p.body.sublist(o+2,o+23),zero=raw.indexOf(0);
+    out.add(PsPartySearchMember(
+      p.body[o],p.body[o+1],
+      utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true),
+    ));
+  }
+  return List.unmodifiable(out);
+}
+
 class PsPartyMember {
   final int id,level,profession,maxHp,hp,maxSp,sp,maxMp,mp,mapId;
   final String name;
@@ -3153,6 +3192,20 @@ class PsWorldSession {
   Future<void> moveRaidMember(int sourceIndex,int destinationIndex) async {
     await connection.send(PsPacketType.raidMovePlayer,[..._i32Bytes(sourceIndex),..._i32Bytes(destinationIndex)]);
   }
+  Future<PsPartySearchRegistration> registerPartySearch() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de buscar grupo.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.partySearchRegistration);
+    await connection.send(PsPacketType.partySearchRegistration);
+    return PsPartySearchRegistration.parse(await response);
+  }
+
+  Future<void> invitePartySearcher(String name) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de invitar.');
+    final value=name.trim(),raw=utf8.encode(value);
+    if(value.isEmpty||raw.length>20)throw ArgumentError('Nombre de jugador inválido.');
+    await connection.send(PsPacketType.partySearchInvite,_fixedStringBytes(value,21));
+  }
+
   Future<void> requestParty(int characterId) async {
     await connection.send(PsPacketType.partyRequest,_u32Bytes(characterId));
   }
