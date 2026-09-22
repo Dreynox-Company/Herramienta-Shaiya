@@ -7,6 +7,7 @@ import '../core/archive_index.dart';
 import '../core/spk_archive.dart';
 import 'archive_source.dart';
 import 'spk_source.dart';
+import 'spk_writer.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
@@ -882,6 +883,105 @@ class Library {
       }
       rethrow;
     }
+  }
+
+  Future<SpkWriterResult> rebuildSpkWorkspace(
+    File target, {
+    required void Function(String message, int done, int total) progress,
+  }) async {
+    final source = spk;
+    final overlayRoot = spkOverlayRoot;
+    if (source == null || overlayRoot == null) {
+      throw const FormatException(
+        'La biblioteca abierta no es un workspace DATA.SPK.',
+      );
+    }
+    if (!source.fullyValidatedResources) {
+      throw const SpkFailure(
+        'SPK_WRITER_AUDIT',
+        'Antes de construir un nuevo DATA.SPK debe completarse la auditoría '
+            'integral.',
+      );
+    }
+
+    final replacements = <int, Uint8List>{};
+    final manifestFile = File(
+      '$overlayRoot${Platform.pathSeparator}_SPK_OVERLAY.json',
+    );
+    if (await manifestFile.exists()) {
+      final raw = jsonDecode(await manifestFile.readAsString());
+      if (raw is! Map) {
+        throw const FormatException('Manifiesto overlay SPK inválido.');
+      }
+      final manifest = Map<String, dynamic>.from(raw);
+      if (manifest['indexSha256']?.toString().toLowerCase() !=
+          source.index.encryptedIndexSha256.toLowerCase()) {
+        throw const FormatException(
+          'El overlay pertenece a otro DATA.SPK.',
+        );
+      }
+      final entries = Map<String, dynamic>.from(
+        (manifest['entries'] as Map?) ?? const {},
+      );
+      final list = entries.entries.toList();
+      for (var i = 0; i < list.length; i++) {
+        final entry = list[i];
+        final canonical = canon(entry.key);
+        final idHex = files[canonical];
+        final record = idHex == null ? null : _spkRecords[idHex];
+        if (record == null) {
+          throw FormatException(
+            'El overlay referencia un recurso ajeno: ${entry.key}.',
+          );
+        }
+        final info = entry.value is Map
+            ? Map<String, dynamic>.from(entry.value as Map)
+            : <String, dynamic>{};
+        if (info['entryId']?.toString() != record.idHex) {
+          throw FormatException(
+            'Entry ID inconsistente en overlay: ${entry.key}.',
+          );
+        }
+        final editedFile = _spkOverlayFile(canonical);
+        if (!await editedFile.exists()) {
+          throw FormatException(
+            'Falta el archivo editado del overlay: ${entry.key}.',
+          );
+        }
+        final edited = await editedFile.readAsBytes();
+        final editedSha = sha256.convert(edited).toString();
+        if (editedSha != info['overlaySha256']?.toString()) {
+          throw FormatException(
+            'El archivo overlay cambió fuera de Studio: ${entry.key}.',
+          );
+        }
+        final original = (await source.readEntry(
+          record,
+          limit: 128 * 1024 * 1024,
+        )).bytes;
+        final originalSha = sha256.convert(original).toString();
+        if (originalSha != info['originalSha256']?.toString()) {
+          throw FormatException(
+            'El DATA.SPK original ya no coincide con el overlay: '
+            '${entry.key}.',
+          );
+        }
+        replacements[record.entryId] = Uint8List.fromList(edited);
+        progress(
+          'Verificando overlay ${entry.key}',
+          i + 1,
+          list.length,
+        );
+      }
+    }
+
+    return SpkWriter.rebuild(
+      source,
+      target,
+      replacements: replacements,
+      control: SpkExtractControl(),
+      progress: progress,
+    );
   }
 
   Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
