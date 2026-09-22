@@ -22,8 +22,10 @@ class WorldHud extends StatelessWidget {
   final VoidCallback onRebirth;
   final List<PsActiveBuff> buffs;
   final PsMapWeather? weather;
-  final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
+  final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp,targetAttackSpeed,targetMoveSpeed;
   final String? targetPlayerName;
+  final List<PsTargetBuff> targetBuffs;
+  final PsSkillCasting? targetCasting;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
   final List<PsInventoryItem> inventory,warehouse,guildWarehouse;
@@ -122,6 +124,10 @@ class WorldHud extends StatelessWidget {
     required this.targetPlayerName,
     required this.targetHp,
     required this.targetMaxHp,
+    required this.targetAttackSpeed,
+    required this.targetMoveSpeed,
+    required this.targetBuffs,
+    required this.targetCasting,
     required this.skillBook,
     required this.skillBar,
     required this.inventory,
@@ -304,7 +310,11 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 215, top: 5, width: 520, height: 48, child: _topHotbar()),
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
           if(targetMobId!=null||targetPlayerName!=null)
-            Positioned(left:390,top:60,width:245,height:48,child:_targetHud()),
+            Positioned(
+              left:390,top:60,width:245,
+              height:(targetBuffs.isNotEmpty||targetCasting!=null)?84:48,
+              child:_targetHud(),
+            ),
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           if(weather!=null&&weather!.state!=0)
@@ -727,6 +737,7 @@ class WorldHud extends StatelessWidget {
     final max=targetMaxHp??rule?.hp??1;
     final hp=(targetHp??max).clamp(0,max);
     final ratio=max<=0?0.0:hp/max;
+    final extra=targetBuffs.isNotEmpty||targetCasting!=null;
     return Container(
       padding:const EdgeInsets.fromLTRB(5,4,5,4),
       decoration:BoxDecoration(
@@ -734,47 +745,97 @@ class WorldHud extends StatelessWidget {
         border:Border.all(color:const Color(0xff7d6b4f)),
         boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:5)],
       ),
-      child:Row(children:[
+      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         SizedBox(
-          width:32,height:32,
-          child:player
-            ?const Icon(Icons.person,color:Color(0xffffd45f),size:25)
-            :DataImage(
-              cache:ui,path:'interface/monster_show.tga',fit:BoxFit.contain,
-              fallback:const Icon(Icons.pest_control,color:Color(0xffffd45f),size:24),
+          height:38,
+          child:Row(children:[
+            SizedBox(
+              width:32,height:32,
+              child:player
+                ?const Icon(Icons.person,color:Color(0xffffd45f),size:25)
+                :DataImage(
+                  cache:ui,path:'interface/monster_show.tga',fit:BoxFit.contain,
+                  fallback:const Icon(Icons.pest_control,color:Color(0xffffd45f),size:24),
+                ),
             ),
-        ),
-        const SizedBox(width:5),
-        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Row(children:[
-            Expanded(child:Text(
-              name,
-              maxLines:1,overflow:TextOverflow.ellipsis,
-              style:const TextStyle(fontSize:10.5,color:Color(0xffffee74),fontWeight:FontWeight.w600,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
-            )),
-            if(player)
-              Text(locale=='spn'?'Jugador':'Player',style:const TextStyle(fontSize:8,color:Colors.white60))
-            else
-              Text('Lv.'+(rule?.level??0).toString(),style:const TextStyle(fontSize:8,color:Colors.white60)),
+            const SizedBox(width:5),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Row(children:[
+                Expanded(child:Text(
+                  name,
+                  maxLines:1,overflow:TextOverflow.ellipsis,
+                  style:const TextStyle(fontSize:10.5,color:Color(0xffffee74),fontWeight:FontWeight.w600,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+                )),
+                if(player)
+                  Text(locale=='spn'?'Jugador':'Player',style:const TextStyle(fontSize:8,color:Colors.white60))
+                else
+                  Text('Lv.'+(rule?.level??0).toString(),style:const TextStyle(fontSize:8,color:Colors.white60)),
+              ]),
+              const SizedBox(height:2),
+              SizedBox(
+                height:8,
+                child:Stack(children:[
+                  Positioned.fill(child:DataImage(cache:ui,path:'interface/monster_hpbar_bg.tga',fit:BoxFit.fill)),
+                  Positioned.fill(child:Align(
+                    alignment:Alignment.centerLeft,
+                    widthFactor:ratio,
+                    child:DataImage(cache:ui,path:'interface/monster_hpbar.tga',fit:BoxFit.fill),
+                  )),
+                ]),
+              ),
+              const SizedBox(height:1),
+              Row(children:[
+                Text(hp.toString()+' / '+max.toString(),style:const TextStyle(fontSize:7.5,color:Colors.white70)),
+                const Spacer(),
+                if(targetAttackSpeed!=null&&targetMoveSpeed!=null)
+                  Text('AS '+targetAttackSpeed.toString()+' · MS '+targetMoveSpeed.toString(),style:const TextStyle(fontSize:7,color:Colors.white38)),
+              ]),
+            ])),
           ]),
-          const SizedBox(height:2),
+        ),
+        if(extra)
           SizedBox(
-            height:8,
-            child:Stack(children:[
-              Positioned.fill(child:DataImage(cache:ui,path:'interface/monster_hpbar_bg.tga',fit:BoxFit.fill)),
-              Positioned.fill(child:Align(
-                alignment:Alignment.centerLeft,
-                widthFactor:ratio,
-                child:DataImage(cache:ui,path:'interface/monster_hpbar.tga',fit:BoxFit.fill),
-              )),
+            height:34,
+            child:Row(children:[
+              if(targetCasting!=null)
+                Expanded(child:Container(
+                  margin:const EdgeInsets.only(top:2,right:4),
+                  padding:const EdgeInsets.symmetric(horizontal:5,vertical:3),
+                  decoration:BoxDecoration(
+                    color:const Color(0xaa23194b),
+                    border:Border.all(color:const Color(0xff7f6cc5)),
+                  ),
+                  child:Text(
+                    (locale=='spn'?'Lanzando ':'Casting ')+catalog.skillName(targetCasting!.skillId,targetCasting!.skillLevel,locale),
+                    maxLines:2,overflow:TextOverflow.ellipsis,
+                    style:const TextStyle(fontSize:7.5,color:Color(0xffe3dcff)),
+                  ),
+                )),
+              if(targetBuffs.isNotEmpty)
+                Expanded(
+                  flex:targetCasting==null?2:1,
+                  child:ListView.separated(
+                    scrollDirection:Axis.horizontal,
+                    itemCount:math.min(8,targetBuffs.length),
+                    separatorBuilder:(_,__)=>const SizedBox(width:2),
+                    itemBuilder:(context,index){
+                      final buff=targetBuffs[index],skill=metadata?.skill(buff.skillId,buff.skillLevel),icon=skill?.iconPath;
+                      final label=catalog.skillName(buff.skillId,buff.skillLevel,locale);
+                      return Tooltip(
+                        message:label+'\nLv. '+buff.skillLevel.toString()+(buff.countdownSeconds<0?'':' · '+buff.countdownSeconds.toString()+' s'),
+                        child:Container(
+                          width:26,height:26,margin:const EdgeInsets.only(top:3),
+                          decoration:BoxDecoration(color:const Color(0xcc17120e),border:Border.all(color:const Color(0xff6d5b40))),
+                          child:icon==null
+                            ?const Icon(Icons.auto_awesome,size:14,color:Color(0xffffd66b))
+                            :DataImage(cache:ui,path:icon,fit:BoxFit.cover,fallback:const Icon(Icons.auto_awesome,size:14,color:Color(0xffffd66b))),
+                        ),
+                      );
+                    },
+                  ),
+                ),
             ]),
           ),
-          const SizedBox(height:1),
-          Text(
-            hp.toString()+' / '+max.toString(),
-            style:const TextStyle(fontSize:7.5,color:Colors.white70),
-          ),
-        ])),
       ]),
     );
   }
