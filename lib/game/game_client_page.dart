@@ -49,6 +49,9 @@ class _GameClientPageState extends State<GameClientPage> {
   PsMapWeather? liveWeather;
   Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
   int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
+  int? targetAttackSpeed,targetMoveSpeed;
+  List<PsTargetBuff> targetBuffs=<PsTargetBuff>[];
+  PsSkillCasting? targetCasting;
   final Map<int,PsEnteredMap> remotePlayerEntries=<int,PsEnteredMap>{};
   final Map<int,PsPlayerShape> remotePlayerShapes=<int,PsPlayerShape>{};
   final Set<int> remoteShapeLoads=<int>{};
@@ -1015,6 +1018,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _clearCombatTarget(){
     targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
     targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;targetPlayerName=null;
+    targetAttackSpeed=targetMoveSpeed=null;targetBuffs=<PsTargetBuff>[];targetCasting=null;
   }
 
   void _sortInventory(){
@@ -1173,6 +1177,7 @@ class _GameClientPageState extends State<GameClientPage> {
         targetPlayerId=hp.targetId;targetPlayerMaxHp=hp.maxHp;targetPlayerHp=hp.currentHp;
         targetPlayerName=remotePlayerShapes[hp.targetId]?.name??_knownCharacterName(hp.targetId);
         targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+        targetBuffs=<PsTargetBuff>[];targetCasting=null;
       }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
       if(mounted)setState((){});
       return;
@@ -1181,9 +1186,79 @@ class _GameClientPageState extends State<GameClientPage> {
         final hp=PsTargetCharacterHp.parse(packet);
         if(targetPlayerId==hp.targetId){
           targetPlayerHp=hp.currentHp;targetPlayerMaxHp=hp.maxHp;
+          targetAttackSpeed=hp.attackSpeed;targetMoveSpeed=hp.moveSpeed;
           targetPlayerName=remotePlayerShapes[hp.targetId]?.name??targetPlayerName??_knownCharacterName(hp.targetId);
         }
       }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.targetBuffs&&packet.body.length>=6){
+      try{
+        final state=PsTargetBuffs.parse(packet);
+        final selected=(state.character&&targetPlayerId==state.targetId)||(state.mob&&targetMobGlobalId==state.targetId);
+        if(selected)targetBuffs=state.buffs.toList();
+      }catch(e){messages.insert(0,'[Target Buff] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.targetBuffAdd||packet.type==PsPacketType.targetBuffRemove)&&packet.body.length>=8){
+      try{
+        final change=PsTargetBuffChange.parse(packet);
+        final selected=(change.character&&targetPlayerId==change.targetId)||(change.mob&&targetMobGlobalId==change.targetId);
+        if(selected){
+          targetBuffs.removeWhere((x)=>x.skillId==change.skillId&&x.skillLevel==change.skillLevel);
+          if(packet.type==PsPacketType.targetBuffAdd){
+            targetBuffs=[...targetBuffs,PsTargetBuff(change.skillId,change.skillLevel,-1)];
+          }
+        }
+      }catch(e){messages.insert(0,'[Target Buff] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.targetMobGetState&&packet.body.length>=10){
+      try{
+        final state=PsTargetMobState.parse(packet);
+        if(targetMobGlobalId==state.targetId){
+          targetMobHp=state.currentHp;targetAttackSpeed=state.attackSpeed;targetMoveSpeed=state.moveSpeed;
+        }
+      }catch(e){messages.insert(0,'[Target State] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.characterSkillCasting||packet.type==PsPacketType.mobSkillCasting)&&packet.body.length>=11){
+      try{
+        final casting=PsSkillCasting.parse(packet);
+        final selected=casting.casterId==targetPlayerId||casting.casterId==targetMobGlobalId||
+          casting.targetId==targetPlayerId||casting.targetId==targetMobGlobalId;
+        if(selected)targetCasting=casting;
+        final name=catalog?.skillName(casting.skillId,casting.skillLevel,uiLocale)??('Skill '+casting.skillId.toString());
+        messages.insert(0,'[Cast] '+name+' Lv.'+casting.skillLevel.toString()+'.');
+      }catch(e){messages.insert(0,'[Cast] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterRecover&&packet.body.length>=16){
+      try{
+        final recovery=PsCharacterRecovery.parse(packet);
+        if(recovery.characterId==liveCharacter?.id){
+          liveHitpoints=PsHitpoints(recovery.hp,recovery.mp,recovery.sp);
+        }else if(recovery.characterId==targetPlayerId){
+          targetPlayerHp=recovery.hp;
+        }
+      }catch(e){messages.insert(0,'[Recover] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterMaxHitpoints&&packet.body.length>=9){
+      try{
+        final max=PsMaxHitpointUpdate.parse(packet);
+        if(max.characterId==targetPlayerId&&max.hitpointType==0)targetPlayerMaxHp=max.value;
+      }catch(e){messages.insert(0,'[Max HP] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.characterSkillKeep||packet.type==PsPacketType.mobSkillKeep)&&packet.body.length>=13){
+      try{
+        final keep=PsSkillKeep.parse(packet);
+        final name=catalog?.skillName(keep.skillId,keep.skillLevel,uiLocale)??('Skill '+keep.skillId.toString());
+        if(keep.sourceId==liveCharacter?.id||keep.sourceId==targetPlayerId||keep.sourceId==targetMobGlobalId){
+          messages.insert(0,'[Skill continuo] '+name+' · HP '+keep.hpDamage.toString()+' / SP '+keep.spDamage.toString()+' / MP '+keep.mpDamage.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[Skill continuo] '+e.toString());}
       if(mounted)setState((){});
       return;
     }else if(packet.type==PsPacketType.characterCharacterAutoAttack&&packet.body.length>=15){
@@ -1205,9 +1280,10 @@ class _GameClientPageState extends State<GameClientPage> {
       }catch(e){messages.insert(0,'[PvP] Autoataque: '+e.toString());}
       if(mounted)setState((){});
       return;
-    }else if(packet.type==PsPacketType.useCharacterTargetSkill&&packet.body.length>=19){
+    }else if(<int>{PsPacketType.useCharacterTargetSkill,PsPacketType.useCharacterRangeSkill}.contains(packet.type)&&packet.body.length>=19){
       try{
         final hit=PsCharacterSkillHit.parse(packet),self=liveCharacter?.id;
+        if(targetCasting?.casterId==hit.attackerId)targetCasting=null;
         if(hit.success&&self!=null){
           if(hit.attackerId==self){
             if(targetPlayerId==hit.targetId&&targetPlayerHp!=null)targetPlayerHp=math.max(0,targetPlayerHp!-hit.hpDamage);
@@ -1685,7 +1761,7 @@ class _GameClientPageState extends State<GameClientPage> {
       }catch(e){messages.insert(0,'[Renacer] '+e.toString());}
     }else if(packet.type==PsPacketType.targetMobHpUpdate&&packet.body.length>=10){
       final hp=PsTargetMobHp.parse(packet);
-      targetMobGlobalId=hp.targetId;targetMobHp=hp.currentHp;
+      targetMobGlobalId=hp.targetId;targetMobHp=hp.currentHp;targetAttackSpeed=hp.attackSpeed;targetMoveSpeed=hp.moveSpeed;
       final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hp.targetId).firstOrNull;
       if(logical!=null){
         targetMobTypeId=logical.mobId;
@@ -1709,8 +1785,9 @@ class _GameClientPageState extends State<GameClientPage> {
       }else if(hit.result!=12){
         messages.insert(0,'[Combate] Ataque normal rechazado ('+hit.result.toString()+').');
       }
-    }else if(packet.type==PsPacketType.useMobTargetSkill&&packet.body.length>=19){
+    }else if(<int>{PsPacketType.useMobTargetSkill,PsPacketType.useMobRangeSkill}.contains(packet.type)&&packet.body.length>=19){
       final hit=PsSkillHit.parse(packet);
+      if(targetCasting?.casterId==hit.attackerId)targetCasting=null;
       targetMobGlobalId=hit.targetId;
       final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hit.targetId).firstOrNull;
       if(logical!=null){
@@ -1726,6 +1803,19 @@ class _GameClientPageState extends State<GameClientPage> {
     }else if(packet.type==PsPacketType.mobSkillUse&&packet.body.length>=19){
       final hit=PsMobSkillHit.parse(packet);
       if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');}
+    }else if(packet.type==PsPacketType.mobRangeSkillUse&&packet.body.length>=19){
+      try{
+        final hit=PsSkillHit.parse(PsPacket(PsPacketType.useMobRangeSkill,packet.body));
+        if(targetCasting?.casterId==hit.attackerId)targetCasting=null;
+        if(hit.targetId==liveCharacter?.id&&hit.success){
+          final hp=liveHitpoints;
+          if(hp!=null)liveHitpoints=PsHitpoints(
+            math.max(0,hp.hp-hit.hpDamage),math.max(0,hp.mp-hit.mpDamage),math.max(0,hp.sp-hit.spDamage),
+          );
+          if(hit.hpDamage>0)unawaited(scene.networkPlayerHit(hit.hpDamage));
+        }
+        messages.insert(0,'[Combate] Skill de área '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');
+      }catch(e){messages.insert(0,'[Combate] Range mob: '+e.toString());}
     }else if(packet.type==PsPacketType.mapWeather&&packet.body.length>=3){
       try{
         liveWeather=PsMapWeather.parse(packet);
@@ -2629,6 +2719,7 @@ class _GameClientPageState extends State<GameClientPage> {
     if(picked.player){
       final id=picked.id;
       targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+      targetAttackSpeed=targetMoveSpeed=null;targetBuffs=<PsTargetBuff>[];targetCasting=null;
       targetPlayerId=id;
       targetPlayerName=remotePlayerShapes[id]?.name??_knownCharacterName(id);
       try{
@@ -2639,13 +2730,17 @@ class _GameClientPageState extends State<GameClientPage> {
         final refreshed=await liveWorld?.refreshCharacterTargetHp(id);
         if(refreshed!=null){
           targetPlayerHp=refreshed.currentHp;targetPlayerMaxHp=refreshed.maxHp;
+          targetAttackSpeed=refreshed.attackSpeed;targetMoveSpeed=refreshed.moveSpeed;
         }
+        final targetBuffState=await liveWorld?.requestCharacterTargetBuffs(id);
+        if(targetBuffState!=null)targetBuffs=targetBuffState.buffs.toList();
         final label=targetPlayerName?.isNotEmpty==true?targetPlayerName!:('#'+id.toString());
         messages.insert(0,'[PvP Target] '+label);
       }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
     }else{
       final id=picked.id,logical=liveSnapshot?.mobs.where((m)=>m.globalId==picked.id).firstOrNull;
       targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;targetPlayerName=null;
+      targetAttackSpeed=targetMoveSpeed=null;targetBuffs=<PsTargetBuff>[];targetCasting=null;
       targetMobGlobalId=id;
       if(logical!=null){
         targetMobTypeId=logical.mobId;
@@ -2653,7 +2748,16 @@ class _GameClientPageState extends State<GameClientPage> {
       }
       try{
         final hp=await liveWorld?.selectMobTarget(id);
-        if(hp!=null){targetMobHp=hp.currentHp;targetMobGlobalId=hp.targetId;}
+        if(hp!=null){
+          targetMobHp=hp.currentHp;targetMobGlobalId=hp.targetId;
+          targetAttackSpeed=hp.attackSpeed;targetMoveSpeed=hp.moveSpeed;
+        }
+        final state=await liveWorld?.requestMobTargetState(id);
+        if(state!=null){
+          targetMobHp=state.currentHp;targetAttackSpeed=state.attackSpeed;targetMoveSpeed=state.moveSpeed;
+        }
+        final targetBuffState=await liveWorld?.requestMobTargetBuffs(id);
+        if(targetBuffState!=null)targetBuffs=targetBuffState.buffs.toList();
         messages.insert(0,'[Target] '+(logical==null?'Mob '+id.toString():catalog!.monsterName(logical.mobId,uiLocale)));
       }catch(e){messages.insert(0,'[Target] '+e.toString());}
     }
@@ -3608,6 +3712,10 @@ class _GameClientPageState extends State<GameClientPage> {
             targetPlayerName:targetPlayerName,
             targetHp:targetPlayerId!=null?targetPlayerHp:targetMobHp,
             targetMaxHp:targetPlayerId!=null?targetPlayerMaxHp:targetMobMaxHp,
+            targetAttackSpeed:targetAttackSpeed,
+            targetMoveSpeed:targetMoveSpeed,
+            targetBuffs:targetBuffs,
+            targetCasting:targetCasting,
             skillBook:liveSkills,
             skillBar:liveSkillBar,
             inventory:liveInventory,
