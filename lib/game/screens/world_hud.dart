@@ -715,6 +715,7 @@ class WorldHud extends StatelessWidget {
         ),
     ]);
   }
+}
 
 class _MiniMapPainter extends CustomPainter {
   final StudioScene scene;
