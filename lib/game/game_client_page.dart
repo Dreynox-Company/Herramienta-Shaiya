@@ -55,6 +55,7 @@ class _GameClientPageState extends State<GameClientPage> {
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
   bool movementSending=false;
+  int? activePortalTrigger;
   double? lastNetworkX,lastNetworkZ;
   bool lastNetworkMoving=false,lastNetworkRun=false;
   List<PsCharacterSlot> liveCharacters=<PsCharacterSlot>[];
@@ -641,6 +642,7 @@ class _GameClientPageState extends State<GameClientPage> {
     if(liveCharacter!=null&&teleport.characterId!=liveCharacter!.id)return;
     if(mapSwitching)return;
     mapSwitching=true;
+    activePortalTrigger=null;
     _closeWorldPanels();
     scene.clearMovement();
     targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
@@ -935,6 +937,30 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<void> _checkPhysicalPortal(double x,double y,double z) async {
+    final map=liveSvmap,session=liveWorld;
+    if(map==null||session==null||map.portals.isEmpty){activePortalTrigger=null;return;}
+    int? inside;
+    for(var i=0;i<map.portals.length;i++){
+      final p=map.portals[i];
+      if((x-p.position.x).abs()>5||(y-p.position.y).abs()>5||(z-p.position.z).abs()>5)continue;
+      final level=liveCharacter?.level??1;
+      if(level<p.minLevel||level>p.maxLevel)continue;
+      final factionOk=p.factionOrId==0||p.factionOrId>2||
+        (faction=='light'&&p.factionOrId==1)||(faction=='dark'&&p.factionOrId==2);
+      if(!factionOk)continue;
+      inside=i;break;
+    }
+    if(inside==null){activePortalTrigger=null;return;}
+    if(activePortalTrigger==inside)return;
+    activePortalTrigger=inside;
+    try{
+      await session.enterPortal(inside);
+      final p=map.portals[inside];
+      messages.insert(0,'[Portal] ${liveMapId} → ${p.targetMap} solicitado a World.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Portal] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _syncMovement() async {
     if(movementSending||stage!=GameStage.world)return;
     final session=liveWorld,a=scene.character;
@@ -944,6 +970,7 @@ class _GameClientPageState extends State<GameClientPage> {
     final z=scene.originZ-a.root.position.z;
     final y=a.root.position.y;
     final run=scene.running;
+    unawaited(_checkPhysicalPortal(x,y,z));
     final changed=lastNetworkX==null||
       ((x-lastNetworkX!)*(x-lastNetworkX!)+(z-lastNetworkZ!)*(z-lastNetworkZ!))>.01||
       moving!=lastNetworkMoving||run!=lastNetworkRun;
