@@ -678,7 +678,21 @@ class _GameClientPageState extends State<GameClientPage> {
 
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
-    if(packet.type==PsPacketType.targetMobHpUpdate&&packet.body.length>=10){
+    if([
+      PsPacketType.chatNormal,PsPacketType.chatWhisper,PsPacketType.chatWorld,
+      PsPacketType.chatGuild,PsPacketType.chatParty,PsPacketType.chatMap,
+    ].contains(packet.type)){
+      try{
+        final chat=PsChatMessage.parse(packet);
+        final sender=chat.senderName??(chat.senderId==liveCharacter?.id?nameController.text:'#'+(chat.senderId?.toString()??'?'));
+        final channel=packet.type==PsPacketType.chatWhisper?'Whisper':
+          packet.type==PsPacketType.chatWorld?'World':
+          packet.type==PsPacketType.chatGuild?'Guild':
+          packet.type==PsPacketType.chatParty?'Party':
+          packet.type==PsPacketType.chatMap?'Map':'Normal';
+        messages.insert(0,'['+channel+'] '+sender+': '+chat.message);
+      }catch(e){messages.insert(0,'[Chat] '+e.toString());}
+    }else if(packet.type==PsPacketType.targetMobHpUpdate&&packet.body.length>=10){
       final hp=PsTargetMobHp.parse(packet);
       targetMobGlobalId=hp.targetId;targetMobHp=hp.currentHp;
       final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hp.targetId).firstOrNull;
@@ -795,6 +809,11 @@ class _GameClientPageState extends State<GameClientPage> {
     return selected;
   }
 
+  Future<void> _sendChat(String value) async {
+    final session=liveWorld;if(session==null||stage!=GameStage.world)return;
+    try{await session.sendNormalChat(value);}
+    catch(e){messages.insert(0,'[Chat] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _selectMobAt(Offset position) async {
     if(stage!=GameStage.world)return;
     focus.requestFocus();
@@ -1334,6 +1353,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
             onToggleInventory:()=>setState((){inventoryOpen=!inventoryOpen;if(inventoryOpen){shopOpen=false;warehouseOpen=false;questOpen=false;}}),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
+            onSendChat:(text)=>unawaited(_sendChat(text)),
             questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
             rewardSelection:rewardSelection,
             onSelectReward:(index)=>unawaited(_chooseQuestReward(index)),
