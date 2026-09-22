@@ -631,7 +631,7 @@ List<PsInventoryItem> parseInventoryItems(PsPacket p){
     out.add(PsInventoryItem(
       bag:b[o],slot:b[o+1],type:b[o+2],typeId:b[o+3],
       quality:d.getUint16(o+4,Endian.little),gems:List.unmodifiable(gems),
-      count:b[o+30],craftName:craft,dyed:b[o+74]!=0,
+      count:b[o+30],craftName:craft,dyed:b[o+75]!=0,
     ));
   }
   return out;
@@ -724,7 +724,7 @@ class PsWarehouseItem {
 List<PsWarehouseItem> parseWarehouseItems(PsPacket p){
   if(p.type!=PsPacketType.warehouseItemList||p.body.isEmpty)return const [];
   final b=p.body,d=ByteData.sublistView(b),count=b[0],out=<PsWarehouseItem>[];
-  const size=107;
+  const size=108;
   if(b.length<1+count*size)throw FormatException('WAREHOUSE_ITEM_LIST truncado: count=$count bytes=${b.length}.');
   var o=1;
   for(var i=0;i<count;i++,o+=size){
