@@ -4,6 +4,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MODULE = ROOT / 'tool' / 'spk_resource_probe' / 'resource_probe.py'
+AGENT = ROOT / 'tool' / 'spk_resource_probe' / 'resource_probe.js'
 SPEC = importlib.util.spec_from_file_location('spk_resource_probe', MODULE)
 probe = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -11,11 +12,23 @@ SPEC.loader.exec_module(probe)
 
 
 class ResourceProbeContractTest(unittest.TestCase):
+    def test_v9_agent_can_recover_keys_from_live_bcrypt_handles(self):
+        text = AGENT.read_text(encoding='utf-8')
+        self.assertIn("BCryptExportKey", text)
+        self.assertIn("KeyDataBlob", text)
+        self.assertIn("BCryptImportKey", text)
+        self.assertIn("BCryptDuplicateKey", text)
+        self.assertIn("KEY_EXPORTED_FROM_LIVE_HANDLE", text)
+
     def test_simple_and_chunks_same_key_make_ready_for_all(self):
         key = '11' * 32
         base = {
             'offlineValid': True,
-            'key': {'secretHex': key, 'chainingMode': 'ChainingModeGCM'},
+            'key': {
+                'secretHex': key,
+                'chainingMode': 'ChainingModeGCM',
+                'source': 'BCryptExportKey:KeyDataBlob',
+            },
             'auth': {'authDataHex': ''},
             'format': 'DDS',
             'plainSha256': 'aa' * 32,
@@ -41,6 +54,10 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertTrue(result['readyForFragmented'])
         self.assertTrue(result['readyForAll'])
         self.assertEqual(result['resourceSecretBytes'], 32)
+        self.assertEqual(
+            result['keySources'],
+            ['BCryptExportKey:KeyDataBlob'],
+        )
         self.assertEqual(result['chunkNonceRule'], 'offset_le96')
         self.assertEqual(result['aadRule'], 'none')
 
