@@ -1060,6 +1060,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _clearCombatTarget(){
     targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
     targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;targetPlayerName=null;
+    targetBuffs=<PsTargetBuff>[];
   }
 
   void _sortInventory(){
@@ -1216,13 +1217,6 @@ class _GameClientPageState extends State<GameClientPage> {
       for(final row in liveCharacters) if(row.id==characterId)next else row,
     ];
     if(liveCharacter?.id==characterId)liveCharacter=next;
-  }
-
-  void _clearCombatTarget(){
-    targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
-    targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;
-    targetPlayerName=null;
-    targetBuffs=<PsTargetBuff>[];
   }
 
   void _handleLivePacket(PsPacket packet){
