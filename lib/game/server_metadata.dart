@@ -44,6 +44,49 @@ class MobRule {
   );
 }
 
+class ItemRule {
+  final int type,id,image,icon,level,quality,slot,count,duration,grade;
+  final int buy,sell;
+  const ItemRule({
+    required this.type,required this.id,required this.image,required this.icon,
+    required this.level,required this.quality,required this.slot,required this.count,
+    required this.duration,required this.grade,required this.buy,required this.sell,
+  });
+  String get key=>'$type:$id';
+  String? get iconPath=>icon<=0?null:'interface/icon/${icon.toString().padLeft(2,'0')}.tga';
+  factory ItemRule.fromJson(Map<String,dynamic> j)=>ItemRule(
+    type:(j['type'] as num).toInt(),id:(j['id'] as num).toInt(),
+    image:(j['image'] as num).toInt(),icon:(j['icon'] as num).toInt(),
+    level:(j['level'] as num).toInt(),quality:(j['quality'] as num).toInt(),
+    slot:(j['slot'] as num).toInt(),count:(j['count'] as num).toInt(),
+    duration:(j['duration'] as num).toInt(),grade:(j['grade'] as num).toInt(),
+    buy:(j['buy'] as num).toInt(),sell:(j['sell'] as num).toInt(),
+  );
+}
+
+class SkillRule {
+  final int id,level,image,animation,effect,sound,requiredLevel,sp,mp;
+  final int castTime,cooldown,attackRange,targetType,applyRange,typeAttack,typeEffect;
+  const SkillRule({
+    required this.id,required this.level,required this.image,required this.animation,
+    required this.effect,required this.sound,required this.requiredLevel,required this.sp,
+    required this.mp,required this.castTime,required this.cooldown,required this.attackRange,
+    required this.targetType,required this.applyRange,required this.typeAttack,required this.typeEffect,
+  });
+  String get key=>'$id:$level';
+  String? get iconPath=>image<=0?null:'interface/icon/${image.toString().padLeft(2,'0')}.tga';
+  factory SkillRule.fromJson(Map<String,dynamic> j)=>SkillRule(
+    id:(j['id'] as num).toInt(),level:(j['level'] as num).toInt(),
+    image:(j['image'] as num).toInt(),animation:(j['animation'] as num).toInt(),
+    effect:(j['effect'] as num).toInt(),sound:(j['sound'] as num).toInt(),
+    requiredLevel:(j['requiredLevel'] as num).toInt(),sp:(j['sp'] as num).toInt(),
+    mp:(j['mp'] as num).toInt(),castTime:(j['castTime'] as num).toInt(),
+    cooldown:(j['cooldown'] as num).toInt(),attackRange:(j['attackRange'] as num).toInt(),
+    targetType:(j['targetType'] as num).toInt(),applyRange:(j['applyRange'] as num).toInt(),
+    typeAttack:(j['typeAttack'] as num).toInt(),typeEffect:(j['typeEffect'] as num).toInt(),
+  );
+}
+
 class CharacterCreateRule {
   final int country,job,mapId;
   final double x,y,z;
@@ -97,12 +140,16 @@ class ServerMetadata {
   final Map<String,NpcRule> npcs;
   final Map<int,QuestRule> quests;
   final Map<int,MobRule> mobs;
+  final Map<String,ItemRule> items;
+  final Map<String,SkillRule> skills;
   final Map<String,CharacterCreateRule> createRules;
-  const ServerMetadata(this.npcs,this.quests,this.mobs,this.createRules);
+  const ServerMetadata(this.npcs,this.quests,this.mobs,this.items,this.skills,this.createRules);
 
   Map<String,int> get npcModels=>{for(final e in npcs.entries)e.key:e.value.model};
   Map<int,int> get mobModels=>{for(final e in mobs.entries)e.key:e.value.image};
   CharacterCreateRule? createRule(int country,int job)=>createRules[country.toString()+':'+job.toString()];
+  ItemRule? item(int type,int id)=>items['$type:$id'];
+  SkillRule? skill(int id,int level)=>skills['$id:$level']??skills['$id:1'];
 
   static Future<ServerMetadata?> load() async {
     final exe=File(Platform.resolvedExecutable).parent.path;
@@ -126,6 +173,14 @@ class ServerMetadata {
         .cast<Map>()
         .map((x)=>MobRule.fromJson(Map<String,dynamic>.from(x)))
         .toList();
+      final itemList=(raw['items'] as List? ?? const [])
+        .cast<Map>()
+        .map((x)=>ItemRule.fromJson(Map<String,dynamic>.from(x)))
+        .toList();
+      final skillList=(raw['skills'] as List? ?? const [])
+        .cast<Map>()
+        .map((x)=>SkillRule.fromJson(Map<String,dynamic>.from(x)))
+        .toList();
       final root=File(Platform.resolvedExecutable).parent.path;
       final configCandidates=<String>[
         root+'/server/metadata/character.json',
@@ -148,6 +203,8 @@ class ServerMetadata {
         {for(final n in npcList)n.key:n},
         {for(final q in questList)q.id:q},
         {for(final m in mobList)m.id:m},
+        {for(final i in itemList)i.key:i},
+        {for(final s in skillList)s.key:s},
         createRules,
       );
     }
