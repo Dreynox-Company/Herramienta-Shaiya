@@ -55,7 +55,7 @@ Uint8List _wldAudioFixture() {
   void fixed(String value, int length) {
     final b = Uint8List(length);
     final raw = utf8.encode(value);
-    b.setRange(0, raw.length.clamp(0, length - 1), raw);
+    final n=raw.length<length?raw.length:length-1;\n    b.setRange(0, n, raw);
     out.add(b);
   }
 
