@@ -149,7 +149,7 @@ function attach(module) {
         required,
         0,
       );
-      if (status !== 0) return null;
+      if (status !== 0 && status !== 0xc0000023) return null;
       const bytes = required.readU32();
       if (bytes < 28 || bytes > 4096) return null;
 
