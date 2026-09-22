@@ -135,13 +135,16 @@ def detect(b:bytes):
     if b.startswith(b'RIFF'):return 'WAV'
     if b.startswith(b'PK\x03\x04'):return 'ZIP'
     if b.startswith(b'MZ'):return 'PE'
+    if b.startswith((b'MLT',b'ML2',b'ML3',b'ML4')):return 'MLT'
+    if b.startswith((b'ITM',b'IT2',b'pandaIT2')):return 'ITM'
+    if b.startswith((b'MO2',b'MO4')):return 'MON'
     if len(b)>=18 and b[2] in (1,2,3,9,10,11) and b[16] in (8,16,24,32):return 'TGA'
     try:
       s=b[:512].decode('utf-8').lstrip()
       if s.startswith('<'):return 'XML'
     except:pass
     return 'BIN'
-def ext(f):return {'DDS':'dds','PNG':'png','BMP':'bmp','JPG':'jpg','OGG':'ogg','WAV':'wav','ZIP':'zip','TGA':'tga','XML':'xml','PE':'exe'}.get(f,'bin')
+def ext(f):return {'DDS':'dds','PNG':'png','BMP':'bmp','JPG':'jpg','OGG':'ogg','WAV':'wav','ZIP':'zip','TGA':'tga','XML':'xml','PE':'exe','MLT':'mlt','ITM':'itm','MON':'mon'}.get(f,'bin')
 
 def canonical_nonce_rule(value):
     return {
@@ -155,6 +158,7 @@ def derive_profile(rows):
     chunks=[r for r in valid if r['target']['kind']=='chunk']
     keys={r.get('key',{}).get('secretHex') for r in valid if r.get('key',{}).get('secretHex')}
     modes={r.get('key',{}).get('chainingMode') for r in valid if r.get('key')}
+    key_sources={r.get('key',{}).get('source') for r in valid if r.get('key',{}).get('source')}
     rules={canonical_nonce_rule(r.get('nonceRule')) for r in chunks if r.get('nonceRule')}
     aad_values=[]
     for r in valid:
@@ -164,13 +168,14 @@ def derive_profile(rows):
     simple_meta=bool(simple) and all(r.get('metadataNonceMatch') and r.get('metadataTagMatch') for r in simple)
     chunk_tags=bool(chunks) and all(r.get('metadataTagMatch') for r in chunks)
     result={
-      'schema':3,
-      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v8',
+      'schema':4,
+      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v9',
       'indexSha256':EXPECTED_INDEX,
       'offlineValidated':len(valid),
       'simpleValidated':len(simple),
       'chunksValidated':len(chunks),
       'resourceKeys':sorted(keys),
+      'keySources':sorted(x for x in key_sources if x),
       'modes':sorted(x for x in modes if x),
       'chunkNonceRules':sorted(rules),
       'simpleMetadataLayout':'nonce12-tag16-flags4' if simple_meta else 'unverified',
