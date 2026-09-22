@@ -27,6 +27,18 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("'studioBuild': studioBuild", browser)
         self.assertIn("'schema': 3", browser)
 
+    def test_name_resolution_stays_one_to_one(self):
+        source = (ROOT / 'lib' / 'data' / 'spk_source.dart').read_text(
+            encoding='utf-8'
+        )
+        archive = (ROOT / 'lib' / 'core' / 'spk_archive.dart').read_text(
+            encoding='utf-8'
+        )
+        self.assertIn("decoded-sha256-one-to-one-reference", source)
+        self.assertIn("ambiguousRecords", source)
+        self.assertIn("names.removeAmbiguousHints()", source)
+        self.assertIn("confirmedPaths.contains(key)", archive)
+
     def test_spk_editor_exposes_verified_repack(self):
         editor = (ROOT / 'lib' / 'ui' / 'data_editor.dart').read_text(
             encoding='utf-8'
