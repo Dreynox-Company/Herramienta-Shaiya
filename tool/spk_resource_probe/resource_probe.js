@@ -7,6 +7,8 @@ const algs = new Map();
 const props = new Map();
 const keys = new Map();
 const seen = new Set();
+const candidateSeen = new Set();
+const candidateHooks = new Set();
 let observer = null;
 let active = true;
 let events = 0;
@@ -14,6 +16,21 @@ let captures = 0;
 
 function event(code, details = {}) {
   if (events++ < 250) send({kind: 'event', code, details});
+}
+
+function emitCandidate(secretHex, secretBytes, source, details = {}) {
+  if (!active || !secretHex || ![16, 32].includes(secretBytes)) return;
+  const normalized = secretHex.toLowerCase();
+  if (candidateSeen.has(normalized)) return;
+  candidateSeen.add(normalized);
+  send({
+    kind: 'candidate-key',
+    secretHex: normalized,
+    secretBytes,
+    source,
+    details,
+  });
+  event('KEY_CANDIDATE_OBSERVED', {source, secretBytes});
 }
 
 function hex(buffer) {
@@ -103,6 +120,150 @@ function authenticatedInfo(pointer) {
     };
   } catch (_) {
     return null;
+  }
+}
+
+function attachCandidateModule(module) {
+  const lower = module.name.toLowerCase();
+  if (
+    lower !== 'bcrypt.dll' &&
+    !lower.includes('crypto') &&
+    !lower.includes('libeay')
+  ) {
+    return;
+  }
+
+  function hook(symbol, callbacks) {
+    const address = module.findExportByName(symbol);
+    if (!address) return false;
+    const key = address.toString();
+    if (candidateHooks.has(key)) return true;
+    candidateHooks.add(key);
+    listeners.push(Interceptor.attach(address, callbacks));
+    event('CANDIDATE_HOOK_READY', {module: module.name, symbol});
+    return true;
+  }
+
+  function derivedBuffer(symbol, outputIndex, bytesIndex) {
+    hook(symbol, {
+      onEnter(args) {
+        this.output = args[outputIndex];
+        try {
+          this.bytes = args[bytesIndex].toUInt32();
+        } catch (_) {
+          this.bytes = 0;
+        }
+      },
+      onLeave(status) {
+        try {
+          if (status.toUInt32() !== 0 || ![16, 32].includes(this.bytes)) {
+            return;
+          }
+          const secretHex = safe(this.output, this.bytes, 64);
+          emitCandidate(secretHex, this.bytes, symbol, {
+            module: module.name,
+            source: 'derived-buffer',
+          });
+        } catch (_) {}
+      },
+    });
+  }
+
+  derivedBuffer('BCryptKeyDerivation', 2, 3);
+  derivedBuffer('BCryptDeriveKeyCapi', 2, 3);
+  derivedBuffer('BCryptFinishHash', 1, 2);
+
+  const pbkdf2 = module.findExportByName('BCryptDeriveKeyPBKDF2');
+  if (pbkdf2 && !candidateHooks.has(pbkdf2.toString())) {
+    candidateHooks.add(pbkdf2.toString());
+    listeners.push(
+      Interceptor.attach(pbkdf2, {
+        onEnter(args) {
+          // cIterations is ULONGLONG: on x86 it consumes two stack slots.
+          const outputIndex = Process.pointerSize === 8 ? 6 : 7;
+          const bytesIndex = Process.pointerSize === 8 ? 7 : 8;
+          this.output = args[outputIndex];
+          try {
+            this.bytes = args[bytesIndex].toUInt32();
+          } catch (_) {
+            this.bytes = 0;
+          }
+        },
+        onLeave(status) {
+          try {
+            if (status.toUInt32() !== 0 || ![16, 32].includes(this.bytes)) {
+              return;
+            }
+            emitCandidate(
+              safe(this.output, this.bytes, 64),
+              this.bytes,
+              'BCryptDeriveKeyPBKDF2',
+              {module: module.name, source: 'derived-buffer'},
+            );
+          } catch (_) {}
+        },
+      }),
+    );
+    event('CANDIDATE_HOOK_READY', {
+      module: module.name,
+      symbol: 'BCryptDeriveKeyPBKDF2',
+    });
+  }
+
+  for (const symbol of ['AES_set_decrypt_key', 'AES_set_encrypt_key']) {
+    hook(symbol, {
+      onEnter(args) {
+        try {
+          const bits = args[1].toInt32();
+          if (![128, 256].includes(bits)) return;
+          const bytes = bits / 8;
+          emitCandidate(safe(args[0], bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'openssl-aes-key',
+          });
+        } catch (_) {}
+      },
+    });
+  }
+
+  for (const symbol of [
+    'EVP_DecryptInit_ex',
+    'EVP_CipherInit_ex',
+    'EVP_EncryptInit_ex',
+  ]) {
+    hook(symbol, {
+      onEnter(args) {
+        const keyPointer = args[3];
+        if (!keyPointer || keyPointer.isNull()) return;
+        for (const bytes of [16, 32]) {
+          emitCandidate(safe(keyPointer, bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'openssl-evp-key',
+            candidateBytes: bytes,
+          });
+        }
+      },
+    });
+  }
+
+  for (const symbol of [
+    'EVP_DecryptInit_ex2',
+    'EVP_CipherInit_ex2',
+    'EVP_EncryptInit_ex2',
+  ]) {
+    hook(symbol, {
+      onEnter(args) {
+        const keyPointer = args[2];
+        if (!keyPointer || keyPointer.isNull()) return;
+        for (const bytes of [16, 32]) {
+          emitCandidate(safe(keyPointer, bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'openssl-evp-key',
+            candidateBytes: bytes,
+          });
+        }
+      },
+    });
   }
 }
 
@@ -229,6 +390,12 @@ function attach(module) {
       if (exported && exported.secretHex) {
         keys.set(id, exported);
         key = exported;
+        emitCandidate(
+          exported.secretHex,
+          exported.secretBytes,
+          exported.source,
+          {module: 'bcrypt.dll', source: 'live-handle-export'},
+        );
         event('KEY_EXPORTED_FROM_LIVE_HANDLE', {
           secretBytes: exported.secretBytes,
           chainingMode: exported.chainingMode,
@@ -304,13 +471,20 @@ function attach(module) {
             if (status.toUInt32() !== 0 || !this.secret) return;
             const handle = this.out.readPointer().toString();
             const mode = props.get(this.algorithm + ':ChainingMode');
-            keys.set(handle, {
+            const key = {
               algorithm: algs.get(this.algorithm) || '?',
               chainingMode: mode && mode.text ? mode.text : null,
               secretHex: this.secret,
               secretBytes: this.secretBytes,
               source: 'BCryptGenerateSymmetricKey',
-            });
+            };
+            keys.set(handle, key);
+            emitCandidate(
+              key.secretHex,
+              key.secretBytes,
+              key.source,
+              {module: module.name, source: 'key-construction'},
+            );
           } catch (_) {}
         },
       }),
@@ -368,7 +542,15 @@ function attach(module) {
             } else {
               key = exportSecret(handlePointer);
             }
-            if (key && key.secretHex) keys.set(handle, key);
+            if (key && key.secretHex) {
+              keys.set(handle, key);
+              emitCandidate(
+                key.secretHex,
+                key.secretBytes,
+                key.source || 'BCryptImportKey',
+                {module: module.name, source: 'key-import'},
+              );
+            }
           } catch (_) {}
         },
       }),
@@ -394,6 +576,12 @@ function attach(module) {
                 : exportSecret(handlePointer);
             if (key && key.secretHex) {
               keys.set(handlePointer.toString(), key);
+              emitCandidate(
+                key.secretHex,
+                key.secretBytes,
+                key.source || 'BCryptDuplicateKey',
+                {module: module.name, source: 'key-duplicate'},
+              );
             }
           } catch (_) {}
         },
@@ -530,6 +718,7 @@ if (
 observer = Process.attachModuleObserver({
   onAdded(module) {
     try {
+      attachCandidateModule(module);
       attach(module);
     } catch (error) {
       event('HOOK_ERROR', {message: String(error).slice(0, 220)});
@@ -557,6 +746,8 @@ rpc.exports = {
 event('READY', {
   scope: 'exact-SPK-resource-ciphertexts-only',
   liveHandleKeyExport: true,
+  candidateKeyOracle: true,
+  candidateHookCount: candidateHooks.size,
   targetArch: Process.arch,
   pointerSize: Process.pointerSize,
 });
