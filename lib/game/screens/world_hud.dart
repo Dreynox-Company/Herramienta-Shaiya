@@ -894,8 +894,8 @@ class WorldHud extends StatelessWidget {
         separatorBuilder:(_,__)=>const SizedBox(height:7),
         itemBuilder:(context,index){
           final target=targets[index];
-          final name=index<names.length&&names[index].trim().isNotEmpty
-            ?names[index].trim()
+          final name=target.index<names.length&&names[target.index].trim().isNotEmpty
+            ?names[target.index].trim()
             :(locale=='spn'?'Mapa ${target.mapId}':'Map ${target.mapId}');
           final affordable=gold>=target.cost;
           return Tooltip(
