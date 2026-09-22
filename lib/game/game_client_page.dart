@@ -47,6 +47,12 @@ class _GameClientPageState extends State<GameClientPage> {
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
   PsMapWeather? liveWeather;
+  PsBlessState? liveBless;
+  List<PsBankItem> liveBankItems=<PsBankItem>[];
+  List<PsTeleportSavedPosition> liveSavedPositions=<PsTeleportSavedPosition>[];
+  int liveAccountPoints=0;
+  List<PsObelisk> liveObelisks=<PsObelisk>[];
+  PsNotice? liveNotice;
   Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
   int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
   int? targetAttackSpeed,targetMoveSpeed;
@@ -147,7 +153,7 @@ class _GameClientPageState extends State<GameClientPage> {
   int hairIndex=0;
   int modeIndex=0;
   double gestureScale=1;
-  final messages=<String>['[Notice] Laboratorio local'];
+  final messages=<String>[];
   final captureKey=GlobalKey();
 
   Future<void> _signalQaReady() async {
@@ -177,6 +183,15 @@ class _GameClientPageState extends State<GameClientPage> {
           'quests':metadata?.quests.length??0,
           'mobs':metadata?.mobs.length??0,
           'createRules':metadata?.createRules.length??0,
+        },
+        'sessionState':{
+          'blessCountry':liveBless?.country,
+          'blessAmount':liveBless?.amount,
+          'bankItems':liveBankItems.length,
+          'savedPositions':liveSavedPositions.length,
+          'accountPoints':liveAccountPoints,
+          'obelisks':liveObelisks.length,
+          'notice':liveNotice?.message,
         },
         'backendReady':backend.ready,
         'questId':questId,
@@ -720,6 +735,12 @@ class _GameClientPageState extends State<GameClientPage> {
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         final weatherPacket=entered.where((p)=>p.type==PsPacketType.mapWeather).lastOrNull;
         if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
+        for(final packet in <PsPacket>[...selected.packets,...entered]){
+          _applyPassiveSessionPacket(packet,announce:false);
+        }
+        if(liveNotice?.message.isNotEmpty==true){
+          messages.insert(0,'[Notice] '+liveNotice!.message);
+        }
         final guildWarehousePackets=entered.where((p)=>p.type==PsPacketType.guildWarehouseItemList).toList();
         guildWarehouseAvailable=guildWarehousePackets.isNotEmpty;
         liveGuildWarehouse=[];
@@ -1252,9 +1273,71 @@ class _GameClientPageState extends State<GameClientPage> {
     );
   }
 
+  bool _applyPassiveSessionPacket(PsPacket packet,{bool announce=true}){
+    try{
+      if(packet.type==PsPacketType.blessInit||packet.type==PsPacketType.blessUpdate){
+        liveBless=PsBlessState.parse(packet,previous:liveBless);
+        return true;
+      }
+      if(packet.type==PsPacketType.bankItemList){
+        liveBankItems=parseBankItems(packet).toList();
+        return true;
+      }
+      if(packet.type==PsPacketType.teleportSavePositionList){
+        liveSavedPositions=parseTeleportSavedPositions(packet).toList();
+        return true;
+      }
+      if(packet.type==PsPacketType.teleportSavePosition&&packet.body.length>=16){
+        final result=PsTeleportSavedPositionResult.parse(packet);
+        if(result.success){
+          liveSavedPositions=[
+            ...liveSavedPositions.where((x)=>x.index!=result.position.index),
+            result.position,
+          ]..sort((a,b)=>a.index.compareTo(b.index));
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.accountPoints){
+        liveAccountPoints=PsAccountPoints.parse(packet).points;
+        return true;
+      }
+      if(packet.type==PsPacketType.obeliskList){
+        liveObelisks=parseObeliskList(packet).toList();
+        return true;
+      }
+      if(packet.type==PsPacketType.obeliskChange){
+        final change=PsObeliskChange.parse(packet);
+        final old=liveObelisks.where((x)=>x.id==change.id).firstOrNull;
+        if(old!=null){
+          liveObelisks=[
+            ...liveObelisks.where((x)=>x.id!=change.id),
+            PsObelisk(old.id,change.country,old.x,old.z),
+          ];
+        }
+        return true;
+      }
+      if(<int>{
+        PsPacketType.noticeAdmins,PsPacketType.noticeFaction,PsPacketType.noticePlayer,
+        PsPacketType.noticeMap,PsPacketType.noticeWorld,
+      }.contains(packet.type)){
+        final notice=PsNotice.parse(packet);liveNotice=notice;
+        if(announce&&notice.message.isNotEmpty)messages.insert(0,'[Notice] '+notice.message);
+        return true;
+      }
+    }catch(e){
+      messages.insert(0,'[ps0032 passive] 0x'+packet.type.toRadixString(16)+': '+e.toString());
+      return true;
+    }
+    return false;
+  }
+
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if((mapSwitching||sectorStreaming)&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
+    if(_applyPassiveSessionPacket(packet)){
+      if(mounted)setState((){});
+      return;
+    }
     if(packet.type==PsPacketType.mapAddItem&&packet.body.length>=24){
       try{
         final item=PsMapItem.parse(packet);_snapshotAddMapItem(item);
