@@ -819,6 +819,255 @@ class WorldHud extends StatelessWidget {
     ]),
   );
 
+  String _professionName(int value){
+    const es=['Guerrero','Defensor','Guardabosques','Arquero','Mago','Sacerdote'];
+    const en=['Fighter','Defender','Ranger','Archer','Mage','Priest'];
+    final list=locale=='spn'?es:en;
+    return value>=0&&value<list.length?list[value]:'#'+value.toString();
+  }
+
+  Widget _miniResourceBar(double ratio,Color color)=>ClipRect(
+    child:Align(
+      alignment:Alignment.centerLeft,
+      widthFactor:ratio.clamp(0.0,1.0),
+      child:Container(height:4,color:color),
+    ),
+  );
+
+  Widget _partyHud()=>Container(
+    padding:const EdgeInsets.all(4),
+    decoration:BoxDecoration(
+      color:const Color(0xbb17120e),
+      border:Border.all(color:const Color(0xff5f513c)),
+      boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:5)],
+    ),
+    child:ListView.builder(
+      padding:EdgeInsets.zero,
+      itemCount:partyMembers.length,
+      itemBuilder:(context,index){
+        final m=partyMembers[index],leader=m.id==partyLeaderId;
+        final hp=m.maxHp<=0?0.0:m.hp/m.maxHp;
+        final sp=m.maxSp<=0?0.0:m.sp/m.maxSp;
+        final mp=m.maxMp<=0?0.0:m.mp/m.maxMp;
+        return SizedBox(
+          height:32,
+          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Row(children:[
+              if(leader)const Padding(
+                padding:EdgeInsets.only(right:3),
+                child:Icon(Icons.workspace_premium,size:10,color:Color(0xffffd45f)),
+              ),
+              Expanded(child:Text(
+                m.name,
+                maxLines:1,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(fontSize:9,color:Color(0xffffe69a),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+              )),
+              Text('Lv.'+m.level.toString(),style:const TextStyle(fontSize:7.5,color:Colors.white54)),
+              const SizedBox(width:3),
+              Text('M'+m.mapId.toString(),style:const TextStyle(fontSize:7,color:Colors.white38)),
+            ]),
+            const SizedBox(height:1),
+            Container(height:4,color:const Color(0xff29100f),child:_miniResourceBar(hp,const Color(0xffc62a25))),
+            const SizedBox(height:1),
+            Row(children:[
+              Expanded(child:Container(height:3,color:const Color(0xff10172a),child:_miniResourceBar(mp,const Color(0xff2867d8)))),
+              const SizedBox(width:2),
+              Expanded(child:Container(height:3,color:const Color(0xff2b2510),child:_miniResourceBar(sp,const Color(0xffd8ae28)))),
+            ]),
+          ]),
+        );
+      },
+    ),
+  );
+
+  Widget _requestCard({
+    required String title,
+    required String subtitle,
+    required VoidCallback accept,
+    required VoidCallback reject,
+  })=>Container(
+    margin:const EdgeInsets.fromLTRB(8,6,8,0),
+    padding:const EdgeInsets.all(7),
+    decoration:BoxDecoration(
+      color:const Color(0xff251b13),
+      border:Border.all(color:const Color(0xff806a49)),
+    ),
+    child:Row(children:[
+      const Icon(Icons.notifications_active,size:20,color:Color(0xffffd45f)),
+      const SizedBox(width:7),
+      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(title,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:9.5,color:Color(0xffffe1a1),fontWeight:FontWeight.w600)),
+        Text(subtitle,style:const TextStyle(fontSize:7.5,color:Colors.white54)),
+      ])),
+      IconButton(
+        tooltip:locale=='spn'?'Aceptar':'Accept',
+        onPressed:accept,
+        visualDensity:VisualDensity.compact,
+        icon:const Icon(Icons.check_circle,size:19,color:Color(0xff74d477)),
+      ),
+      IconButton(
+        tooltip:locale=='spn'?'Rechazar':'Reject',
+        onPressed:reject,
+        visualDensity:VisualDensity.compact,
+        icon:const Icon(Icons.cancel,size:19,color:Color(0xffd66a61)),
+      ),
+    ]),
+  );
+
+  Widget _socialWindow(){
+    final requester=pendingPartyRequesterId==null
+      ?null
+      :friends.where((f)=>f.id==pendingPartyRequesterId).firstOrNull;
+    final selfLeader=partyLeaderId!=null&&partyLeaderId==selfCharacterId;
+    return _panelShell(
+      locale=='spn'?'Social · Amigos / Grupo':'Social · Friends / Party',
+      Column(children:[
+        if(pendingFriendRequestName!=null)
+          _requestCard(
+            title:pendingFriendRequestName!,
+            subtitle:locale=='spn'?'Solicitud de amistad':'Friend request',
+            accept:()=>onRespondFriend(true),
+            reject:()=>onRespondFriend(false),
+          ),
+        if(pendingPartyRequesterId!=null)
+          _requestCard(
+            title:requester?.name??('#'+pendingPartyRequesterId.toString()),
+            subtitle:locale=='spn'?'Invitación a grupo':'Party invitation',
+            accept:()=>onRespondParty(true),
+            reject:()=>onRespondParty(false),
+          ),
+        Padding(
+          padding:const EdgeInsets.fromLTRB(10,8,10,4),
+          child:Row(children:[
+            const Icon(Icons.people_alt,size:15,color:Color(0xff8ed7ff)),
+            const SizedBox(width:5),
+            Text(
+              (locale=='spn'?'Amigos':'Friends')+' ('+friends.length.toString()+')',
+              style:const TextStyle(fontSize:10,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
+            ),
+          ]),
+        ),
+        Expanded(
+          flex:6,
+          child:friends.isEmpty
+            ?Center(child:Text(locale=='spn'?'No tienes amigos agregados.':'No friends added.',style:const TextStyle(fontSize:9,color:Colors.white38)))
+            :ListView.builder(
+                padding:const EdgeInsets.symmetric(horizontal:8),
+                itemCount:friends.length,
+                itemBuilder:(context,index){
+                  final f=friends[index];
+                  return Container(
+                    height:38,
+                    margin:const EdgeInsets.only(bottom:3),
+                    padding:const EdgeInsets.symmetric(horizontal:7),
+                    decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff493c2c))),
+                    child:Row(children:[
+                      Container(
+                        width:7,height:7,
+                        decoration:BoxDecoration(
+                          shape:BoxShape.circle,
+                          color:f.online?const Color(0xff6ddd78):const Color(0xff666666),
+                        ),
+                      ),
+                      const SizedBox(width:7),
+                      Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Text(f.name,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:9.5,color:f.online?const Color(0xffffe7b2):Colors.white54)),
+                        Text(_professionName(f.job),style:const TextStyle(fontSize:7,color:Colors.white38)),
+                      ])),
+                      if(f.online)
+                        IconButton(
+                          tooltip:locale=='spn'?'Invitar a grupo':'Invite to party',
+                          onPressed:()=>onInviteParty(f),
+                          visualDensity:VisualDensity.compact,
+                          icon:const Icon(Icons.group_add,size:17,color:Color(0xff86c8ff)),
+                        ),
+                      IconButton(
+                        tooltip:locale=='spn'?'Eliminar amigo':'Delete friend',
+                        onPressed:()=>onDeleteFriend(f),
+                        visualDensity:VisualDensity.compact,
+                        icon:const Icon(Icons.person_remove,size:16,color:Color(0xffbd7569)),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+        ),
+        Padding(
+          padding:const EdgeInsets.fromLTRB(8,5,8,7),
+          child:_SocialNameInput(locale:locale,onSubmit:onRequestFriend),
+        ),
+        const Divider(height:1,color:Color(0xff5a4934)),
+        Padding(
+          padding:const EdgeInsets.fromLTRB(10,7,10,4),
+          child:Row(children:[
+            const Icon(Icons.groups,size:15,color:Color(0xffffd070)),
+            const SizedBox(width:5),
+            Text(
+              (locale=='spn'?'Grupo':'Party')+' ('+(partyMembers.length+(partyMembers.isNotEmpty?1:0)).toString()+'/7)',
+              style:const TextStyle(fontSize:10,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
+            ),
+            const Spacer(),
+            if(partyMembers.isNotEmpty||partyLeaderId!=null)
+              TextButton(
+                onPressed:onLeaveParty,
+                style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffd98678)),
+                child:Text(locale=='spn'?'Salir':'Leave',style:const TextStyle(fontSize:8)),
+              ),
+          ]),
+        ),
+        Expanded(
+          flex:4,
+          child:partyMembers.isEmpty
+            ?Center(child:Text(locale=='spn'?'No estás en un grupo.':'Not in a party.',style:const TextStyle(fontSize:9,color:Colors.white38)))
+            :ListView.builder(
+                padding:const EdgeInsets.symmetric(horizontal:8),
+                itemCount:partyMembers.length,
+                itemBuilder:(context,index){
+                  final m=partyMembers[index],leader=m.id==partyLeaderId;
+                  return Container(
+                    height:42,
+                    margin:const EdgeInsets.only(bottom:3),
+                    padding:const EdgeInsets.symmetric(horizontal:7),
+                    decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:leader?const Color(0xff856c34):const Color(0xff493c2c))),
+                    child:Row(children:[
+                      if(leader)const Icon(Icons.workspace_premium,size:15,color:Color(0xffffd45f)),
+                      if(leader)const SizedBox(width:4),
+                      Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Text(m.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:9.5,color:Color(0xffffe7b2))),
+                        Text('Lv.'+m.level.toString()+' · '+_professionName(m.profession)+' · M'+m.mapId.toString(),style:const TextStyle(fontSize:7,color:Colors.white38)),
+                      ])),
+                      if(selfLeader&&!leader)
+                        IconButton(
+                          tooltip:locale=='spn'?'Hacer líder':'Make leader',
+                          onPressed:()=>onPromoteParty(m),
+                          visualDensity:VisualDensity.compact,
+                          icon:const Icon(Icons.workspace_premium,size:16,color:Color(0xffffcf62)),
+                        ),
+                      if(selfLeader)
+                        IconButton(
+                          tooltip:locale=='spn'?'Expulsar':'Kick',
+                          onPressed:()=>onKickParty(m),
+                          visualDensity:VisualDensity.compact,
+                          icon:const Icon(Icons.person_remove,size:16,color:Color(0xffd87368)),
+                        ),
+                    ]),
+                  );
+                },
+              ),
+        ),
+      ]),
+      footer:Container(
+        height:28,
+        padding:const EdgeInsets.symmetric(horizontal:8),
+        alignment:Alignment.centerRight,
+        child:TextButton(
+          onPressed:onToggleSocial,
+          style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:Colors.white60),
+          child:Text(locale=='spn'?'Cerrar':'Close',style:const TextStyle(fontSize:8)),
+        ),
+      ),
+    );
+  }
   Widget _statLine(String label,Object? base,Object? total,{VoidCallback? onAdd})=>Padding(
     padding:const EdgeInsets.symmetric(vertical:3),
     child:Row(children:[
