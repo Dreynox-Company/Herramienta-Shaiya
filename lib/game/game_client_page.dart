@@ -44,6 +44,8 @@ class _GameClientPageState extends State<GameClientPage> {
   bool mapSwitching=false,sectorStreaming=false;
   final List<PsPacket> pendingMapActorPackets=<PsPacket>[];
   PsCharacterDetails? liveDetails;
+  PsAutoStats? liveAutoStats;
+  final Map<int,int> liveKillCounts=<int,int>{};
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
   PsMapWeather? liveWeather;
@@ -678,6 +680,14 @@ class _GameClientPageState extends State<GameClientPage> {
       try{
         final selected=await session.selectCharacter(current.id);
         liveDetails=selected.details;
+        liveKillCounts
+          ..clear()
+          ..addAll(<int,int>{
+            0:selected.details.kills,
+            1:selected.details.deaths,
+            2:selected.details.victories,
+            3:selected.details.defeats,
+          });
         liveGold=selected.details.gold;
         liveItemExpirations.clear();
         for(final packet in selected.packets.where((p)=>p.type==PsPacketType.itemExpiration)){
@@ -735,6 +745,13 @@ class _GameClientPageState extends State<GameClientPage> {
         }
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
         if(barPacket!=null)liveSkillBar=PsSkillBar.parse(barPacket);
+        final autoPacket=selected.packets.where((p)=>p.type==PsPacketType.autoStatsList).lastOrNull;
+        if(autoPacket!=null){
+          liveAutoStats=PsAutoStats.parse(autoPacket);
+        }else{
+          try{liveAutoStats=await session.requestAutoStats();}
+          catch(e){messages.insert(0,'[Auto Stats] '+e.toString());}
+        }
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         final weatherPacket=entered.where((p)=>p.type==PsPacketType.mapWeather).lastOrNull;
         if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
@@ -1278,6 +1295,54 @@ class _GameClientPageState extends State<GameClientPage> {
 
   bool _applyPassiveSessionPacket(PsPacket packet,{bool announce=true}){
     try{
+      if(packet.type==PsPacketType.autoStatsList){
+        liveAutoStats=PsAutoStats.parse(packet);
+        return true;
+      }
+      if(packet.type==PsPacketType.statsReset){
+        final reset=PsStatsReset.parse(packet),details=liveDetails;
+        if(reset.success&&details!=null){
+          liveDetails=details.copyWith(
+            statPoint:reset.statPoint,
+            strength:reset.strength,
+            dexterity:reset.dexterity,
+            reaction:reset.reaction,
+            intelligence:reset.intelligence,
+            wisdom:reset.wisdom,
+            luck:reset.luck,
+          );
+          if(announce)messages.insert(0,'[Estado] Atributos reiniciados por World.');
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.resetSkills){
+        final reset=PsSkillsReset.parse(packet),details=liveDetails;
+        if(reset.success){
+          liveSkills=PsSkillBook(reset.skillPoint,const <PsLearnedSkill>[]);
+          if(details!=null)liveDetails=details.copyWith(skillPoint:reset.skillPoint);
+          final old=liveSkillBar;
+          if(old!=null){
+            liveSkillBar=PsSkillBar(
+              List<PsQuickSlot>.unmodifiable(old.slots.where((slot)=>!slot.isSkill)),
+            );
+          }
+          if(announce)messages.insert(0,'[Skills] Habilidades reiniciadas por World.');
+        }
+        return true;
+      }
+      if(packet.type==PsPacketType.userKillCountUpdate){
+        final update=PsKillCountUpdate.parse(packet),details=liveDetails;
+        liveKillCounts[update.index]=update.count;
+        if(details!=null){
+          liveDetails=details.copyWith(
+            kills:update.index==0?update.count:details.kills,
+            deaths:update.index==1?update.count:details.deaths,
+            victories:update.index==2?update.count:details.victories,
+            defeats:update.index==3?update.count:details.defeats,
+          );
+        }
+        return true;
+      }
       if(packet.type==PsPacketType.blessInit||packet.type==PsPacketType.blessUpdate){
         liveBless=PsBlessState.parse(packet,previous:liveBless);
         return true;
@@ -3120,6 +3185,29 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Estado] '+e.toString());if(mounted)setState((){});}
   }
+  Future<void> _adjustAutoStat(int index,int delta) async {
+    final session=liveWorld,current=liveAutoStats,character=liveCharacter;
+    if(session==null||character==null||stage!=GameStage.world)return;
+    final values=[...(current?.values??const <int>[0,0,0,0,0,0])];
+    if(index<0||index>=values.length)return;
+    values[index]=(values[index]+delta).clamp(0,255).toInt();
+    try{
+      final result=await session.setAutoStats(
+        character.id,
+        str:values[0],dex:values[1],rec:values[2],
+        intl:values[3],wis:values[4],luc:values[5],
+      );
+      liveAutoStats=result;
+      messages.insert(
+        0,
+        '[Auto Stats] STR ${result.strength} · DEX ${result.dexterity} · '
+        'REC ${result.reaction} · INT ${result.intelligence} · '
+        'WIS ${result.wisdom} · LUC ${result.luck}.',
+      );
+    }catch(e){messages.insert(0,'[Auto Stats] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
   Future<void> _assignSkillToHotbar(PsLearnedSkill skill) async {
     final session=liveWorld;
     if(session==null||stage!=GameStage.world)return;
@@ -4176,6 +4264,7 @@ class _GameClientPageState extends State<GameClientPage> {
             mapId:liveMapId,
             level:liveCharacter?.level??1,
             details:liveDetails,
+            autoStats:liveAutoStats,
             additionalStats:liveAdditionalStats,
             hitpoints:liveHitpoints,
             dead:dead,
@@ -4355,6 +4444,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onPromoteParty:(member)=>unawaited(_promotePartyMember(member)),
             onToggleStatus:()=>_toggleWorldPanel('status'),
             onAddStat:(index)=>unawaited(_addStat(index)),
+            onAdjustAutoStat:(index,delta)=>unawaited(_adjustAutoStat(index,delta)),
             onToggleSkills:()=>_toggleWorldPanel('skills'),
             onToggleQuestLog:()=>_toggleWorldPanel('quests'),
             onOpenQuest:_openQuestFromLog,
