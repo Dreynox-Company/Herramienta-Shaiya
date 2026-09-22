@@ -64,6 +64,19 @@ var shops = parsed.Merchants.Select(m => new {
     }).ToArray(),
 }).ToArray();
 
+var gates = parsed.Gatekeepers.Select(g => new {
+    type = 2,
+    typeId = (int)g.TypeId,
+    targets = g.GateTargets.Select((gate,index) => new {
+        index,
+        mapId = (int)gate.MapId,
+        x = gate.Position.X,
+        y = gate.Position.Y,
+        z = gate.Position.Z,
+        cost = gate.Cost,
+    }).ToArray(),
+}).ToArray();
+
 var quests = parsed.Quests.Select(q => new {
     id = (int)q.Id,
     minLevel = (int)q.MinLevel,
@@ -168,15 +181,17 @@ var doc = new {
     itemCount = items.Length,
     skillCount = skills.Length,
     shopCount = shops.Length,
+    gatekeeperCount = gates.Length,
     npcs = npc,
     quests,
     mobs,
     items,
     skills,
     shops,
+    gates,
 };
 
 var json = JsonSerializer.Serialize(doc,new JsonSerializerOptions{WriteIndented=false});
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[1]))!);
 File.WriteAllText(args[1],json);
-Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" Items="+items.Length+" Skills="+skills.Length+" Shops="+shops.Length+" -> "+args[1]);
+Console.WriteLine("NPC="+npc.Count+" Quests="+parsed.Quests.Count+" Mobs="+mobs.Length+" Items="+items.Length+" Skills="+skills.Length+" Shops="+shops.Length+" Gates="+gates.Length+" -> "+args[1]);
