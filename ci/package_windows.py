@@ -33,7 +33,44 @@ def main():
         'nativeChecks':len(native.get('checks',[])),'nativeFixture':'synthetic resources only',
         'startupResult':startup,'editor06WorkbenchDelivered':True,'completeOriginalGameRecreation':False,'offlineGameDelivered':False}
     (release/'build-provenance.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    readme=f'''SHAIYA STUDIO 0.6 - EDITOR VISUAL Y LABORATORIO\nVersion: {version}\nCommit: {commit}\n\nExtrae TODO el ZIP y abre herramienta_shaiya.exe. Conserva sus DLL y la\ncarpeta data de Flutter; NO reemplaces esa carpeta por la DATA del juego.\nLa biblioteca original se selecciona dentro de la aplicacion.\n\nEsta revision integra las correcciones auditadas de idioma espanol,\nvuelo manual < y continuidad del movimiento. No incluye un nuevo game.exe\noffline. Los suplementos de animacion y los datos originales no estan\nincluidos.\n\nDATA.SPK: profiles contiene el mapa ligado al indice observado.\nExtras/SPK/Shaiya_SPK_ResourceProbe.exe puede capturar el perfil AES-GCM\nde payloads desde una copia local de game.exe. Ejecutalo sin Internet y sin\niniciar sesion. Studio solo habilita Extraer todo cuando clave, AAD y regla\nde fragmentacion quedan validados.\n\nLa integracion Windows utiliza recursos sinteticos; no certifica cada\ncombinacion de modelos del cliente original.\n'''
+    readme=f'''SHAIYA STUDIO 0.6.17 - DATA.SPK V11
+Version: {version}
+Commit: {commit}
+
+Extrae TODO el ZIP y abre herramienta_shaiya.exe. Conserva sus DLL y la
+carpeta data de Flutter; NO reemplaces esa carpeta por la DATA del juego.
+Abre el DATA.SPK desde la aplicacion.
+
+FLUJO RECOMENDADO:
+  1. Abre DATA.SPK.
+  2. Pulsa Desbloquear SPK / AutoPerfil.
+  3. ResourceProbe V11 intenta primero un barrido estatico fail-closed:
+     ninguna clave se acepta si no autentica payloads reales por AES-GCM.
+  4. Si no encuentra coincidencia, instrumenta una copia local de game.exe
+     x86/x64. Hazlo offline y no introduzcas credenciales.
+  5. Solo cuando simples + fragmentados + auditoria integral pasan, Studio
+     habilita Objetos/trade, Mobs/drops, Skills, Studio 3D y repack.
+
+TRABAJO VISIBLE:
+  - texturas autenticadas tienen preview;
+  - 3DC/3DO tienen visor 3D y textura asociada cuando es inequívoca;
+  - SData se abre en filas/columnas;
+  - Objetos/trade abre directamente Requisitos (ReqOg/Og);
+  - Mobs/drops abre directamente Botin y oro;
+  - Skills abre directamente Habilidades;
+  - los cambios se guardan en overlay: DATA.SPK original no se modifica;
+  - Construir nuevo DATA.SPK crea un archivo separado y lo reabre/audita antes
+    de considerarlo valido.
+
+DIAGNOSTICO:
+Extras/SPK/Shaiya_SPK_ResourceProbe.exe genera evidencia reproducible. Si el
+AutoPerfil no cierra la clave revisa probe-console.log, probe-diagnosis.json,
+resource-observations.json y static-key-sweep.json.
+
+La integracion Windows usa fixtures sinteticos para regresion. La validacion
+final del cliente original exige probar este build contra el par exacto
+game.exe + data.spk del usuario.
+'''
     (release/'LEEME_ACTUALIZACION.txt').write_text(readme,encoding='utf-8')
     dest=ROOT/'dist';dest.mkdir(exist_ok=True)
     output=dest/f'Shaiya-Studio-Windows-{commit[:12]}.zip'
