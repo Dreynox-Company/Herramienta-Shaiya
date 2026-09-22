@@ -75,7 +75,13 @@ Future<void> main() async {
     });
     final targetMob=mobsByDistance.firstOrNull;
     final targetHp=targetMob==null?null:await world.selectMobTarget(targetMob.globalId);
-    if(targetHp!=null)stdout.writeln('Target mob '+targetHp.targetId.toString()+' hp='+targetHp.currentHp.toString());
+    final targetState=targetMob==null?null:await world.requestMobTargetState(targetMob.globalId);
+    final targetBuffState=targetMob==null?null:await world.requestMobTargetBuffs(targetMob.globalId);
+    if(targetHp!=null)stdout.writeln(
+      'Target mob '+targetHp.targetId.toString()+' hp='+targetHp.currentHp.toString()+
+      ' state='+targetState!.currentHp.toString()+' buffs='+targetBuffState!.buffs.length.toString()
+    );
+    await world.clearTarget();
     final tutorialNpc=snapshot.npcs.where((n)=>n.type==7&&n.typeId==1167).firstOrNull;
     var questStartOk=false;
     if(tutorialNpc!=null&&!snapshot.quests.any((q)=>q.questId==3781)&&!snapshot.finishedQuests.any((q)=>q.questId==3781)){
@@ -123,6 +129,8 @@ Future<void> main() async {
       'targetMob':targetMob==null?null:{
         'globalId':targetMob.globalId,'mobId':targetMob.mobId,
         'hp':targetHp?.currentHp,'attackSpeed':targetHp?.attackSpeed,'moveSpeed':targetHp?.moveSpeed,
+        'stateHp':targetState?.currentHp,'stateAttackSpeed':targetState?.attackSpeed,'stateMoveSpeed':targetState?.moveSpeed,
+        'buffCount':targetBuffState?.buffs.length,'clearConfirmed':true,
       },
       'tutorialQuest':{
         'id':3781,'npcFound':tutorialNpc!=null,
@@ -171,8 +179,10 @@ Future<void> main() async {
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
-    if(targetMob==null||targetHp==null)throw StateError('TARGET_MOB_HP_UPDATE did not return a target.');
+    if(targetMob==null||targetHp==null||targetState==null||targetBuffState==null)throw StateError('Target protocol did not return complete mob state.');
     if(targetHp.targetId!=targetMob.globalId||targetHp.currentHp<=0)throw StateError('Target mob HP/state invalid.');
+    if(targetState.targetId!=targetMob.globalId||targetState.currentHp<=0)throw StateError('TARGET_MOB_GET_STATE invalid.');
+    if(!targetBuffState.mob||targetBuffState.targetId!=targetMob.globalId)throw StateError('TARGET_BUFFS mob state invalid.');
     if(tutorialNpc==null)throw StateError('Tutorial NPC 7:1167 is not present near map-1 spawn.');
     if(!questStartOk)throw StateError('Tutorial QUEST_START 3781 was not confirmed.');
   }finally{
