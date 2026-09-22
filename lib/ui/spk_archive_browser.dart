@@ -721,6 +721,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'Primero valida el perfil completo de payloads con AutoPerfil SPK.',
       );
     }
+    if (!archive.fullyValidatedResources) {
+      operation =
+          'Auditando todos los payloads antes del descubrimiento estructural…';
+      if (mounted) setState(() {});
+      await _auditAllResources(archive);
+    }
     final result = await SpkCoreTableDiscovery.discover(
       archive,
       control: extractControl,
