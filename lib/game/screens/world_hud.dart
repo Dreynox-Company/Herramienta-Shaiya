@@ -30,6 +30,7 @@ class WorldHud extends StatelessWidget {
   final String? castingSkill;
   final double castingProgress;
   final List<PsInventoryItem> inventory,warehouse,guildWarehouse;
+  final List<PsMapItem> mapItems;
   final List<PsFriend> friends;
   final List<PsPartyMember> partyMembers;
   final PsRaidState? raid;
@@ -133,6 +134,7 @@ class WorldHud extends StatelessWidget {
     required this.inventory,
     required this.warehouse,
     required this.guildWarehouse,
+    required this.mapItems,
     required this.friends,
     required this.partyMembers,
     required this.raid,
@@ -318,6 +320,7 @@ class WorldHud extends StatelessWidget {
           if(weather!=null&&weather!.state!=0)
             Positioned.fill(child:IgnorePointer(child:CustomPaint(painter:_WeatherPainter(weather!)))),
           ..._worldLabels(),
+          ..._mapItemLabels(),
           if(socialOpen)
             Positioned(right:180,top:165,width:390,height:480,child:_socialWindow()),
           if(guildOpen&&!guildWarehouseOpen)
@@ -418,6 +421,41 @@ class WorldHud extends StatelessWidget {
       ]),
     ),
   );
+
+  List<Widget> _mapItemLabels(){
+    final rows=<Widget>[];
+    for(final item in mapItems){
+      final p=scene.projectWorldPoint(item.x,item.y,item.z,1024,742,lift:.35);
+      if(p==null)continue;
+      final money=item.type==26;
+      final name=money
+        ?(locale=='spn'?'Oro':'Gold')
+        :catalog.itemName(item.type,item.typeId,locale);
+      rows.add(Positioned(
+        left:(p.x-70).clamp(0.0,884.0),
+        top:(p.y-12).clamp(0.0,710.0),
+        width:140,
+        child:IgnorePointer(child:Text(
+          money
+            ?name+' × '+item.count.toString()
+            :name+(item.count>1?' × '+item.count.toString():''),
+          maxLines:1,
+          overflow:TextOverflow.ellipsis,
+          textAlign:TextAlign.center,
+          style:TextStyle(
+            fontSize:9.5,
+            color:money?const Color(0xffffd34f):const Color(0xff8fe7ff),
+            fontWeight:FontWeight.w600,
+            shadows:const [
+              Shadow(color:Colors.black,offset:Offset(1,1),blurRadius:2),
+              Shadow(color:Colors.black,offset:Offset(-1,-1),blurRadius:2),
+            ],
+          ),
+        )),
+      ));
+    }
+    return rows;
+  }
 
   List<Widget> _worldLabels(){
     final labels=scene.projectGameLabels(1024,742);
