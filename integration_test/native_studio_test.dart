@@ -16,8 +16,19 @@ void main(){
   expect(input,isNotNull,reason:'Set SHAIYA_FIXTURE_PATH to the generated synthetic fixture.');
   final output=Directory(Platform.environment['SHAIYA_QA_PATH']??'qa-native');await output.create(recursive:true);
   final passed=<String>[];
-  await tester.pumpWidget(ShaiyaApp(initialData:input));
-  final dynamic state=tester.state(find.byType(StudioPage));
+  await tester.pumpWidget(ShaiyaApp(initialData:input,studio:true));
+  final studioFinder=find.byType(StudioPage);
+  final studioDeadline=DateTime.now().add(const Duration(seconds:45));
+  while(studioFinder.evaluate().isEmpty&&DateTime.now().isBefore(studioDeadline)){
+    await tester.pump(const Duration(milliseconds:40));
+    await Future<void>.delayed(const Duration(milliseconds:40));
+  }
+  expect(
+    studioFinder,
+    findsOneWidget,
+    reason:'StudioPage did not finish bootstrapping from SHAIYA_FIXTURE_PATH.',
+  );
+  final dynamic state=tester.state(studioFinder);
   final scene=state.scene as StudioScene;
   Future<void> waitFor(bool Function() condition,String name)async{
    final deadline=DateTime.now().add(const Duration(seconds:45));
