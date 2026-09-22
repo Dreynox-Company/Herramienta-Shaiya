@@ -274,19 +274,17 @@ class Sink:
         self.dynamic_key_match=None
 
     def _persist_candidates(self):
-        (self.out/'candidate-keys.json').write_text(
-            json.dumps(
-                {
-                    'schema':1,
-                    'tested':len(self.candidate_rows),
-                    'authenticated':sum(1 for row in self.candidate_rows if row.get('authenticated')),
-                    'rows':self.candidate_rows,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding='utf-8',
+        payload=json.dumps(
+            {
+                'schema':1,
+                'tested':len(self.candidate_rows),
+                'authenticated':sum(1 for row in self.candidate_rows if row.get('authenticated')),
+                'rows':self.candidate_rows,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
+        (self.out/'candidate-keys.json').write_text(payload,encoding='utf-8')
 
     def _accept_candidate(self,p):
         secret_hex=str(p.get('secretHex') or '').strip().lower()
