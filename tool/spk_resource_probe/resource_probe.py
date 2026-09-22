@@ -103,7 +103,9 @@ class Sink:
        if m.get('type')!='send' or not isinstance(m.get('payload'),dict):return
        p=m['payload'];kind=p.get('kind')
        if kind=='event':
-        if len(self.events)<250:self.events.append(p);return
+        if len(self.events)<250:self.events.append(p)
+        print('EVENT',p.get('code','?'),json.dumps(p.get('details') or {},ensure_ascii=False,separators=(',',':')),flush=True)
+        return
        if kind!='resource':return
        pref=p.get('prefix');target=self.details.get(pref)
        if not target:raise ValueError('Objetivo fuera del catálogo')
@@ -274,6 +276,7 @@ def main():
        try:sess.detach()
        except:pass
     prof=derive_profile(sink.rows);prof['failure']=failure;(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2),encoding='utf-8');(out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2),encoding='utf-8')
+    print('RESUMEN capturas=',len(sink.rows),'simples_validas=',len(sink.valid_simple),'chunks_validos=',len(sink.valid_chunks),'fallo=',failure,flush=True)
     print(json.dumps(prof,ensure_ascii=False,indent=2));
     if prof['readyForFragmented']:print('ÉXITO: simples + fragmentos reproducidos offline.');return 0
     if prof['readyForSimple']:print('Simples autenticados; Shaiya Studio revalidará la clave y derivará los chunks offline.');return 4
