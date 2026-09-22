@@ -283,6 +283,7 @@ Future<void> loadAutomaticSpkNameMap(
         continue;
       }
       source.names = SpkNameMap.fromJson(map);
+      source.names.removeAmbiguousHints();
       return;
     } catch (_) {
       // Un mapa opcional dañado no impide abrir un SPK válido.
