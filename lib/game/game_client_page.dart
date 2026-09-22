@@ -2496,7 +2496,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }
     final open=!guildWarehouseOpen;
     _closeWorldPanels();
-    guildOpen=true;guildWarehouseOpen=open;
+    guildOpen=true;guildWarehouseOpen=open;inventoryOpen=open;
     if(mounted)setState((){});
   }
 
