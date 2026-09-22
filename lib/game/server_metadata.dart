@@ -61,6 +61,28 @@ class ItemRule {
   bool get recreationRune=>special==62||const <int>{86,87,88,89,90,91}.contains(special);
   bool get absoluteRecreationRune=>special==117;
   bool get recreationVial=>special>=93&&special<=98;
+  bool get dyeItem=>special==110&&id>=55&&id<=60;
+  bool get dyeWeaponTarget=>const <int>{
+    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+    45,46,47,48,49,50,51,52,53,54,55,56,57,59,60,61,62,63,64,65,
+  }.contains(type);
+  bool get dyeArmorTarget=>const <int>{
+    16,17,18,20,21,31,32,33,35,36,
+    67,68,70,71,72,73,74,76,77,82,83,85,86,87,88,89,91,92,
+  }.contains(type);
+  bool get dyeMountTarget=>type==42;
+  bool get dyePetTarget=>type==120;
+  bool get dyeCostumeTarget=>type==150;
+  bool get dyeWingTarget=>type==121;
+  bool canBeDyedBy(ItemRule dye)=>dye.dyeItem&&switch(dye.id){
+    55=>dyeWeaponTarget,
+    56=>dyeArmorTarget,
+    57=>dyeMountTarget,
+    58=>dyePetTarget,
+    59=>dyeCostumeTarget,
+    60=>dyeWingTarget,
+    _=>false,
+  };
   bool get enchantTarget=>const <int>{
     1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
     16,17,18,20,21,31,32,33,35,36,
