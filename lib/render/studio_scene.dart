@@ -969,7 +969,7 @@ class StudioScene extends ChangeNotifier {
     }
     if(sound&&moving&&!sceneCombatLocked&&mount==null&&world!=null){
       _footstepAccumulator+=delta;
-      final cadence=running?.32:.48;
+      final cadence=running ? .32 : .48;
       if(_footstepAccumulator>=cadence){_footstepAccumulator=0;unawaited(_playTerrainFootstep());}
     }else{_footstepAccumulator=0;}
     updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
