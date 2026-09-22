@@ -26,6 +26,11 @@ class WorldHud extends StatelessWidget {
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
   final List<PsInventoryItem> inventory,warehouse;
+  final List<PsFriend> friends;
+  final List<PsPartyMember> partyMembers;
+  final int? partyLeaderId,selfCharacterId;
+  final String? pendingFriendRequestName;
+  final int? pendingPartyRequesterId;
   final int gold;
   final NpcShopRule? shop;
   final NpcGateRule? gate;
@@ -35,14 +40,18 @@ class WorldHud extends StatelessWidget {
   final PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
   final PsLinkingPossibility? blacksmithExtractPossibility;
   final bool blacksmithBusy;
-  final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
+  final bool inventoryOpen,socialOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
   final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem;
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
-  final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
+  final VoidCallback onToggleInventory,onToggleSocial,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
+  final ValueChanged<String> onRequestFriend;
+  final ValueChanged<bool> onRespondFriend,onRespondParty;
+  final ValueChanged<PsFriend> onDeleteFriend,onInviteParty;
+  final ValueChanged<PsPartyMember> onKickParty,onPromoteParty;
   final ValueChanged<PsLearnedSkill> onAssignSkill;
   final ValueChanged<String> onSendChat;
   final UiAssetCache ui;
@@ -80,6 +89,12 @@ class WorldHud extends StatelessWidget {
     required this.skillBar,
     required this.inventory,
     required this.warehouse,
+    required this.friends,
+    required this.partyMembers,
+    required this.partyLeaderId,
+    required this.selfCharacterId,
+    required this.pendingFriendRequestName,
+    required this.pendingPartyRequesterId,
     required this.gold,
     required this.shop,
     required this.gate,
@@ -94,6 +109,7 @@ class WorldHud extends StatelessWidget {
     required this.blacksmithExtractPossibility,
     required this.blacksmithBusy,
     required this.inventoryOpen,
+    required this.socialOpen,
     required this.statusOpen,
     required this.skillsOpen,
     required this.questLogOpen,
@@ -121,12 +137,21 @@ class WorldHud extends StatelessWidget {
     required this.onStoreWarehouse,
     required this.onWithdrawWarehouse,
     required this.onToggleInventory,
+    required this.onToggleSocial,
     required this.onToggleStatus,
     required this.onAddStat,
     required this.onToggleSkills,
     required this.onToggleQuestLog,
     required this.onHotbar,
     required this.onOpenQuest,
+    required this.onRequestFriend,
+    required this.onRespondFriend,
+    required this.onRespondParty,
+    required this.onDeleteFriend,
+    required this.onInviteParty,
+    required this.onLeaveParty,
+    required this.onKickParty,
+    required this.onPromoteParty,
     required this.onAssignSkill,
     required this.onSendChat,
     required this.locale,
@@ -149,6 +174,12 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 8, top: 3, width: 216, height: 79, child: _playerHud()),
           if(buffs.isNotEmpty)
             Positioned(left:8,top:84,width:300,height:38,child:_buffBar()),
+          if(partyMembers.isNotEmpty)
+            Positioned(
+              left:8,top:124,width:218,
+              height:math.min(228.0,30+partyMembers.length*33.0),
+              child:_partyHud(),
+            ),
           Positioned(left: 215, top: 5, width: 520, height: 48, child: _topHotbar()),
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
           if(targetMobId!=null)
@@ -158,6 +189,8 @@ class WorldHud extends StatelessWidget {
           if(weather!=null&&weather!.state!=0)
             Positioned.fill(child:IgnorePointer(child:CustomPaint(painter:_WeatherPainter(weather!)))),
           ..._worldLabels(),
+          if(socialOpen)
+            Positioned(right:180,top:165,width:390,height:480,child:_socialWindow()),
           if(statusOpen)
             Positioned(right:198,top:210,width:318,height:420,child:_statusWindow()),
           if(skillsOpen)
@@ -754,7 +787,7 @@ class WorldHud extends StatelessWidget {
         _bottomButton('interface/main_bottom_btn_skill.tga',onTap:onToggleSkills),
         _bottomButton('interface/main_bottom_btn_item.tga',onTap:onToggleInventory),
         _bottomButton('interface/main_bottom_btn_quest.tga',onTap:onToggleQuestLog),
-        _bottomButton('interface/main_bottom_btn_sub.tga'),
+        _bottomButton('interface/main_bottom_btn_sub.tga',onTap:onToggleSocial),
         _bottomButton('interface/main_bottom_btn_guild.tga'),
         _bottomButton('interface/main_bottom_btn_shop.tga'),
         _bottomButton('interface/main_bottom_btn_option.tga'),
