@@ -41,6 +41,22 @@ void main(){
     expect(p.keepActivated,isTrue);
   });
 
+  test('parses character auto attack against mob',(){
+    final b=_body(15),d=ByteData.sublistView(b);
+    b[0]=0;
+    d.setUint32(1,41,Endian.little);
+    d.setUint32(5,42,Endian.little);
+    d.setUint16(9,77,Endian.little);
+    d.setUint16(11,8,Endian.little);
+    d.setUint16(13,9,Endian.little);
+    final p=PsUsualHit.parse(PsPacket(PsPacketType.characterMobAutoAttack,b));
+    expect(p.success,isTrue);
+    expect(p.attackerId,41);
+    expect(p.targetId,42);
+    expect(p.hpDamage,77);
+    expect(p.spDamage,8);
+    expect(p.mpDamage,9);
+  });
   test('parses mob normal attack',(){
     final b=_body(15),d=ByteData.sublistView(b);
     b[0]=0;
