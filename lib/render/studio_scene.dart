@@ -58,24 +58,24 @@ class RuntimeMobSpawn {
 class GameActorLabel {
   final Actor actor;
   final String text;
-  final bool quest,mob;
+  final bool quest,mob,player;
   final int globalId;
-  const GameActorLabel(this.actor,this.text,{this.quest=false,this.mob=false,this.globalId=0});
+  const GameActorLabel(this.actor,this.text,{this.quest=false,this.mob=false,this.player=false,this.globalId=0});
 }
 
 class ProjectedGameLabel {
   final double x,y;
   final String text;
-  final bool quest,mob;
+  final bool quest,mob,player;
   final int globalId;
-  const ProjectedGameLabel(this.x,this.y,this.text,this.quest,this.mob,this.globalId);
+  const ProjectedGameLabel(this.x,this.y,this.text,this.quest,this.mob,this.player,this.globalId);
 }
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
   t.ThreeJS? view;Catalog? catalog;
   t.LineSegments? grid;
   bool gridVisible=true;
-  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> networkNpcActors={},networkMobActors={};Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> networkNpcActors={},networkMobActors={},networkPlayerActors={};Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -151,6 +151,22 @@ class StudioScene extends ChangeNotifier {
     finally{if(revision==_appearanceRevision){busy=false;if(!disposed)notifyListeners();}}
   }
   Future<void> selectAnimation(String path) async {final a=character;if(a==null)return;final revision=++_clipRevision,c=a.clips[path]??await clip(path);if(disposed||revision!=_clipRevision||a!=character)return;if(!compatible(a,c))throw FormatException('Animación incompatible: necesita ${a.requiredBones} huesos y contiene ${c.bones.length}.');a.clips[path]=c;a.play(c);say('${animationLabel(path)} · ${c.duration.toStringAsFixed(2)} s');}
+  Future<Actor> loadAppearanceActor(Appearance next) async {
+    final staged=Actor();
+    try{
+      for(final p in next.effective){
+        final part=await skinned(p.meshPath,p.texturePath,alpha:p.raw.alpha);
+        staged.parts.add(part);staged.root.add(part.mesh);
+      }
+      final idle=await firstCompatible(staged,groundMotionCandidates(next.archetype.animations,GroundMotion.idle));
+      if(idle==null)throw FormatException('No hay reposo compatible para jugador remoto ${next.archetype.id}.');
+      staged.walk=await firstCompatible(staged,groundMotionCandidates(next.archetype.animations,GroundMotion.walk));
+      staged.run=await firstCompatible(staged,groundMotionCandidates(next.archetype.animations,GroundMotion.run));
+      staged.idle=idle;staged.normal=idle;staged.play(idle);
+      staged.root.scale.z=-1;
+      return staged;
+    }catch(_){staged.dispose();rethrow;}
+  }
   Future<Actor> loadCreature(CreatureRecord c) async {
     final lib=catalog!.library,root=directoryName(c.source),a=Actor();
     try{
@@ -192,7 +208,7 @@ class StudioScene extends ChangeNotifier {
     int mobLimit=80,
   }) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();gameLabels.clear();networkNpcActors.clear();networkMobActors.clear();
+    gameActors.clear();gameLabels.clear();networkNpcActors.clear();networkMobActors.clear();networkPlayerActors.clear();
     if(view==null||catalog==null)return;
 
     final npcRecords={for(final n in catalog!.npcs)n.id:n};
@@ -298,6 +314,69 @@ class StudioScene extends ChangeNotifier {
       gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true,globalId:p.globalId));
       notifyListeners();
     }catch(e){report('LIVE mob ${p.mobId}: $e');}
+  }
+  Future<void> addNetworkPlayer({
+    required int characterId,required Appearance appearance,required String name,
+    required double x,required double y,required double z,required int angle,
+  }) async {
+    if(view==null||catalog==null)return;
+    removeNetworkPlayer(characterId);
+    final lx=x-originX,lz=-(z-originZ);
+    if(lx.abs()>110||lz.abs()>110)return;
+    try{
+      final a=await loadAppearanceActor(appearance);
+      a.root.position.setValues(lx,y,lz);
+      a.root.rotation.y=-angle*(math.pi*2/65536.0);
+      gameActors.add(a);networkPlayerActors[characterId]=a;view!.scene.add(a.root);
+      gameLabels.add(GameActorLabel(a,name,player:true,globalId:characterId));
+      notifyListeners();
+    }catch(e){report('LIVE player $characterId: $e');}
+  }
+
+  void moveNetworkPlayer(int characterId,double worldX,double worldY,double worldZ,int angle,int motion){
+    final a=networkPlayerActors[characterId];if(a==null)return;
+    final nx=worldX-originX,nz=-(worldZ-originZ);
+    a.root.position.setValues(nx,worldY,nz);
+    a.root.rotation.y=-angle*(math.pi*2/65536.0);
+    final moving=motion!=0;
+    final clip=moving?(motion==1?(a.run??a.walk):(a.walk??a.run)):(a.idle??a.normal);
+    if(clip!=null&&a.clip!=clip)a.play(clip);
+    notifyListeners();
+  }
+
+  void removeNetworkPlayer(int characterId){
+    final a=networkPlayerActors.remove(characterId);if(a==null)return;
+    gameActors.remove(a);gameLabels.removeWhere((x)=>identical(x.actor,a));a.dispose();
+    notifyListeners();
+  }
+
+  int? pickNetworkPlayer(double screenX,double screenY,double width,double height,{double radius=34}){
+    int? bestId;var best=radius*radius;
+    for(final p in projectGameLabels(width,height)){
+      if(!p.player||p.globalId==0)continue;
+      final dx=p.x-screenX,dy=p.y-screenY,d=dx*dx+dy*dy;
+      if(d<best){best=d;bestId=p.globalId;}
+    }
+    return bestId;
+  }
+
+  Future<void> networkPlayerAttackCharacter(int characterId) async {
+    final a=character,target=networkPlayerActors[characterId];
+    if(a==null||target==null)return;
+    final dx=target.root.position.x-a.root.position.x,dz=target.root.position.z-a.root.position.z;
+    if(dx.abs()+dz.abs()>1e-5)a.root.rotation.y=math.atan2(dx,dz);
+    if(attackClips.isEmpty)await prepareWeaponMotions();
+    if(attackClips.isNotEmpty)a.play(attackClips[attackCounter++%attackClips.length],repeat:false);
+    notifyListeners();
+  }
+
+  Future<void> networkRemotePlayerHit(int characterId,int damage) async {
+    final a=networkPlayerActors[characterId];if(a==null)return;
+    lastImpact='PvP −'+damage.toString();hitLife=.65;
+    if(hitSprite!=null){
+      hitSprite!.visible=true;hitSprite!.position.setValues(a.root.position.x,a.root.position.y+1,-.1+a.root.position.z);
+    }
+    notifyListeners();
   }
   int? pickNetworkMob(double screenX,double screenY,double width,double height,{double radius=34}){
     int? bestId;var best=radius*radius;
@@ -511,7 +590,7 @@ class StudioScene extends ChangeNotifier {
       final p=t.Vector3(a.root.position.x,a.root.position.y+a.height+0.28,a.root.position.z);
       p.project(camera);
       if(p.z<-1||p.z>1||p.x<-1.25||p.x>1.25||p.y<-1.25||p.y>1.25)continue;
-      out.add(ProjectedGameLabel((p.x+1)*.5*width,(1-p.y)*.5*height,label.text,label.quest,label.mob,label.globalId));
+      out.add(ProjectedGameLabel((p.x+1)*.5*width,(1-p.y)*.5*height,label.text,label.quest,label.mob,label.player,label.globalId));
     }
     return out;
   }
@@ -793,7 +872,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
