@@ -41,6 +41,11 @@ const supportedExtensions = {
   '.smod',
   '.dg',
   '.eft',
+  '.vani',
+  '.mani',
+  '.wtr',
+  '.3de',
+  '.seff',
   '.sdata',
 };
 bool supportedPath(String p) {
@@ -154,8 +159,19 @@ class Library {
     if (name.isEmpty || baseName(name).toLowerCase().startsWith('null.'))
       return null;
     final n = canon(name);
-    final variants = {n};
-    if (n.endsWith('.tga')) variants.add('${n.substring(0, n.length - 4)}.dds');
+    final variants = <String>{n};
+    final dot=n.lastIndexOf('.');
+    if(dot>=0){
+      final stem=n.substring(0,dot),ext=n.substring(dot);
+      const textureAliases=<String>{'.dds','.tga','.bmp','.jpg','.jpeg','.png'};
+      if(textureAliases.contains(ext)){
+        // Shaiya tables frequently name authored TGA/BMP/JPG files while the
+        // distributed DATA stores the converted DDS equivalent.
+        for(final alias in textureAliases){
+          variants.add('$stem$alias');
+        }
+      }
+    }
     for (final root in directories) {
       for (final v in variants) {
         final key = canon(root.isEmpty ? v : '$root/$v');
@@ -166,13 +182,31 @@ class Library {
       if (files.containsKey(v)) return v;
     }
     if (uniqueFallback) {
-      for (final v in variants) {
-        final hits = _names[baseName(v)] ?? [];
-        if (hits.length == 1) return hits.single;
-        if (hits.length > 1)
-          throw FormatException(
-            'Nombre ambiguo: $name (${hits.length} rutas).',
-          );
+      final preferred=<String>{};
+      for(final root in directories){
+        final prefix=canon(root.isEmpty?'':root.endsWith('/')?root:'$root/');
+        for(final v in variants){
+          for(final hit in _names[baseName(v)]??const <String>[]){
+            if(prefix.isEmpty||hit.startsWith(prefix))preferred.add(hit);
+          }
+        }
+      }
+      if(preferred.length==1)return preferred.single;
+      if(preferred.length>1){
+        throw FormatException(
+          'Nombre ambiguo en rutas preferidas: $name (${preferred.length} rutas: '
+          '${preferred.take(6).join(', ')}).',
+        );
+      }
+      final hits=<String>{};
+      for(final v in variants){
+        hits.addAll(_names[baseName(v)]??const <String>[]);
+      }
+      if(hits.length==1)return hits.single;
+      if(hits.length>1){
+        throw FormatException(
+          'Nombre ambiguo: $name (${hits.length} rutas: ${hits.take(6).join(', ')}).',
+        );
       }
     }
     return null;
