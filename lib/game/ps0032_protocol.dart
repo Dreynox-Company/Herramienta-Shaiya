@@ -38,6 +38,8 @@ class PsPacketType {
   static const mobAttack=0x0605;
   static const mobDeath=0x0606;
   static const mobSkillUse=0x060B;
+  static const npcBuyItem=0x0702;
+  static const npcSellItem=0x0703;
   static const questList=0x0901;
   static const questStart=0x0902;
   static const questEnd=0x0903;
@@ -689,6 +691,23 @@ class PsInventoryMove {
   }
 }
 
+class PsNpcTradeResult {
+  final int result,bag,slot,type,typeId,count,gold;
+  const PsNpcTradeResult(this.result,this.bag,this.slot,this.type,this.typeId,this.count,this.gold);
+  bool get success=>result==0;
+  static PsNpcTradeResult parse(PsPacket p){
+    if(p.type!=PsPacketType.npcBuyItem&&p.type!=PsPacketType.npcSellItem){
+      throw FormatException('No es una respuesta de compra/venta NPC.');
+    }
+    if(p.body.length<10)throw FormatException('NPC trade truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsNpcTradeResult(
+      p.body[0],p.body[1],p.body[2],p.body[3],p.body[4],p.body[5],
+      d.getUint32(6,Endian.little),
+    );
+  }
+}
+
 class PsLearnedSkill {
   final int skillId,level,number,cooldownSeconds;
   const PsLearnedSkill(this.skillId,this.level,this.number,this.cooldownSeconds);
@@ -953,6 +972,19 @@ class PsWorldSession {
     await connection.send(PsPacketType.questQuit,_i16Bytes(questId));
   }
 
+  Future<PsNpcTradeResult> buyNpcItem(int npcGlobalId,int productIndex,int count) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de comprar.');
+    if(productIndex<0||productIndex>255||count<=0||count>255)throw RangeError('Índice/cantidad de compra inválidos.');
+    await connection.send(PsPacketType.npcBuyItem,[..._u32Bytes(npcGlobalId),productIndex,count]);
+    return PsNpcTradeResult.parse(await connection.nextType(PsPacketType.npcBuyItem));
+  }
+
+  Future<PsNpcTradeResult> sellNpcItem(int bag,int slot,int count) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de vender.');
+    if(bag<=0||bag>255||slot<0||slot>255||count<=0||count>255)throw RangeError('Bag/slot/cantidad de venta inválidos.');
+    await connection.send(PsPacketType.npcSellItem,[bag,slot,count]);
+    return PsNpcTradeResult.parse(await connection.nextType(PsPacketType.npcSellItem));
+  }
   Future<void> useMobSkill(int skillNumber,int targetGlobalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar skills.');
     await connection.send(PsPacketType.useMobTargetSkill,[
