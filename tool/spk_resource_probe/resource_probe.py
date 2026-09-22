@@ -140,8 +140,15 @@ def _nearby_binary_candidates(path:Path,index_key:bytes,max_candidates:int=30000
       (ascii_hex,'index-key-hex'),
       (ascii_upper,'index-key-HEX'),
       (b'ChainingModeGCM','gcm-string'),
+      ('ChainingModeGCM'.encode('utf-16-le'),'gcm-string-wide'),
+      (b'KeyDataBlob','keydatablob-string'),
+      ('KeyDataBlob'.encode('utf-16-le'),'keydatablob-string-wide'),
+      (b'AES','aes-string'),
+      ('AES'.encode('utf-16-le'),'aes-string-wide'),
       (b'data.spk','data-spk-string'),
       (b'DATA.SPK','DATA-SPK-string'),
+      ('data.spk'.encode('utf-16-le'),'data-spk-string-wide'),
+      ('DATA.SPK'.encode('utf-16-le'),'DATA-SPK-string-wide'),
     ):
       start=0
       while True:
@@ -152,7 +159,7 @@ def _nearby_binary_candidates(path:Path,index_key:bytes,max_candidates:int=30000
         if len(anchors)>=64:break
       if len(anchors)>=64:break
     for at,label in anchors:
-      lo=max(0,at-2048);hi=min(len(blob),at+2048)
+      lo=max(0,at-4096);hi=min(len(blob),at+4096)
       region=blob[lo:hi]
       for match in re.finditer(rb'(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{32}|[0-9A-Fa-f]{64})(?![0-9A-Fa-f])',region):
         try:key=bytes.fromhex(match.group(0).decode('ascii'))
@@ -211,10 +218,10 @@ def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,ind
     (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return None,None,report
 
-def static_resource_profile(key:bytes,source_label:str):
+def static_resource_profile(key:bytes,source_label:str,profile_id:str='shaiya-spk-v3-resources-a3ea7e3b-v12-static'):
     return {
       'schema':4,
-      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v11-static',
+      'profileId':profile_id,
       'indexSha256':EXPECTED_INDEX,
       'offlineValidated':3,
       'simpleValidated':3,
@@ -252,7 +259,78 @@ def nonce_rules(t:dict):
     }
 
 class Sink:
-    def __init__(self,out:Path,spk:Path,details):self.out=out;self.spk=spk;self.details=details;self.events=[];self.rows=[];self.lock=threading.Lock();self.valid_simple=[];self.valid_chunks=[]
+    def __init__(self,out:Path,spk:Path,details,cat):
+        self.out=out
+        self.spk=spk
+        self.details=details
+        self.events=[]
+        self.rows=[]
+        self.lock=threading.Lock()
+        self.valid_simple=[]
+        self.valid_chunks=[]
+        self.samples=_spread_simple_records(cat,3)
+        self.candidate_rows=[]
+        self.candidate_seen=set()
+        self.dynamic_key_match=None
+
+    def _persist_candidates(self):
+        (self.out/'candidate-keys.json').write_text(
+            json.dumps(
+                {
+                    'schema':1,
+                    'tested':len(self.candidate_rows),
+                    'authenticated':sum(1 for row in self.candidate_rows if row.get('authenticated')),
+                    'rows':self.candidate_rows,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding='utf-8',
+        )
+
+    def _accept_candidate(self,p):
+        secret_hex=str(p.get('secretHex') or '').strip().lower()
+        source=str(p.get('source') or 'unknown')[:180]
+        try:
+            key=bytes.fromhex(secret_hex)
+        except ValueError:
+            return
+        if len(key) not in (16,32):
+            return
+        fingerprint=sha256(key)
+        if fingerprint in self.candidate_seen:
+            return
+        self.candidate_seen.add(fingerprint)
+        authenticated=_key_authenticates_samples(self.spk,self.samples,key)
+        row={
+            'source':source,
+            'secretBytes':len(key),
+            'secretSha256':fingerprint,
+            'authenticated':authenticated,
+        }
+        self.candidate_rows.append(row)
+        if authenticated and self.dynamic_key_match is None:
+            self.dynamic_key_match=(key,source)
+            event={
+                'kind':'event',
+                'code':'CANDIDATE_KEY_AUTHENTICATED',
+                'details':{
+                    'source':source,
+                    'secretBytes':len(key),
+                    'samples':[r['entryId'] for r in self.samples],
+                },
+            }
+            if len(self.events)<250:
+                self.events.append(event)
+            print(
+                'CLAVE_CANDIDATA_AUTENTICADA',
+                source,
+                'bytes=',len(key),
+                'muestras=',len(self.samples),
+                flush=True,
+            )
+        self._persist_candidates()
+
     def accept(self,m,data):
       with self.lock:
        if m.get('type')=='error':
@@ -262,6 +340,9 @@ class Sink:
        if kind=='event':
         if len(self.events)<250:self.events.append(p)
         print('EVENT',p.get('code','?'),json.dumps(p.get('details') or {},ensure_ascii=False,separators=(',',':')),flush=True)
+        return
+       if kind=='candidate-key':
+        self._accept_candidate(p)
         return
        if kind!='resource':return
        pref=p.get('prefix');target=self.details.get(pref)
@@ -344,7 +425,7 @@ def derive_profile(rows):
     chunk_tags=bool(chunks) and all(r.get('metadataTagMatch') for r in chunks)
     result={
       'schema':4,
-      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v11',
+      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v12',
       'indexSha256':EXPECTED_INDEX,
       'offlineValidated':len(valid),
       'simpleValidated':len(simple),
@@ -422,11 +503,14 @@ def main():
       print('Escribe CAPTURAR para continuar:',flush=True)
       if input().strip()!='CAPTURAR':print('Cancelado');return 2
     cfg={'prefixes':prefix};agent=AGENT_FILE.read_text(encoding='utf-8').replace('__CONFIG__',json.dumps(cfg,separators=(',',':')))
-    sink=Sink(out,spk,details);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None;grace_started=False
+    sink=Sink(out,spk,details,cat);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None;grace_started=False
     def onmsg(m,d):
       nonlocal failure,grace_started
       try:
        sink.accept(m,d)
+       if sink.dynamic_key_match is not None:
+        done.set()
+        return
        # Si ya hay clave/AAD reproducibles, damos una ventana corta para capturar
        # chunks nativos. Si no aparecen, Studio deriva la regla offline después.
        if len(sink.valid_simple)>=4:
@@ -445,8 +529,22 @@ def main():
       if sess:
        try:sess.detach()
        except:pass
-    prof=derive_profile(sink.rows);prof['failure']=failure;(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2),encoding='utf-8');(out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2),encoding='utf-8')
-    print('RESUMEN capturas=',len(sink.rows),'simples_validas=',len(sink.valid_simple),'chunks_validos=',len(sink.valid_chunks),'fallo=',failure,flush=True)
+    (out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2),encoding='utf-8')
+    if sink.dynamic_key_match is not None:
+      dynamic_key,dynamic_source=sink.dynamic_key_match
+      prof=static_resource_profile(
+        dynamic_key,
+        'dynamic-candidate:'+dynamic_source,
+        profile_id='shaiya-spk-v3-resources-a3ea7e3b-v12-dynamic-candidate',
+      )
+      prof['dynamicCandidateKeysTested']=len(sink.candidate_rows)
+      prof['failure']=failure
+      (out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2),encoding='utf-8')
+      print('ÉXITO dinámico: clave candidata autenticada contra 3 muestras ·',dynamic_source,flush=True)
+      print(json.dumps(prof,ensure_ascii=False,indent=2))
+      return 4
+    prof=derive_profile(sink.rows);prof['failure']=failure;prof['dynamicCandidateKeysTested']=len(sink.candidate_rows);(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2),encoding='utf-8')
+    print('RESUMEN capturas=',len(sink.rows),'simples_validas=',len(sink.valid_simple),'chunks_validos=',len(sink.valid_chunks),'candidatas=',len(sink.candidate_rows),'fallo=',failure,flush=True)
     print(json.dumps(prof,ensure_ascii=False,indent=2));
     if prof['readyForFragmented']:print('ÉXITO: simples + fragmentos reproducidos offline.');return 0
     if prof['readyForSimple']:print('Simples autenticados; Shaiya Studio revalidará la clave y derivará los chunks offline.');return 4
