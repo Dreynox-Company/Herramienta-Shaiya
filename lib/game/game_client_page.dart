@@ -1502,7 +1502,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
   }
   void _setBlacksmithMode(int mode){
-    blacksmithMode=mode.clamp(0,1);
+    blacksmithMode=mode.clamp(0,1).toInt();
     if(mounted)setState((){});
   }
 
