@@ -2873,7 +2873,12 @@ class _GameClientPageState extends State<GameClientPage> {
     if(stage!=GameStage.world||dead||rebirthPending)return;
     focus.requestFocus();
     final picked=scene.pickNetworkCombatTarget(position.dx,position.dy,1024,742);
-    if(picked==null)return;
+    if(picked==null){
+      try{await liveWorld?.clearTarget();}catch(e){messages.insert(0,'[Target] '+e.toString());}
+      _clearCombatTarget();
+      if(mounted)setState((){});
+      return;
+    }
     if(picked.player){
       final id=picked.id;
       targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
