@@ -9,6 +9,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:herramienta_shaiya/main.dart';
 import 'package:herramienta_shaiya/game/game_client_page.dart';
 import 'package:herramienta_shaiya/game/game_stage.dart';
+import 'package:herramienta_shaiya/core/formats.dart';
 
 void main(){
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -140,6 +141,49 @@ void main(){
         'metadataQuests':state.metadata?.quests.length??0,
       };
       if(requireReal&&stage==GameStage.world){
+        final stageReport=report[stage.name] as Map<String,dynamic>;
+        final world=state.scene.world!;
+        final lib=state.catalog.library;
+        final layout=world.layout.trim();
+        if(layout.toLowerCase().endsWith('.wtr')){
+          final waterPath=lib.resolve(
+            layout,
+            ['world','world/water','terrain','terrain/water'],
+            uniqueFallback:true,
+          );
+          if(waterPath!=null){
+            final water=readWtr(await lib.read(waterPath),waterPath);
+            stageReport['water']={
+              'path':waterPath,
+              'unknown1':water.unknown1,
+              'unknown2':water.unknown2,
+              'unknown3':water.unknown3,
+              'textures':water.textures,
+            };
+          }else{
+            stageReport['water']={'missing':layout};
+          }
+        }
+        final maniRows=<Map<String,dynamic>>[];
+        for(final binding in world.maniBindings.take(64)){
+          final path=lib.resolve(binding.asset,['entity/MAni'],uniqueFallback:true);
+          if(path==null){
+            maniRows.add({'asset':binding.asset,'buildingIndex':binding.buildingIndex,'missing':true});
+            continue;
+          }
+          final mani=readMani(await lib.read(path),path);
+          maniRows.add({
+            'asset':binding.asset,
+            'path':path,
+            'buildingIndex':binding.buildingIndex,
+            'rotationEnabled':mani.rotationEnabled,
+            'axis':[mani.rotationAxis.x,mani.rotationAxis.y,mani.rotationAxis.z],
+            'speed':mani.animationSpeed,
+          });
+        }
+        stageReport['maniBindingsDecoded']=maniRows;
+        stageReport['animatedWorldTransforms']=state.scene.animatedWorldTransforms.length;
+
         final actor=state.scene.character!;
         final fromX=actor.root.position.x,fromZ=actor.root.position.z;
         state.scene.setMovement(0.0,1.0);
