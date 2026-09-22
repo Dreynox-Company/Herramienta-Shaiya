@@ -1207,6 +1207,7 @@ class _GameClientPageState extends State<GameClientPage> {
             level:liveCharacter?.level??1,
             details:liveDetails,
             hitpoints:liveHitpoints,
+            targetMobGlobalId:targetMobGlobalId,
             targetMobId:targetMobTypeId,
             targetHp:targetMobHp,
             targetMaxHp:targetMobMaxHp,
