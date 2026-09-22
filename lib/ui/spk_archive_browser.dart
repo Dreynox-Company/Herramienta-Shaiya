@@ -1226,6 +1226,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (target is Map && target['kind'] == 'chunk') chunkHits++;
     }
 
+    final simpleValidated =
+        (profile['simpleValidated'] as num?)?.toInt() ?? 0;
+
     String reason;
     if (!eventCodes.contains('HOOK_READY')) {
       reason =
@@ -1246,8 +1249,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       reason =
           'Se capturaron clave y parámetros GCM, pero no autentican offline '
           'el ciphertext exacto del DATA.SPK.';
-    } else if ((profile['simpleValidated'] as num?)?.toInt() case final n?
-        when n < 2) {
+    } else if (simpleValidated < 2) {
       reason =
           'Hay evidencia AES-GCM válida, pero faltan al menos dos recursos '
           'simples consistentes para cerrar el perfil.';
