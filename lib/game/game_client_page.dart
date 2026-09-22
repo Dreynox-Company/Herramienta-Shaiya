@@ -2956,7 +2956,18 @@ class _GameClientPageState extends State<GameClientPage> {
         rule.special!=0||rule.hp!=0||rule.mp!=0||rule.sp!=0||rule.itemSkill!=0;
       if(!usable){messages.insert(0,'[Objeto] '+catalog!.itemName(item.type,item.typeId,uiLocale)+' no es equipable ni utilizable.');if(mounted)setState((){});return;}
       if(rule.special==32){
-        messages.insert(0,'[Objeto] Movement Rune requiere seleccionar un jugador del grupo; no se enviará contra un mob.');
+        final target=targetPlayerId;
+        final groupIds=<int>{
+          ...livePartyMembers.map((member)=>member.id),
+          ...?liveRaid?.members.map((row)=>row.member.id),
+        };
+        if(target==null||!groupIds.contains(target)){
+          messages.insert(0,'[Objeto] Movement Rune: selecciona un miembro de Party/Raid.');
+          if(mounted)setState((){});
+          return;
+        }
+        await session.useInventoryItem(item.bag,item.slot,targetGlobalId:target);
+        messages.insert(0,'[Objeto] Movement Rune → '+_knownCharacterName(target)+'.');
         if(mounted)setState((){});
         return;
       }
@@ -2967,7 +2978,7 @@ class _GameClientPageState extends State<GameClientPage> {
   }
   int? _firstFreeGuildWarehouseSlot(){
     final occupied={for(final i in liveGuildWarehouse)i.slot};
-    for(var slot=0;slot<40;slot++){if(!occupied.contains(slot))return slot;}
+    for(var slot=0;slot<240;slot++){if(!occupied.contains(slot))return slot;}
     return null;
   }
 
@@ -2983,7 +2994,7 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});return;
     }
     if(slot==null){
-      messages.insert(0,'[Guild Warehouse] Primera pestaña llena. No se asume nivel de pestañas superiores.');
+      messages.insert(0,'[Guild Warehouse] Almacén completo (240/240 slots).');
       if(mounted)setState((){});return;
     }
     try{
