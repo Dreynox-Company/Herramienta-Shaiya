@@ -2340,6 +2340,60 @@ class _WeatherPainter extends CustomPainter {
   bool shouldRepaint(covariant _WeatherPainter oldDelegate)=>true;
 }
 
+class _GuildCreateInput extends StatefulWidget {
+  final String locale;
+  final void Function(String,String) onCreate;
+  const _GuildCreateInput({required this.locale,required this.onCreate});
+
+  @override
+  State<_GuildCreateInput> createState()=>_GuildCreateInputState();
+}
+
+class _GuildCreateInputState extends State<_GuildCreateInput> {
+  final name=TextEditingController(),message=TextEditingController();
+
+  @override
+  void dispose(){name.dispose();message.dispose();super.dispose();}
+
+  void submit(){
+    final n=name.text.trim(),m=message.text.trim();
+    if(n.isEmpty)return;
+    widget.onCreate(n,m);
+  }
+
+  InputDecoration deco(String hint)=>InputDecoration(
+    counterText:'',isDense:true,
+    contentPadding:const EdgeInsets.symmetric(horizontal:8,vertical:7),
+    hintText:hint,hintStyle:const TextStyle(fontSize:8,color:Colors.white30),
+    filled:true,fillColor:const Color(0xff120f0c),
+    enabledBorder:const OutlineInputBorder(borderSide:BorderSide(color:Color(0xff5b4b37))),
+    focusedBorder:const OutlineInputBorder(borderSide:BorderSide(color:Color(0xffa68854))),
+  );
+
+  @override
+  Widget build(BuildContext context)=>Column(children:[
+    Row(children:[
+      Expanded(child:TextField(
+        controller:name,maxLength:24,style:const TextStyle(fontSize:9,color:Colors.white),
+        decoration:deco(widget.locale=='spn'?'Nombre del guild':'Guild name'),
+      )),
+      const SizedBox(width:5),
+      SizedBox(
+        width:72,
+        child:TextButton(
+          onPressed:submit,
+          style:TextButton.styleFrom(backgroundColor:const Color(0xff49331f),foregroundColor:const Color(0xffffdf91),visualDensity:VisualDensity.compact),
+          child:Text(widget.locale=='spn'?'Crear':'Create',style:const TextStyle(fontSize:8.5)),
+        ),
+      ),
+    ]),
+    const SizedBox(height:4),
+    TextField(
+      controller:message,maxLength:25,style:const TextStyle(fontSize:8.5,color:Colors.white70),
+      decoration:deco(widget.locale=='spn'?'Mensaje del guild':'Guild message'),
+    ),
+  ]);
+}
 class _SocialNameInput extends StatefulWidget {
   final String locale;
   final ValueChanged<String> onSubmit;
