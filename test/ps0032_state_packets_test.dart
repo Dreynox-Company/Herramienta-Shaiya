@@ -49,6 +49,17 @@ void main(){
     expect(PsMoneyUpdate.parse(PsPacket(PsPacketType.setMoney,money)).gold,987654);
   });
 
+  test('decodes the native packed Shaiya world clock',(){
+    const year=2020,month=1,day=1,hour=12,minute=30,second=0;
+    final packedHour=hour+32*(day+32*(month+16*(year-16)));
+    final raw=second+((minute+(packedHour<<6))<<6);
+    final body=Uint8List(4);
+    ByteData.sublistView(body).setInt32(0,raw,Endian.little);
+    final time=PsWorldTime.parse(PsPacket(PsPacketType.worldDay,body));
+    expect((time.year,time.month,time.day),(year,month,day));
+    expect((time.hour,time.minute,time.second),(hour,minute,second));
+  });
+
   test('parses target buffs map drops and NPC attacks',(){
     final buffs=Uint8List(20),bd=ByteData.sublistView(buffs);
     buffs[0]=2;
