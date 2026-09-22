@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-import argparse, hashlib, json, struct, sys, threading, time
+import argparse, hashlib, json, re, struct, sys, threading, time
 
 MAGIC=0x9e7bd34c; VERSION=0x00030000; HEADER=128; FOOTER=64; RECORD=96; AUX=32
 EXPECTED_INDEX='a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f'
@@ -77,6 +77,163 @@ def build_targets(spk:Path, cat:dict):
                 prefix[p]=a['storedBytes'];details[p]={**a,'kind':'chunk','parentOrdinal':r['ordinal'],'entryId':r['entryId'],'localChunk':j,'parentDecodedBytes':r['decodedBytes']}
     if total!=55457:raise ValueError(f'Se esperaban 55.457 objetivos y hay {total}')
     return prefix,details
+
+
+def _spread_simple_records(cat:dict, count:int=3):
+    rows=[r for r in cat['records'] if r['recordType']==1 and r['storedBytes']>0]
+    if len(rows)<=count:return rows
+    picks=[]
+    for i in range(count):
+      at=round(i*(len(rows)-1)/(count-1))
+      row=rows[at]
+      if row not in picks:picks.append(row)
+    return picks
+
+def _key_authenticates_samples(spk:Path, records:list, key:bytes):
+    if len(key) not in (16,32) or len(records)<2:return False
+    try:
+      from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+      aes=AESGCM(key)
+      for r in records[:3]:
+        meta=bytes.fromhex(r['metadataHex'])
+        nonce,tag=meta[:12],meta[12:28]
+        ct=read_range(spk,r['dataOffset'],r['storedBytes'])
+        aes.decrypt(nonce,ct+tag,None)
+      return True
+    except Exception:
+      return False
+
+def _derived_index_candidates(index_key:bytes,index_hash:str):
+    digest=hashlib.sha256(index_key).digest()
+    reverse=index_key[::-1]
+    hash_bytes=bytes.fromhex(index_hash)
+    candidates=[
+      ('index-key-direct',index_key),
+      ('sha256-index-first16',digest[:16]),
+      ('sha256-index-last16',digest[16:]),
+      ('md5-index',hashlib.md5(index_key).digest()),
+      ('reverse-index',reverse),
+      ('xor-ff-index',bytes(x^0xff for x in index_key)),
+      ('index-hash-first16',hash_bytes[:16]),
+      ('index-hash-last16',hash_bytes[16:]),
+      ('sha256-index-hash-text-first16',hashlib.sha256(index_hash.encode('ascii')).digest()[:16]),
+    ]
+    seen=set()
+    for label,key in candidates:
+      if key in seen:continue
+      seen.add(key);yield label,key
+
+def _nearby_binary_candidates(path:Path,index_key:bytes,max_candidates:int=30000):
+    try:
+      size=path.stat().st_size
+      if size<=0 or size>256*1024*1024:return
+      blob=path.read_bytes()
+    except OSError:
+      return
+    seen=set();emitted=0
+    anchors=[]
+    raw=index_key
+    ascii_hex=index_key.hex().encode('ascii')
+    ascii_upper=index_key.hex().upper().encode('ascii')
+    for needle,label in (
+      (raw,'index-key'),
+      (ascii_hex,'index-key-hex'),
+      (ascii_upper,'index-key-HEX'),
+      (b'ChainingModeGCM','gcm-string'),
+      (b'data.spk','data-spk-string'),
+      (b'DATA.SPK','DATA-SPK-string'),
+    ):
+      start=0
+      while True:
+        at=blob.find(needle,start)
+        if at<0:break
+        anchors.append((at,label))
+        start=at+1
+        if len(anchors)>=64:break
+      if len(anchors)>=64:break
+    for at,label in anchors:
+      lo=max(0,at-2048);hi=min(len(blob),at+2048)
+      region=blob[lo:hi]
+      for match in re.finditer(rb'(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{32}|[0-9A-Fa-f]{64})(?![0-9A-Fa-f])',region):
+        try:key=bytes.fromhex(match.group(0).decode('ascii'))
+        except ValueError:continue
+        if len(key) not in (16,32) or key in seen:continue
+        seen.add(key);emitted+=1
+        yield f'{path.name}:{label}:hex@0x{lo+match.start():x}',key
+        if emitted>=max_candidates:return
+      # Raw constants close to an observed crypto/string anchor. Step 4 keeps
+      # the sweep bounded while covering normal constant-pool alignment.
+      for width in (16,32):
+        end=max(lo,hi-width+1)
+        for pos in range(lo,end,4):
+          key=blob[pos:pos+width]
+          if len(key)!=width or key in seen:continue
+          if len(set(key))<6:continue
+          seen.add(key);emitted+=1
+          yield f'{path.name}:{label}:raw@0x{pos:x}',key
+          if emitted>=max_candidates:return
+
+def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,index_hash:str,out:Path):
+    samples=_spread_simple_records(cat,3)
+    report={'schema':1,'samples':[r['entryId'] for r in samples],'modules':[],'tested':0,'match':None}
+    def test(label,key):
+      report['tested']+=1
+      if _key_authenticates_samples(spk,samples,key):
+        report['match']={'source':label,'secretHex':key.hex(),'secretBytes':len(key)}
+        return key
+      return None
+    for label,key in _derived_index_candidates(index_key,index_hash):
+      found=test(label,key)
+      if found:
+        (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        return found,label,report
+    modules=[game]
+    try:
+      modules += sorted(
+        [p for p in game.parent.iterdir() if p.is_file() and p.suffix.lower()=='.dll'],
+        key=lambda p:p.stat().st_size,
+      )
+    except OSError:
+      pass
+    for module in modules[:64]:
+      try:size=module.stat().st_size
+      except OSError:continue
+      if size>256*1024*1024:continue
+      item={'file':module.name,'bytes':size,'testedBefore':report['tested']}
+      for label,key in _nearby_binary_candidates(module,index_key):
+        found=test(label,key)
+        if found:
+          item['testedAfter']=report['tested'];report['modules'].append(item)
+          (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+          return found,label,report
+      item['testedAfter']=report['tested'];report['modules'].append(item)
+      if report['tested']>=120000:break
+    (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+    return None,None,report
+
+def static_resource_profile(key:bytes,source_label:str):
+    return {
+      'schema':4,
+      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v11-static',
+      'indexSha256':EXPECTED_INDEX,
+      'offlineValidated':3,
+      'simpleValidated':3,
+      'chunksValidated':0,
+      'resourceKeys':[key.hex()],
+      'keySources':['static-key-sweep:'+source_label],
+      'modes':['ChainingModeGCM'],
+      'chunkNonceRules':[],
+      'simpleMetadataLayout':'nonce12-tag16-flags4',
+      'chunkTagRule':'unverified',
+      'readyForSimple':True,
+      'readyForFragmented':False,
+      'readyForAll':False,
+      'aadRule':'none',
+      'resourceSecretHex':key.hex(),
+      'resourceSecretBytes':len(key),
+      'algorithm':'AES-GCM',
+      'validatedSamples':[],
+    }
 
 def nonce_rules(t:dict):
     if t['kind']!='chunk':return {}
@@ -187,7 +344,7 @@ def derive_profile(rows):
     chunk_tags=bool(chunks) and all(r.get('metadataTagMatch') for r in chunks)
     result={
       'schema':4,
-      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v10',
+      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v11',
       'indexSha256':EXPECTED_INDEX,
       'offlineValidated':len(valid),
       'simpleValidated':len(simple),
@@ -227,7 +384,7 @@ def derive_profile(rows):
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--client',type=Path,required=True);ap.add_argument('--out',type=Path,required=True);ap.add_argument('--seconds',type=int,default=120);ap.add_argument('--noninteractive',action='store_true');a=ap.parse_args()
-    if sys.platform!='win32':raise RuntimeError('Esta fase requiere Windows x64.')
+    if sys.platform!='win32':raise RuntimeError('Esta fase requiere Windows.')
     import struct as _s
     if _s.calcsize('P')!=8:raise RuntimeError('Usa Python 64 bits.')
     try:import frida,zstandard,cryptography
@@ -247,6 +404,19 @@ def main():
     print('Leyendo índice y construyendo mapa de 55.457 ciphertexts…',flush=True)
     cat=parse_spk(spk);prefix,details=build_targets(spk,cat);(out/'target-summary.json').write_text(json.dumps({'spkBytes':cat['size'],'targets':len(prefix),'simple':48668,'chunks':6789,'gameArch':arch},indent=2),encoding='utf-8')
     print('game.exe detectado como',arch,'· objetivos SPK:',len(prefix),flush=True)
+    index_profile=json.loads(INDEX_PROFILE.read_text(encoding='utf-8'))
+    index_key=bytes.fromhex(index_profile['secretHex'])
+    print('Probando derivaciones y constantes estáticas contra tags GCM reales…',flush=True)
+    static_key,static_source,static_report=discover_static_resource_key(
+      exe,spk,cat,index_key,EXPECTED_INDEX,out
+    )
+    if static_key is not None:
+      prof=static_resource_profile(static_key,static_source)
+      (out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2),encoding='utf-8')
+      (out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':[],'events':[{'kind':'event','code':'STATIC_KEY_SWEEP_MATCH','details':{'source':static_source,'tested':static_report['tested']}}]},ensure_ascii=False,indent=2),encoding='utf-8')
+      print('ÉXITO estático: clave de recursos autenticada contra 3 muestras ·',static_source,flush=True)
+      return 4
+    print('Barrido estático sin coincidencias · candidatos probados:',static_report['tested'],flush=True)
     print('Desconecta Internet. Se abrirá game.exe; NO inicies sesión.',flush=True)
     if not a.noninteractive:
       print('Escribe CAPTURAR para continuar:',flush=True)
