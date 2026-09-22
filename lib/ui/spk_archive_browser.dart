@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:three_js/three_js.dart' as t;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -12,6 +15,7 @@ import '../core/spk_archive.dart';
 import '../core/textures.dart';
 import '../data/spk_source.dart';
 import '../data/spk_table_discovery.dart';
+import '../render/native_view.dart';
 
 String _spkNormalizePath(String value, String separator) {
   final alternate = separator == '\\' ? '/' : '\\';
@@ -338,6 +342,209 @@ Future<dynamic> readSpkJsonFile(File file) async {
   final bytes = await file.readAsBytes();
   return jsonDecode(utf8.decode(bytes, allowMalformed: true));
 }
+
+
+class _SpkMeshPreview extends StatefulWidget {
+  final MeshData mesh;
+  final String label;
+
+  const _SpkMeshPreview({
+    required this.mesh,
+    required this.label,
+  });
+
+  @override
+  State<_SpkMeshPreview> createState() => _SpkMeshPreviewState();
+}
+
+class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
+  late final NativeView view;
+  t.Mesh? object;
+  bool ready = false;
+  bool wireframe = true;
+  double yaw = .45;
+  double pitch = .18;
+  double zoom = 1;
+  double centerY = 0;
+  double distance = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    view = NativeView(
+      settings: t.Settings(
+        clearColor: 0x0b1018,
+        antialias: true,
+        toneMapping: t.NoToneMapping,
+      ),
+      setup: _setup,
+      onSetupComplete: () {
+        if (mounted) setState(() => ready = true);
+      },
+    );
+  }
+
+  Future<void> _setup() async {
+    final mesh = widget.mesh;
+    if (mesh.vertices == 0 || mesh.triangles == 0) {
+      throw const FormatException('La malla no contiene geometría visible.');
+    }
+
+    view.scene = t.Scene();
+    view.scene.background = t.Color.fromHex32(0x0b1018);
+    view.camera = t.PerspectiveCamera(
+      42,
+      view.width / view.height,
+      .001,
+      100000,
+    );
+
+    final geometry = t.BufferGeometry();
+    geometry.setAttributeFromString(
+      'position',
+      t.Float32BufferAttribute.fromList(mesh.positions.toList(), 3),
+    );
+    if (mesh.normals.length == mesh.positions.length) {
+      geometry.setAttributeFromString(
+        'normal',
+        t.Float32BufferAttribute.fromList(mesh.normals.toList(), 3),
+      );
+    }
+    geometry.setIndex(mesh.indices.toList());
+
+    final material = t.MeshBasicMaterial.fromMap({
+      'color': 0xb8c7df,
+      'side': t.DoubleSide,
+      'wireframe': wireframe,
+      'toneMapped': false,
+    });
+    object = t.Mesh(geometry, material)..frustumCulled = false;
+    view.scene.add(object!);
+
+    var minX = double.infinity;
+    var minY = double.infinity;
+    var minZ = double.infinity;
+    var maxX = -double.infinity;
+    var maxY = -double.infinity;
+    var maxZ = -double.infinity;
+    for (var i = 0; i < mesh.positions.length; i += 3) {
+      final x = mesh.positions[i];
+      final y = mesh.positions[i + 1];
+      final z = mesh.positions[i + 2];
+      minX = math.min(minX, x);
+      minY = math.min(minY, y);
+      minZ = math.min(minZ, z);
+      maxX = math.max(maxX, x);
+      maxY = math.max(maxY, y);
+      maxZ = math.max(maxZ, z);
+    }
+    final centerX = (minX + maxX) / 2;
+    centerY = (minY + maxY) / 2;
+    final centerZ = (minZ + maxZ) / 2;
+    object!.position.setValues(-centerX, 0, -centerZ);
+    final span = math.max(
+      maxX - minX,
+      math.max(maxY - minY, maxZ - minZ),
+    );
+    distance = math.max(.02, span * 1.7);
+    _camera();
+    view.addAnimationEvent((_) => _camera());
+  }
+
+  void _camera() {
+    final d = distance * zoom;
+    view.camera.position.setValues(
+      math.sin(yaw) * math.cos(pitch) * d,
+      centerY + math.sin(pitch) * d,
+      math.cos(yaw) * math.cos(pitch) * d,
+    );
+    view.camera.lookAt(t.Vector3(0, centerY, 0));
+  }
+
+  @override
+  void dispose() {
+    object?.geometry?.dispose();
+    object?.material?.dispose();
+    view.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(widget.label, style: const TextStyle(fontSize: 11)),
+      const SizedBox(height: 8),
+      Expanded(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Listener(
+                onPointerSignal: (event) {
+                  if (event is PointerScrollEvent) {
+                    setState(() {
+                      zoom = (zoom * math.exp(event.scrollDelta.dy * .0015))
+                          .clamp(.12, 12.0);
+                    });
+                  }
+                },
+                child: GestureDetector(
+                  onPanUpdate: (details) => setState(() {
+                    yaw += details.delta.dx * .01;
+                    pitch = (pitch + details.delta.dy * .01).clamp(-1.45, 1.45);
+                  }),
+                  child: view.build(),
+                ),
+              ),
+            ),
+            if (!ready)
+              const Positioned(
+                right: 16,
+                bottom: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          FilterChip(
+            label: const Text('Malla'),
+            selected: wireframe,
+            onSelected: (value) {
+              setState(() => wireframe = value);
+              object?.material?.wireframe = value;
+            },
+          ),
+          TextButton(
+            onPressed: () => setState(() {
+              yaw = 0;
+              pitch = 0;
+              zoom = 1;
+            }),
+            child: const Text('Frente'),
+          ),
+          TextButton(
+            onPressed: () => setState(() {
+              yaw = math.pi / 2;
+              pitch = 0;
+              zoom = 1;
+            }),
+            child: const Text('Perfil'),
+          ),
+          const Text(
+            'Arrastra para girar · rueda para zoom',
+            style: TextStyle(fontSize: 10, color: Color(0xff8e9bb0)),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
@@ -1551,24 +1758,19 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           break;
         case '3DC':
           final mesh = MeshData.skinned(result.bytes, path);
-          preview = SelectableText(
-            'Malla 3DC válida\n\n'
-            'Vértices: ${mesh.vertices}\n'
-            'Triángulos: ${mesh.triangles}\n'
-            'Huesos requeridos: ${mesh.requiredBones}\n'
-            'Matrices inversas: ${mesh.inverses.length}\n'
-            'Reparaciones: ${mesh.repairs.isEmpty ? 'ninguna' : mesh.repairs.join(', ')}',
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          preview = _SpkMeshPreview(
+            mesh: mesh,
+            label:
+                '3DC · ${mesh.vertices} vértices · ${mesh.triangles} triángulos · '
+                '${mesh.requiredBones} huesos',
           );
           break;
         case '3DO':
           final mesh = MeshData.object(result.bytes, path);
-          preview = SelectableText(
-            'Malla 3DO válida\n\n'
-            'Vértices: ${mesh.vertices}\n'
-            'Triángulos: ${mesh.triangles}\n'
-            'Reparaciones: ${mesh.repairs.isEmpty ? 'ninguna' : mesh.repairs.join(', ')}',
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          preview = _SpkMeshPreview(
+            mesh: mesh,
+            label:
+                '3DO · ${mesh.vertices} vértices · ${mesh.triangles} triángulos',
           );
           break;
         case 'ANI':
