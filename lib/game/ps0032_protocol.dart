@@ -38,6 +38,12 @@ class PsPacketType {
   static const mobAttack=0x0605;
   static const mobDeath=0x0606;
   static const mobSkillUse=0x060B;
+  static const chatNormal=0x1101;
+  static const chatWhisper=0x1102;
+  static const chatWorld=0x1103;
+  static const chatGuild=0x1104;
+  static const chatParty=0x1105;
+  static const chatMap=0x1111;
   static const npcBuyItem=0x0702;
   static const warehouseItemList=0x0711;
   static const npcSellItem=0x0703;
@@ -395,6 +401,51 @@ class PsMobSkillHit {
       attackType:p.body[9],skillId:d.getUint16(10,Endian.little),skillLevel:p.body[12],
       hpDamage:d.getUint16(13,Endian.little),spDamage:d.getUint16(15,Endian.little),mpDamage:d.getUint16(17,Endian.little),
     );
+  }
+}
+
+Uint8List _utf16Le(String value){
+  final units=value.codeUnits,out=Uint8List(units.length*2),d=ByteData.sublistView(out);
+  for(var i=0;i<units.length;i++)d.setUint16(i*2,units[i],Endian.little);
+  return out;
+}
+
+String _utf16LeDecode(Uint8List bytes,int offset,int chars){
+  final end=offset+chars*2;
+  if(offset<0||chars<0||end>bytes.length)throw FormatException('UTF-16LE chat truncado.');
+  final d=ByteData.sublistView(bytes),codes=<int>[];
+  for(var o=offset;o<end;o+=2)codes.add(d.getUint16(o,Endian.little));
+  return String.fromCharCodes(codes).replaceAll('\u0000','');
+}
+
+class PsChatMessage {
+  final int packetType;
+  final int? senderId;
+  final String? senderName;
+  final String message;
+  const PsChatMessage(this.packetType,this.senderId,this.senderName,this.message);
+  static PsChatMessage parse(PsPacket p){
+    final b=p.body,d=ByteData.sublistView(b);
+    if(p.type==PsPacketType.chatNormal||p.type==PsPacketType.chatParty){
+      if(b.length<5)throw FormatException('Chat normal/party truncado.');
+      final id=d.getUint32(0,Endian.little),len=b[4];
+      return PsChatMessage(p.type,id,null,_utf16LeDecode(b,5,len));
+    }
+    if(p.type==PsPacketType.chatWhisper){
+      if(b.length<23)throw FormatException('Whisper truncado.');
+      final raw=b.sublist(1,22),zero=raw.indexOf(0);
+      final name=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+      final len=b[22];
+      return PsChatMessage(p.type,null,name,_utf16LeDecode(b,23,len));
+    }
+    if(p.type==PsPacketType.chatWorld||p.type==PsPacketType.chatGuild||p.type==PsPacketType.chatMap){
+      if(b.length<22)throw FormatException('Chat con nombre truncado.');
+      final raw=b.sublist(0,21),zero=raw.indexOf(0);
+      final name=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+      final len=b[21];
+      return PsChatMessage(p.type,null,name,_utf16LeDecode(b,22,len));
+    }
+    throw FormatException('Tipo de chat no soportado: 0x${p.type.toRadixString(16)}');
   }
 }
 
@@ -1003,6 +1054,12 @@ class PsWorldSession {
     await connection.send(PsPacketType.questQuit,_i16Bytes(questId));
   }
 
+  Future<void> sendNormalChat(String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
+    final text=message.trim();if(text.isEmpty)return;
+    if(text.length>255)throw RangeError('El mensaje supera 255 caracteres.');
+    await connection.send(PsPacketType.chatNormal,[text.length,..._utf16Le(text)]);
+  }
   Future<PsInventoryMove> moveItem(int currentBag,int currentSlot,int destinationBag,int destinationSlot) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de mover objetos.');
     for(final value in [currentBag,currentSlot,destinationBag,destinationSlot]){
