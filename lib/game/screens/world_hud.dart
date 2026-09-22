@@ -27,6 +27,7 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<int> onBuyShopProduct;
   final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
+  final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<PsLearnedSkill> onAssignSkill;
   final ValueChanged<String> onSendChat;
@@ -75,6 +76,7 @@ class WorldHud extends StatelessWidget {
     required this.onWithdrawWarehouse,
     required this.onToggleInventory,
     required this.onToggleStatus,
+    required this.onAddStat,
     required this.onToggleSkills,
     required this.onToggleQuestLog,
     required this.onHotbar,
@@ -615,16 +617,26 @@ class WorldHud extends StatelessWidget {
     ]),
   );
 
-  Widget _statLine(String label,Object? base,Object? total)=>Padding(
+  Widget _statLine(String label,Object? base,Object? total,{VoidCallback? onAdd})=>Padding(
     padding:const EdgeInsets.symmetric(vertical:3),
     child:Row(children:[
       Expanded(child:Text(label,style:const TextStyle(fontSize:10,color:Color(0xffe9d9bc)))),
-      SizedBox(width:58,child:Text((base??0).toString(),textAlign:TextAlign.right,style:const TextStyle(fontSize:10,color:Colors.white70))),
+      SizedBox(width:52,child:Text((base??0).toString(),textAlign:TextAlign.right,style:const TextStyle(fontSize:10,color:Colors.white70))),
       const SizedBox(width:8),
-      SizedBox(width:58,child:Text((total??base??0).toString(),textAlign:TextAlign.right,style:const TextStyle(fontSize:10,color:Color(0xffffd26a)))),
+      SizedBox(width:52,child:Text((total??base??0).toString(),textAlign:TextAlign.right,style:const TextStyle(fontSize:10,color:Color(0xffffd26a)))),
+      if(onAdd!=null)...[
+        const SizedBox(width:8),
+        SizedBox(
+          width:24,height:20,
+          child:TextButton(
+            onPressed:onAdd,
+            style:TextButton.styleFrom(padding:EdgeInsets.zero,foregroundColor:const Color(0xffffe082),backgroundColor:const Color(0xff3c2a1a)),
+            child:const Text('+',style:TextStyle(fontSize:14,fontWeight:FontWeight.bold)),
+          ),
+        ),
+      ],
     ]),
   );
-
   Widget _statusWindow(){
     final d=details,a=additionalStats;
     return _panelShell(
@@ -644,12 +656,12 @@ class WorldHud extends StatelessWidget {
             const SizedBox(width:58,child:Text('Total',textAlign:TextAlign.right,style:TextStyle(fontSize:9,color:Colors.white54))),
           ]),
           const Divider(color:Color(0xff65533b),height:10),
-          _statLine(locale=='spn'?'Fuerza':'Strength',d?.strength,a?.strength),
-          _statLine(locale=='spn'?'Destreza':'Dexterity',d?.dexterity,a?.dexterity),
-          _statLine(locale=='spn'?'Reacción':'Reaction',d?.reaction,a?.reaction),
-          _statLine(locale=='spn'?'Inteligencia':'Intelligence',d?.intelligence,a?.intelligence),
-          _statLine(locale=='spn'?'Sabiduría':'Wisdom',d?.wisdom,a?.wisdom),
-          _statLine(locale=='spn'?'Suerte':'Luck',d?.luck,a?.luck),
+          _statLine(locale=='spn'?'Fuerza':'Strength',d?.strength,a?.strength,onAdd:(d?.statPoint??0)>0?()=>onAddStat(0):null),
+          _statLine(locale=='spn'?'Destreza':'Dexterity',d?.dexterity,a?.dexterity,onAdd:(d?.statPoint??0)>0?()=>onAddStat(1):null),
+          _statLine(locale=='spn'?'Reacción':'Reaction',d?.reaction,a?.reaction,onAdd:(d?.statPoint??0)>0?()=>onAddStat(2):null),
+          _statLine(locale=='spn'?'Inteligencia':'Intelligence',d?.intelligence,a?.intelligence,onAdd:(d?.statPoint??0)>0?()=>onAddStat(3):null),
+          _statLine(locale=='spn'?'Sabiduría':'Wisdom',d?.wisdom,a?.wisdom,onAdd:(d?.statPoint??0)>0?()=>onAddStat(4):null),
+          _statLine(locale=='spn'?'Suerte':'Luck',d?.luck,a?.luck,onAdd:(d?.statPoint??0)>0?()=>onAddStat(5):null),
           const Divider(color:Color(0xff65533b),height:14),
           _statLine(locale=='spn'?'Ataque':'Attack','${a?.minAttack??0}-${a?.maxAttack??0}',null),
           _statLine(locale=='spn'?'Ataque mágico':'Magic attack','${a?.minMagicAttack??0}-${a?.maxMagicAttack??0}',null),
