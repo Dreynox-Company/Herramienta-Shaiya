@@ -118,6 +118,49 @@ Uint8List dgFixture() {
   return bytes.takeBytes();
 }
 
+
+Uint8List worldAudioFixture(){
+  final bytes=BytesBuilder();
+  void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void u16(int x){final b=ByteData(2)..setUint16(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void vec(double x,double y,double z){f32(x);f32(y);f32(z);}
+  void str256(String value){
+    final out=Uint8List(256),raw=Uint8List.fromList(value.codeUnits);
+    out.setRange(0,raw.length.clamp(0,255),raw);bytes.add(out);
+  }
+  void emptyCategory(){u32(0);u32(0);}
+  bytes.add([70,76,68,0]); // FLD\0
+  u32(2);
+  for(var i=0;i<4;i++)u16(10000+i);
+  bytes.add(List<int>.filled(4,0));
+  u32(0); // terrain layers
+  str256(''); // water/layout
+  for(var i=0;i<7;i++)emptyCategory();
+  u32(0); // MAni names
+  u32(0); // MAni instances
+  str256(''); // EFT
+  u32(0); // effect instances
+  i32(0);i32(0);i32(0);
+  emptyCategory(); // Entity/Object
+  u32(1);str256('field_theme.wav');
+  u32(1);
+  vec(0,0,0);vec(100,100,100);f32(50);i32(0);i32(0);
+  u32(1);str256('birds.wav');
+  u32(0); // WLD zones
+  u32(1);i32(0);vec(10,0,20);f32(30);
+  u32(0); // restricted zones
+  u32(0); // portals
+  u32(0); // spawns
+  u32(0); // named areas
+  i32(0); // NPC rows
+  str256('sky.bmp');str256('cloud1.bmp');str256('cloud2.bmp');
+  for(var i=0;i<6;i++)f32(0); // two unused colors
+  vec(.1,.2,.3);f32(40);f32(80);
+  return bytes.takeBytes();
+}
+
 Uint8List smodCollisionFixture(){
   final bytes=BytesBuilder();
   void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
@@ -304,6 +347,25 @@ void main() {
       expect(m[12],closeTo(5,1e-6));
       expect(m[13],closeTo(2,1e-6));
       expect(m[14],closeTo(-5,1e-6));
+    });
+  });
+
+
+  group('WLD audio zones',(){
+    test('decodifica música y efectos ambientales nativos',(){
+      final w=WorldData.parse(worldAudioFixture(),'audio.wld');
+      expect(w.musicAssets,['field_theme.wav']);
+      expect(w.musicZones.length,1);
+      expect(w.musicZones.single.assetId,0);
+      expect(w.musicZones.single.bounds.contains(50,10,50),isTrue);
+      expect(w.musicZones.single.bounds.contains(120,10,50),isFalse);
+      expect(w.soundEffectAssets,['birds.wav']);
+      expect(w.soundEffects.length,1);
+      expect(w.soundEffects.single.contains(10,0,20),isTrue);
+      expect(w.soundEffects.single.contains(100,0,20),isFalse);
+      expect(w.skyFile,'sky.bmp');
+      expect(w.fogStart,closeTo(40,1e-6));
+      expect(w.fogEnd,closeTo(80,1e-6));
     });
   });
 
