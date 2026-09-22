@@ -16,6 +16,10 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("Mobs / drops", browser)
         self.assertIn("Abrir Studio 3D", browser)
         self.assertIn("requireCharacter: false", browser)
+        self.assertIn("PAYLOAD NO LEÍDO", browser)
+        self.assertIn("Desbloquear con AutoPerfil SPK", browser)
+        self.assertIn("rutas aún no confirmadas por contenido", browser)
+        self.assertIn("SPK_TEXT_ENCODING_INVALID", browser)
 
     def test_spk_editor_exposes_verified_repack(self):
         editor = (ROOT / 'lib' / 'ui' / 'data_editor.dart').read_text(
