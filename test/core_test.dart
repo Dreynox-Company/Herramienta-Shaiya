@@ -115,6 +115,23 @@ Uint8List dgFixture() {
   return bytes.takeBytes();
 }
 
+Uint8List smodCollisionFixture(){
+  final bytes=BytesBuilder();
+  void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void u16(int x){final b=ByteData(2)..setUint16(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void vec(double x,double y,double z){f32(x);f32(y);f32(z);}
+  vec(0,1,0);f32(5); // center + radius
+  vec(-2,0,-2);vec(2,4,2); // view box
+  u32(0); // textured objects
+  vec(-1,0,-1);vec(1,3,1); // collision box
+  u32(1); // collision meshes
+  u32(3);
+  vec(0,0,0);vec(0,2,0);vec(0,0,2);
+  u32(1);u16(0);u16(1);u16(2);
+  return bytes.takeBytes();
+}
+
 PartRecord part(Slot s, int id, String texture) => PartRecord(
   s,
   MaterialRecord(id, 'm.3dc', texture, 1),
@@ -281,6 +298,18 @@ void main() {
       expect(m[12],closeTo(5,1e-6));
       expect(m[13],closeTo(2,1e-6));
       expect(m[14],closeTo(-5,1e-6));
+    });
+  });
+
+  group('SMOD collision',(){
+    test('decodifica la malla de colisión nativa además de la geometría visual',(){
+      final smod=readSmodData(smodCollisionFixture(),'collision.smod');
+      expect(smod.parts,isEmpty);
+      expect(smod.radius,closeTo(5,1e-6));
+      expect(smod.collisions.length,1);
+      expect(smod.collisions.single.vertices.length,3);
+      expect(smod.collisions.single.indices,[0,1,2]);
+      expect(smod.collisionUpper.y,closeTo(3,1e-6));
     });
   });
 
