@@ -991,6 +991,23 @@ class WorldData {
     return (h(a, b) * (1 - tx) + h(a + 1, b) * tx) * (1 - tz) +
         (h(a, b + 1) * (1 - tx) + h(a + 1, b + 1) * tx) * tz;
   }
+
+  v.Vector3 normalAt(
+    double x,
+    double z, {
+    double scale=.02,
+    double offset=-200,
+    double step=1,
+  }){
+    if(size==0||step<=0)return v.Vector3(0,1,0);
+    final hL=heightAt(x-step,z,scale:scale,offset:offset);
+    final hR=heightAt(x+step,z,scale:scale,offset:offset);
+    final hD=heightAt(x,z-step,scale:scale,offset:offset);
+    final hU=heightAt(x,z+step,scale:scale,offset:offset);
+    final out=v.Vector3(-(hR-hL)/(2*step),1,(hU-hD)/(2*step));
+    if(out.length2<1e-12)return v.Vector3(0,1,0);
+    return out..normalize();
+  }
 }
 
 
