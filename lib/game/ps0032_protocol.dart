@@ -3218,11 +3218,53 @@ class PsWorldSession {
     await connection.send(PsPacketType.rebirthNearestTown,[useRune?4:2]);
   }
 
+  List<int> _chatBody(String message){
+    final text=message.trim();
+    if(text.isEmpty)return const <int>[];
+    if(text.runes.length>255)throw RangeError('El mensaje supera 255 caracteres.');
+    return [text.runes.length,..._utf16Le(text)];
+  }
+
   Future<void> sendNormalChat(String message) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
-    final text=message.trim();if(text.isEmpty)return;
-    if(text.length>255)throw RangeError('El mensaje supera 255 caracteres.');
-    await connection.send(PsPacketType.chatNormal,[text.length,..._utf16Le(text)]);
+    final body=_chatBody(message);if(body.isEmpty)return;
+    await connection.send(PsPacketType.chatNormal,body);
+  }
+
+  Future<void> sendPartyChat(String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
+    final body=_chatBody(message);if(body.isEmpty)return;
+    await connection.send(PsPacketType.chatParty,body);
+  }
+
+  Future<void> sendGuildChat(String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
+    final body=_chatBody(message);if(body.isEmpty)return;
+    await connection.send(PsPacketType.chatGuild,body);
+  }
+
+  Future<void> sendWorldChat(String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
+    final body=_chatBody(message);if(body.isEmpty)return;
+    await connection.send(PsPacketType.chatWorld,body);
+  }
+
+  Future<void> sendMapChat(String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
+    final body=_chatBody(message);if(body.isEmpty)return;
+    await connection.send(PsPacketType.chatMap,body);
+  }
+
+  Future<void> sendWhisper(String targetName,String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
+    final target=targetName.trim(),body=_chatBody(message);
+    if(target.isEmpty||body.isEmpty)return;
+    final raw=utf8.encode(target);
+    if(raw.length>20)throw RangeError('El nombre destino supera 20 bytes.');
+    await connection.send(PsPacketType.chatWhisper,[
+      ..._fixedStringBytes(target,21),
+      ...body,
+    ]);
   }
   Future<PsInventoryMove> moveItem(int currentBag,int currentSlot,int destinationBag,int destinationSlot) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de mover objetos.');
