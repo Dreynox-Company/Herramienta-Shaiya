@@ -1,7 +1,7 @@
 name: herramienta_shaiya
 description: Laboratorio nativo de recursos Shaiya para Windows y Android.
 publish_to: none
-version: 0.6.17+25
+version: 0.6.18+26
 environment:
   sdk: '>=3.10.0 <4.0.0'
 dependencies:
