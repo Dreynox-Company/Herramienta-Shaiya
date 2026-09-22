@@ -250,6 +250,19 @@ class StudioScene extends ChangeNotifier {
     say('$npcsLoaded NPC y $mobsLoaded criaturas renderizados desde paquetes ps0032.');
   }
 
+  int? nearestNetworkNpcId({double maxDistance=4.5}){
+    final me=character;
+    if(me==null||networkNpcActors.isEmpty)return null;
+    int? bestId;var best=maxDistance*maxDistance;
+    for(final entry in networkNpcActors.entries){
+      final dx=entry.value.root.position.x-me.root.position.x;
+      final dz=entry.value.root.position.z-me.root.position.z;
+      final d=dx*dx+dz*dz;
+      if(d<best){best=d;bestId=entry.key;}
+    }
+    return bestId;
+  }
+
   int? nearestNetworkMobId({double maxDistance=12}){
     final me=character;
     if(me==null||networkMobActors.isEmpty)return null;
