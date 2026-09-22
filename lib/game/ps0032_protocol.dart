@@ -1003,6 +1003,15 @@ class PsWorldSession {
     await connection.send(PsPacketType.questQuit,_i16Bytes(questId));
   }
 
+  Future<PsInventoryMove> moveItem(int currentBag,int currentSlot,int destinationBag,int destinationSlot) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de mover objetos.');
+    for(final value in [currentBag,currentSlot,destinationBag,destinationSlot]){
+      if(value<0||value>255)throw RangeError('Bag/slot fuera de byte: $value');
+    }
+    await connection.send(PsPacketType.inventoryMoveItem,[currentBag,currentSlot,destinationBag,destinationSlot]);
+    final response=await connection.nextType(PsPacketType.inventoryMoveItem);
+    return PsInventoryMove.parse(response);
+  }
   Future<PsNpcTradeResult> buyNpcItem(int npcGlobalId,int productIndex,int count) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de comprar.');
     if(productIndex<0||productIndex>255||count<=0||count>255)throw RangeError('Índice/cantidad de compra inválidos.');
