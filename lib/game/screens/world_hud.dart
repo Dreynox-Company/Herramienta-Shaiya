@@ -668,6 +668,61 @@ class WorldHud extends StatelessWidget {
       ),
     );
   }
+  Widget _skillsWindow(){
+    final skills=[...(skillBook?.skills??const <PsLearnedSkill>[])];
+    skills.sort((a,b){final id=a.skillId.compareTo(b.skillId);return id!=0?id:a.level.compareTo(b.level);});
+    return _panelShell(
+      locale=='spn'?'Habilidades':'Skills',
+      skills.isEmpty
+        ?Center(child:Text(locale=='spn'?'No hay habilidades aprendidas.':'No learned skills.',style:const TextStyle(color:Colors.white54,fontSize:11)))
+        :ListView.separated(
+            padding:const EdgeInsets.all(8),
+            itemCount:skills.length,
+            separatorBuilder:(_,__)=>const Divider(color:Color(0xff463828),height:7),
+            itemBuilder:(context,index){
+              final s=skills[index],rule=metadata?.skill(s.skillId,s.level);
+              final name=catalog.skillName(s.skillId,s.level,locale);
+              final text=catalog.skillText(s.skillId,s.level,locale)?.text.trim()??'';
+              final icon=rule?.iconPath;
+              return Tooltip(
+                waitDuration:const Duration(milliseconds:250),
+                message:name+
+                  (text.isEmpty?'':'\n\n'+text)+
+                  '\nID ${s.skillId} · Lv.${s.level} · #${s.number}'+
+                  '\nMP ${rule?.mp??0} · SP ${rule?.sp??0} · CD ${rule?.cooldown??s.cooldownSeconds}',
+                child:Container(
+                  padding:const EdgeInsets.all(6),
+                  decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff55452f))),
+                  child:Row(children:[
+                    SizedBox(
+                      width:38,height:38,
+                      child:icon==null
+                        ?const Icon(Icons.auto_fix_high,color:Color(0xffffd26a))
+                        :DataImage(cache:ui,path:icon,fit:BoxFit.contain,fallback:const Icon(Icons.auto_fix_high,color:Color(0xffffd26a))),
+                    ),
+                    const SizedBox(width:8),
+                    Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Text(name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:10,color:Color(0xffffe1a1),fontWeight:FontWeight.w600)),
+                      Text(
+                        'Lv.${s.level} · MP ${rule?.mp??0} · SP ${rule?.sp??0} · CD ${rule?.cooldown??s.cooldownSeconds}',
+                        style:const TextStyle(fontSize:8,color:Colors.white54),
+                      ),
+                    ])),
+                  ]),
+                ),
+              );
+            },
+          ),
+      footer:Container(
+        height:30,padding:const EdgeInsets.symmetric(horizontal:10),
+        alignment:Alignment.centerRight,
+        child:Text(
+          (locale=='spn'?'Puntos disponibles: ':'Available points: ')+(skillBook?.skillPoints??details?.skillPoint??0).toString(),
+          style:const TextStyle(fontSize:9,color:Color(0xffffd26a)),
+        ),
+      ),
+    );
+  }
   Widget _shopWindow(){
     final s=shop!;
     return Container(
