@@ -3802,6 +3802,8 @@ class _GameClientPageState extends State<GameClientPage> {
             targetMaxHp:targetPlayerId!=null?targetPlayerMaxHp:targetMobMaxHp,
             skillBook:liveSkills,
             skillBar:liveSkillBar,
+            castingSkill:_skillCastLabel,
+            castingProgress:_skillCastProgress,
             inventory:liveInventory,
             warehouse:liveWarehouse,
             guildWarehouse:liveGuildWarehouse,
