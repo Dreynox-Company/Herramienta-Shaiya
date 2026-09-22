@@ -65,28 +65,54 @@ class ItemRule {
 }
 
 class SkillRule {
-  final int id,level,image,animation,effect,sound,requiredLevel,sp,mp;
+  final int id,level,image,animation,effect,sound,requiredLevel,country,grow,point,previousSkill,typeShow;
+  final int fighter,defender,ranger,archer,mage,priest,sp,mp;
   final int castTime,cooldown,attackRange,targetType,applyRange,typeAttack,typeEffect;
   const SkillRule({
     required this.id,required this.level,required this.image,required this.animation,
-    required this.effect,required this.sound,required this.requiredLevel,required this.sp,
-    required this.mp,required this.castTime,required this.cooldown,required this.attackRange,
+    required this.effect,required this.sound,required this.requiredLevel,required this.country,
+    required this.grow,required this.point,required this.previousSkill,required this.typeShow,
+    required this.fighter,required this.defender,required this.ranger,required this.archer,
+    required this.mage,required this.priest,required this.sp,required this.mp,
+    required this.castTime,required this.cooldown,required this.attackRange,
     required this.targetType,required this.applyRange,required this.typeAttack,required this.typeEffect,
   });
   String get key=>'$id:$level';
   String? get iconPath=>image<=0?null:'interface/icon/${image.toString().padLeft(2,'0')}.tga';
+  bool professionAllowed(int profession){
+    final flags=[fighter,defender,ranger,archer,mage,priest];
+    return profession>=0&&profession<flags.length&&flags[profession]!=0;
+  }
+  bool familyAllowed(int race){
+    switch(country){
+      case 0:return race==0; // Human
+      case 1:return race==1; // Elf
+      case 2:return race==0||race==1; // Alliance of Light
+      case 3:return race==3; // DeathEater
+      case 4:return race==2; // Vail
+      case 5:return race==2||race==3; // Union of Fury
+      case 6:return true; // All factions
+      default:return false;
+    }
+  }
   factory SkillRule.fromJson(Map<String,dynamic> j)=>SkillRule(
     id:(j['id'] as num).toInt(),level:(j['level'] as num).toInt(),
     image:(j['image'] as num).toInt(),animation:(j['animation'] as num).toInt(),
     effect:(j['effect'] as num).toInt(),sound:(j['sound'] as num).toInt(),
-    requiredLevel:(j['requiredLevel'] as num).toInt(),sp:(j['sp'] as num).toInt(),
-    mp:(j['mp'] as num).toInt(),castTime:(j['castTime'] as num).toInt(),
-    cooldown:(j['cooldown'] as num).toInt(),attackRange:(j['attackRange'] as num).toInt(),
-    targetType:(j['targetType'] as num).toInt(),applyRange:(j['applyRange'] as num).toInt(),
-    typeAttack:(j['typeAttack'] as num).toInt(),typeEffect:(j['typeEffect'] as num).toInt(),
+    requiredLevel:(j['requiredLevel'] as num).toInt(),
+    country:(j['country'] as num? ?? 6).toInt(),grow:(j['grow'] as num? ?? 0).toInt(),
+    point:(j['point'] as num? ?? 0).toInt(),previousSkill:(j['previousSkill'] as num? ?? 0).toInt(),
+    typeShow:(j['typeShow'] as num? ?? 0).toInt(),
+    fighter:(j['fighter'] as num? ?? 1).toInt(),defender:(j['defender'] as num? ?? 1).toInt(),
+    ranger:(j['ranger'] as num? ?? 1).toInt(),archer:(j['archer'] as num? ?? 1).toInt(),
+    mage:(j['mage'] as num? ?? 1).toInt(),priest:(j['priest'] as num? ?? 1).toInt(),
+    sp:(j['sp'] as num).toInt(),mp:(j['mp'] as num).toInt(),
+    castTime:(j['castTime'] as num).toInt(),cooldown:(j['cooldown'] as num).toInt(),
+    attackRange:(j['attackRange'] as num).toInt(),targetType:(j['targetType'] as num).toInt(),
+    applyRange:(j['applyRange'] as num).toInt(),typeAttack:(j['typeAttack'] as num).toInt(),
+    typeEffect:(j['typeEffect'] as num).toInt(),
   );
 }
-
 class ShopProductRule {
   final int index,type,id;
   const ShopProductRule(this.index,this.type,this.id);
