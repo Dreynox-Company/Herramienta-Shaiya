@@ -69,6 +69,16 @@ class PsPacketType {
   static const npcBuyItem=0x0702;
   static const warehouseItemList=0x0711;
   static const npcSellItem=0x0703;
+  static const tradeRequest=0x0A01;
+  static const tradeResponse=0x0A02;
+  static const tradeStart=0x0A03;
+  static const tradeStop=0x0A04;
+  static const tradeFinish=0x0A05;
+  static const tradeOwnerAddItem=0x0A06;
+  static const tradeRemoveItem=0x0A07;
+  static const tradeAddMoney=0x0A08;
+  static const tradeReceiverAddItem=0x0A09;
+  static const tradeDecide=0x0A0A;
   static const guildDismantle=0x0D03;
   static const guildJoinRequest=0x0D07;
   static const guildJoinResultUser=0x0D08;
@@ -658,6 +668,71 @@ Uint8List _fixedUtf16LeBytes(String value,int chars){
   final d=ByteData.sublistView(out);
   for(var i=0;i<codes.length;i++)d.setUint16(i*2,codes[i],Endian.little);
   return out;
+}
+
+class PsTradeItem {
+  final int tradeSlot,type,typeId,count,quality;
+  final List<int> gems;
+  final String craftName;
+  final bool dyed;
+  const PsTradeItem({
+    required this.tradeSlot,required this.type,required this.typeId,required this.count,
+    required this.quality,required this.gems,required this.craftName,required this.dyed,
+  });
+  String get key=>'$type:$typeId';
+  static PsTradeItem parse(PsPacket p){
+    if(p.type!=PsPacketType.tradeReceiverAddItem||p.body.length<108){
+      throw FormatException('TRADE_RECEIVER_ADD_ITEM truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    final gems=List<int>.generate(6,(i)=>d.getInt32(63+i*4,Endian.little));
+    final raw=b.sublist(87,107),zero=raw.indexOf(0);
+    final craft=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+    return PsTradeItem(
+      tradeSlot:b[0],type:b[1],typeId:b[2],count:b[3],quality:d.getUint16(4,Endian.little),
+      gems:List.unmodifiable(gems),craftName:craft,dyed:b[36]!=0,
+    );
+  }
+}
+
+class PsTradeOwnerItemAck {
+  final int bag,slot,count,tradeSlot;
+  const PsTradeOwnerItemAck(this.bag,this.slot,this.count,this.tradeSlot);
+  static PsTradeOwnerItemAck parse(PsPacket p){
+    if(p.type!=PsPacketType.tradeOwnerAddItem||p.body.length<4){
+      throw FormatException('TRADE_OWNER_ADD_ITEM truncado: ${p.body.length}.');
+    }
+    return PsTradeOwnerItemAck(p.body[0],p.body[1],p.body[2],p.body[3]);
+  }
+}
+
+class PsTradeMoney {
+  final int byWho,money;
+  const PsTradeMoney(this.byWho,this.money);
+  static PsTradeMoney parse(PsPacket p){
+    if(p.type!=PsPacketType.tradeAddMoney||p.body.length<5)throw FormatException('TRADE_ADD_MONEY truncado: ${p.body.length}.');
+    return PsTradeMoney(p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little));
+  }
+}
+
+class PsTradeDecision {
+  final int byWho;
+  final bool decided;
+  const PsTradeDecision(this.byWho,this.decided);
+  static PsTradeDecision parse(PsPacket p){
+    if(p.type!=PsPacketType.tradeDecide||p.body.length<2)throw FormatException('TRADE_DECIDE truncado: ${p.body.length}.');
+    return PsTradeDecision(p.body[0],p.body[1]!=0);
+  }
+}
+
+class PsTradeConfirmation {
+  final int byWho;
+  final bool declined;
+  const PsTradeConfirmation(this.byWho,this.declined);
+  static PsTradeConfirmation parse(PsPacket p){
+    if(p.type!=PsPacketType.tradeFinish||p.body.length<2)throw FormatException('TRADE_FINISH truncado: ${p.body.length}.');
+    return PsTradeConfirmation(p.body[0],p.body[1]!=0);
+  }
 }
 
 class PsGuildSummary {
@@ -1608,6 +1683,37 @@ class PsWorldSession {
     final response=connection.waitStream((p)=>p.type==PsPacketType.characterTeleportViaNpc);
     await connection.send(PsPacketType.characterTeleportViaNpc,[..._u32Bytes(npcGlobalId),gateId]);
     return PsNpcTeleportResult.parse(await response);
+  }
+  Future<void> requestTrade(int characterId) async {
+    await connection.send(PsPacketType.tradeRequest,_u32Bytes(characterId));
+  }
+
+  Future<void> respondTrade({required bool declined}) async {
+    await connection.send(PsPacketType.tradeResponse,[declined?1:0]);
+  }
+
+  Future<void> addTradeItem(int bag,int slot,int count,int tradeSlot) async {
+    for(final v in [bag,slot,count,tradeSlot]){if(v<0||v>255)throw RangeError('Trade byte fuera de rango: $v');}
+    await connection.send(PsPacketType.tradeOwnerAddItem,[bag,slot,count,tradeSlot]);
+  }
+
+  Future<void> removeTradeItem(int tradeSlot) async {
+    if(tradeSlot<0||tradeSlot>255)throw RangeError('Trade slot fuera de rango: $tradeSlot');
+    await connection.send(PsPacketType.tradeRemoveItem,[tradeSlot]);
+  }
+
+  Future<void> addTradeMoney(int money) async {
+    if(money<0||money>0xffffffff)throw RangeError('Oro de trade fuera de uint32.');
+    await connection.send(PsPacketType.tradeAddMoney,_u32Bytes(money));
+  }
+
+  Future<void> decideTrade(bool decided) async {
+    await connection.send(PsPacketType.tradeDecide,[decided?1:0]);
+  }
+
+  Future<void> finishTrade(int result) async {
+    if(result<0||result>2)throw RangeError('Resultado de trade inválido: $result');
+    await connection.send(PsPacketType.tradeFinish,[result]);
   }
   Future<void> requestGuildJoin(int guildId) async {
     await connection.send(PsPacketType.guildJoinRequest,_u32Bytes(guildId));
