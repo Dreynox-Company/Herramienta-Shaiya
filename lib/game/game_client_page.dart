@@ -438,7 +438,11 @@ class _GameClientPageState extends State<GameClientPage> {
         'npcs':scene.gameActors.length,
         'timestamp':DateTime.now().toIso8601String(),
       };
-      await File(path).writeAsString(jsonEncode(payload),flush:true);
+      final target=File(path),temp=File(path+'.tmp');
+      await target.parent.create(recursive:true);
+      await temp.writeAsString(jsonEncode(payload),flush:true);
+      if(await target.exists())await target.delete();
+      await temp.rename(target.path);
     }catch(e){messages.insert(0,'[QA] '+e.toString());}
   }
 
