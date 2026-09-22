@@ -1,7 +1,7 @@
 name: Flutter game client v1
 on:
   push:
-    branches: [work/flutter-game-client-v1, work/flutter-game-client-v7-stable, work/flutter-game-client-v8-complete, work/flutter-game-v8-mani, work/flutter-game-v8-world-sky]
+    branches: [work/flutter-game-client-v1, work/flutter-game-client-v7-stable, work/flutter-game-client-v8-complete, work/flutter-game-v8-mani, work/flutter-game-v8-world-sky, work/flutter-game-v8-camera-calibration]
   workflow_dispatch:
 permissions:
   contents: read
@@ -256,6 +256,7 @@ jobs:
           $env:SHAIYA_QA_DISABLE_BACKEND='1'
           $env:SHAIYA_UI_LOCALE='usa'
           $env:SHAIYA_EXPECT_REAL_DATA='1'
+          $env:SHAIYA_CAMERA_SWEEP='1'
           flutter test integration_test/game_visual_parity_test.dart -d windows --reporter expanded
           if($LASTEXITCODE -ne 0){throw 'real-DATA Flutter parity integration test failed'}
           foreach($s in @('faction','characterSelect','characterCreate','characterMode','world')){
@@ -392,6 +393,45 @@ jobs:
             canvas.save(root/f'side-by-side-{stage}.jpg',quality=91)
           (root/'visual-parity.json').write_text(json.dumps(report,indent=2))
           print(json.dumps(report,indent=2))
+
+          # Camera calibration is scored only on the unobstructed central world
+          # viewport.  This avoids rewarding UI alignment while searching yaw,
+          # pitch and distance against the native game.exe reference.
+          native_world,_=native_image(mapping['world'])
+          crop_box=(220,80,566,690)
+          nb=np.asarray(native_world.crop(crop_box),dtype=np.float32)
+          grayB=np.mean(nb,axis=2)
+          bx=np.diff(grayB,axis=1,prepend=grayB[:,:1]);by=np.diff(grayB,axis=0,prepend=grayB[:1])
+          eb=np.hypot(bx,by)
+          camera_report=[]
+          for candidate in sorted(root.glob('camera-y*-p*-d*.png')):
+            ca=Image.open(candidate).convert('RGB').resize((1024,742)).crop(crop_box)
+            aa=np.asarray(ca,dtype=np.float32)
+            grayA=np.mean(aa,axis=2)
+            ax=np.diff(grayA,axis=1,prepend=grayA[:,:1]);ay=np.diff(grayA,axis=0,prepend=grayA[:1])
+            ea=np.hypot(ax,ay)
+            denom=float(np.linalg.norm(ea.ravel())*np.linalg.norm(eb.ravel()))
+            edge=float(np.dot(ea.ravel(),eb.ravel())/denom) if denom else 0.0
+            lum=float(np.corrcoef(grayA.ravel(),grayB.ravel())[0,1])
+            mae=float(np.mean(np.abs(aa-nb))/255.0)
+            pixel=1-mae
+            score=0.58*edge+0.27*max(-1.0,min(1.0,lum))+0.15*pixel
+            camera_report.append({
+              'file':candidate.name,
+              'score':round(score,6),
+              'edgeCorrelation':round(edge,6),
+              'luminanceCorrelation':round(lum,6),
+              'pixelSimilarity':round(pixel,6),
+            })
+          camera_report.sort(key=lambda x:x['score'],reverse=True)
+          (root/'camera-parity.json').write_text(json.dumps({
+            'crop':crop_box,
+            'best':camera_report[0] if camera_report else None,
+            'candidates':camera_report,
+          },indent=2))
+          if camera_report:
+            print('CAMERA_BEST',json.dumps(camera_report[0]))
+
           if any(v['pixelSimilarity']<0.18 for v in report.values()):
             raise SystemExit('visual parity gross-regression gate failed')
           '@ | Set-Content compare_parity.py
