@@ -1,4 +1,4 @@
-# SPK real reader / writer — estado auditado 0.6.16
+# SPK real reader / writer — estado auditado 0.6.17
 
 Fecha de corte: 2026-09-22.
 
@@ -55,6 +55,33 @@ Se corrigieron ambos frentes:
   de diagnóstico para revisar `derived-resource-profile.json` y
   `resource-observations.json`.
 
+## Capa de trabajo 0.6.17
+
+La herramienta deja de tratar el explorador como un listado pasivo después del
+desbloqueo:
+
+- los formatos reales se conservan inmediatamente tras una lectura autenticada;
+- recursos sin nombre confirmado reciben un alias estable por Entry ID y
+  extensión validada;
+- el explorador filtra por formato real;
+- DDS/PNG/BMP/JPEG/GIF/TGA tienen previsualización visual;
+- XML/JSON/INI/TXT tienen visor de texto;
+- 3DC/3DO tienen visor 3D interactivo y usan la DDS compañera cuando puede
+  resolverse sin ambigüedad;
+- ANI muestra duración y pistas;
+- MLT/ITM/MON se inspeccionan como catálogos estructurados;
+- SData se muestra en filas/columnas y puede abrirse directamente en el editor;
+- antes de editar una SData sin nombre confirmado, Studio ejecuta descubrimiento
+  estructural de tablas núcleo;
+- SData, MLT, ITM, MON y recursos de texto autenticados pueden abrirse
+  directamente en el editor de overlay;
+- AutoPerfil genera un diagnóstico clasificado cuando no consigue cerrar la
+  clave: ausencia de hook, ausencia de ciphertexts, ausencia de clave, parámetros
+  GCM incompletos, fallo de autenticación offline o muestras insuficientes.
+
+La edición por Entry ID técnico sigue exigiendo auditoría completa del SPK. Las
+rutas inferidas no se convierten en autoridad de escritura.
+
 ## Evidencia real recibida hasta ahora
 
 El inventario más reciente recibido del usuario todavía corresponde a una
@@ -74,7 +101,7 @@ Studio la prueba contra tags GCM reales y la descarta si no autentica.
 
 Por tanto, el código está preparado para lectura/escritura completa, pero no se
 debe afirmar todavía que los 50.135 payloads del archivo real del usuario han
-sido descifrados. Falta ejecutar 0.6.16 contra el par real
+sido descifrados. Falta ejecutar 0.6.17 contra el par real
 `game.exe + data.spk` y obtener la auditoría.
 
 ## Avances consolidados del lector
