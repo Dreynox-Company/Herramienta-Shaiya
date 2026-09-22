@@ -33,7 +33,7 @@ def main():
         'nativeChecks':len(native.get('checks',[])),'nativeFixture':'synthetic resources only',
         'startupResult':startup,'editor06WorkbenchDelivered':True,'completeOriginalGameRecreation':False,'offlineGameDelivered':False}
     (release/'build-provenance.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    readme=f'''SHAIYA STUDIO 0.6.17 - DATA.SPK V11
+    readme=f'''SHAIYA STUDIO {version} - DATA.SPK V11
 Version: {version}
 Commit: {commit}
 
