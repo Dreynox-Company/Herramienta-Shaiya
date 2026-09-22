@@ -27,6 +27,7 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory;
   final ValueChanged<int> onHotbar;
+  final ValueChanged<String> onSendChat;
   final UiAssetCache ui;
   final List<String> messages;
   final bool questOpen;
@@ -66,6 +67,7 @@ class WorldHud extends StatelessWidget {
     required this.onWithdrawWarehouse,
     required this.onToggleInventory,
     required this.onHotbar,
+    required this.onSendChat,
     required this.locale,
     required this.ui,
     required this.messages,
@@ -492,7 +494,7 @@ class WorldHud extends StatelessWidget {
       ),
     ),
     Positioned(
-      left:12,top:52,right:20,bottom:10,
+      left:12,top:52,right:20,bottom:36,
       child:ListView(
         reverse:true,
         padding:EdgeInsets.zero,
@@ -508,6 +510,10 @@ class WorldHud extends StatelessWidget {
           ),
         )).toList(),
       ),
+    ),
+    Positioned(
+      left:11,right:18,bottom:8,height:24,
+      child:_ChatInput(onSend:onSendChat),
     ),
   ]);
 
@@ -1001,6 +1007,48 @@ class WorldHud extends StatelessWidget {
         ),
     ]);
   }
+}
+
+class _ChatInput extends StatefulWidget {
+  final ValueChanged<String> onSend;
+  const _ChatInput({required this.onSend});
+  @override State<_ChatInput> createState()=>_ChatInputState();
+}
+
+class _ChatInputState extends State<_ChatInput> {
+  final controller=TextEditingController();
+  @override void dispose(){controller.dispose();super.dispose();}
+  void send(String value){
+    final text=value.trim();if(text.isEmpty)return;
+    widget.onSend(text);controller.clear();
+  }
+  @override Widget build(BuildContext context)=>TextField(
+    controller:controller,
+    onSubmitted:send,
+    textInputAction:TextInputAction.send,
+    style:const TextStyle(fontSize:10,color:Colors.white),
+    cursorColor:const Color(0xffffd46a),
+    decoration:InputDecoration(
+      isDense:true,
+      contentPadding:const EdgeInsets.symmetric(horizontal:7,vertical:5),
+      hintText:'Enter…',
+      hintStyle:const TextStyle(fontSize:9,color:Colors.white38),
+      filled:true,
+      fillColor:const Color(0xaa080808),
+      border:OutlineInputBorder(
+        borderRadius:BorderRadius.zero,
+        borderSide:const BorderSide(color:Color(0xff665745)),
+      ),
+      enabledBorder:const OutlineInputBorder(
+        borderRadius:BorderRadius.zero,
+        borderSide:BorderSide(color:Color(0xff665745)),
+      ),
+      focusedBorder:const OutlineInputBorder(
+        borderRadius:BorderRadius.zero,
+        borderSide:BorderSide(color:Color(0xffb08a54)),
+      ),
+    ),
+  );
 }
 
 class _MiniMapPainter extends CustomPainter {
