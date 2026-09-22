@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -418,8 +419,10 @@ class SpkWriter {
           if (replacement == null) {
             clearParts = originalParts;
           } else {
-            final originalPacked = BytesBuilder(copy: false)
-              ..addAll(originalParts);
+            final originalPacked = BytesBuilder(copy: false);
+            for (final part in originalParts) {
+              originalPacked.add(part);
+            }
             final packed = await _packReplacement(
               replacement,
               originalPacked.takeBytes(),
@@ -606,21 +609,22 @@ class SpkWriter {
       await temp.rename(target.path);
       final profileFile = File('${target.path}.profile.json');
       await profileFile.writeAsString(
-        '{\\n'
-        '  "profileId": "${candidateProfile.profileId}",\\n'
-        '  "indexSha256": "$indexHash",\\n'
-        '  "index": {\\n'
-        '    "algorithm": "AES-GCM",\\n'
-        '    "secretHex": "${spkHex(candidateProfile.indexSecret)}"\\n'
-        '  },\\n'
-        '  "resources": {\\n'
-        '    "algorithm": "AES-GCM",\\n'
-        '    "secretHex": "${spkHex(resourceKey)}",\\n'
-        '    "useIndexKey": ${candidateProfile.resourceKeyIsIndexKey},\\n'
-        '    "aadHex": "${spkHex(candidateProfile.resourceAad)}",\\n'
-        '    "chunkNonceRule": "${candidateProfile.chunkNonceRule}"\\n'
-        '  }\\n'
-        '}\\n',
+        const JsonEncoder.withIndent('  ').convert({
+          'profileId': candidateProfile.profileId,
+          'indexSha256': indexHash,
+          'index': {
+            'algorithm': 'AES-GCM',
+            'secretHex': spkHex(candidateProfile.indexSecret),
+          },
+          'resources': {
+            'algorithm': 'AES-GCM',
+            'secretHex': spkHex(resourceKey),
+            'useIndexKey': candidateProfile.resourceKeyIsIndexKey,
+            if (candidateProfile.resourceAad.isNotEmpty)
+              'aadHex': spkHex(candidateProfile.resourceAad),
+            'chunkNonceRule': candidateProfile.chunkNonceRule,
+          },
+        }),
         flush: true,
       );
 
