@@ -2017,6 +2017,32 @@ class PsWorldSession {
     await connection.send(PsPacketType.friendDelete,_u32Bytes(characterId));
   }
 
+  Future<void> createRaid({bool autoJoin=false,int dropType=0}) async {
+    await connection.send(PsPacketType.raidCreate,[1,autoJoin?1:0,..._i32Bytes(dropType)]);
+  }
+
+  Future<void> joinRaid(String characterName) async {
+    await connection.send(PsPacketType.raidJoin,_fixedStringBytes(characterName,21));
+  }
+
+  Future<void> inviteRaid(int characterId) async {
+    await connection.send(PsPacketType.raidInvite,_u32Bytes(characterId));
+  }
+
+  Future<void> respondRaid(int requesterId,{required bool declined}) async {
+    await connection.send(PsPacketType.raidResponse,[declined?1:0,..._i32Bytes(requesterId)]);
+  }
+
+  Future<void> leaveRaid() async {await connection.send(PsPacketType.raidLeave);}
+  Future<void> dismantleRaid() async {await connection.send(PsPacketType.raidDismantle);}
+  Future<void> kickRaidMember(int characterId) async {await connection.send(PsPacketType.raidKick,_u32Bytes(characterId));}
+  Future<void> changeRaidLeader(int characterId) async {await connection.send(PsPacketType.raidChangeLeader,_u32Bytes(characterId));}
+  Future<void> changeRaidSubLeader(int characterId) async {await connection.send(PsPacketType.raidChangeSubLeader,_u32Bytes(characterId));}
+  Future<void> changeRaidLoot(int dropType) async {await connection.send(PsPacketType.raidChangeLoot,_i32Bytes(dropType));}
+  Future<void> changeRaidAutoJoin(bool enabled) async {await connection.send(PsPacketType.raidChangeAutoInvite,[enabled?1:0]);}
+  Future<void> moveRaidMember(int sourceIndex,int destinationIndex) async {
+    await connection.send(PsPacketType.raidMovePlayer,[..._i32Bytes(sourceIndex),..._i32Bytes(destinationIndex)]);
+  }
   Future<void> requestParty(int characterId) async {
     await connection.send(PsPacketType.partyRequest,_u32Bytes(characterId));
   }
