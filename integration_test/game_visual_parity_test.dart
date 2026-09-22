@@ -120,6 +120,7 @@ void main(){
         'actors':state.scene.gameActors.length,
         'loadedWorldAssets':state.scene.loadedWorldAssets,
         'missingWorldAssets':state.scene.missingWorldAssets,
+        'collisionTriangles':state.scene.worldCollision?.triangles.length??0,
         'originX':state.scene.originX,
         'originZ':state.scene.originZ,
         'questId':state.questId,
