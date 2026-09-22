@@ -121,6 +121,20 @@ void main(){
               category:(state.scene.world.objects as List).where((dynamic o)=>o.category==category).length,
           },
         'worldSky':state.scene.world?.skyFile??'',
+        'worldPrimaryCloud':state.scene.world?.primaryCloudFile??'',
+        'worldSecondaryCloud':state.scene.world?.secondaryCloudFile??'',
+        'mapTextureCandidates':state.catalog==null
+          ?<String>[]
+          :state.catalog!.library.files.keys.where((String path){
+              final p=path.toLowerCase(),name=p.split('/').last;
+              final map=(state.liveMapId<=0?1:state.liveMapId).toString();
+              final image=p.endsWith('.tga')||p.endsWith('.dds')||p.endsWith('.bmp');
+              if(!image)return false;
+              final mapLike=p.contains('map')||p.contains('mini');
+              final exact=name=='$map.tga'||name=='$map.dds'||name=='$map.bmp';
+              final numbered=name.contains('map$map')||name.contains('map_$map')||name.contains('mini$map')||name.contains('mini_$map');
+              return mapLike&&(exact||numbered||p.contains('/minimap/'));
+            }).take(120).toList(),
         'worldFogColor':state.scene.world==null?null:[
           state.scene.world.fogColor.x,
           state.scene.world.fogColor.y,
