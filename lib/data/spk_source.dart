@@ -545,8 +545,7 @@ class SpkArchiveSource {
       fullResourceValidation?['validatedResources'] == index.resources.length &&
       _validatedFormats.length == index.resources.length;
 
-  String? validatedFormat(int entryId) =>
-      fullyValidatedResources ? _validatedFormats[entryId] : null;
+  String? validatedFormat(int entryId) => _validatedFormats[entryId];
 
   Map<String, String> get validatedFormatsJson => {
     for (final entry in _validatedFormats.entries)
@@ -1029,6 +1028,7 @@ class SpkArchiveSource {
           ? await _readSimple(record)
           : await _readFragmented(record);
       final format = detectFormat(bytes);
+      _validatedFormats[record.entryId] = format;
       reads++;
       bytesRead += bytes.length;
       if (recentReads.length >= 40) recentReads.removeAt(0);
