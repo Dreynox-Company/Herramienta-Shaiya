@@ -297,8 +297,10 @@ class WorldHud extends StatelessWidget {
           ..._worldLabels(),
           if(socialOpen)
             Positioned(right:180,top:165,width:390,height:480,child:_socialWindow()),
-          if(guildOpen)
+          if(guildOpen&&!guildWarehouseOpen)
             Positioned(right:155,top:145,width:430,height:510,child:_guildWindow()),
+          if(guildWarehouseOpen)
+            Positioned(left:50,top:145,width:430,height:510,child:_guildWarehouseWindow()),
           if(tradeOpen)
             Positioned(left:185,top:135,width:525,height:500,child:_tradeWindow()),
           if(pendingDuelRequesterId!=null||duelTradeOpen)
@@ -337,7 +339,7 @@ class WorldHud extends StatelessWidget {
             ),
           if(inventoryOpen)
             Positioned(
-              right:(tradeOpen||duelTradeOpen)?8:198,top:(tradeOpen||duelTradeOpen)?180:250,width:292,height:390,
+              right:(tradeOpen||duelTradeOpen||guildWarehouseOpen)?8:198,top:(tradeOpen||duelTradeOpen||guildWarehouseOpen)?180:250,width:292,height:390,
               child:_inventoryWindow(),
             ),
           if (questOpen&&!dead)
@@ -1941,6 +1943,12 @@ class WorldHud extends StatelessWidget {
               style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffd98678)),
               child:Text(locale=='spn'?'Salir':'Leave',style:const TextStyle(fontSize:8)),
             ),
+          if(inGuild&&guildWarehouseAvailable)
+            TextButton(
+              onPressed:onToggleGuildWarehouse,
+              style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xff9fd9ff)),
+              child:Text(locale=='spn'?'Almacén':'Warehouse',style:const TextStyle(fontSize:8)),
+            ),
           if(inGuild&&guildRank==1)
             TextButton(
               onPressed:onDismantleGuild,
@@ -2721,7 +2729,12 @@ class WorldHud extends StatelessWidget {
                     ]),
                   ),
                 );
-                return duelTradeOpen
+                return guildWarehouseOpen
+                  ?GestureDetector(
+                      onDoubleTap:()=>onStoreGuildWarehouse(item),
+                      child:cell,
+                    )
+                  :duelTradeOpen
                   ?GestureDetector(
                       onDoubleTap:()=>onDuelInventoryItem(item),
                       child:cell,
