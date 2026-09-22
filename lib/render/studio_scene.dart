@@ -253,6 +253,52 @@ class StudioScene extends ChangeNotifier {
     say('$npcsLoaded NPC y $mobsLoaded criaturas renderizados desde paquetes ps0032.');
   }
 
+  Future<void> addNetworkNpc(
+    RuntimeNpcSpawn p,{Map<String,int>? npcModels,Set<String>? questNpcKeys,String locale='spn'}
+  ) async {
+    if(view==null||catalog==null)return;
+    if(p.globalId!=0)removeNetworkActor(p.globalId,mob:false);
+    final x=p.x-originX,z=-(p.z-originZ);
+    if(x.abs()>100||z.abs()>100)return;
+    final model=npcModels?[p.type.toString()+':'+p.typeId.toString()]??p.typeId;
+    final record=catalog!.npcs.where((n)=>n.id==model).firstOrNull;
+    if(record==null){report('LIVE NPC ${p.type}:${p.typeId}: modelo $model no existe en npc MON.');return;}
+    try{
+      final a=await loadCreature(record);
+      a.root.position.setValues(x,p.y,z);
+      a.root.rotation.y=-p.angle*(math.pi*2/65536.0);
+      gameActors.add(a);view!.scene.add(a.root);
+      if(p.globalId!=0)networkNpcActors[p.globalId]=a;
+      final key='${p.type}:${p.typeId}',localized=catalog!.questText(locale)?.npc(p.type,p.typeId);
+      gameLabels.add(GameActorLabel(
+        a,(localized?.name.isNotEmpty??false)?localized!.name:'NPC $key',
+        quest:questNpcKeys?.contains(key)??false,globalId:p.globalId,
+      ));
+      notifyListeners();
+    }catch(e){report('LIVE NPC ${p.type}:${p.typeId}: $e');}
+  }
+
+  Future<void> addNetworkMob(
+    RuntimeMobSpawn p,{Map<int,int>? mobModels,String locale='spn'}
+  ) async {
+    if(view==null||catalog==null)return;
+    if(p.globalId!=0)removeNetworkActor(p.globalId,mob:true);
+    final x=p.x-originX,z=-(p.z-originZ);
+    if(x.abs()>105||z.abs()>105)return;
+    final model=mobModels?[p.mobId]??p.mobId;
+    final record=catalog!.creatures.where((m)=>m.id==model).firstOrNull;
+    if(record==null){report('LIVE mob ${p.mobId}: modelo $model no existe en monster.mon.');return;}
+    try{
+      final a=await loadCreature(record);
+      final y=world==null?groundY:world!.heightAt(p.x,p.z,scale:.02,offset:-200);
+      a.root.position.setValues(x,y,z);
+      a.root.rotation.y=math.atan2(-x,-z);
+      gameActors.add(a);view!.scene.add(a.root);
+      if(p.globalId!=0)networkMobActors[p.globalId]=a;
+      gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true,globalId:p.globalId));
+      notifyListeners();
+    }catch(e){report('LIVE mob ${p.mobId}: $e');}
+  }
   int? pickNetworkMob(double screenX,double screenY,double width,double height,{double radius=34}){
     int? bestId;var best=radius*radius;
     for(final p in projectGameLabels(width,height)){
