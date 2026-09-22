@@ -1022,7 +1022,21 @@ class WorldHud extends StatelessWidget {
     ]);
   }
 
-  Widget _blacksmithWindow(){
+  Widget _blacksmithTabs()=>Row(children:[
+    Expanded(child:ShaiyaButton(
+      label:locale=='spn'?'Enlazar':'Link',
+      onPressed:blacksmithMode==0?null:()=>onBlacksmithMode(0),
+      compact:true,
+    )),
+    const SizedBox(width:6),
+    Expanded(child:ShaiyaButton(
+      label:locale=='spn'?'Extraer':'Extract',
+      onPressed:blacksmithMode==1?null:()=>onBlacksmithMode(1),
+      compact:true,
+    )),
+  ]);
+
+  Widget _blacksmithLinkingBody(){
     final targets=inventory.where((item){
       if(item.bag==0||item.type==30)return false;
       final rule=metadata?.item(item.type,item.typeId);
@@ -1035,69 +1049,167 @@ class WorldHud extends StatelessWidget {
     }).toList();
     final p=blacksmithPossibility;
     final canLink=!blacksmithBusy&&p!=null&&p.available&&blacksmithItem!=null&&blacksmithGem!=null&&gold>=p.gold;
-
-    return _panelShell(
-      locale=='spn'?'Herrero · Enlace de lapis':'Blacksmith · Lapis linking',
-      Padding(
-        padding:const EdgeInsets.all(10),
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      _blacksmithPick(
+        title:locale=='spn'?'1. Objeto':'1. Item',
+        items:targets,selected:blacksmithItem,onSelect:onSelectBlacksmithItem,
+      ),
+      const SizedBox(height:9),
+      _blacksmithPick(
+        title:locale=='spn'?'2. Lapis':'2. Lapis',
+        items:gems,selected:blacksmithGem,onSelect:onSelectBlacksmithGem,
+      ),
+      const SizedBox(height:9),
+      _blacksmithPick(
+        title:locale=='spn'?'3. Martillo opcional':'3. Optional hammer',
+        items:hammers,selected:blacksmithHammer,onSelect:onSelectBlacksmithHammer,
+      ),
+      const Spacer(),
+      Container(
+        width:double.infinity,padding:const EdgeInsets.all(9),
+        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          _blacksmithPick(
-            title:locale=='spn'?'1. Objeto':'1. Item',
-            items:targets,selected:blacksmithItem,onSelect:onSelectBlacksmithItem,
+          Text(
+            p==null
+              ?(blacksmithBusy?(locale=='spn'?'Consultando a World…':'Querying World…'):(locale=='spn'?'Selecciona objeto y lapis para consultar.':'Select item and lapis to query.'))
+              :'Probabilidad: ${p.rate.toStringAsFixed(2)}% · Coste: ${p.gold} oro',
+            style:TextStyle(fontSize:10,color:p==null?Colors.white54:(p.rate>=50?const Color(0xff9dff90):const Color(0xffffb46d))),
           ),
-          const SizedBox(height:9),
-          _blacksmithPick(
-            title:locale=='spn'?'2. Lapis':'2. Lapis',
-            items:gems,selected:blacksmithGem,onSelect:onSelectBlacksmithGem,
-          ),
-          const SizedBox(height:9),
-          _blacksmithPick(
-            title:locale=='spn'?'3. Martillo opcional':'3. Optional hammer',
-            items:hammers,selected:blacksmithHammer,onSelect:onSelectBlacksmithHammer,
-          ),
-          const Spacer(),
-          Container(
-            width:double.infinity,
-            padding:const EdgeInsets.all(9),
-            decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
-            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(
-                p==null
-                  ?(blacksmithBusy?(locale=='spn'?'Consultando a World…':'Querying World…'):(locale=='spn'?'Selecciona objeto y lapis para consultar.':'Select item and lapis to query.'))
-                  :'Probabilidad: ${p.rate.toStringAsFixed(2)}% · Coste: ${p.gold} oro',
-                style:TextStyle(fontSize:10,color:p==null?Colors.white54:(p.rate>=50?const Color(0xff9dff90):const Color(0xffffb46d))),
-              ),
-              const SizedBox(height:5),
-              Text(
-                locale=='spn'
-                  ?'El resultado es aleatorio y lo decide World. Un fallo puede consumir el lapis.'
-                  :'World decides the random result. Failure may consume the lapis.',
-                style:const TextStyle(fontSize:7.8,color:Colors.white38),
-              ),
-            ]),
+          const SizedBox(height:5),
+          Text(
+            locale=='spn'
+              ?'El resultado es aleatorio y lo decide World. Un fallo puede consumir el lapis.'
+              :'World decides the random result. Failure may consume the lapis.',
+            style:const TextStyle(fontSize:7.8,color:Colors.white38),
           ),
         ]),
       ),
-      footer:Container(
-        height:42,padding:const EdgeInsets.symmetric(horizontal:8),
-        child:Row(children:[
-          Text('Oro: $gold',style:const TextStyle(fontSize:9.5,color:Color(0xffffd26a))),
-          const Spacer(),
-          SizedBox(
-            width:92,height:29,
-            child:ShaiyaButton(
-              label:blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Enlazar':'Link'),
-              onPressed:canLink?onLinkGem:null,
-              compact:true,
-            ),
+      const SizedBox(height:7),
+      Row(children:[
+        Text('Oro: $gold',style:const TextStyle(fontSize:9.5,color:Color(0xffffd26a))),
+        const Spacer(),
+        SizedBox(
+          width:92,height:29,
+          child:ShaiyaButton(
+            label:blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Enlazar':'Link'),
+            onPressed:canLink?onLinkGem:null,compact:true,
           ),
-          const SizedBox(width:7),
-          GestureDetector(onTap:onCloseBlacksmith,child:const Icon(Icons.close,size:18,color:Colors.white70)),
-        ]),
-      ),
-    );
+        ),
+      ]),
+    ]);
   }
 
+  Widget _blacksmithExtractionBody(){
+    final targets=inventory.where((item)=>item.bag!=0&&item.gems.any((g)=>g>0)).toList();
+    final hammers=inventory.where((item){
+      final special=metadata?.item(item.type,item.typeId)?.special??0;
+      return item.bag!=0&&(special==58||special==59);
+    }).toList();
+    final item=blacksmithExtractItem,p=blacksmithExtractPossibility;
+    final validGem=item!=null&&blacksmithExtractPosition>=0&&blacksmithExtractPosition<item.gems.length&&item.gems[blacksmithExtractPosition]>0;
+    final canExtract=!blacksmithBusy&&p!=null&&p.available&&validGem&&gold>=p.gold;
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      _blacksmithPick(
+        title:locale=='spn'?'1. Objeto con lapis':'1. Socketed item',
+        items:targets,selected:blacksmithExtractItem,onSelect:onSelectExtractItem,
+      ),
+      const SizedBox(height:8),
+      Text(locale=='spn'?'2. Slot de lapis':'2. Lapis slot',style:const TextStyle(fontSize:9.5,color:Color(0xffffdc72),fontWeight:FontWeight.w600)),
+      const SizedBox(height:4),
+      SizedBox(
+        height:54,
+        child:Row(children:List.generate(6,(index){
+          final id=item!=null&&index<item.gems.length?item.gems[index]:0;
+          final selected=blacksmithExtractPosition==index&&id>0;
+          final name=id>0?catalog.itemName(30,id,locale):(locale=='spn'?'Vacío':'Empty');
+          return Expanded(child:Padding(
+            padding:EdgeInsets.only(right:index==5?0:4),
+            child:Tooltip(
+              message:name,
+              child:GestureDetector(
+                onTap:id>0?()=>onSelectExtractPosition(index):null,
+                child:Container(
+                  decoration:BoxDecoration(
+                    color:const Color(0xff17120e),
+                    border:Border.all(color:selected?const Color(0xffffd15b):const Color(0xff5c4a35),width:selected?2:1),
+                  ),
+                  child:Center(child:id<=0
+                    ?const Text('—',style:TextStyle(color:Colors.white24))
+                    :Column(mainAxisSize:MainAxisSize.min,children:[
+                        const Icon(Icons.diamond_outlined,size:19,color:Color(0xff7fd9ff)),
+                        Text(id.toString(),style:const TextStyle(fontSize:7,color:Colors.white70)),
+                      ]),
+                  ),
+                ),
+              ),
+            ),
+          ));
+        })),
+      ),
+      const SizedBox(height:9),
+      _blacksmithPick(
+        title:locale=='spn'?'3. Martillo de extracción opcional':'3. Optional extraction hammer',
+        items:hammers,selected:blacksmithExtractHammer,onSelect:onSelectExtractHammer,
+      ),
+      const Spacer(),
+      Container(
+        width:double.infinity,padding:const EdgeInsets.all(9),
+        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(
+            p==null
+              ?(blacksmithBusy?(locale=='spn'?'Consultando a World…':'Querying World…'):(locale=='spn'?'Selecciona objeto y slot para consultar.':'Select item and slot to query.'))
+              :'Probabilidad: ${p.rate.toStringAsFixed(2)}% · Coste: ${p.gold} oro',
+            style:TextStyle(fontSize:10,color:p==null?Colors.white54:(p.rate>=50?const Color(0xff9dff90):const Color(0xffffb46d))),
+          ),
+          const SizedBox(height:5),
+          Text(
+            locale=='spn'
+              ?'World decide si el lapis se recupera. La extracción puede fallar.'
+              :'World decides whether the lapis is recovered. Extraction may fail.',
+            style:const TextStyle(fontSize:7.8,color:Colors.white38),
+          ),
+        ]),
+      ),
+      const SizedBox(height:7),
+      Row(children:[
+        Text('Oro: $gold',style:const TextStyle(fontSize:9.5,color:Color(0xffffd26a))),
+        const Spacer(),
+        SizedBox(
+          width:92,height:29,
+          child:ShaiyaButton(
+            label:blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Extraer':'Extract'),
+            onPressed:canExtract?onExtractGem:null,compact:true,
+          ),
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _blacksmithWindow()=>_panelShell(
+    blacksmithMode==0
+      ?(locale=='spn'?'Herrero · Enlace de lapis':'Blacksmith · Lapis linking')
+      :(locale=='spn'?'Herrero · Extracción de lapis':'Blacksmith · Lapis extraction'),
+    Padding(
+      padding:const EdgeInsets.all(10),
+      child:Column(children:[
+        _blacksmithTabs(),
+        const SizedBox(height:9),
+        Expanded(child:blacksmithMode==0?_blacksmithLinkingBody():_blacksmithExtractionBody()),
+      ]),
+    ),
+    footer:Container(
+      height:30,padding:const EdgeInsets.symmetric(horizontal:8),
+      child:Row(children:[
+        Text(
+          blacksmithMode==0?(locale=='spn'?'Linking':'Linking'):(locale=='spn'?'Extracción':'Extraction'),
+          style:const TextStyle(fontSize:8,color:Colors.white38),
+        ),
+        const Spacer(),
+        GestureDetector(onTap:onCloseBlacksmith,child:const Icon(Icons.close,size:18,color:Colors.white70)),
+      ]),
+    ),
+  );
   Widget _gateWindow(){
     final g=gate!;
     final localized=catalog.questText(locale)?.npc(g.type,g.typeId);
