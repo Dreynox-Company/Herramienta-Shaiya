@@ -32,7 +32,7 @@ class WorldHud extends StatelessWidget {
   final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,gateOpen,warehouseOpen;
   final VoidCallback onCloseShop,onCloseGate,onCloseWarehouse;
   final ValueChanged<int> onBuyShopProduct,onUseGate;
-  final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
+  final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
@@ -89,6 +89,7 @@ class WorldHud extends StatelessWidget {
     required this.onBuyShopProduct,
     required this.onUseGate,
     required this.onSellInventory,
+    required this.onActivateInventory,
     required this.onStoreWarehouse,
     required this.onWithdrawWarehouse,
     required this.onToggleInventory,
@@ -1281,7 +1282,10 @@ class WorldHud extends StatelessWidget {
                         onDoubleTap:()=>onSellInventory(item),
                         child:cell,
                       )
-                    :cell;
+                    :GestureDetector(
+                        onDoubleTap:()=>onActivateInventory(item),
+                        child:cell,
+                      );
               },
             ),
       ),
