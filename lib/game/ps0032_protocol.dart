@@ -640,6 +640,8 @@ class PsAppearanceChange {
 class PsCharacterSpeed {
   final int characterId,attackSpeed,moveSpeed;
   const PsCharacterSpeed(this.characterId,this.attackSpeed,this.moveSpeed);
+  bool get canAttack=>attackSpeed!=255;
+  bool get canMove=>moveSpeed!=255;
   static PsCharacterSpeed parse(PsPacket p){
     if(p.type!=PsPacketType.characterAttackMovementSpeed||p.body.length<6){
       throw FormatException('CHARACTER_ATTACK_MOVEMENT_SPEED truncado: ${p.body.length}.');
@@ -874,22 +876,6 @@ class PsCharacterLevelUp {
       d.getUint16(8,Endian.little),
       d.getUint32(10,Endian.little),
       d.getUint32(14,Endian.little),
-    );
-  }
-}
-
-class PsCharacterSpeed {
-  final int characterId,attackSpeed,moveSpeed;
-  const PsCharacterSpeed(this.characterId,this.attackSpeed,this.moveSpeed);
-  bool get canAttack=>attackSpeed!=255;
-  bool get canMove=>moveSpeed!=255;
-  static PsCharacterSpeed parse(PsPacket p){
-    if(p.type!=PsPacketType.characterAttackMovementSpeed||p.body.length<6){
-      throw FormatException('CHARACTER_ATTACK_MOVEMENT_SPEED truncado: ${p.body.length}.');
-    }
-    final d=ByteData.sublistView(p.body);
-    return PsCharacterSpeed(
-      d.getUint32(0,Endian.little),p.body[4],p.body[5],
     );
   }
 }
