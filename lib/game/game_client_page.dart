@@ -79,9 +79,12 @@ class _GameClientPageState extends State<GameClientPage> {
   bool skillsOpen=false;
   bool questLogOpen=false;
   bool shopOpen=false;
+  bool gateOpen=false;
   bool warehouseOpen=false;
   NpcShopRule? activeShop;
+  NpcGateRule? activeGate;
   int? activeShopNpcGlobalId;
+  int? activeGateNpcGlobalId;
   int? liveGold;
   String faction='light';
   String progress='Inicializando cliente Flutter…';
@@ -1110,9 +1113,12 @@ class _GameClientPageState extends State<GameClientPage> {
     skillsOpen=false;
     questLogOpen=false;
     shopOpen=false;
+    gateOpen=false;
     warehouseOpen=false;
     activeShop=null;
+    activeGate=null;
     activeShopNpcGlobalId=null;
+    activeGateNpcGlobalId=null;
   }
 
   void _toggleWorldPanel(String panel){
