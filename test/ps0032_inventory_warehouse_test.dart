@@ -6,7 +6,8 @@ import 'package:herramienta_shaiya/game/ps0032_protocol.dart';
 
 void _putName(Uint8List b,int offset,String value){
   final raw=latin1.encode(value);
-  b.setRange(offset,offset+raw.length.clamp(0,20),raw);
+  final n=raw.length>20?20:raw.length;
+  b.setRange(offset,offset+n,raw);
 }
 
 void main(){
