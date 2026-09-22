@@ -946,6 +946,79 @@ class WorldHud extends StatelessWidget {
     ),
   );
 
+  Widget _raidHud(){
+    final r=raid!;
+    final byIndex={for(final row in r.members)row.index:row};
+    return Container(
+      padding:const EdgeInsets.all(4),
+      decoration:BoxDecoration(
+        color:const Color(0xcc15110e),
+        border:Border.all(color:const Color(0xff806944)),
+        boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:6)],
+      ),
+      child:Column(children:[
+        SizedBox(
+          height:20,
+          child:Row(children:[
+            const Icon(Icons.groups,size:13,color:Color(0xffffd45f)),
+            const SizedBox(width:4),
+            Text('RAID '+r.members.length.toString()+'/30',style:const TextStyle(fontSize:9,color:Color(0xffffdf8d),fontWeight:FontWeight.bold)),
+            const Spacer(),
+            Text(
+              (r.autoJoin?'AUTO ':'')+'Loot '+r.dropType.toString(),
+              style:const TextStyle(fontSize:7,color:Colors.white54),
+            ),
+          ]),
+        ),
+        Expanded(
+          child:GridView.builder(
+            padding:EdgeInsets.zero,
+            physics:const NeverScrollableScrollPhysics(),
+            gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount:5,crossAxisSpacing:2,mainAxisSpacing:2,childAspectRatio:1.38,
+            ),
+            itemCount:30,
+            itemBuilder:(context,index){
+              final row=byIndex[index];
+              if(row==null){
+                return Container(
+                  decoration:BoxDecoration(color:const Color(0x331b1712),border:Border.all(color:const Color(0x335b4b36))),
+                  alignment:Alignment.center,
+                  child:Text('${index~/6+1}.${index%6+1}',style:const TextStyle(fontSize:6,color:Colors.white12)),
+                );
+              }
+              final m=row.member,leader=index==r.leaderIndex,sub=index==r.subLeaderIndex&&!leader;
+              final hp=m.maxHp<=0?0.0:m.hp/m.maxHp;
+              return Tooltip(
+                waitDuration:const Duration(milliseconds:250),
+                message:m.name+'\nLv.'+m.level.toString()+' · '+_professionName(m.profession)+' · M'+m.mapId.toString()+
+                  '\nGrupo '+(index~/6+1).toString()+' · slot '+(index%6+1).toString()+
+                  '\nHP '+m.hp.toString()+'/'+m.maxHp.toString(),
+                child:Container(
+                  padding:const EdgeInsets.all(2),
+                  decoration:BoxDecoration(
+                    color:leader?const Color(0xff342815):sub?const Color(0xff202d34):const Color(0xff1a1611),
+                    border:Border.all(color:leader?const Color(0xffffca55):sub?const Color(0xff70b9dd):const Color(0xff4d4131)),
+                  ),
+                  child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Row(children:[
+                      if(leader)const Icon(Icons.workspace_premium,size:8,color:Color(0xffffd45f)),
+                      if(sub)const Icon(Icons.star_half,size:8,color:Color(0xff8fdcff)),
+                      Expanded(child:Text(m.name,maxLines:1,overflow:TextOverflow.clip,style:const TextStyle(fontSize:6.5,color:Color(0xffffe5ab)))),
+                    ]),
+                    const Spacer(),
+                    Container(height:3,color:const Color(0xff29100f),child:_miniResourceBar(hp,const Color(0xffc62a25))),
+                    const SizedBox(height:1),
+                    Text('L'+m.level.toString()+' M'+m.mapId.toString(),style:const TextStyle(fontSize:5.5,color:Colors.white38)),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
   Widget _partyHud()=>Container(
     padding:const EdgeInsets.all(4),
     decoration:BoxDecoration(
