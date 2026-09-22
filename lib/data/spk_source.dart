@@ -598,6 +598,33 @@ class SpkArchiveSource {
     return out;
   }
 
+  Future<SpkArchiveSource?> tryIndexKeyAsResourceProfile() async {
+    if (profile.effectiveResourceSecret != null) return null;
+
+    final candidateProfile = SpkCryptoProfile(
+      profileId: '${profile.profileId}-index-key-resources',
+      indexSha256: profile.indexSha256,
+      indexSecret: Uint8List.fromList(profile.indexSecret),
+      resourceSecret: null,
+      resourceAad: Uint8List(0),
+      resourceKeyIsIndexKey: true,
+      chunkNonceRule: 'unsupported',
+    );
+
+    SpkArchiveSource candidate;
+    try {
+      candidate = await SpkArchiveSource.open(
+        file.path,
+        candidateProfile,
+        names: names,
+      );
+      await candidate.validateSimpleResourceProfile();
+    } catch (_) {
+      return null;
+    }
+    return candidate;
+  }
+
   Future<Map<String, Object?>> validateSimpleResourceProfile({
     int minimumAuthenticatedSamples = 3,
     int maxSamples = 8,
