@@ -60,6 +60,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
+  final Map<String,PsItemExpiration> liveItemExpirations=<String,PsItemExpiration>{};
   List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
   List<PsInventoryItem> liveGuildWarehouse=<PsInventoryItem>[];
   bool guildWarehouseAvailable=false;
@@ -660,6 +661,22 @@ class _GameClientPageState extends State<GameClientPage> {
         final selected=await session.selectCharacter(current.id);
         liveDetails=selected.details;
         liveGold=selected.details.gold;
+        liveItemExpirations.clear();
+        for(final packet in selected.packets.where((p)=>p.type==PsPacketType.itemExpiration)){
+          try{
+            final expiration=PsItemExpiration.parse(packet);
+            liveItemExpirations[expiration.key]=expiration;
+          }catch(e){messages.insert(0,'[Inventario] ITEM_EXPIRATION: '+e.toString());}
+        }
+        final moneyPacket=selected.packets.where((p)=>p.type==PsPacketType.setMoney).lastOrNull;
+        if(moneyPacket!=null)liveGold=PsMoneyUpdate.parse(moneyPacket).gold;
+        final maxVitalsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterMaxHpMpSp).lastOrNull;
+        if(maxVitalsPacket!=null){
+          final max=PsMaxVitals.parse(maxVitalsPacket);
+          if(max.characterId==current.id){
+            liveDetails=liveDetails!.copyWith(maxHp:max.maxHp,maxMp:max.maxMp,maxSp:max.maxSp);
+          }
+        }
         final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
         final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
         final buffsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterActiveBuffs).firstOrNull;
@@ -1991,6 +2008,67 @@ class _GameClientPageState extends State<GameClientPage> {
       }catch(e){messages.insert(0,'[Recurso] '+e.toString());}
     }else if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
       liveHitpoints=PsHitpoints.parse(packet);
+    }else if(packet.type==PsPacketType.setMoney&&packet.body.length>=4){
+      try{
+        final money=PsMoneyUpdate.parse(packet);liveGold=money.gold;
+        if(liveDetails!=null)liveDetails=liveDetails!.copyWith(gold:money.gold);
+      }catch(e){messages.insert(0,'[Oro] '+e.toString());}
+    }else if(packet.type==PsPacketType.characterMaxHpMpSp&&packet.body.length>=16){
+      try{
+        final max=PsMaxVitals.parse(packet);
+        if(max.characterId==liveCharacter?.id&&liveDetails!=null){
+          liveDetails=liveDetails!.copyWith(maxHp:max.maxHp,maxMp:max.maxMp,maxSp:max.maxSp);
+        }else if(max.characterId==targetPlayerId){
+          targetPlayerMaxHp=max.maxHp;
+        }
+      }catch(e){messages.insert(0,'[Estado] MAX_HP_MP_SP: '+e.toString());}
+    }else if(packet.type==PsPacketType.experienceGain&&packet.body.length>=8){
+      try{
+        final gain=PsExperienceGain.parse(packet),details=liveDetails;
+        if(details!=null){
+          liveDetails=details.copyWith(currentExp:math.min(details.endExp,details.currentExp+gain.amount));
+          if(gain.amount>0)messages.insert(0,'[EXP] +'+gain.amount.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[EXP] '+e.toString());}
+    }else if(<int>{PsPacketType.characterLevelUpSelf,PsPacketType.characterLevelUpOther}.contains(packet.type)&&packet.body.length>=18){
+      try{
+        final up=PsLevelUp.parse(packet);
+        if(up.characterId==liveCharacter?.id){
+          final current=liveCharacter;
+          if(current!=null){
+            final updated=current.copyWith(level:up.level);
+            liveCharacter=updated;
+            liveCharacters=liveCharacters.map((x)=>x.id==updated.id?updated:x).toList();
+          }
+          final details=liveDetails;
+          if(details!=null){
+            liveDetails=details.copyWith(
+              statPoint:up.statPoint,skillPoint:up.skillPoint,
+              startExp:up.minExp,endExp:up.nextExp,
+              currentExp:math.max(up.minExp,math.min(details.currentExp,up.nextExp)),
+            );
+          }
+          messages.insert(0,'[Nivel] Alcanzaste Lv.'+up.level.toString()+'.');
+        }else{
+          messages.insert(0,'[Nivel] Jugador #'+up.characterId.toString()+' alcanzó Lv.'+up.level.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[Nivel] '+e.toString());}
+    }else if(packet.type==PsPacketType.itemExpiration&&packet.body.length>=14){
+      try{
+        final expiration=PsItemExpiration.parse(packet);
+        liveItemExpirations[expiration.key]=expiration;
+      }catch(e){messages.insert(0,'[Inventario] ITEM_EXPIRATION: '+e.toString());}
+    }else if(packet.type==PsPacketType.itemExpired&&packet.body.length>=7){
+      try{
+        final expired=PsItemExpired.parse(packet);
+        liveItemExpirations.remove(expired.bag.toString()+':'+expired.slot.toString());
+        final item=liveInventory.where((x)=>x.bag==expired.bag&&x.slot==expired.slot).firstOrNull;
+        if(item!=null){
+          liveInventory.remove(item);
+          final name=catalog?.itemName(item.type,item.typeId,uiLocale)??item.key;
+          messages.insert(0,'[Inventario] '+name+' expiró.');
+        }
+      }catch(e){messages.insert(0,'[Inventario] ITEM_EXPIRED: '+e.toString());}
     }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
       liveAdditionalStats=PsAdditionalStats.parse(packet);
     }else if(packet.type==PsPacketType.sendEquipment&&packet.body.length>=13){
