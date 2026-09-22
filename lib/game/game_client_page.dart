@@ -1147,6 +1147,44 @@ class _GameClientPageState extends State<GameClientPage> {
     );
   }
 
+  void _beginSkillCast(PsSkillCasting cast){
+    final now=DateTime.now();
+    final rule=metadata?.skill(cast.skillId,cast.skillLevel);
+    final duration=rule?.castDuration??const Duration(milliseconds:250);
+    liveSkillCasting=cast;
+    liveSkillCastStartedAt=now;
+    liveSkillCastEndsAt=now.add(duration);
+    if(cast.casterId==liveCharacter?.id){
+      final name=catalog?.skillName(cast.skillId,cast.skillLevel,uiLocale)??('Skill '+cast.skillId.toString());
+      messages.insert(0,'[Cast] '+name+' · '+duration.inMilliseconds.toString()+' ms.');
+    }
+  }
+
+  void _finishSkillCast(int casterId,int skillId){
+    final cast=liveSkillCasting;
+    if(cast==null)return;
+    if(cast.casterId==casterId&&cast.skillId==skillId){
+      liveSkillCasting=null;
+      liveSkillCastStartedAt=null;
+      liveSkillCastEndsAt=null;
+    }
+  }
+
+  double get _skillCastProgress{
+    final cast=liveSkillCasting,start=liveSkillCastStartedAt,end=liveSkillCastEndsAt;
+    if(cast==null||start==null||end==null)return 0;
+    final total=end.difference(start).inMilliseconds;
+    if(total<=0)return 1;
+    final elapsed=DateTime.now().difference(start).inMilliseconds;
+    return (elapsed/total).clamp(0.0,1.0);
+  }
+
+  String? get _skillCastLabel{
+    final cast=liveSkillCasting;
+    if(cast==null)return null;
+    return catalog?.skillName(cast.skillId,cast.skillLevel,uiLocale)??('Skill '+cast.skillId.toString());
+  }
+
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if((mapSwitching||sectorStreaming)&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
@@ -1248,23 +1286,69 @@ class _GameClientPageState extends State<GameClientPage> {
       }catch(e){messages.insert(0,'[PvP] Autoataque: '+e.toString());}
       if(mounted)setState((){});
       return;
-    }else if(packet.type==PsPacketType.useCharacterTargetSkill&&packet.body.length>=19){
+    }else if((packet.type==PsPacketType.characterSkillCasting||packet.type==PsPacketType.mobSkillCasting)&&packet.body.length>=11){
+      try{_beginSkillCast(PsSkillCasting.parse(packet));}
+      catch(e){messages.insert(0,'[Cast] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.useCharacterTargetSkill||packet.type==PsPacketType.useCharacterRangeSkill)&&packet.body.length>=19){
       try{
         final hit=PsCharacterSkillHit.parse(packet),self=liveCharacter?.id;
+        _finishSkillCast(hit.attackerId,hit.skillId);
         if(hit.success&&self!=null){
           if(hit.attackerId==self){
-            if(targetPlayerId==hit.targetId&&targetPlayerHp!=null)targetPlayerHp=math.max(0,targetPlayerHp!-hit.hpDamage);
-            unawaited(scene.networkPlayerAttackCharacter(hit.targetId));
-            if(hit.hpDamage>0)unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+            if(hit.targetId!=0){
+              if(targetPlayerId==hit.targetId&&targetPlayerHp!=null)targetPlayerHp=math.max(0,targetPlayerHp!-hit.hpDamage);
+              if(scene.networkPlayerActors.containsKey(hit.targetId)){
+                unawaited(scene.networkPlayerAttackCharacter(hit.targetId));
+                if(hit.hpDamage>0)unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+              }
+            }
           }else if(hit.targetId==self){
             final hp=liveHitpoints;
             if(hp!=null)liveHitpoints=PsHitpoints(math.max(0,hp.hp-hit.hpDamage),math.max(0,hp.mp-hit.mpDamage),math.max(0,hp.sp-hit.spDamage));
             if(hit.hpDamage>0)unawaited(scene.networkPlayerHit(hit.hpDamage));
-          }else if(hit.hpDamage>0){
+          }else if(hit.targetId!=0&&hit.hpDamage>0){
             unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
           }
         }
       }catch(e){messages.insert(0,'[PvP] Skill: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterSkillKeep&&packet.body.length>=13){
+      try{
+        final keep=PsSkillKeep.parse(packet),self=liveCharacter?.id;
+        if(keep.characterId==self){
+          final hp=liveHitpoints;
+          if(hp!=null)liveHitpoints=PsHitpoints(
+            math.max(0,hp.hp-keep.hpDamage),
+            math.max(0,hp.mp-keep.mpDamage),
+            math.max(0,hp.sp-keep.spDamage),
+          );
+          if(keep.hpDamage>0)unawaited(scene.networkPlayerHit(keep.hpDamage));
+        }else if(keep.hpDamage>0){
+          unawaited(scene.networkRemotePlayerHit(keep.characterId,keep.hpDamage));
+        }
+      }catch(e){messages.insert(0,'[Skill Keep] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if((packet.type==PsPacketType.characterSkillMirror||packet.type==PsPacketType.mobSkillMirror)&&packet.body.length>=14){
+      try{
+        final mirror=PsSkillMirror.parse(packet),self=liveCharacter?.id;
+        if(mirror.targetId==self){
+          final hp=liveHitpoints;
+          if(hp!=null)liveHitpoints=PsHitpoints(
+            math.max(0,hp.hp-mirror.hpDamage),
+            math.max(0,hp.mp-mirror.mpDamage),
+            math.max(0,hp.sp-mirror.spDamage),
+          );
+          if(mirror.hpDamage>0)unawaited(scene.networkPlayerHit(mirror.hpDamage));
+        }else if(packet.type==PsPacketType.characterSkillMirror&&mirror.hpDamage>0){
+          unawaited(scene.networkRemotePlayerHit(mirror.targetId,mirror.hpDamage));
+        }else if(packet.type==PsPacketType.mobSkillMirror&&mirror.hpDamage>0){
+          unawaited(scene.networkMobHit(mirror.targetId,mirror.hpDamage));
+        }
+      }catch(e){messages.insert(0,'[Reflejo] '+e.toString());}
       if(mounted)setState((){});
       return;
     }
@@ -1752,8 +1836,9 @@ class _GameClientPageState extends State<GameClientPage> {
       }else if(hit.result!=12){
         messages.insert(0,'[Combate] Ataque normal rechazado ('+hit.result.toString()+').');
       }
-    }else if(packet.type==PsPacketType.useMobTargetSkill&&packet.body.length>=19){
+    }else if((packet.type==PsPacketType.useMobTargetSkill||packet.type==PsPacketType.useMobRangeSkill)&&packet.body.length>=19){
       final hit=PsSkillHit.parse(packet);
+      _finishSkillCast(hit.attackerId,hit.skillId);
       targetMobGlobalId=hit.targetId;
       final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hit.targetId).firstOrNull;
       if(logical!=null){
