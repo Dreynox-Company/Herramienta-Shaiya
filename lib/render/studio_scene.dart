@@ -17,8 +17,10 @@ import '../data/library.dart';
 import '../data/catalog.dart';
 
 class RenderPart {
-  final MeshData data;final t.Mesh mesh;final t.Float32BufferAttribute position;final t.Texture texture;
-  RenderPart(this.data,this.mesh,this.position,this.texture);
+  final MeshData data;final t.Mesh mesh;
+  final t.Float32BufferAttribute position,normal,uvAttribute;
+  final t.Texture texture;
+  RenderPart(this.data,this.mesh,this.position,this.normal,this.uvAttribute,this.texture);
   void skin(List<v.Matrix4> world){
     if(data.inverses.isEmpty)return;
     final palette=List.generate(math.min(world.length,data.inverses.length),(i)=>(world[i]*data.inverses[i]).storage);
@@ -29,7 +31,40 @@ class RenderPart {
     }
     position.needsUpdate=true;
   }
+  void applyVaniFrame(VaniMeshData source,int frame){
+    if(source.frameCount==0)return;
+    final i=frame%source.frameCount,p=source.positions[i],n=source.normals[i],uv=source.uv[i];
+    if(p.length!=data.positions.length||n.length!=data.normals.length||uv.length!=data.uv.length)return;
+    for(var vertex=0;vertex<data.vertices;vertex++){
+      position.setXYZ(vertex,p[vertex*3],p[vertex*3+1],p[vertex*3+2]);
+      normal.setXYZ(vertex,n[vertex*3],n[vertex*3+1],n[vertex*3+2]);
+      uvAttribute.setXY(vertex,uv[vertex*2],uv[vertex*2+1]);
+    }
+    position.needsUpdate=true;normal.needsUpdate=true;uvAttribute.needsUpdate=true;
+  }
   void dispose(){mesh.removeFromParent();mesh.geometry?.dispose();mesh.material?.dispose();texture.dispose();}
+}
+class VaniBinding {
+  final RenderPart part;
+  final VaniMeshData mesh;
+  const VaniBinding(this.part,this.mesh);
+}
+class VaniActor {
+  final t.Group root;
+  final List<VaniBinding> bindings;
+  final int frameCount;
+  double time=0;
+  int frame=-1;
+  VaniActor(this.root,this.bindings,this.frameCount);
+  void tick(double dt){
+    if(frameCount<=1)return;
+    time+=dt;
+    final next=(time*15).floor()%frameCount;
+    if(next==frame)return;
+    frame=next;
+    for(final binding in bindings)binding.part.applyVaniFrame(binding.mesh,next);
+  }
+  void dispose(){root.removeFromParent();for(final binding in bindings)binding.part.dispose();}
 }
 class Actor {
   final t.Group root=t.Group();final List<RenderPart> parts=[];
@@ -86,7 +121,7 @@ class StudioScene extends ChangeNotifier {
   List<ClipData> attackClips=[];int attackCounter=0;
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
-  t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
+  t.Group environment=t.Group();final List<RenderPart> environmentParts=[];final List<VaniActor> animatedWorldActors=[];
   WorldData? world;DgData? dungeon;String? worldPath,effectPath,skyPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
@@ -128,9 +163,9 @@ class StudioScene extends ChangeNotifier {
     // the wrong polygons.  2D scene backdrops use their own loading path.
     final texture=await t.TextureLoader(flipY:false).fromBytes(png);if(texture==null)throw FormatException('El motor no pudo cargar $texturePath');
     texture.colorSpace=t.SRGBColorSpace;texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
-    final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3);
-    geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',t.Float32BufferAttribute.fromList(data.normals.toList(),3));geometry.setAttributeFromString('uv',t.Float32BufferAttribute.fromList(data.uv.toList(),2));geometry.setIndex(data.indices.toList());
-    final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,texture);
+    final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),uv=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
+    geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',normals);geometry.setAttributeFromString('uv',uv);geometry.setIndex(data.indices.toList());
+    final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,normals,uv,texture);
   }
   Future<RenderPart> skinned(String mesh,String texture,{int alpha=0}) async {final data=MeshData.skinned(await catalog!.library.read(mesh),mesh);for(final repair in data.repairs){report('$mesh · $repair');}return makePart(data,texture,opaque:alpha==1);}
   Future<ClipData> clip(String path)=>catalog!.library.read(path).then((b)=>ClipData.parse(b,path));
@@ -881,7 +916,7 @@ class StudioScene extends ChangeNotifier {
     if(disposed)return;_frameAccumulator+=dt;_uiAccumulator+=dt;if(_frameAccumulator<1/30)return;final delta=_frameAccumulator.clamp(0.0,.1);_frameAccumulator=0;
     final moving=walkX!=0||walkZ!=0;final transition=movementTransitions.update(x:walkX,z:walkZ,running:running,blocked:sceneCombatLocked);if(transition!=null)applyLocomotion(transition);final desired=movementClip(movementTransitions.requested);
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
-    for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}
+    for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}for(final a in animatedWorldActors){a.tick(delta);}
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
