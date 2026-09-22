@@ -351,6 +351,29 @@ void main() {
           isA<SpkFailure>().having(
             (error) => error.code,
             'code',
+            'SPK_TABLE_DISCOVERY_PROFILE',
+          ),
+        ),
+      );
+
+      final cryptoOnly = await SpkArchiveSource.fromValidatedIndexForTesting(
+        file: source.file,
+        index: source.index,
+        profile: source.profile,
+      );
+      await cryptoOnly.validateSimpleResourceProfile();
+      expect(cryptoOnly.canExtractAll, isTrue);
+      expect(cryptoOnly.fullyValidatedResources, isFalse);
+      await expectLater(
+        SpkCoreTableDiscovery.discover(
+          cryptoOnly,
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        ),
+        throwsA(
+          isA<SpkFailure>().having(
+            (error) => error.code,
+            'code',
             'SPK_TABLE_DISCOVERY_AUDIT',
           ),
         ),
