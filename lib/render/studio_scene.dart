@@ -1170,7 +1170,33 @@ class StudioScene extends ChangeNotifier {
     try{
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
-      for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
+      for(final entry in grouped.entries){
+        if(w.layers.isEmpty)break;
+        final layer=w.layers[entry.key],tex=lib.resolve(
+          w.layers[entry.key].texture,
+          ['terrain','terrain/texture','terrain/dds'],
+          uniqueFallback:true,
+        );
+        if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}
+        final n=entry.value.length~/3,no=Float32List(n*3);
+        for(var i=0;i<n;i++){
+          final localX=entry.value[i*3],localZ=entry.value[i*3+2];
+          final worldX=ox+localX,worldZ=oz-localZ,step=1.0;
+          final hL=w.heightAt(worldX-step,worldZ,scale:.02,offset:-200);
+          final hR=w.heightAt(worldX+step,worldZ,scale:.02,offset:-200);
+          final hD=w.heightAt(worldX,worldZ-step,scale:.02,offset:-200);
+          final hU=w.heightAt(worldX,worldZ+step,scale:.02,offset:-200);
+          var nx=-(hR-hL)/(2*step),ny=1.0,nz=(hU-hD)/(2*step);
+          final length=math.sqrt(nx*nx+ny*ny+nz*nz);
+          if(length>1e-8){nx/=length;ny/=length;nz/=length;}
+          no[i*3]=nx;no[i*3+1]=ny;no[i*3+2]=nz;
+        }
+        final data=MeshData(
+          Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),
+          Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path,
+        );
+        final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);
+      }
       if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');
       var loaded=0;
       final loadedByCategory=<String,int>{};
