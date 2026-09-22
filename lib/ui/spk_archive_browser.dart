@@ -3044,6 +3044,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         : () => openCoreTableEditor(
                               'BinarySData/DBItemData.SData',
                               'Objetos / trade',
+                              fieldGroup: 'Requisitos',
                             ),
                     icon: const Icon(Icons.inventory_2_outlined, size: 16),
                     label: const Text('Objetos / trade'),
@@ -3054,6 +3055,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         : () => openCoreTableEditor(
                               'BinarySData/DBMonsterData.SData',
                               'Mobs / drops',
+                              fieldGroup: 'Botín y oro',
                             ),
                     icon: const Icon(Icons.pest_control_outlined, size: 16),
                     label: const Text('Mobs / drops'),
@@ -3064,6 +3066,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         : () => openCoreTableEditor(
                               'BinarySData/DBSkillData.SData',
                               'Skills',
+                              fieldGroup: 'Habilidades',
                             ),
                     icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
                     label: const Text('Skills'),
