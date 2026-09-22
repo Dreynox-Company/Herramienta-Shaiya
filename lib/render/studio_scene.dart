@@ -93,12 +93,19 @@ class StudioScene extends ChangeNotifier {
   final WorldCollisionIndex worldCollision=WorldCollisionIndex();
   final Map<String,({double height,double forward})> _seats={};
   String lastImpact='';t.Sprite? hitSprite;t.Texture? effectTexture;double hitLife=0;
-  final Combat combat=Combat();AudioPlayer? _audio;AudioPlayer get audio=>_audio??=AudioPlayer();
+  final Combat combat=Combat();
+  AudioPlayer? _audio,_musicAudio,_ambientAudio;
+  AudioPlayer get audio=>_audio??=AudioPlayer();
+  AudioPlayer get musicAudio=>_musicAudio??=AudioPlayer();
+  AudioPlayer get ambientAudio=>_ambientAudio??=AudioPlayer();
+  final Map<String,String> _materializedAudio=<String,String>{};
+  String? _worldMusicPath,_worldAmbientPath;
+  bool _worldAudioSyncing=false;
   bool sound=false,wireframe=false,ready=false,disposed=false,busy=false;
   int _appearanceRevision=0,_creatureRevision=0,_mountRevision=0,_wingRevision=0,_worldRevision=0,_weaponRevision=0,_clipRevision=0,_effectRevision=0,_skyRevision=0;
   double yaw=.25,pitch=.18,distance=5.2,targetY=1.05,panX=0,panZ=0;
   double riderHeight=1.0,riderForward=0,wingHeight=1.3,wingDepth=.25,wingSize=1;
-  double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0;
+  double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0,_worldAudioAccumulator=0;
   String status='Selecciona la carpeta DATA.';
   List<String> get animations=>appearance?.archetype.animations??[];
   Future<void> setup(t.ThreeJS three) async {
@@ -759,9 +766,63 @@ class StudioScene extends ChangeNotifier {
     if(wing!=null){final bone=a.wingBone;final valid=bone!=null&&bone<a.world.length&&a.wingReference!=null;final matrix=backAttachmentPose(position:v.Vector3(x,a.root.position.y,z),yaw:rotation,bone:valid?a.world[bone]:v.Matrix4.identity(),referenceInverse:valid?a.wingReference!:v.Matrix4.identity(),offset:v.Vector3(0,wingHeight,wingDepth),scale:wingSize);wing!.root.matrix.copyFromArray(matrix.storage);wing!.root.matrixWorldNeedsUpdate=true;}
   }
   Future<void> previewActorAnimation(String target,String name) async {final a=target=='enemy'?enemy:target=='mount'?mount:wing;final c=a?.clips[name];if(a!=null&&c!=null)a.play(c);notifyListeners();}
+  Future<String> _materializeAudio(String path) async {
+    final cached=_materializedAudio[path];
+    if(cached!=null&&await File(cached).exists())return cached;
+    final bytes=await catalog!.library.read(path,limit:32*1024*1024),dir=await getTemporaryDirectory();
+    final safeName=baseName(path).replaceAll(RegExp(r'[^a-zA-Z0-9._-]'),'_');
+    final f=File('${dir.path}/shaiya_${path.hashCode.toUnsigned(32)}_$safeName');
+    if(!await f.exists()||await f.length()!=bytes.length)await f.writeAsBytes(bytes,flush:true);
+    _materializedAudio[path]=f.path;
+    return f.path;
+  }
   Future<void> playSound(String path) async {
     if(!sound||catalog==null)return;
-    try{final bytes=await catalog!.library.read(path,limit:32*1024*1024),dir=await getTemporaryDirectory();final safeName=baseName(path).replaceAll(RegExp(r'[^a-zA-Z0-9._-]'),'_');final f=File('${dir.path}/shaiya_${path.hashCode.toUnsigned(32)}_$safeName');await f.writeAsBytes(bytes,flush:true);await audio.play(DeviceFileSource(f.path));}catch(e){report('Audio: $e');}
+    try{await audio.play(DeviceFileSource(await _materializeAudio(path)));}catch(e){report('Audio: $e');}
+  }
+  String? _resolveWorldAudioAsset(String name,{required bool music}){
+    final lib=catalog?.library;if(lib==null||name.trim().isEmpty)return null;
+    final roots=music?const ['sound/music','sound']:const ['sound'];
+    return lib.resolve(name,roots)??lib.resolve(name,roots,uniqueFallback:true);
+  }
+  Future<void> _setLoopingChannel(AudioPlayer player,String? next,{required bool music}) async {
+    final current=music?_worldMusicPath:_worldAmbientPath;
+    if(current==next)return;
+    if(music)_worldMusicPath=next;else _worldAmbientPath=next;
+    await player.stop();
+    if(next==null||!sound)return;
+    try{
+      await player.setReleaseMode(ReleaseMode.loop);
+      await player.play(DeviceFileSource(await _materializeAudio(next)));
+    }catch(e){report((music?'Música':'Ambiente')+': '+e.toString());}
+  }
+  Future<void> _syncWorldAudio() async {
+    if(_worldAudioSyncing||catalog==null)return;
+    _worldAudioSyncing=true;
+    try{
+      if(!sound||world==null||character==null){
+        await _setLoopingChannel(musicAudio,null,music:true);
+        await _setLoopingChannel(ambientAudio,null,music:false);
+        return;
+      }
+      final w=world!,a=character!,x=originX+a.root.position.x,y=groundY,z=originZ-a.root.position.z;
+      String? musicPath;
+      for(final zone in w.musicZones){
+        if(!zone.bounds.contains(x,y,z))continue;
+        musicPath=_resolveWorldAudioAsset(w.musicAssets[zone.assetId],music:true);
+        if(musicPath!=null)break;
+      }
+      WorldSoundEffect? nearest;var nearestDistance=double.infinity;
+      for(final effect in w.soundEffects){
+        if(!effect.contains(x,y,z))continue;
+        final dx=x-effect.center.x,dy=y-effect.center.y,dz=z-effect.center.z,d=dx*dx+dy*dy+dz*dz;
+        if(d<nearestDistance){nearestDistance=d;nearest=effect;}
+      }
+      final ambientPath=nearest==null?null:_resolveWorldAudioAsset(w.soundEffectAssets[nearest.assetId],music:false);
+      await _setLoopingChannel(musicAudio,musicPath,music:true);
+      await _setLoopingChannel(ambientAudio,ambientPath,music:false);
+    }catch(e){report('Audio de mundo: '+e.toString());}
+    finally{_worldAudioSyncing=false;}
   }
   Future<void> setEffect(String path) async {
     final revision=++_effectRevision,lib=catalog!.library;final png=await compute(_decodeTexture,{'bytes':await lib.read(path),'path':path,'opaque':false});final texture=await t.TextureLoader(flipY:false).fromBytes(png);if(texture==null)return;if(disposed||revision!=_effectRevision){texture.dispose();return;}
@@ -829,7 +890,9 @@ class StudioScene extends ChangeNotifier {
       _moveCharacterInWorld(x,z);
       character!.root.rotation.y=math.atan2(direction.x,direction.z);
     }
-    updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
+    updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();
+    _worldAudioAccumulator+=delta;if(_worldAudioAccumulator>.5){_worldAudioAccumulator=0;unawaited(_syncWorldAudio());}
+    if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
   }
   void orbit(double dx,double dy){yaw-=dx*.006;pitch=(pitch+dy*.006).clamp(-1.2,1.2);updateCamera();}
   void zoom(double amount){distance=(distance*amount).clamp(.4,250);updateCamera();}
@@ -874,7 +937,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -1012,7 +1075,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · ${worldCollision.triangleCount} triángulos de colisión nativos.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
