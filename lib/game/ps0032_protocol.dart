@@ -27,6 +27,7 @@ class PsPacketType {
   static const targetMobHpUpdate=0x0305;
   static const inventoryMoveItem=0x0204;
   static const updateStats=0x0208;
+  static const learnNewSkill=0x0209;
   static const addItem=0x0205;
   static const removeItem=0x0206;
   static const characterMove=0x0501;
@@ -811,6 +812,21 @@ List<PsWarehouseItem> parseWarehouseItems(PsPacket p){
   return List.unmodifiable(out);
 }
 
+class PsLearnSkillResult {
+  final bool success;
+  final int number,skillId,level;
+  const PsLearnSkillResult(this.success,this.number,this.skillId,this.level);
+  static PsLearnSkillResult parse(PsPacket p){
+    if(p.type!=PsPacketType.learnNewSkill||p.body.length<5){
+      throw FormatException('LEARN_NEW_SKILL truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsLearnSkillResult(
+      p.body[0]==0,p.body[1],d.getUint16(2,Endian.little),p.body[4],
+    );
+  }
+}
+
 class PsLearnedSkill {
   final int skillId,level,number,cooldownSeconds;
   const PsLearnedSkill(this.skillId,this.level,this.number,this.cooldownSeconds);
@@ -1006,6 +1022,18 @@ class PsWorldSession {
     if(packet.body.length<12)throw FormatException('UPDATE_STATS response truncado: ${packet.body.length}.');
     final d=ByteData.sublistView(packet.body);
     return List<int>.generate(6,(i)=>d.getUint16(i*2,Endian.little));
+  }
+  Future<PsLearnSkillResult> learnSkill(int skillId,int level) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de aprender habilidades.');
+    if(skillId<=0||skillId>65535||level<=0||level>255)throw RangeError('Skill id/nivel inválido.');
+    final response=connection.waitStream((p){
+      if(p.type!=PsPacketType.learnNewSkill||p.body.length<5)return false;
+      final d=ByteData.sublistView(p.body);
+      final returned=d.getUint16(2,Endian.little);
+      return returned==0||returned==skillId;
+    },timeout:const Duration(seconds:5));
+    await connection.send(PsPacketType.learnNewSkill,[..._u16Bytes(skillId),level]);
+    return PsLearnSkillResult.parse(await response);
   }
   Future<void> saveSkillBar(List<PsQuickSlot> slots) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de guardar la barra rápida.');
