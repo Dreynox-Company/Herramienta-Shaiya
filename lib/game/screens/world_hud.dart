@@ -1227,19 +1227,71 @@ class WorldHud extends StatelessWidget {
               style:const TextStyle(fontSize:10,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
             ),
             const Spacer(),
-            if(partyMembers.isNotEmpty||partyLeaderId!=null)
+            if(raid==null&&selfLeader&&partyMembers.isNotEmpty)
+              TextButton(
+                onPressed:onCreateRaid,
+                style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffd5a4ff)),
+                child:const Text('RAID',style:TextStyle(fontSize:8)),
+              ),
+            if(raid!=null)
+              TextButton(
+                onPressed:onToggleRaidAutoJoin,
+                style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:raid!.autoJoin?const Color(0xff75d77b):Colors.white54),
+                child:Text(raid!.autoJoin?'AUTO ON':'AUTO OFF',style:const TextStyle(fontSize:7.5)),
+              ),
+            if(raid!=null&&raidLeader)
+              TextButton(
+                onPressed:()=>onChangeRaidLoot(raid!.dropType==1?2:raid!.dropType==2?4:1),
+                style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffffd36c)),
+                child:Text('Loot '+raid!.dropType.toString(),style:const TextStyle(fontSize:7.5)),
+              ),
+            if(raid==null&&(partyMembers.isNotEmpty||partyLeaderId!=null))
               TextButton(
                 onPressed:onLeaveParty,
                 style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffd98678)),
                 child:Text(locale=='spn'?'Salir':'Leave',style:const TextStyle(fontSize:8)),
               ),
+            if(raid!=null)
+              TextButton(
+                onPressed:raidLeader?onDismantleRaid:onLeaveRaid,
+                style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffd98678)),
+                child:Text(raidLeader?(locale=='spn'?'Disolver':'Dismantle'):(locale=='spn'?'Salir':'Leave'),style:const TextStyle(fontSize:8)),
+              ),
           ]),
         ),
         Expanded(
           flex:4,
-          child:partyMembers.isEmpty
-            ?Center(child:Text(locale=='spn'?'No estás en un grupo.':'Not in a party.',style:const TextStyle(fontSize:9,color:Colors.white38)))
-            :ListView.builder(
+          child:raid!=null
+            ?Padding(
+                padding:const EdgeInsets.all(10),
+                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  Text(
+                    (locale=='spn'?'Líder: ':'Leader: ')+(raid!.leader?.member.name??'-'),
+                    style:const TextStyle(fontSize:9,color:Color(0xffffdc72)),
+                  ),
+                  const SizedBox(height:4),
+                  Text(
+                    (locale=='spn'?'Sub-líder: ':'Sub-leader: ')+(raid!.subLeader?.member.name??'-'),
+                    style:const TextStyle(fontSize:8.5,color:Color(0xff9fd9ff)),
+                  ),
+                  const SizedBox(height:5),
+                  Text(
+                    (locale=='spn'?'Loot: ':'Loot: ')+(raid!.dropType==1?'Grupo':raid!.dropType==2?'Aleatorio':'Líder')+
+                      ' · AutoJoin '+(raid!.autoJoin?'ON':'OFF'),
+                    style:const TextStyle(fontSize:8,color:Colors.white54),
+                  ),
+                  const SizedBox(height:8),
+                  Text(
+                    locale=='spn'
+                      ?'La cuadrícula RAID de 30 posiciones se muestra junto al HUD.'
+                      :'The 30-slot RAID grid is shown next to the HUD.',
+                    style:const TextStyle(fontSize:7.5,color:Colors.white38),
+                  ),
+                ]),
+              )
+            :partyMembers.isEmpty
+              ?Center(child:Text(locale=='spn'?'No estás en un grupo.':'Not in a party.',style:const TextStyle(fontSize:9,color:Colors.white38)))
+              :ListView.builder(
                 padding:const EdgeInsets.symmetric(horizontal:8),
                 itemCount:partyMembers.length,
                 itemBuilder:(context,index){
