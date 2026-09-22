@@ -673,13 +673,14 @@ class _GameClientPageState extends State<GameClientPage> {
         targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
       }
       if(hit.success&&targetMobHp!=null)targetMobHp=math.max(0,targetMobHp!-hit.hpDamage);
+      if(hit.success&&hit.hpDamage>0)unawaited(scene.networkMobHit(hit.targetId,hit.hpDamage));
       messages.insert(0,'[Combate] Skill '+hit.skillId.toString()+' Lv.'+hit.skillLevel.toString()+' · daño '+hit.hpDamage.toString()+'.');
     }else if(packet.type==PsPacketType.mobAttack&&packet.body.length>=15){
       final hit=PsMobAttack.parse(packet);
-      if(hit.success)messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' te golpea por '+hit.hpDamage.toString()+'.');
+      if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' te golpea por '+hit.hpDamage.toString()+'.');}
     }else if(packet.type==PsPacketType.mobSkillUse&&packet.body.length>=19){
       final hit=PsMobSkillHit.parse(packet);
-      if(hit.success)messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');
+      if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');}
     }else if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
       liveHitpoints=PsHitpoints.parse(packet);
     }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
