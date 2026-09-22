@@ -16,6 +16,7 @@ class WorldHud extends StatelessWidget {
   final PsCharacterDetails? details;
   final PsAdditionalStats? additionalStats;
   final PsHitpoints? hitpoints;
+  final List<PsActiveBuff> buffs;
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
@@ -52,6 +53,7 @@ class WorldHud extends StatelessWidget {
     required this.details,
     required this.additionalStats,
     required this.hitpoints,
+    required this.buffs,
     required this.targetMobGlobalId,
     required this.targetMobId,
     required this.targetHp,
@@ -101,6 +103,8 @@ class WorldHud extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
         children: [
           Positioned(left: 8, top: 3, width: 216, height: 79, child: _playerHud()),
+          if(buffs.isNotEmpty)
+            Positioned(left:8,top:84,width:300,height:38,child:_buffBar()),
           Positioned(left: 215, top: 5, width: 520, height: 48, child: _topHotbar()),
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
           if(targetMobId!=null)
@@ -381,6 +385,72 @@ class WorldHud extends StatelessWidget {
       ),
     ),
   ]);
+
+  Widget _buffBar(){
+    final list=[...buffs]..sort((a,b){
+      final byId=a.skillId.compareTo(b.skillId);
+      return byId!=0?byId:a.skillLevel.compareTo(b.skillLevel);
+    });
+    return Align(
+      alignment:Alignment.centerLeft,
+      child:ListView.separated(
+        scrollDirection:Axis.horizontal,
+        itemCount:list.length,
+        separatorBuilder:(_,__)=>const SizedBox(width:3),
+        itemBuilder:(context,index){
+          final buff=list[index];
+          final rule=metadata?.skill(buff.skillId,buff.skillLevel);
+          final icon=rule?.iconPath;
+          final name=catalog.skillName(buff.skillId,buff.skillLevel,locale);
+          final desc=catalog.skillText(buff.skillId,buff.skillLevel,locale)?.text.trim()??'';
+          final remaining=buff.countdownSeconds;
+          return Tooltip(
+            waitDuration:const Duration(milliseconds:250),
+            message:name+
+              '\nLv. ${buff.skillLevel} · #${buff.id}'+
+              (remaining<0?'':'\n'+(locale=='spn'?'Tiempo: ':'Time: ')+remaining.toString()+' s')+
+              (desc.isEmpty?'':'\n\n'+desc),
+            child:Container(
+              width:36,height:36,
+              decoration:BoxDecoration(
+                color:const Color(0xcc17120e),
+                border:Border.all(color:const Color(0xff6d5b40)),
+              ),
+              child:Stack(children:[
+                Positioned.fill(
+                  child:Padding(
+                    padding:const EdgeInsets.all(2),
+                    child:icon==null
+                      ?const Icon(Icons.shield_moon,color:Color(0xff8ed7ff),size:24)
+                      :DataImage(
+                          cache:ui,path:icon,fit:BoxFit.contain,
+                          fallback:const Icon(Icons.shield_moon,color:Color(0xff8ed7ff),size:24),
+                        ),
+                  ),
+                ),
+                Positioned(
+                  right:1,top:0,
+                  child:Text(
+                    'L${buff.skillLevel}',
+                    style:const TextStyle(fontSize:7,color:Color(0xffffe081),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+                  ),
+                ),
+                if(remaining>=0)
+                  Positioned(
+                    left:1,right:1,bottom:0,
+                    child:Text(
+                      remaining>999?'999+':remaining.toString(),
+                      textAlign:TextAlign.center,
+                      style:const TextStyle(fontSize:7,color:Colors.white,shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+                    ),
+                  ),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   Widget _targetHud(){
     final id=targetMobId!;
