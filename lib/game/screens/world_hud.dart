@@ -39,6 +39,11 @@ class WorldHud extends StatelessWidget {
   final String? pendingFriendRequestName;
   final int? pendingPartyRequesterId;
   final int gold;
+  final bool tradeOpen;
+  final int? tradePartnerId,pendingTradeRequesterId;
+  final Map<int,PsTradeItem> localTradeItems,remoteTradeItems;
+  final int localTradeMoney,remoteTradeMoney;
+  final bool localTradeDecided,remoteTradeDecided,localTradeConfirmed,remoteTradeConfirmed;
   final NpcShopRule? shop;
   final NpcGateRule? gate;
   final int blacksmithMode,blacksmithExtractPosition;
@@ -62,6 +67,9 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<PsGuildSummary> onRequestGuildJoin;
   final void Function(PsGuildJoinApplicant,bool) onRespondGuildApplicant;
   final ValueChanged<PsGuildMember> onKickGuild,onPromoteGuild,onDemoteGuild;
+  final ValueChanged<int> onRequestTrade,onRemoveTradeItem,onSetTradeMoney,onFinishTrade;
+  final ValueChanged<bool> onRespondTrade,onDecideTrade;
+  final ValueChanged<PsInventoryItem> onTradeInventoryItem;
   final void Function(String,String) onCreateGuild;
   final ValueChanged<bool> onRespondGuildCreate;
   final ValueChanged<PsLearnedSkill> onAssignSkill;
@@ -116,6 +124,17 @@ class WorldHud extends StatelessWidget {
     required this.pendingFriendRequestName,
     required this.pendingPartyRequesterId,
     required this.gold,
+    required this.tradeOpen,
+    required this.tradePartnerId,
+    required this.pendingTradeRequesterId,
+    required this.localTradeItems,
+    required this.remoteTradeItems,
+    required this.localTradeMoney,
+    required this.remoteTradeMoney,
+    required this.localTradeDecided,
+    required this.remoteTradeDecided,
+    required this.localTradeConfirmed,
+    required this.remoteTradeConfirmed,
     required this.shop,
     required this.gate,
     required this.blacksmithMode,
@@ -183,6 +202,13 @@ class WorldHud extends StatelessWidget {
     required this.onCreateGuild,
     required this.onRespondGuildCreate,
     required this.onDismantleGuild,
+    required this.onRequestTrade,
+    required this.onRespondTrade,
+    required this.onTradeInventoryItem,
+    required this.onRemoveTradeItem,
+    required this.onSetTradeMoney,
+    required this.onDecideTrade,
+    required this.onFinishTrade,
     required this.onAssignSkill,
     required this.onSendChat,
     required this.locale,
@@ -224,6 +250,8 @@ class WorldHud extends StatelessWidget {
             Positioned(right:180,top:165,width:390,height:480,child:_socialWindow()),
           if(guildOpen)
             Positioned(right:155,top:145,width:430,height:510,child:_guildWindow()),
+          if(tradeOpen)
+            Positioned(left:185,top:135,width:525,height:500,child:_tradeWindow()),
           if(statusOpen)
             Positioned(right:198,top:210,width:318,height:420,child:_statusWindow()),
           if(skillsOpen)
@@ -252,7 +280,7 @@ class WorldHud extends StatelessWidget {
             ),
           if(inventoryOpen)
             Positioned(
-              right:198,top:250,width:292,height:390,
+              right:tradeOpen?8:198,top:tradeOpen?180:250,width:292,height:390,
               child:_inventoryWindow(),
             ),
           if (questOpen&&!dead)
@@ -2087,12 +2115,17 @@ class WorldHud extends StatelessWidget {
                     ]),
                   ),
                 );
-                return warehouseOpen
+                return tradeOpen
                   ?GestureDetector(
-                      onDoubleTap:()=>onStoreWarehouse(item),
+                      onDoubleTap:()=>onTradeInventoryItem(item),
                       child:cell,
                     )
-                  :shopOpen
+                  :warehouseOpen
+                    ?GestureDetector(
+                        onDoubleTap:()=>onStoreWarehouse(item),
+                        child:cell,
+                      )
+                    :shopOpen
                     ?GestureDetector(
                         onDoubleTap:()=>onSellInventory(item),
                         child:cell,
