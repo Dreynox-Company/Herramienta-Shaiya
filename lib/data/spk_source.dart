@@ -611,13 +611,14 @@ class SpkArchiveSource {
       chunkNonceRule: 'unsupported',
     );
 
-    SpkArchiveSource candidate;
+    final candidate = SpkArchiveSource._(
+      file,
+      fileBytes,
+      index,
+      candidateProfile,
+      names,
+    );
     try {
-      candidate = await SpkArchiveSource.open(
-        file.path,
-        candidateProfile,
-        names: names,
-      );
       await candidate.validateSimpleResourceProfile();
     } catch (_) {
       return null;
