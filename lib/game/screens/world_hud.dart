@@ -22,6 +22,7 @@ class WorldHud extends StatelessWidget {
   final VoidCallback onRebirth;
   final List<PsActiveBuff> buffs;
   final PsMapWeather? weather;
+  final List<PsMapItem> mapItems;
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp,targetAttackSpeed,targetMoveSpeed;
   final String? targetPlayerName;
   final List<PsTargetBuff> targetBuffs;
@@ -68,6 +69,7 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse,onStoreGuildWarehouse,onWithdrawGuildWarehouse;
+  final ValueChanged<PsMapItem> onPickMapItem;
   final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onToggleVehicle,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
@@ -119,6 +121,7 @@ class WorldHud extends StatelessWidget {
     required this.onRebirth,
     required this.buffs,
     required this.weather,
+    required this.mapItems,
     required this.targetMobGlobalId,
     required this.targetMobId,
     required this.targetPlayerName,
@@ -221,6 +224,7 @@ class WorldHud extends StatelessWidget {
     required this.onWithdrawWarehouse,
     required this.onStoreGuildWarehouse,
     required this.onWithdrawGuildWarehouse,
+    required this.onPickMapItem,
     required this.onToggleInventory,
     required this.onToggleSocial,
     required this.onToggleGuild,
@@ -320,6 +324,7 @@ class WorldHud extends StatelessWidget {
           if(weather!=null&&weather!.state!=0)
             Positioned.fill(child:IgnorePointer(child:CustomPaint(painter:_WeatherPainter(weather!)))),
           ..._worldLabels(),
+          ..._lootLabels(),
           if(socialOpen)
             Positioned(right:180,top:165,width:390,height:480,child:_socialWindow()),
           if(guildOpen&&!guildWarehouseOpen)
@@ -420,6 +425,41 @@ class WorldHud extends StatelessWidget {
       ]),
     ),
   );
+
+  List<Widget> _lootLabels(){
+    final widgets=<Widget>[];
+    for(final item in mapItems){
+      final p=scene.projectWorldPosition(item.x,item.y+.18,item.z,1024,742);
+      if(p==null)continue;
+      final name=catalog.itemName(item.type,item.typeId,locale);
+      widgets.add(Positioned(
+        left:(p.x-80).clamp(0.0,864.0),
+        top:(p.y-12).clamp(0.0,706.0),
+        width:160,
+        child:GestureDetector(
+          onDoubleTap:()=>onPickMapItem(item),
+          child:Container(
+            alignment:Alignment.center,
+            padding:const EdgeInsets.symmetric(horizontal:3,vertical:1),
+            decoration:const BoxDecoration(
+              color:Color(0x33000000),
+              borderRadius:BorderRadius.all(Radius.circular(2)),
+            ),
+            child:Text(
+              name+(item.count>1?' x'+item.count.toString():''),
+              maxLines:1,overflow:TextOverflow.ellipsis,textAlign:TextAlign.center,
+              style:TextStyle(
+                color:item.ownerId==0?const Color(0xffffe277):const Color(0xff86d8ff),
+                fontSize:8.5,fontWeight:FontWeight.w600,
+                shadows:const [Shadow(color:Colors.black,blurRadius:3)],
+              ),
+            ),
+          ),
+        ),
+      ));
+    }
+    return widgets;
+  }
 
   List<Widget> _worldLabels(){
     final labels=scene.projectGameLabels(1024,742);
