@@ -1089,14 +1089,55 @@ class StaticPart {
   StaticPart(this.texture, this.mesh);
 }
 
-List<StaticPart> readSmod(Uint8List bytes, String source) {
-  final r = Bin(bytes, source);
-  r.skip(40);
-  final out = <StaticPart>[];
-  final n = r.count(10000);
-  for (var i = 0; i < n; i++) {
-    final tex = r.str();
-    out.add(StaticPart(tex, MeshData.rigid(r, boneField: true)));
-  }
-  return out;
+class SmodCollisionMesh {
+  final List<v.Vector3> vertices;
+  final Uint16List indices;
+  const SmodCollisionMesh(this.vertices,this.indices);
+  int get triangles=>indices.length~/3;
 }
+
+class SmodData {
+  final v.Vector3 center,viewLower,viewUpper,collisionLower,collisionUpper;
+  final double radius;
+  final List<StaticPart> parts;
+  final List<SmodCollisionMesh> collisions;
+  const SmodData(
+    this.center,this.radius,this.viewLower,this.viewUpper,
+    this.parts,this.collisionLower,this.collisionUpper,this.collisions,
+  );
+}
+
+SmodData readSmodData(Uint8List bytes,String source){
+  final r=Bin(bytes,source);
+  final center=r.vec(),radius=r.f32(),viewLower=r.vec(),viewUpper=r.vec();
+  final parts=<StaticPart>[];
+  final textured=r.count(10000);
+  for(var i=0;i<textured;i++){
+    final tex=r.str();
+    parts.add(StaticPart(tex,MeshData.rigid(r,boneField:true)));
+  }
+  final collisionLower=r.vec(),collisionUpper=r.vec();
+  final collisions=<SmodCollisionMesh>[];
+  final collisionCount=r.count(10000);
+  for(var i=0;i<collisionCount;i++){
+    final vertexCount=r.count(1000000);
+    final vertices=<v.Vector3>[];
+    for(var j=0;j<vertexCount;j++)vertices.add(r.vec());
+    final faceCount=r.count(2000000);
+    r.need(faceCount*6);
+    final indices=Uint16List(faceCount*3);
+    for(var j=0;j<indices.length;j++){
+      final index=r.u16();
+      if(index>=vertexCount)r.fail('Triángulo de colisión SMOD fuera de la malla.');
+      indices[j]=index;
+    }
+    collisions.add(SmodCollisionMesh(List.unmodifiable(vertices),indices));
+  }
+  r.end();
+  return SmodData(
+    center,radius,viewLower,viewUpper,List.unmodifiable(parts),
+    collisionLower,collisionUpper,List.unmodifiable(collisions),
+  );
+}
+
+List<StaticPart> readSmod(Uint8List bytes,String source)=>readSmodData(bytes,source).parts;
