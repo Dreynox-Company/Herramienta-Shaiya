@@ -1,17 +1,500 @@
 'use strict';
-const CONFIG=__CONFIG__;const hooks=new Set(),listeners=[],algs=new Map(),props=new Map(),keys=new Map(),seen=new Set();let obs=null,active=true,events=0,caps=0;
-function event(code,details={}){if(events++<250)send({kind:'event',code,details});}
-function hex(buf){return Array.from(new Uint8Array(buf)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-function safe(p,n,max=8192){if(p.isNull()||!n||n>max)return null;try{return hex(p.readByteArray(n));}catch(_){return null;}}
-function loc(p){const m=Process.findModuleByAddress(p);return m?{module:m.name,rva:p.sub(m.base).toString()}:{module:null,address:p.toString()};}
-function auth(pi){try{if(pi.isNull())return null;const cb=pi.readU32(),v=pi.add(4).readU32();if(cb<80||cb>128)return null;const np=pi.add(8).readPointer(),nl=pi.add(16).readU32(),ap=pi.add(24).readPointer(),al=pi.add(32).readU32(),tp=pi.add(40).readPointer(),tl=pi.add(48).readU32(),mp=pi.add(56).readPointer(),ml=pi.add(64).readU32();return{cbSize:cb,version:v,nonceHex:safe(np,nl,256),nonceBytes:nl,authDataHex:safe(ap,al,8192),authDataBytes:al,tagHex:safe(tp,tl,256),tagBytes:tl,macContextHex:safe(mp,ml,512),macContextBytes:ml,cbAAD:pi.add(68).readU32(),cbData:pi.add(72).readU64().toString(),flags:pi.add(80).readU32()};}catch(_){return null;}}
-function attach(m){if(m.name.toLowerCase()!=='bcrypt.dll'||hooks.has(m.base.toString()))return;hooks.add(m.base.toString());
- const open=m.findExportByName('BCryptOpenAlgorithmProvider'),setp=m.findExportByName('BCryptSetProperty'),gen=m.findExportByName('BCryptGenerateSymmetricKey'),destroy=m.findExportByName('BCryptDestroyKey'),dec=m.findExportByName('BCryptDecrypt');
- if(open)listeners.push(Interceptor.attach(open,{onEnter(a){this.out=a[0];try{this.name=a[1].readUtf16String();}catch(_){this.name='?';}},onLeave(s){try{if(s.toUInt32()===0)algs.set(this.out.readPointer().toString(),this.name);}catch(_){}}}));
- if(setp)listeners.push(Interceptor.attach(setp,{onEnter(a){try{const h=a[0].toString(),name=a[1].readUtf16String(),n=a[3].toUInt32();let txt=null;try{txt=a[2].readUtf16String(Math.floor(n/2));}catch(_){};props.set(h+':'+name,{name,text:txt,hex:safe(a[2],n,512)});}catch(_){}}}));
- if(gen)listeners.push(Interceptor.attach(gen,{onEnter(a){this.alg=a[0].toString();this.out=a[1];const n=a[5].toUInt32();this.secret=n>0&&n<=256?safe(a[4],n,256):null;this.n=n;},onLeave(s){try{if(s.toUInt32()===0&&this.secret){const h=this.out.readPointer().toString();const mode=props.get(this.alg+':ChainingMode');keys.set(h,{algorithm:algs.get(this.alg)||'?',chainingMode:mode&&mode.text||null,secretHex:this.secret,secretBytes:this.n});}}catch(_){}}}));
- if(destroy)listeners.push(Interceptor.attach(destroy,{onEnter(a){keys.delete(a[0].toString());}}));
- if(!dec){event('NO_BCRYPT_DECRYPT');return;}
- listeners.push(Interceptor.attach(dec,{onEnter(a){this.hit=null;if(!active||caps>=30)return;try{const n=a[2].toUInt32();if(n<6)return;const pref=hex(a[1].readByteArray(6)),expect=CONFIG.prefixes[pref];if(expect===undefined||expect!==n)return;const full=a[1].readByteArray(n),digest=Checksum.compute('sha256',full),uniq=pref+':'+digest;if(seen.has(uniq))return;this.hit={prefix:pref,inputSha256:digest,inputBytes:n,caller:loc(this.returnAddress),flags:a[9].toUInt32(),key:keys.get(a[0].toString())||null,auth:auth(a[3]),ivHex:safe(a[4],a[5].toUInt32(),256)};this.output=a[6];this.cap=a[7].toUInt32();this.result=a[8];}catch(e){event('MATCH_ERROR',{message:String(e).slice(0,220)});}},onLeave(s){if(!this.hit)return;try{const st=s.toUInt32();if(st!==0){event('MATCH_FAIL',{status:'0x'+st.toString(16)});return;}seen.add(this.hit.prefix+':'+this.hit.inputSha256);let bytes=null,n=0;if(!this.output.isNull()&&!this.result.isNull()){n=this.result.readU32();if(n>0&&n<=this.cap&&n<=8*1024*1024)bytes=this.output.readByteArray(n);}this.hit.kind='resource';this.hit.outputBytes=n;this.hit.outputSha256=bytes?Checksum.compute('sha256',bytes):null;caps++;send(this.hit,bytes);}catch(e){event('OUTPUT_ERROR',{message:String(e).slice(0,220)});}}}));
- event('HOOK_READY',{targets:Object.keys(CONFIG.prefixes).length});}
-if(Process.platform!=='windows'||Process.arch!=='x64')throw new Error('Windows x64 requerido');obs=Process.attachModuleObserver({onAdded(m){try{attach(m);}catch(e){event('HOOK_ERROR',{message:String(e).slice(0,220)});}}});rpc.exports={stop(){active=false;for(const h of listeners)try{h.detach();}catch(_){};if(obs)try{obs.detach();}catch(_){};return{caps};}};event('READY',{scope:'exact-SPK-resource-ciphertexts-only'});
+
+const CONFIG = __CONFIG__;
+const hooks = new Set();
+const listeners = [];
+const algs = new Map();
+const props = new Map();
+const keys = new Map();
+const seen = new Set();
+let observer = null;
+let active = true;
+let events = 0;
+let captures = 0;
+
+function event(code, details = {}) {
+  if (events++ < 250) send({kind: 'event', code, details});
+}
+
+function hex(buffer) {
+  return Array.from(new Uint8Array(buffer))
+      .map(x => x.toString(16).padStart(2, '0'))
+      .join('');
+}
+
+function safe(pointer, length, max = 8192) {
+  if (pointer.isNull() || !length || length > max) return null;
+  try {
+    return hex(pointer.readByteArray(length));
+  } catch (_) {
+    return null;
+  }
+}
+
+function location(pointer) {
+  const module = Process.findModuleByAddress(pointer);
+  return module
+      ? {module: module.name, rva: pointer.sub(module.base).toString()}
+      : {module: null, address: pointer.toString()};
+}
+
+function authenticatedInfo(pointer) {
+  try {
+    if (pointer.isNull()) return null;
+    const cbSize = pointer.readU32();
+    const version = pointer.add(4).readU32();
+    if (cbSize < 80 || cbSize > 128) return null;
+    const noncePtr = pointer.add(8).readPointer();
+    const nonceBytes = pointer.add(16).readU32();
+    const aadPtr = pointer.add(24).readPointer();
+    const aadBytes = pointer.add(32).readU32();
+    const tagPtr = pointer.add(40).readPointer();
+    const tagBytes = pointer.add(48).readU32();
+    const macPtr = pointer.add(56).readPointer();
+    const macBytes = pointer.add(64).readU32();
+    return {
+      cbSize,
+      version,
+      nonceHex: safe(noncePtr, nonceBytes, 256),
+      nonceBytes,
+      authDataHex: safe(aadPtr, aadBytes, 8192),
+      authDataBytes: aadBytes,
+      tagHex: safe(tagPtr, tagBytes, 256),
+      tagBytes,
+      macContextHex: safe(macPtr, macBytes, 512),
+      macContextBytes: macBytes,
+      cbAAD: pointer.add(68).readU32(),
+      cbData: pointer.add(72).readU64().toString(),
+      flags: pointer.add(80).readU32(),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function attach(module) {
+  if (module.name.toLowerCase() !== 'bcrypt.dll') return;
+  if (hooks.has(module.base.toString())) return;
+  hooks.add(module.base.toString());
+
+  const open = module.findExportByName('BCryptOpenAlgorithmProvider');
+  const setProperty = module.findExportByName('BCryptSetProperty');
+  const getPropertyPtr = module.findExportByName('BCryptGetProperty');
+  const generate = module.findExportByName('BCryptGenerateSymmetricKey');
+  const importKey = module.findExportByName('BCryptImportKey');
+  const duplicateKey = module.findExportByName('BCryptDuplicateKey');
+  const exportKeyPtr = module.findExportByName('BCryptExportKey');
+  const destroy = module.findExportByName('BCryptDestroyKey');
+  const decrypt = module.findExportByName('BCryptDecrypt');
+
+  const getProperty = getPropertyPtr
+      ? new NativeFunction(
+          getPropertyPtr,
+          'uint32',
+          ['pointer', 'pointer', 'pointer', 'uint32', 'pointer', 'uint32'],
+        )
+      : null;
+  const exportKey = exportKeyPtr
+      ? new NativeFunction(
+          exportKeyPtr,
+          'uint32',
+          [
+            'pointer',
+            'pointer',
+            'pointer',
+            'pointer',
+            'uint32',
+            'pointer',
+            'uint32',
+          ],
+        )
+      : null;
+
+  function readWideProperty(handle, name) {
+    if (!getProperty) return null;
+    try {
+      const propertyName = Memory.allocUtf16String(name);
+      const output = Memory.alloc(256);
+      const written = Memory.alloc(4);
+      written.writeU32(0);
+      const status = getProperty(
+        handle,
+        propertyName,
+        output,
+        256,
+        written,
+        0,
+      );
+      if (status !== 0) return null;
+      const bytes = written.readU32();
+      if (bytes < 2 || bytes > 256) return null;
+      return output.readUtf16String(Math.floor(bytes / 2)).replace(/\0+$/, '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function exportSecret(handle) {
+    if (!exportKey) return null;
+    try {
+      const blobType = Memory.allocUtf16String('KeyDataBlob');
+      const required = Memory.alloc(4);
+      required.writeU32(0);
+      let status = exportKey(
+        handle,
+        ptr(0),
+        blobType,
+        ptr(0),
+        0,
+        required,
+        0,
+      );
+      if (status !== 0) return null;
+      const bytes = required.readU32();
+      if (bytes < 28 || bytes > 4096) return null;
+
+      const output = Memory.alloc(bytes);
+      required.writeU32(0);
+      status = exportKey(
+        handle,
+        ptr(0),
+        blobType,
+        output,
+        bytes,
+        required,
+        0,
+      );
+      if (status !== 0) return null;
+
+      const actual = required.readU32();
+      if (actual < 12 || actual > bytes) return null;
+      const magic = output.readU32();
+      const version = output.add(4).readU32();
+      const secretBytes = output.add(8).readU32();
+      if (magic !== 0x4d42444b || version !== 1) return null;
+      if (![16, 24, 32].includes(secretBytes)) return null;
+      if (12 + secretBytes > actual) return null;
+
+      return {
+        algorithm: 'AES',
+        chainingMode: readWideProperty(handle, 'ChainingMode'),
+        secretHex: safe(output.add(12), secretBytes, 256),
+        secretBytes,
+        source: 'BCryptExportKey:KeyDataBlob',
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function keyFor(handle) {
+    const id = handle.toString();
+    let key = keys.get(id) || null;
+    if (!key || !key.secretHex) {
+      const exported = exportSecret(handle);
+      if (exported && exported.secretHex) {
+        keys.set(id, exported);
+        key = exported;
+        event('KEY_EXPORTED_FROM_LIVE_HANDLE', {
+          secretBytes: exported.secretBytes,
+          chainingMode: exported.chainingMode,
+        });
+      }
+    } else if (!key.chainingMode) {
+      key.chainingMode = readWideProperty(handle, 'ChainingMode');
+    }
+    return key;
+  }
+
+  if (open) {
+    listeners.push(
+      Interceptor.attach(open, {
+        onEnter(args) {
+          this.out = args[0];
+          try {
+            this.name = args[1].readUtf16String();
+          } catch (_) {
+            this.name = '?';
+          }
+        },
+        onLeave(status) {
+          try {
+            if (status.toUInt32() === 0) {
+              algs.set(this.out.readPointer().toString(), this.name);
+            }
+          } catch (_) {}
+        },
+      }),
+    );
+  }
+
+  if (setProperty) {
+    listeners.push(
+      Interceptor.attach(setProperty, {
+        onEnter(args) {
+          try {
+            const handle = args[0].toString();
+            const name = args[1].readUtf16String();
+            const bytes = args[3].toUInt32();
+            let text = null;
+            try {
+              text = args[2].readUtf16String(Math.floor(bytes / 2));
+            } catch (_) {}
+            props.set(handle + ':' + name, {
+              name,
+              text,
+              hex: safe(args[2], bytes, 512),
+            });
+            const key = keys.get(handle);
+            if (key && name === 'ChainingMode') key.chainingMode = text;
+          } catch (_) {}
+        },
+      }),
+    );
+  }
+
+  if (generate) {
+    listeners.push(
+      Interceptor.attach(generate, {
+        onEnter(args) {
+          this.algorithm = args[0].toString();
+          this.out = args[1];
+          this.secretBytes = args[5].toUInt32();
+          this.secret =
+              this.secretBytes > 0 && this.secretBytes <= 256
+                  ? safe(args[4], this.secretBytes, 256)
+                  : null;
+        },
+        onLeave(status) {
+          try {
+            if (status.toUInt32() !== 0 || !this.secret) return;
+            const handle = this.out.readPointer().toString();
+            const mode = props.get(this.algorithm + ':ChainingMode');
+            keys.set(handle, {
+              algorithm: algs.get(this.algorithm) || '?',
+              chainingMode: mode && mode.text ? mode.text : null,
+              secretHex: this.secret,
+              secretBytes: this.secretBytes,
+              source: 'BCryptGenerateSymmetricKey',
+            });
+          } catch (_) {}
+        },
+      }),
+    );
+  }
+
+  if (importKey) {
+    listeners.push(
+      Interceptor.attach(importKey, {
+        onEnter(args) {
+          this.algorithm = args[0].toString();
+          this.out = args[3];
+          this.secret = null;
+          this.secretBytes = 0;
+          this.blobType = '';
+          try {
+            this.blobType = args[2].readUtf16String() || '';
+            const bytes = args[7].toUInt32();
+            const input = args[6];
+            if (
+              this.blobType.toLowerCase() === 'keydatablob' &&
+              bytes >= 28 &&
+              bytes <= 4096
+            ) {
+              const magic = input.readU32();
+              const version = input.add(4).readU32();
+              const keyBytes = input.add(8).readU32();
+              if (
+                magic === 0x4d42444b &&
+                version === 1 &&
+                [16, 24, 32].includes(keyBytes) &&
+                12 + keyBytes <= bytes
+              ) {
+                this.secret = safe(input.add(12), keyBytes, 256);
+                this.secretBytes = keyBytes;
+              }
+            }
+          } catch (_) {}
+        },
+        onLeave(status) {
+          try {
+            if (status.toUInt32() !== 0) return;
+            const handlePointer = this.out.readPointer();
+            const handle = handlePointer.toString();
+            let key = null;
+            if (this.secret) {
+              const mode = props.get(this.algorithm + ':ChainingMode');
+              key = {
+                algorithm: algs.get(this.algorithm) || '?',
+                chainingMode: mode && mode.text ? mode.text : null,
+                secretHex: this.secret,
+                secretBytes: this.secretBytes,
+                source: 'BCryptImportKey:KeyDataBlob',
+              };
+            } else {
+              key = exportSecret(handlePointer);
+            }
+            if (key && key.secretHex) keys.set(handle, key);
+          } catch (_) {}
+        },
+      }),
+    );
+  }
+
+  if (duplicateKey) {
+    listeners.push(
+      Interceptor.attach(duplicateKey, {
+        onEnter(args) {
+          this.source = args[0].toString();
+          this.out = args[1];
+        },
+        onLeave(status) {
+          try {
+            if (status.toUInt32() !== 0) return;
+            const handlePointer = this.out.readPointer();
+            const original = keys.get(this.source);
+            const key = original
+                ? Object.assign({}, original, {
+                    source: (original.source || 'unknown') + '+duplicate',
+                  })
+                : exportSecret(handlePointer);
+            if (key && key.secretHex) {
+              keys.set(handlePointer.toString(), key);
+            }
+          } catch (_) {}
+        },
+      }),
+    );
+  }
+
+  if (destroy) {
+    listeners.push(
+      Interceptor.attach(destroy, {
+        onEnter(args) {
+          keys.delete(args[0].toString());
+        },
+      }),
+    );
+  }
+
+  if (!decrypt) {
+    event('NO_BCRYPT_DECRYPT');
+    return;
+  }
+
+  listeners.push(
+    Interceptor.attach(decrypt, {
+      onEnter(args) {
+        this.hit = null;
+        if (!active || captures >= 30) return;
+        try {
+          const inputBytes = args[2].toUInt32();
+          if (inputBytes < 6) return;
+
+          const prefix = hex(args[1].readByteArray(6));
+          const expectedBytes = CONFIG.prefixes[prefix];
+          if (expectedBytes === undefined || expectedBytes !== inputBytes) {
+            return;
+          }
+
+          const full = args[1].readByteArray(inputBytes);
+          const digest = Checksum.compute('sha256', full);
+          const unique = prefix + ':' + digest;
+          if (seen.has(unique)) return;
+
+          this.hit = {
+            prefix,
+            inputSha256: digest,
+            inputBytes,
+            caller: location(this.returnAddress),
+            flags: args[9].toUInt32(),
+            key: keyFor(args[0]),
+            auth: authenticatedInfo(args[3]),
+            ivHex: safe(args[4], args[5].toUInt32(), 256),
+          };
+          this.output = args[6];
+          this.capacity = args[7].toUInt32();
+          this.result = args[8];
+        } catch (error) {
+          event('MATCH_ERROR', {message: String(error).slice(0, 220)});
+        }
+      },
+      onLeave(status) {
+        if (!this.hit) return;
+        try {
+          const code = status.toUInt32();
+          if (code !== 0) {
+            event('MATCH_FAIL', {status: '0x' + code.toString(16)});
+            return;
+          }
+
+          seen.add(this.hit.prefix + ':' + this.hit.inputSha256);
+          let bytes = null;
+          let outputBytes = 0;
+          if (!this.output.isNull() && !this.result.isNull()) {
+            outputBytes = this.result.readU32();
+            if (
+              outputBytes > 0 &&
+              outputBytes <= this.capacity &&
+              outputBytes <= 8 * 1024 * 1024
+            ) {
+              bytes = this.output.readByteArray(outputBytes);
+            }
+          }
+          this.hit.kind = 'resource';
+          this.hit.outputBytes = outputBytes;
+          this.hit.outputSha256 = bytes
+              ? Checksum.compute('sha256', bytes)
+              : null;
+          captures++;
+          send(this.hit, bytes);
+        } catch (error) {
+          event('OUTPUT_ERROR', {message: String(error).slice(0, 220)});
+        }
+      },
+    }),
+  );
+
+  event('HOOK_READY', {
+    targets: Object.keys(CONFIG.prefixes).length,
+    exportKeyFallback: Boolean(exportKey),
+    importKeyHook: Boolean(importKey),
+    duplicateKeyHook: Boolean(duplicateKey),
+  });
+}
+
+if (Process.platform !== 'windows' || Process.arch !== 'x64') {
+  throw new Error('Windows x64 requerido');
+}
+
+observer = Process.attachModuleObserver({
+  onAdded(module) {
+    try {
+      attach(module);
+    } catch (error) {
+      event('HOOK_ERROR', {message: String(error).slice(0, 220)});
+    }
+  },
+});
+
+rpc.exports = {
+  stop() {
+    active = false;
+    for (const listener of listeners) {
+      try {
+        listener.detach();
+      } catch (_) {}
+    }
+    if (observer) {
+      try {
+        observer.detach();
+      } catch (_) {}
+    }
+    return {caps: captures};
+  },
+};
+
+event('READY', {
+  scope: 'exact-SPK-resource-ciphertexts-only',
+  liveHandleKeyExport: true,
+});
