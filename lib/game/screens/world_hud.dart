@@ -1874,6 +1874,109 @@ class WorldHud extends StatelessWidget {
     );
   }
 
+  Widget _guildWarehouseWindow(){
+    final bySlot={for(final item in guildWarehouse)item.slot:item};
+    final canWithdraw=guildRank>0&&guildRank<=2;
+    final canDeposit=guildRank>0&&guildRank<=8;
+    return _panelShell(
+      (locale=='spn'?'Almacén del Guild':'Guild Warehouse')+' · '+guildWarehouse.length.toString()+'/240',
+      Column(children:[
+        Container(
+          height:32,padding:const EdgeInsets.symmetric(horizontal:9),
+          child:Row(children:[
+            Text('R'+guildRank.toString(),style:const TextStyle(fontSize:9,color:Color(0xffffdc72),fontWeight:FontWeight.bold)),
+            const SizedBox(width:8),
+            Expanded(child:Text(
+              canWithdraw
+                ?(locale=='spn'?'Depositar y retirar habilitado':'Deposit and withdraw enabled')
+                :canDeposit
+                  ?(locale=='spn'?'Solo depósito':'Deposit only')
+                  :(locale=='spn'?'Sin permisos de almacén':'No warehouse permissions'),
+              style:const TextStyle(fontSize:8,color:Colors.white54),
+            )),
+            Text(
+              locale=='spn'?'6 pestañas × 40':'6 tabs × 40',
+              style:const TextStyle(fontSize:7.5,color:Colors.white38),
+            ),
+          ]),
+        ),
+        Expanded(
+          child:GridView.builder(
+            padding:const EdgeInsets.all(8),
+            gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount:10,crossAxisSpacing:3,mainAxisSpacing:3,childAspectRatio:1,
+            ),
+            itemCount:240,
+            itemBuilder:(context,index){
+              final item=bySlot[index];
+              final tab=index~/40+1,slot=index%40+1;
+              if(item==null){
+                return Tooltip(
+                  message:(locale=='spn'?'Pestaña ':'Tab ')+tab.toString()+' · '+(locale=='spn'?'slot ':'slot ')+slot.toString(),
+                  child:Container(
+                    decoration:BoxDecoration(
+                      color:const Color(0x3317130f),
+                      border:Border.all(color:index<40?const Color(0x665d513e):const Color(0x33463c31)),
+                    ),
+                    alignment:Alignment.center,
+                    child:Text((index+1).toString(),style:const TextStyle(fontSize:5.5,color:Colors.white12)),
+                  ),
+                );
+              }
+              final rule=metadata?.item(item.type,item.typeId),icon=rule?.iconPath;
+              final name=catalog.itemName(item.type,item.typeId,locale);
+              final gems=item.gems.where((g)=>g>0).length;
+              final cell=Container(
+                decoration:BoxDecoration(
+                  color:const Color(0xff17120e),
+                  border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
+                ),
+                child:Stack(children:[
+                  Positioned.fill(child:Padding(
+                    padding:const EdgeInsets.all(2),
+                    child:icon==null
+                      ?const Icon(Icons.inventory_2,size:20,color:Color(0xffc0b49d))
+                      :DataImage(cache:ui,path:icon,fit:BoxFit.contain,fallback:const Icon(Icons.inventory_2,size:20,color:Color(0xffc0b49d))),
+                  )),
+                  if(item.count>1)Positioned(right:1,bottom:0,child:Text(
+                    'x'+item.count.toString(),style:const TextStyle(fontSize:6.5,color:Colors.white),
+                  )),
+                  if(gems>0)Positioned(left:1,bottom:0,child:Text(
+                    '◆'+gems.toString(),style:const TextStyle(fontSize:6.5,color:Color(0xff7fd9ff)),
+                  )),
+                ]),
+              );
+              return Tooltip(
+                waitDuration:const Duration(milliseconds:250),
+                message:name+'\n'+item.type.toString()+':'+item.typeId.toString()+
+                  ' · Tab '+tab.toString()+' · Slot '+slot.toString()+
+                  '\n'+(canWithdraw
+                    ?(locale=='spn'?'Doble clic para retirar.':'Double click to withdraw.')
+                    :(locale=='spn'?'Tu rango no puede retirar.':'Your rank cannot withdraw.')),
+                child:canWithdraw?GestureDetector(onDoubleTap:()=>onWithdrawGuildWarehouse(item),child:cell):cell,
+              );
+            },
+          ),
+        ),
+      ]),
+      footer:Container(
+        height:38,padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          Expanded(child:Text(
+            canDeposit
+              ?(locale=='spn'?'Inventario lateral: doble clic para depositar.':'Side inventory: double click to deposit.')
+              :(locale=='spn'?'Tu rango no puede depositar.':'Your rank cannot deposit.'),
+            style:const TextStyle(fontSize:7.5,color:Colors.white54),
+          )),
+          TextButton(
+            onPressed:onToggleGuildWarehouse,
+            style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:Colors.white60),
+            child:Text(locale=='spn'?'Volver':'Back',style:const TextStyle(fontSize:8)),
+          ),
+        ]),
+      ),
+    );
+  }
   Widget _guildWindow(){
     final inGuild=guildId!=0;
     final admin=inGuild&&guildRank>0&&guildRank<=3;
