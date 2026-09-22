@@ -282,10 +282,13 @@ class SpkArchiveSource {
 
   String displayType(SpkRecord record) {
     final verified = validatedFormat(record.entryId);
-    if (verified != null && verified.isNotEmpty) return verified;
+    if (verified != null && verified.isNotEmpty && verified != 'BIN') {
+      return verified;
+    }
     final path = technicalPath(record);
     final ext = p.extension(path).replaceFirst('.', '').toUpperCase();
     if (ext.isNotEmpty && ext != 'BIN') return ext;
+    if (verified == 'BIN') return verified!;
     return record.simple ? 'Simple' : 'Fragmentado';
   }
 
