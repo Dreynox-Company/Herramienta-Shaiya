@@ -381,6 +381,28 @@ class Library {
       }
     }
 
+    if (source.fullyValidatedResources) {
+      for (final record in source.index.resources) {
+        if (source.names.isConfirmed(record.entryId)) continue;
+        final format = source.validatedFormat(record.entryId) ?? 'BIN';
+        final alias = canon(
+          '_SPK_SinNombre/${record.idHex}'
+          '${SpkArchiveSource.extensionFor(format)}',
+        );
+        if (!supportedPath(alias)) continue;
+        final existing = mounted[alias];
+        if (existing == null) {
+          mounted[alias] = record.idHex;
+          confirmedByPath[alias] = false;
+          technical++;
+        } else if (existing != record.idHex) {
+          throw FormatException(
+            'Colisión imposible de ruta técnica SPK: $alias.',
+          );
+        }
+      }
+    }
+
     if (mounted.isEmpty) {
       throw const FormatException(
         'El SPK no tiene todavía rutas utilizables para montar una biblioteca.',
