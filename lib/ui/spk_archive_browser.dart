@@ -311,9 +311,21 @@ Future<bool> loadAutomaticSpkFullAudit(
   try {
     final raw = await readSpkJsonFile(file);
     if (raw is! Map) return false;
-    return source.restoreFullResourceValidation(
+    final restored = source.restoreFullResourceValidation(
       Map<String, dynamic>.from(raw),
     );
+    if (restored) {
+      final nameValidation = source.validateInferredNamesByFormat();
+      await File('$spkPath.names.json').writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          ...source.names.toJson(),
+          'spkIndexSha256': source.index.encryptedIndexSha256,
+          'nameFormatValidation': nameValidation,
+        }),
+        flush: true,
+      );
+    }
+    return restored;
   } catch (_) {
     return false;
   }
@@ -833,10 +845,24 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         });
       },
     );
+    final nameValidation = archive.validateInferredNamesByFormat();
+    await File('${archive.file.path}.names.json').writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        ...archive.names.toJson(),
+        'spkIndexSha256': archive.index.encryptedIndexSha256,
+        'nameFormatValidation': nameValidation,
+      }),
+      flush: true,
+    );
+
+    final audited = <String, Object?>{
+      ...result,
+      'nameFormatValidation': nameValidation,
+    };
     final evidence = File('${archive.file.path}.audit.json');
     await evidence.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
-        'schema': 1,
+        'schema': 2,
         'source': archive.file.path,
         'indexSha256': archive.index.encryptedIndexSha256,
         'profileId': archive.profile.profileId,
@@ -844,13 +870,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             ? null
             : sha256.convert(archive.profile.effectiveResourceSecret!).toString(),
         'chunkNonceRule': archive.profile.chunkNonceRule,
-        'validation': result,
+        'validation': audited,
         'resourceFormats': archive.validatedFormatsJson,
         'diagnostics': archive.diagnostics(),
       }),
       flush: true,
     );
-    return result;
+    return audited;
   }
 
   Future<void> auditAllResources() => runAction(() async {
@@ -868,7 +894,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       SnackBar(
         content: Text(
           'Auditoría total OK: ${result['validatedResources']} recursos · '
-          '${result['decodedBytes']} bytes decodificados · 0 fallos.',
+          '${result['decodedBytes']} bytes decodificados · '
+          '${(result['nameFormatValidation'] as Map?)?['validated'] ?? 0} '
+          'rutas inferidas validadas · 0 fallos.',
         ),
         duration: const Duration(seconds: 10),
       ),
