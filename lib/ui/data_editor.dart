@@ -952,6 +952,58 @@ class _DataEditorPageState extends State<DataEditorPage> {
     );
   });
 
+  Future<void> _rebuildSpkWorkspace() => _job(() async {
+    final library = widget.library;
+    if (!library.isSpkWorkspace) {
+      throw const FormatException('Abre primero un DATA.SPK en Studio.');
+    }
+    if (dirty || hasDrafts) {
+      throw const FormatException(
+        'Guarda primero los cambios pendientes en el overlay antes de '
+        'construir el nuevo DATA.SPK.',
+      );
+    }
+    if (library.spk?.fullyValidatedResources != true) {
+      throw const FormatException(
+        'El escritor SPK solo se habilita después de auditar todos los '
+        'recursos simples y fragmentados.',
+      );
+    }
+    if (!await _confirm(
+      'Construir nuevo DATA.SPK',
+      'Se creará un DATA.SPK nuevo. El original nunca se sobrescribe. '
+          'Los recursos editados del overlay se reempacan, los fragmentos se '
+          'vuelven a autenticar AES-GCM, se reconstruyen tabla auxiliar e '
+          'índice y Studio vuelve a abrir y auditar el archivo resultante '
+          'antes de publicarlo.',
+    )) {
+      return;
+    }
+    final selected = await getSaveLocation(
+      suggestedName: 'data-editado.spk',
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'DATA.SPK reconstruido', extensions: ['spk']),
+      ],
+      confirmButtonText: 'Construir nuevo DATA.SPK',
+    );
+    if (selected == null) return;
+
+    final result = await library.rebuildSpkWorkspace(
+      File(selected.path),
+      progress: (message, done, total) {
+        if (!mounted) return;
+        setState(() {
+          status = total > 0 ? '$message · $done/$total' : message;
+        });
+      },
+    );
+    _note(
+      'DATA.SPK reconstruido y auditado: ${result.file} · '
+      '${result.resources} recursos · ${result.replaced} editados · '
+      'perfil: ${result.profileFile}',
+    );
+  });
+
   Future<void> _recoverArchive() => _job(() async {
     final s = widget.library.archive;
     if (s?.sahPath == null) {
@@ -2048,6 +2100,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
                             _exportReport();
                           case 'spkData':
                             _exportSpkWorkspace();
+                          case 'spkRepack':
+                            _rebuildSpkWorkspace();
                           case 'extract':
                             _exportArchive(false);
                           case 'pack':
@@ -2078,13 +2132,20 @@ class _DataEditorPageState extends State<DataEditorPage> {
                           ),
                         ],
                         if (widget.library.isSpkWorkspace &&
-                            !Platform.isAndroid)
+                            !Platform.isAndroid) ...[
                           const PopupMenuItem(
                             value: 'spkData',
                             child: Text(
                               'Materializar DATA completa + overlay',
                             ),
                           ),
+                          const PopupMenuItem(
+                            value: 'spkRepack',
+                            child: Text(
+                              'Construir nuevo DATA.SPK verificado',
+                            ),
+                          ),
+                        ],
                         if (widget.library.archive != null &&
                             !Platform.isAndroid) ...[
                           const PopupMenuItem(
