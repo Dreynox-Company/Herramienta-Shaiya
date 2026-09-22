@@ -86,6 +86,11 @@ void main(){
       return state;
     }
 
+    String? resolveProbe(dynamic library,String name,List<String> roots){
+      try{return library.resolve(name,roots,uniqueFallback:true) as String?;}
+      catch(e){return 'ERROR: '+e.toString();}
+    }
+
     Future<void> shot(dynamic state,String name) async {
       final boundary=state.captureKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final image=await boundary.toImage(pixelRatio:1);
@@ -107,6 +112,13 @@ void main(){
       report[stage.name]={
         'progress':state.progress,
         'resources':state.catalog.library.files.length,
+        'indexedNativeFormats':<String,int>{
+          '.vani':state.catalog.library.files.keys.where((String p)=>p.endsWith('.vani')).length,
+          '.mani':state.catalog.library.files.keys.where((String p)=>p.endsWith('.mani')).length,
+          '.wtr':state.catalog.library.files.keys.where((String p)=>p.endsWith('.wtr')).length,
+          '.3de':state.catalog.library.files.keys.where((String p)=>p.endsWith('.3de')).length,
+          '.seff':state.catalog.library.files.keys.where((String p)=>p.endsWith('.seff')).length,
+        },
         'archetypes':state.catalog.archetypes.length,
         'npcs':state.catalog.npcs.length,
         'creatures':state.catalog.creatures.length,
@@ -123,6 +135,37 @@ void main(){
         'worldSky':state.scene.world?.skyFile??'',
         'worldPrimaryCloud':state.scene.world?.primaryCloudFile??'',
         'worldSecondaryCloud':state.scene.world?.secondaryCloudFile??'',
+        'nativeReferenceResolution':state.scene.world==null
+          ?<String,String?>{}
+          :<String,String?>{
+            'sky':resolveProbe(
+              state.catalog.library,state.scene.world!.skyFile,
+              <String>['sky','entity/texture','entity/textures','world'],
+            ),
+            'primaryCloud':resolveProbe(
+              state.catalog.library,state.scene.world!.primaryCloudFile,
+              <String>['sky','entity/texture','entity/textures','world'],
+            ),
+            'secondaryCloud':resolveProbe(
+              state.catalog.library,state.scene.world!.secondaryCloudFile,
+              <String>['sky','entity/texture','entity/textures','world'],
+            ),
+            'water':resolveProbe(
+              state.catalog.library,state.scene.world!.layout,
+              <String>['entity/water','world/water'],
+            ),
+            if(state.scene.world!.objects.where((dynamic o)=>o.category=='VAni').isNotEmpty)
+              'firstVAni':resolveProbe(
+                state.catalog.library,
+                state.scene.world!.objects.where((dynamic o)=>o.category=='VAni').first.asset,
+                <String>['entity/vani','entity/texture','entity/textures'],
+              ),
+            if(state.scene.world!.maniInstances.isNotEmpty)
+              'firstMAni':resolveProbe(
+                state.catalog.library,state.scene.world!.maniInstances.first.maniAsset,
+                <String>['entity/mani'],
+              ),
+          },
         'skyLayerLoaded':state.scene.sky!=null,
         'primaryCloudLayerLoaded':state.scene.primaryCloud!=null,
         'secondaryCloudLayerLoaded':state.scene.secondaryCloud!=null,
