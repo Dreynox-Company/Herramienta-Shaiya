@@ -513,6 +513,13 @@ class SpkArchiveSource {
       canReadSimpleResources &&
       (index.fragmentedResources.isEmpty || canReadFragmentedResources);
 
+  bool canReadRecord(SpkRecord record) {
+    if (!record.resource) return false;
+    if (record.simple) return canReadSimpleResources;
+    if (record.fragmented) return canReadFragmentedResources;
+    return false;
+  }
+
   bool get fullyValidatedResources =>
       canExtractAll &&
       fullResourceValidation?['status'] == 'validated' &&
