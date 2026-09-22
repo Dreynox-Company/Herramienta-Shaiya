@@ -784,6 +784,16 @@ class StudioScene extends ChangeNotifier {
   void resetCombat(){combat.reset();movementTransitions.invalidate();for(final a in [character,enemy]){if(a==null)continue;final c=a.clips['Respirar']??a.clips['Reposo']??a.normal;if(c!=null){a.idle=c;a.play(c);}}notifyListeners();}
   void setWireframe(bool value){wireframe=value;for(final a in [character,enemy,mount,wing]){for(final p in a?.parts??<RenderPart>[]){p.mesh.material?.wireframe=value;}}weapon?.mesh.material?.wireframe=value;secondWeapon?.mesh.material?.wireframe=value;notifyListeners();}
   double _worldGroundAtLocal(double x,double z)=>dungeon?.floorAt(originX+x,originZ-z)??world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
+  bool _insideCurrentWorldBounds(double x,double z){
+    if(world==null)return true;
+    final dg=dungeon;
+    if(dg!=null){
+      final worldX=originX+x,worldZ=originZ-z;
+      return worldX>=dg.lower.x&&worldX<=dg.upper.x&&
+        worldZ>=dg.lower.z&&worldZ<=dg.upper.z;
+    }
+    return x.abs()<72&&z.abs()<72;
+  }
   bool _worldPositionBlocked(double x,double z){
     if(world==null||worldCollision.isEmpty)return false;
     final radius=mount==null?.32:.52;
@@ -793,7 +803,7 @@ class StudioScene extends ChangeNotifier {
   void _moveCharacterInWorld(double x,double z){
     final a=character;if(a==null)return;
     if(world==null){a.root.position.x=x;a.root.position.z=z;return;}
-    if(x.abs()>=72||z.abs()>=72)return;
+    if(!_insideCurrentWorldBounds(x,z))return;
     final startX=a.root.position.x,startZ=a.root.position.z;
     var nextX=startX,nextZ=startZ;
     if(!_worldPositionBlocked(x,z)){
