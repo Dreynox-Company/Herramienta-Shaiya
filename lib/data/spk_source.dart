@@ -1016,6 +1016,11 @@ class SpkArchiveSource {
     'entry_id_aux_le',
     'offset_chunk1_le96',
     'entry_id_chunk1_le',
+    'record_ordinal_chunk_le96',
+    'record_ordinal_aux_le96',
+    'record_ordinal_chunk1_le96',
+    'aux_ordinal_chunk_le96',
+    'aux_ordinal_zero_le96',
   ];
 
   static Uint8List fragmentNonceForRule(
@@ -1051,6 +1056,26 @@ class SpkArchiveSource {
       case 'entry_id_chunk1_le':
         data.setUint64(0, record.entryId, Endian.little);
         data.setUint32(8, ordinal + 1, Endian.little);
+        return data.buffer.asUint8List();
+      case 'record_ordinal_chunk_le96':
+        data.setUint64(0, record.ordinal, Endian.little);
+        data.setUint32(8, ordinal, Endian.little);
+        return data.buffer.asUint8List();
+      case 'record_ordinal_aux_le96':
+        data.setUint64(0, record.ordinal, Endian.little);
+        data.setUint32(8, part.ordinal, Endian.little);
+        return data.buffer.asUint8List();
+      case 'record_ordinal_chunk1_le96':
+        data.setUint64(0, record.ordinal, Endian.little);
+        data.setUint32(8, ordinal + 1, Endian.little);
+        return data.buffer.asUint8List();
+      case 'aux_ordinal_chunk_le96':
+        data.setUint64(0, part.ordinal, Endian.little);
+        data.setUint32(8, ordinal, Endian.little);
+        return data.buffer.asUint8List();
+      case 'aux_ordinal_zero_le96':
+        data.setUint64(0, part.ordinal, Endian.little);
+        data.setUint32(8, 0, Endian.little);
         return data.buffer.asUint8List();
       default:
         throw const SpkFailure(
