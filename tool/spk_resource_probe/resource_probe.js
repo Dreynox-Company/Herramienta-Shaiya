@@ -20,6 +20,7 @@ function event(code, details = {}) {
 
 function emitCandidate(secretHex, secretBytes, source, details = {}) {
   if (!active || !secretHex || ![16, 32].includes(secretBytes)) return;
+  if (candidateSeen.size >= 4096) return;
   const normalized = secretHex.toLowerCase();
   if (candidateSeen.has(normalized)) return;
   candidateSeen.add(normalized);
