@@ -3263,7 +3263,8 @@ class _GuildCreateInputState extends State<_GuildCreateInput> {
 class _SocialNameInput extends StatefulWidget {
   final String locale;
   final ValueChanged<String> onSubmit;
-  const _SocialNameInput({required this.locale,required this.onSubmit});
+  final String? hint,actionLabel;
+  const _SocialNameInput({required this.locale,required this.onSubmit,this.hint,this.actionLabel});
 
   @override
   State<_SocialNameInput> createState()=>_SocialNameInputState();
@@ -3296,7 +3297,7 @@ class _SocialNameInputState extends State<_SocialNameInput> {
             counterText:'',
             isDense:true,
             contentPadding:const EdgeInsets.symmetric(horizontal:8,vertical:7),
-            hintText:widget.locale=='spn'?'Nombre del personaje':'Character name',
+            hintText:widget.hint??(widget.locale=='spn'?'Nombre del personaje':'Character name'),
             hintStyle:const TextStyle(fontSize:8,color:Colors.white30),
             filled:true,
             fillColor:const Color(0xff120f0c),
@@ -3315,7 +3316,7 @@ class _SocialNameInputState extends State<_SocialNameInput> {
             backgroundColor:const Color(0xff49331f),
             foregroundColor:const Color(0xffffdf91),
           ),
-          child:Text(widget.locale=='spn'?'Agregar':'Add',style:const TextStyle(fontSize:8.5)),
+          child:Text(widget.actionLabel??(widget.locale=='spn'?'Agregar':'Add'),style:const TextStyle(fontSize:8.5)),
         ),
       ),
     ]),
