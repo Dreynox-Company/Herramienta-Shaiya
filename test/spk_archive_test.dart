@@ -301,6 +301,31 @@ void main() {
       expect(map[9], 'Character/Elf/3DC/elmm_lower001.3DC');
     });
 
+    test('inferred alias of a confirmed path is discarded fail-closed', () {
+      final map = SpkNameMap.fromJson({
+        'schema': 2,
+        'paths': {
+          '0000000000000001': 'Character/Elf/3DC/elmm_upper001.3DC',
+        },
+        'hints': {
+          '0000000000000002': {
+            'path': 'character\\elf\\3dc\\ELMM_UPPER001.3dc',
+            'confidence': 'strong-inferred',
+            'evidence': 'decoded-size+zstd3-size',
+          },
+          '0000000000000003': {
+            'path': 'Character/Elf/3DC/elmm_lower001.3DC',
+            'confidence': 'strong-inferred',
+            'evidence': 'decoded-size+zstd3-size',
+          },
+        },
+      });
+      expect(map.removeAmbiguousHints(), 1);
+      expect(map[1], 'Character/Elf/3DC/elmm_upper001.3DC');
+      expect(map[2], isNull);
+      expect(map[3], 'Character/Elf/3DC/elmm_lower001.3DC');
+    });
+
     test('name map merge keeps confirmed paths authoritative', () {
       final map = SpkNameMap.empty();
       map.mergeHints(
