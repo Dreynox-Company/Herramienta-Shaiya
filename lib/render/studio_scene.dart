@@ -1051,7 +1051,7 @@ class StudioScene extends ChangeNotifier {
     }
 
     if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
-    final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[];
+    final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[],animated=<AnimatedWorldPart>[];
     try{
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
@@ -1066,44 +1066,65 @@ class StudioScene extends ChangeNotifier {
           _=><String>['entity/${obj.category}'],
         };
         final model=lib.resolve(obj.asset,roots);
-        if(model==null||!model.toLowerCase().endsWith('.smod')){
+        if(model==null){
           missingWorldAssets.add('${obj.category}:${obj.asset}');
           continue;
         }
         try{
-          final smod=readSmodData(await lib.read(model),model),objects=smod.parts,group=t.Group();
+          final lowerModel=model.toLowerCase(),group=t.Group();
           final instanceMatrix=worldInstanceMatrix(obj,ox,oz);
-          collisionTriangles.addAll(transformSmodCollisions(smod.collisions,instanceMatrix));
           var pieceCount=0;
-          for(final piece in objects){
-            final requested=piece.texture.trim();
-            if(requested.isEmpty)continue;
-            final dds=requested.toLowerCase().endsWith('.tga')
-              ?requested.substring(0,requested.length-4)+'.dds'
-              :requested;
-            final tex=lib.resolve(
-              dds,
-              [
-                'entity/texture',
-                'entity/textures',
-                'entity/${obj.category}',
-                'entity/${obj.category}/texture',
-                'entity/${obj.category}/textures',
-              ],
-              uniqueFallback:true,
-            )??lib.resolve(
-              requested,
-              [
-                'entity/texture',
-                'entity/textures',
-                'entity/${obj.category}',
-                'entity/${obj.category}/texture',
-                'entity/${obj.category}/textures',
-              ],
-              uniqueFallback:true,
-            );
-            if(tex==null){missingWorldAssets.add('texture:${piece.texture} @ ${obj.asset}');continue;}
-            final p=await makePart(piece.mesh,tex);parts.add(p);group.add(p.mesh);pieceCount++;
+          if(lowerModel.endsWith('.smod')){
+            final smod=readSmodData(await lib.read(model),model),objects=smod.parts;
+            collisionTriangles.addAll(transformSmodCollisions(smod.collisions,instanceMatrix));
+            for(final piece in objects){
+              final requested=piece.texture.trim();
+              if(requested.isEmpty)continue;
+              final dds=requested.toLowerCase().endsWith('.tga')
+                ?requested.substring(0,requested.length-4)+'.dds'
+                :requested;
+              final tex=lib.resolve(
+                dds,
+                [
+                  'entity/texture','entity/textures','entity/${obj.category}',
+                  'entity/${obj.category}/texture','entity/${obj.category}/textures',
+                ],
+                uniqueFallback:true,
+              )??lib.resolve(
+                requested,
+                [
+                  'entity/texture','entity/textures','entity/${obj.category}',
+                  'entity/${obj.category}/texture','entity/${obj.category}/textures',
+                ],
+                uniqueFallback:true,
+              );
+              if(tex==null){missingWorldAssets.add('texture:${piece.texture} @ ${obj.asset}');continue;}
+              final p=await makePart(piece.mesh,tex);parts.add(p);group.add(p.mesh);pieceCount++;
+            }
+          }else if(lowerModel.endsWith('.vani')){
+            final vani=_vaniCache[model]??=readVani(await lib.read(model),model);
+            for(final mesh in vani.meshes){
+              final requested=mesh.texture.trim();
+              if(requested.isEmpty)continue;
+              final dds=requested.toLowerCase().endsWith('.tga')
+                ?requested.substring(0,requested.length-4)+'.dds'
+                :requested;
+              final tex=lib.resolve(
+                dds,
+                ['entity/VAni','entity/VAni/texture','entity/texture','entity/textures'],
+                uniqueFallback:true,
+              )??lib.resolve(
+                requested,
+                ['entity/VAni','entity/VAni/texture','entity/texture','entity/textures'],
+                uniqueFallback:true,
+              );
+              if(tex==null){missingWorldAssets.add('vani-texture:$requested @ ${obj.asset}');continue;}
+              final p=await makePart(mesh.frame(0,model),tex);
+              parts.add(p);group.add(p.mesh);animated.add(AnimatedWorldPart(p,mesh));pieceCount++;
+            }
+          }else{
+            missingWorldAssets.add('unsupported:${obj.category}:${obj.asset}');
+            continue;
           }
           if(pieceCount==0){missingWorldAssets.add('empty:${obj.asset}');continue;}
           group.matrixAutoUpdate=false;
@@ -1114,7 +1135,7 @@ class StudioScene extends ChangeNotifier {
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
-      for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldCollision=WorldCollisionField(collisionTriangles);worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
+      animatedWorldParts..clear()..addAll(animated);for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldCollision=WorldCollisionField(collisionTriangles);worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
       if(sky==null&&catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
