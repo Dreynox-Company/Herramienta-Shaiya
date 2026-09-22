@@ -28,6 +28,8 @@ class PsPacketType {
   static const characterEnteredPortal=0x020A;
   static const characterMapTeleport=0x020B;
   static const characterTeleportViaNpc=0x020C;
+  static const targetCharacterHpUpdate=0x0301;
+  static const characterShape=0x0303;
   static const targetMobHpUpdate=0x0305;
   static const mapWeather=0x0451;
   static const inventoryMoveItem=0x0204;
@@ -36,9 +38,11 @@ class PsPacketType {
   static const addItem=0x0205;
   static const removeItem=0x0206;
   static const characterMove=0x0501;
+  static const characterCharacterAutoAttack=0x0502;
   static const characterMobAutoAttack=0x0503;
   static const sendEquipment=0x0507;
   static const useItem=0x050A;
+  static const useCharacterTargetSkill=0x0511;
   static const useMobTargetSkill=0x0517;
   static const usedSpMp=0x050C;
   static const buffAdd=0x050D;
@@ -452,6 +456,99 @@ class PsNpcTeleportResult {
       throw FormatException('CHARACTER_TELEPORT_VIA_NPC response truncado: ${p.body.length}');
     }
     return PsNpcTeleportResult(p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little));
+  }
+}
+
+class PsShapeEquipment {
+  final int slot,type,typeId,enhancement;
+  final bool dyed;
+  final int alpha,r,g,b;
+  const PsShapeEquipment(this.slot,this.type,this.typeId,this.enhancement,this.dyed,this.alpha,this.r,this.g,this.b);
+  bool get empty=>type==0||typeId==0;
+}
+
+class PsPlayerShape {
+  final int characterId,motion,country,race,hair,face,height,profession,gender,partyDefinition,mode,kills;
+  final bool dead;
+  final List<PsShapeEquipment> equipment;
+  final String name,guildName;
+  final int guildFrame;
+  const PsPlayerShape({
+    required this.characterId,required this.dead,required this.motion,required this.country,required this.race,
+    required this.hair,required this.face,required this.height,required this.profession,required this.gender,
+    required this.partyDefinition,required this.mode,required this.kills,required this.equipment,
+    required this.name,required this.guildFrame,required this.guildName,
+  });
+  static PsPlayerShape parse(PsPacket p){
+    if(p.type!=PsPacketType.characterShape||p.body.length<685){
+      throw FormatException('CHARACTER_SHAPE US truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b),s=4;
+    final equipment=<PsShapeEquipment>[];
+    for(var i=0;i<17;i++){
+      final eo=s+15+i*3,hasColor=b[s+66+i]!=0,co=s+86+i*4;
+      equipment.add(PsShapeEquipment(
+        i,b[eo],b[eo+1],b[eo+2],hasColor,b[co],b[co+1],b[co+2],b[co+3],
+      ));
+    }
+    return PsPlayerShape(
+      characterId:d.getUint32(0,Endian.little),dead:b[s]!=0,motion:b[s+1],country:b[s+2],race:b[s+3],
+      hair:b[s+4],face:b[s+5],height:b[s+6],profession:b[s+7],gender:b[s+8],
+      partyDefinition:b[s+9],mode:b[s+10],kills:d.getUint32(s+11,Endian.little),
+      equipment:List.unmodifiable(equipment),
+      name:_fixedString(b,s+606,21),guildFrame:b[s+627],guildName:_fixedString(b,s+656,25),
+    );
+  }
+}
+
+class PsTargetCharacterHp {
+  final int targetId,currentHp,maxHp,attackSpeed,moveSpeed;
+  const PsTargetCharacterHp(this.targetId,this.currentHp,this.maxHp,this.attackSpeed,this.moveSpeed);
+  static PsTargetCharacterHp parse(PsPacket p){
+    if(p.type!=PsPacketType.targetCharacterHpUpdate||p.body.length<14){
+      throw FormatException('TARGET_CHARACTER_HP_UPDATE truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsTargetCharacterHp(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),d.getInt32(8,Endian.little),p.body[12],p.body[13],
+    );
+  }
+}
+
+class PsCharacterUsualHit {
+  final int result,attackerId,targetId,hpDamage,spDamage,mpDamage;
+  const PsCharacterUsualHit(this.result,this.attackerId,this.targetId,this.hpDamage,this.spDamage,this.mpDamage);
+  bool get success=>result==0||result==1;
+  static PsCharacterUsualHit parse(PsPacket p){
+    if(p.type!=PsPacketType.characterCharacterAutoAttack||p.body.length<15){
+      throw FormatException('CHARACTER_CHARACTER_AUTO_ATTACK truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterUsualHit(
+      p.body[0],d.getUint32(1,Endian.little),d.getUint32(5,Endian.little),
+      d.getUint16(9,Endian.little),d.getUint16(11,Endian.little),d.getUint16(13,Endian.little),
+    );
+  }
+}
+
+class PsCharacterSkillHit {
+  final int result,attackerId,targetId,skillId,skillLevel,hpDamage,spDamage,mpDamage;
+  final bool keepActivated;
+  const PsCharacterSkillHit({
+    required this.result,required this.attackerId,required this.targetId,required this.skillId,required this.skillLevel,
+    required this.hpDamage,required this.spDamage,required this.mpDamage,required this.keepActivated,
+  });
+  bool get success=>result==0||result==1||result==4;
+  static PsCharacterSkillHit parse(PsPacket p){
+    if(p.type!=PsPacketType.useCharacterTargetSkill||p.body.length<19){
+      throw FormatException('USE_CHARACTER_TARGET_SKILL truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterSkillHit(
+      result:p.body[0],attackerId:d.getUint32(1,Endian.little),targetId:d.getUint32(5,Endian.little),
+      skillId:d.getUint16(9,Endian.little),skillLevel:p.body[11],hpDamage:d.getUint16(12,Endian.little),
+      spDamage:d.getUint16(14,Endian.little),mpDamage:d.getUint16(16,Endian.little),keepActivated:p.body[18]!=0,
+    );
   }
 }
 
@@ -1298,12 +1395,18 @@ class PsWorldSnapshot {
     required this.quests,required this.finishedQuests,
   });
 
-  factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets){
+  factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets,{int? selfCharacterId}){
     PsEnteredMap? self;
     final npcs=<PsNpcEnter>[],mobs=<PsMobEnter>[],quests=<PsQuestProgress>[],finished=<PsFinishedQuest>[];
     for(final p in packets){
-      if(p.type==PsPacketType.characterEnteredMap)self=PsEnteredMap.parse(p);
-      else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
+      if(p.type==PsPacketType.characterEnteredMap){
+        final entered=PsEnteredMap.parse(p);
+        if(selfCharacterId==null){
+          self??=entered;
+        }else if(entered.characterId==selfCharacterId){
+          self=entered;
+        }
+      }else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
       else if(p.type==PsPacketType.mobEnter)mobs.add(PsMobEnter.parse(p));
       else if(p.type==PsPacketType.questList)quests.addAll(parseQuestList(p));
       else if(p.type==PsPacketType.questFinishedList)finished.addAll(parseFinishedQuests(p));
@@ -1885,6 +1988,25 @@ class PsWorldSession {
 
   Stream<PsPacket> get packets=>connection.packets;
 
+  Future<PsTargetCharacterHp> selectCharacterTarget(int characterId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo PvP.');
+    final response=connection.waitStream((p)=>
+      p.type==PsPacketType.targetCharacterHpUpdate&&p.body.length>=4&&
+      ByteData.sublistView(p.body).getUint32(0,Endian.little)==characterId
+    );
+    await connection.send(PsPacketType.targetCharacterHpUpdate,_u32Bytes(characterId));
+    return PsTargetCharacterHp.parse(await response);
+  }
+
+  Future<void> startCharacterAutoAttack(int targetId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de atacar en PvP.');
+    await connection.send(PsPacketType.characterCharacterAutoAttack,_u32Bytes(targetId));
+  }
+
+  Future<void> useCharacterSkill(int skillNumber,int targetId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar skills PvP.');
+    await connection.send(PsPacketType.useCharacterTargetSkill,[skillNumber&0xff,..._u32Bytes(targetId)]);
+  }
   Future<PsTargetMobHp> selectMobTarget(int globalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo.');
     final responseFuture=connection.waitStream((p)=>p.type==PsPacketType.targetMobHpUpdate&&p.body.length>=4&&ByteData.sublistView(p.body).getUint32(0,Endian.little)==globalId);
