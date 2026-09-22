@@ -1304,6 +1304,53 @@ class _GameClientPageState extends State<GameClientPage> {
     return null;
   }
 
+  int? _preferredEquipmentSlot(PsInventoryItem item){
+    final slots=equipmentSlotsForItemType(item.type);
+    if(slots.isEmpty)return null;
+    final equipped={for(final x in liveInventory.where((x)=>x.bag==0))x.slot};
+    for(final slot in slots){if(!equipped.contains(slot))return slot;}
+    return slots.first;
+  }
+
+  Future<void> _activateInventoryItem(PsInventoryItem item) async {
+    final session=liveWorld;
+    if(session==null||stage!=GameStage.world||dead||rebirthPending)return;
+    if(item.bag==100){messages.insert(0,'[Inventario] Retira primero el objeto del almacén.');if(mounted)setState((){});return;}
+    try{
+      if(item.bag==0){
+        final dest=_firstFreeInventorySlot();
+        if(dest==null){messages.insert(0,'[Inventario] No hay espacio para desequipar.');if(mounted)setState((){});return;}
+        final move=await session.moveItem(0,item.slot,dest.bag,dest.slot);
+        _upsertInventoryItem(move.source);_upsertInventoryItem(move.destination);liveGold=move.gold;
+        messages.insert(0,'[Equipo] Objeto desequipado.');
+        if(mounted)setState((){});
+        return;
+      }
+
+      final equipSlot=_preferredEquipmentSlot(item);
+      if(equipSlot!=null){
+        final move=await session.moveItem(item.bag,item.slot,0,equipSlot);
+        _upsertInventoryItem(move.source);_upsertInventoryItem(move.destination);liveGold=move.gold;
+        messages.insert(0,'[Equipo] '+(catalog?.itemName(item.type,item.typeId,uiLocale)??item.key)+' → slot '+equipSlot.toString()+'.');
+        if(mounted)setState((){});
+        return;
+      }
+
+      final rule=metadata?.item(item.type,item.typeId);
+      if(rule==null){messages.insert(0,'[Objeto] No hay metadata para '+item.key+'.');if(mounted)setState((){});return;}
+      final usable=item.type==27||item.type==28||item.type==29||item.type==30||item.type==98||item.type==99||
+        rule.special!=0||rule.hp!=0||rule.mp!=0||rule.sp!=0||rule.itemSkill!=0;
+      if(!usable){messages.insert(0,'[Objeto] '+catalog!.itemName(item.type,item.typeId,uiLocale)+' no es equipable ni utilizable.');if(mounted)setState((){});return;}
+      if(rule.special==32){
+        messages.insert(0,'[Objeto] Movement Rune requiere seleccionar un jugador del grupo; no se enviará contra un mob.');
+        if(mounted)setState((){});
+        return;
+      }
+      await session.useInventoryItem(item.bag,item.slot);
+      messages.insert(0,'[Objeto] Uso solicitado: '+catalog!.itemName(item.type,item.typeId,uiLocale)+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Objeto/Equipo] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _storeInWarehouse(PsInventoryItem item) async {
     final session=liveWorld,slot=_firstFreeWarehouseSlot();
     if(session==null||!warehouseOpen)return;
@@ -1734,6 +1781,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
             onUseGate:(index)=>unawaited(_useGatekeeperTarget(index)),
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
+            onActivateInventory:(item)=>unawaited(_activateInventoryItem(item)),
             onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
             onToggleInventory:()=>_toggleWorldPanel('inventory'),
