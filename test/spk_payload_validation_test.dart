@@ -399,6 +399,62 @@ void main() {
     }
   });
 
+  test('audited inferred resources keep a stable editable Entry-ID alias', () async {
+    final root = await Directory.systemTemp.createTemp('spk-inferred-alias-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      source.names.mergeConfirmed({
+        0x1000: 'Character/Human/humf_upper.mlt',
+      });
+      source.names.mergeHints(
+        {
+          0x1001: 'Character/Human/DDS/humf_upper001.dds',
+        },
+        confidence: 'strong-inferred',
+        evidence: 'fixture-inferred',
+      );
+      await source.validateSimpleResourceProfile();
+      await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, _, _) {},
+      );
+
+      final library = await Library.fromSpk(
+        source,
+        overlayRoot: '${root.path}/overlay',
+      );
+      expect(
+        library.files,
+        contains('character/human/dds/humf_upper001.dds'),
+      );
+      const technical = '_spk_sinnombre/0000000000001001.dds';
+      expect(library.files, contains(technical));
+      expect(
+        library.files['character/human/dds/humf_upper001.dds'],
+        library.files[technical],
+      );
+
+      final original = await library.read(technical);
+      final replacement = Uint8List.fromList([
+        ...original.take(32),
+        1,
+        2,
+        3,
+        4,
+      ]);
+      await library.writeSpkOverlay(
+        {technical: replacement},
+        expectedHashes: {
+          technical: sha256.convert(original).toString(),
+        },
+      );
+      expect(await library.read(technical), orderedEquals(replacement));
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test('validated SPK mounts as Library and overlay never mutates source', () async {
     final root = await Directory.systemTemp.createTemp('spk-workspace-');
     try {
