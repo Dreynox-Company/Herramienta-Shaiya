@@ -797,7 +797,7 @@ class StudioScene extends ChangeNotifier {
         var nextX=x,nextZ=z;
         final w=world,field=worldCollision;
         if(w!=null&&field!=null&&!field.isEmpty){
-          final radius=mount==null?.34:.72,height=mount==null?1.7:2.3;
+          final radius=mount==null ? .34 : .72,height=mount==null ? 1.7 : 2.3;
           final targetY=w.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
           if(!field.allowsMove(
             fromX:fromX,fromY:groundY,fromZ:fromZ,
