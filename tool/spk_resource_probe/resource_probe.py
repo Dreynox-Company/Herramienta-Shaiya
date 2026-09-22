@@ -287,6 +287,8 @@ class Sink:
         (self.out/'candidate-keys.json').write_text(payload,encoding='utf-8')
 
     def _accept_candidate(self,p):
+        if len(self.candidate_seen)>=4096:
+            return
         secret_hex=str(p.get('secretHex') or '').strip().lower()
         source=str(p.get('source') or 'unknown')[:180]
         try:
@@ -327,7 +329,8 @@ class Sink:
                 'muestras=',len(self.samples),
                 flush=True,
             )
-        self._persist_candidates()
+        if authenticated or len(self.candidate_rows)%25==0:
+            self._persist_candidates()
 
     def accept(self,m,data):
       with self.lock:
@@ -527,6 +530,7 @@ def main():
       if sess:
        try:sess.detach()
        except:pass
+    sink._persist_candidates()
     (out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2),encoding='utf-8')
     if sink.dynamic_key_match is not None:
       dynamic_key,dynamic_source=sink.dynamic_key_match
