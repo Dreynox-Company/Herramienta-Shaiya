@@ -986,6 +986,7 @@ class _GameClientPageState extends State<GameClientPage> {
           GameStage.world=>WorldHud(
             scene:scene,
             catalog:catalog!,
+            metadata:metadata,
             characterName:nameController.text,
             level:liveCharacter?.level??1,
             details:liveDetails,
