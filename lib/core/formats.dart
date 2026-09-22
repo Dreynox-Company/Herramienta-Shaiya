@@ -973,6 +973,20 @@ class WorldData {
     );
   }
 
+  int layerIndexAt(double x,double z){
+    if(size==0||types.isEmpty||layers.isEmpty)return 0;
+    final width=size~/2+1;
+    final ix=(x/2).floor().clamp(0,width-1);
+    final iz=(z/2).floor().clamp(0,width-1);
+    final raw=types[iz*width+ix];
+    return raw<layers.length?raw:0;
+  }
+
+  WorldLayer? layerAt(double x,double z){
+    if(layers.isEmpty)return null;
+    return layers[layerIndexAt(x,z)];
+  }
+
   double heightAt(
     double x,
     double z, {
