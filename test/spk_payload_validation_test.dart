@@ -38,13 +38,18 @@ class _Fixture {
   const _Fixture(this.file, this.index, this.profile);
 }
 
-Future<_Fixture> _buildSimpleFixture(Directory root) async {
+Future<_Fixture> _buildSimpleFixture(
+  Directory root, {
+  bool resourceUsesIndexKey = false,
+}) async {
   final indexKey = Uint8List.fromList(
     List<int>.generate(16, (i) => 0x10 + i),
   );
-  final resourceKey = Uint8List.fromList(
-    List<int>.generate(16, (i) => 0x80 + i),
-  );
+  final resourceKey = resourceUsesIndexKey
+      ? Uint8List.fromList(indexKey)
+      : Uint8List.fromList(
+          List<int>.generate(16, (i) => 0x80 + i),
+        );
 
   final bytes = BytesBuilder(copy: false)..add(Uint8List(spkHeaderBytes));
   final records = <SpkRecord>[];
@@ -124,6 +129,57 @@ Future<SpkArchiveSource> _sourceFor(_Fixture fixture, SpkCryptoProfile profile) 
     );
 
 void main() {
+  test('SPK can prove offline that the index key is also the resource key', () async {
+    final root = await Directory.systemTemp.createTemp('spk-shared-key-');
+    try {
+      final fixture = await _buildSimpleFixture(
+        root,
+        resourceUsesIndexKey: true,
+      );
+      final indexOnly = SpkCryptoProfile(
+        profileId: 'synthetic-index-only',
+        indexSha256: fixture.profile.indexSha256,
+        indexSecret: fixture.profile.indexSecret,
+        resourceSecret: null,
+        resourceAad: Uint8List(0),
+        resourceKeyIsIndexKey: false,
+        chunkNonceRule: 'unsupported',
+      );
+      final source = await _sourceFor(fixture, indexOnly);
+      expect(source.canReadSimpleResources, isFalse);
+
+      final derived = await source.tryIndexKeyAsResourceProfile();
+      expect(derived, isNotNull);
+      expect(derived!.profile.resourceKeyIsIndexKey, isTrue);
+      expect(derived.canReadSimpleResources, isTrue);
+      final first = await derived.readEntry(derived.index.simpleResources.first);
+      expect(first.format, 'DDS');
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('SPK rejects the index-key hypothesis when resources use another key', () async {
+    final root = await Directory.systemTemp.createTemp('spk-separate-key-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final indexOnly = SpkCryptoProfile(
+        profileId: 'synthetic-index-only',
+        indexSha256: fixture.profile.indexSha256,
+        indexSecret: fixture.profile.indexSecret,
+        resourceSecret: null,
+        resourceAad: Uint8List(0),
+        resourceKeyIsIndexKey: false,
+        chunkNonceRule: 'unsupported',
+      );
+      final source = await _sourceFor(fixture, indexOnly);
+      expect(await source.tryIndexKeyAsResourceProfile(), isNull);
+      expect(source.canReadSimpleResources, isFalse);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test(
     'SPK simple payload access stays closed until real GCM samples validate',
     () async {
