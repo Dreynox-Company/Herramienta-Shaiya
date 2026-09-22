@@ -723,6 +723,66 @@ class WorldHud extends StatelessWidget {
       ),
     );
   }
+  Widget _questLogWindow(){
+    final active=[...openQuests];
+    return _panelShell(
+      locale=='spn'?'Registro de misiones':'Quest log',
+      Column(children:[
+        Container(
+          height:28,padding:const EdgeInsets.symmetric(horizontal:10),
+          alignment:Alignment.centerLeft,
+          child:Text(
+            (locale=='spn'?'Activas: ':'Active: ')+active.length.toString()+
+              ' · '+(locale=='spn'?'Finalizadas: ':'Finished: ')+finishedQuests.where((q)=>q.success).length.toString(),
+            style:const TextStyle(fontSize:9,color:Colors.white60),
+          ),
+        ),
+        Expanded(
+          child:active.isEmpty
+            ?Center(child:Text(locale=='spn'?'No hay misiones activas.':'No active quests.',style:const TextStyle(color:Colors.white54,fontSize:11)))
+            :ListView.separated(
+                padding:const EdgeInsets.fromLTRB(8,0,8,8),
+                itemCount:active.length,
+                separatorBuilder:(_,__)=>const SizedBox(height:5),
+                itemBuilder:(context,index){
+                  final q=active[index],text=catalog.questText(locale)?.quest(q.questId),rule=metadata?.quests[q.questId];
+                  final name=(text?.name.isNotEmpty??false)?text!.name:(locale=='spn'?'Misión ${q.questId}':'Quest ${q.questId}');
+                  final objectives=<String>[];
+                  if((rule?.requiredMobId1??0)>0){
+                    objectives.add(catalog.monsterName(rule!.requiredMobId1,locale)+' ${q.count1}/${rule.requiredMobCount1}');
+                  }
+                  if((rule?.requiredMobId2??0)>0){
+                    objectives.add(catalog.monsterName(rule!.requiredMobId2,locale)+' ${q.count2}/${rule.requiredMobCount2}');
+                  }
+                  if(objectives.isEmpty){
+                    objectives.add(locale=='spn'?'Progreso ${q.count1}, ${q.count2}, ${q.count3}':'Progress ${q.count1}, ${q.count2}, ${q.count3}');
+                  }
+                  return GestureDetector(
+                    onDoubleTap:()=>onOpenQuest(q.questId),
+                    child:Container(
+                      padding:const EdgeInsets.all(8),
+                      decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5d4c34))),
+                      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Row(children:[
+                          Expanded(child:Text(name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:10,color:Color(0xffffdc72),fontWeight:FontWeight.w600))),
+                          Text('#${q.questId}',style:const TextStyle(fontSize:7.5,color:Colors.white38)),
+                        ]),
+                        const SizedBox(height:4),
+                        ...objectives.map((o)=>Text(o,style:const TextStyle(fontSize:8.5,color:Colors.white60))),
+                        const SizedBox(height:3),
+                        Text(
+                          locale=='spn'?'Doble clic para abrir detalles.':'Double click for details.',
+                          style:const TextStyle(fontSize:7,color:Colors.white30),
+                        ),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+        ),
+      ]),
+    );
+  }
   Widget _shopWindow(){
     final s=shop!;
     return Container(
