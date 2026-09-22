@@ -64,11 +64,13 @@ class DataEditorPage extends StatefulWidget {
   final Library library;
   final GameTextEncoding initialEncoding;
   final String? initialPath;
+  final String? initialFieldGroup;
   const DataEditorPage({
     super.key,
     required this.library,
     this.initialEncoding = GameTextEncoding.automatic,
     this.initialPath,
+    this.initialFieldGroup,
   });
   @override
   State<DataEditorPage> createState() => _DataEditorPageState();
@@ -316,7 +318,15 @@ class _DataEditorPageState extends State<DataEditorPage> {
     await _loadNames(path);
     final view = _views[path];
     selected = view?.$2 ?? 0;
-    group = 'Todos';
+    final initialPath = widget.initialPath == null
+        ? null
+        : canon(widget.initialPath!);
+    final requestedGroup = widget.initialFieldGroup;
+    group = path == initialPath &&
+            requestedGroup != null &&
+            FieldMeaning.groups.contains(requestedGroup)
+        ? requestedGroup
+        : 'Todos';
     _labels.clear();
     _summaries.clear();
     _rowsQuery.text = view?.$1 ?? '';
