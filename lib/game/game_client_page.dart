@@ -759,6 +759,55 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
   }
+  Future<void> _interactNearestNpc() async {
+    if(stage!=GameStage.world)return;
+    final globalId=scene.nearestNetworkNpcId();
+    if(globalId==null){
+      messages.insert(0,uiLocale=='spn'?'[NPC] No hay ningún NPC suficientemente cerca.':'[NPC] No NPC is close enough.');
+      if(mounted)setState((){});
+      return;
+    }
+    final snapshot=liveSnapshot;
+    final logical=snapshot?.npcs.where((n)=>n.globalId==globalId).firstOrNull;
+    if(logical==null){
+      messages.insert(0,'[NPC] Actor '+globalId.toString()+' sin metadata lógica.');
+      if(mounted)setState((){});
+      return;
+    }
+    final key=logical.type.toString()+':'+logical.typeId.toString();
+    final rule=metadata?.npcs[key];
+    final localized=catalog?.questText(uiLocale)?.npc(logical.type,logical.typeId);
+    final npcName=(localized?.name.trim().isNotEmpty??false)?localized!.name.trim():'NPC '+key;
+    final openIds={for(final q in snapshot?.quests??const <PsQuestProgress>[])q.questId};
+    final finishedIds={for(final q in snapshot?.finishedQuests??const <PsFinishedQuest>[])q.questId};
+    int? selectedQuest;
+
+    if(rule!=null){
+      for(final id in rule.inQuests){
+        if(openIds.contains(id)){selectedQuest=id;break;}
+      }
+      if(selectedQuest==null){
+        final level=liveCharacter?.level??1;
+        for(final id in rule.outQuests){
+          if(openIds.contains(id)||finishedIds.contains(id))continue;
+          final q=metadata?.quests[id];
+          if(q!=null&&q.minLevel>0&&level<q.minLevel)continue;
+          if(q!=null&&q.maxLevel>0&&level>q.maxLevel)continue;
+          selectedQuest=id;break;
+        }
+      }
+    }
+
+    if(selectedQuest!=null){
+      questId=selectedQuest;
+      questOpen=true;
+      messages.insert(0,'[NPC] '+npcName+' · misión '+selectedQuest.toString()+'.');
+    }else{
+      final welcome=localized?.welcome.trim()??'';
+      messages.insert(0,'['+npcName+'] '+(welcome.isEmpty?(uiLocale=='spn'?'No tiene nada que decir ahora.':'Nothing to say right now.'):welcome));
+    }
+    if(mounted)setState((){});
+  }
   Future<void> _acceptCurrentQuest() async {
     final text=catalog?.questText(uiLocale)?.quest(questId);
     final session=liveWorld;
@@ -898,6 +947,7 @@ class _GameClientPageState extends State<GameClientPage> {
     onAction:(key){
       if(stage!=GameStage.world)return;
       if(key==LogicalKeyboardKey.keyR){scene.resetCombat();return;}
+      if(key==LogicalKeyboardKey.keyE){unawaited(_interactNearestNpc());return;}
       final keys=<LogicalKeyboardKey>[
         LogicalKeyboardKey.digit1,LogicalKeyboardKey.digit2,
         LogicalKeyboardKey.digit3,LogicalKeyboardKey.digit4,
