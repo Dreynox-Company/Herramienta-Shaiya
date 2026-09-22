@@ -25,7 +25,7 @@ class WorldHud extends StatelessWidget {
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
-  final List<PsInventoryItem> inventory,warehouse;
+  final List<PsInventoryItem> inventory,warehouse,guildWarehouse;
   final List<PsFriend> friends;
   final List<PsPartyMember> partyMembers;
   final PsRaidState? raid;
@@ -59,12 +59,12 @@ class WorldHud extends StatelessWidget {
   final PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
   final PsLinkingPossibility? blacksmithExtractPossibility;
   final bool blacksmithBusy;
-  final bool inventoryOpen,socialOpen,guildOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
+  final bool inventoryOpen,socialOpen,guildOpen,guildWarehouseAvailable,guildWarehouseOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
   final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem;
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
-  final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
-  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
+  final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse,onStoreGuildWarehouse,onWithdrawGuildWarehouse;
+  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<String> onRequestFriend;
@@ -121,6 +121,7 @@ class WorldHud extends StatelessWidget {
     required this.skillBar,
     required this.inventory,
     required this.warehouse,
+    required this.guildWarehouse,
     required this.friends,
     required this.partyMembers,
     required this.raid,
@@ -176,6 +177,8 @@ class WorldHud extends StatelessWidget {
     required this.inventoryOpen,
     required this.socialOpen,
     required this.guildOpen,
+    required this.guildWarehouseAvailable,
+    required this.guildWarehouseOpen,
     required this.statusOpen,
     required this.skillsOpen,
     required this.questLogOpen,
@@ -202,9 +205,12 @@ class WorldHud extends StatelessWidget {
     required this.onActivateInventory,
     required this.onStoreWarehouse,
     required this.onWithdrawWarehouse,
+    required this.onStoreGuildWarehouse,
+    required this.onWithdrawGuildWarehouse,
     required this.onToggleInventory,
     required this.onToggleSocial,
     required this.onToggleGuild,
+    required this.onToggleGuildWarehouse,
     required this.onToggleStatus,
     required this.onAddStat,
     required this.onToggleSkills,
