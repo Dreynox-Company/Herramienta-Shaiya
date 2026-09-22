@@ -1,4 +1,4 @@
-SHAIYA SPK RESOURCE PROBE V10 - integrado en Shaiya Studio 0.6.16
+SHAIYA SPK RESOURCE PROBE V11 - integrado en Shaiya Studio 0.6.17
 
 Este auxiliar existe para cerrar la capa criptografica de payloads del DATA.SPK
 sin tratar ciphertext como si fuera un recurso valido.
@@ -19,7 +19,7 @@ USO RECOMENDADO
 EVIDENCIA
   derived-resource-profile.json contiene solamente evidencia que el helper pudo
   reproducir offline contra ciphertexts del SPK validado. La mera presencia de
-  una clave no habilita lectura en 0.6.16: Studio exige una segunda validacion
+  una clave no habilita lectura en 0.6.17: Studio exige una segunda validacion
   contra recursos simples reales. "Extraer todo" solo se habilita despues de
   reconstruir y validar tambien recursos fragmentados completos.
 
@@ -29,7 +29,7 @@ SEGURIDAD
   indice observado; otro SPK se rechaza.
 
 
-V10 endurece la captura de claves:
+V11 endurece la captura de claves:
 - observa BCryptGenerateSymmetricKey, BCryptImportKey y BCryptDuplicateKey;
 - si la creación de la clave ocurrió antes de instalar los hooks, intenta
   exportar de forma no destructiva el BCRYPT_KEY_DATA_BLOB desde el handle
@@ -39,10 +39,16 @@ V10 endurece la captura de claves:
 - game.exe y data.spk permanecen sin modificaciones.
 
 
-V10 agrega compatibilidad real con clientes Shaiya x86 y x64:
+V11 agrega compatibilidad real con clientes Shaiya x86 y x64:
 - detecta la arquitectura PE de game.exe antes de lanzar la captura;
 - interpreta BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO con layout correcto para
   32 y 64 bits;
 - fuerza UTF-8 para la consola y todos los JSON de evidencia;
 - conserva probe-console.log para diagnosticar una captura que no logre
   autenticar todavía la clave de recursos.
+
+V11 agrega un barrido estatico fail-closed antes de instrumentar el cliente:
+  - prueba derivaciones acotadas de la clave del indice;
+  - busca constantes de 16/32 bytes cerca de la clave del indice y cadenas GCM/SPK;
+  - una candidata solo se acepta si autentica por AES-GCM tres payloads simples reales;
+  - si no hay coincidencia, se continua con la captura dinamica x86/x64 sin habilitar lectura.
