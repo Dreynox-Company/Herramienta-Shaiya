@@ -3181,13 +3181,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       backgroundColor: const Color(0xff101722),
       appBar: AppBar(
         titleSpacing: 12,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('DATA.SPK', style: TextStyle(fontSize: 14)),
+            const Text('DATA.SPK', style: TextStyle(fontSize: 14)),
             Text(
-              'Explorador · solo lectura',
-              style: TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
+              source.canExtractAll
+                  ? 'Original protegido · overlay editable'
+                  : 'Explorador · contenido cifrado',
+              style: const TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
             ),
           ],
         ),
