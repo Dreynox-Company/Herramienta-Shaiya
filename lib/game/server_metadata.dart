@@ -46,11 +46,12 @@ class MobRule {
 
 class ItemRule {
   final int type,id,image,icon,level,quality,slot,count,duration,grade;
-  final int buy,sell;
+  final int special,hp,sp,mp,itemSkill,buy,sell;
   const ItemRule({
     required this.type,required this.id,required this.image,required this.icon,
     required this.level,required this.quality,required this.slot,required this.count,
-    required this.duration,required this.grade,required this.buy,required this.sell,
+    required this.duration,required this.grade,required this.special,required this.hp,
+    required this.sp,required this.mp,required this.itemSkill,required this.buy,required this.sell,
   });
   String get key=>'$type:$id';
   String? get iconPath=>icon<=0?null:'interface/icon/${icon.toString().padLeft(2,'0')}.tga';
@@ -60,8 +61,30 @@ class ItemRule {
     level:(j['level'] as num).toInt(),quality:(j['quality'] as num).toInt(),
     slot:(j['slot'] as num).toInt(),count:(j['count'] as num).toInt(),
     duration:(j['duration'] as num).toInt(),grade:(j['grade'] as num).toInt(),
+    special:(j['special'] as num? ?? 0).toInt(),hp:(j['hp'] as num? ?? 0).toInt(),
+    sp:(j['sp'] as num? ?? 0).toInt(),mp:(j['mp'] as num? ?? 0).toInt(),
+    itemSkill:(j['itemSkill'] as num? ?? 0).toInt(),
     buy:(j['buy'] as num).toInt(),sell:(j['sell'] as num).toInt(),
   );
+}
+
+List<int> equipmentSlotsForItemType(int type){
+  if((type>=1&&type<=15)||(type>=45&&type<=65))return const [5];
+  if(const {16,31,66,72,81,87}.contains(type))return const [0];
+  if(const {17,32,67,73,82,88}.contains(type))return const [1];
+  if(const {18,33,68,74,83,89}.contains(type))return const [2];
+  if(const {20,35,70,76,85,91}.contains(type))return const [3];
+  if(const {21,36,71,77,86,92}.contains(type))return const [4];
+  if(const {19,34,69,75,84,90}.contains(type))return const [6];
+  if(const {24,39}.contains(type))return const [7];
+  if(const {23,96}.contains(type))return const [8];
+  if(const {22,37}.contains(type))return const [9,10];
+  if(const {40,97}.contains(type))return const [11,12];
+  if(type==42)return const [13];
+  if(type==120)return const [14];
+  if(type==150)return const [15];
+  if(type==121)return const [16];
+  return const [];
 }
 
 class SkillRule {
