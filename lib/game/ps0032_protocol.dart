@@ -33,6 +33,8 @@ class PsPacketType {
   static const characterEnteredMap=0x0201;
   static const characterLeftMap=0x0202;
   static const runMode=0x0210;
+  static const blessUpdate=0x020F;
+  static const blessInit=0x0211;
   static const useVehicle=0x0216;
   static const useVehicleReady=0x0217;
   static const setMoney=0x0213;
@@ -40,6 +42,8 @@ class PsPacketType {
   static const vehicleRequest=0x021D;
   static const vehicleResponse=0x021E;
   static const inventorySort=0x021F;
+  static const teleportSavePosition=0x0220;
+  static const teleportSavePositionList=0x0225;
   static const itemExpiration=0x022E;
   static const itemExpired=0x022F;
   static const characterEnteredPortal=0x020A;
@@ -224,6 +228,194 @@ class PsPacketType {
   static const mapNpcEnter=0x0E01;
   static const mapNpcLeave=0x0E02;
   static const mapNpcMove=0x0E03;
+
+  static const obeliskList=0x2101;
+  static const obeliskChange=0x2102;
+
+  static const accountPoints=0x2601;
+
+  static const bankItemList=0xB101;
+  static const bankClaimItem=0xB102;
+
+  static const noticeAdmins=0xF906;
+  static const noticeFaction=0xF907;
+  static const noticePlayer=0xF908;
+  static const noticeMap=0xF909;
+  static const noticeWorld=0xF90B;
+}
+
+class PsBlessState {
+  final int country,amount,remainingTime;
+  const PsBlessState(this.country,this.amount,this.remainingTime);
+
+  static PsBlessState parse(PsPacket p,{PsBlessState? previous}){
+    if(p.type==PsPacketType.blessInit){
+      if(p.body.length<9)throw FormatException('BLESS_INIT truncado: ${p.body.length}.');
+      final d=ByteData.sublistView(p.body);
+      return PsBlessState(
+        p.body[0],d.getInt32(1,Endian.little),d.getUint32(5,Endian.little),
+      );
+    }
+    if(p.type==PsPacketType.blessUpdate){
+      if(p.body.length<5)throw FormatException('BLESS_UPDATE truncado: ${p.body.length}.');
+      final d=ByteData.sublistView(p.body);
+      return PsBlessState(
+        p.body[0],d.getInt32(1,Endian.little),previous?.remainingTime??0,
+      );
+    }
+    throw FormatException('Paquete Bless inesperado: 0x${p.type.toRadixString(16)}.');
+  }
+}
+
+class PsBankItem {
+  final int slot,type,typeId,count;
+  const PsBankItem(this.slot,this.type,this.typeId,this.count);
+}
+
+List<PsBankItem> parseBankItems(PsPacket p){
+  if(p.type!=PsPacketType.bankItemList||p.body.isEmpty){
+    throw FormatException('BANK_ITEM_LIST inválido: ${p.body.length}.');
+  }
+  final count=p.body[0],expected=1+count*4;
+  if(p.body.length<expected){
+    throw FormatException('BANK_ITEM_LIST truncado: count=$count bytes=${p.body.length}.');
+  }
+  return List<PsBankItem>.generate(count,(i){
+    final o=1+i*4;
+    return PsBankItem(p.body[o],p.body[o+1],p.body[o+2],p.body[o+3]);
+  },growable:false);
+}
+
+class PsBankClaim {
+  final int bankSlot,bag,slot,count;
+  const PsBankClaim(this.bankSlot,this.bag,this.slot,this.count);
+  static PsBankClaim parse(PsPacket p){
+    if(p.type!=PsPacketType.bankClaimItem||p.body.length<4){
+      throw FormatException('BANK_CLAIM_ITEM truncado: ${p.body.length}.');
+    }
+    return PsBankClaim(p.body[0],p.body[1],p.body[2],p.body[3]);
+  }
+}
+
+class PsTeleportSavedPosition {
+  final int index,mapId;
+  final double x,y,z;
+  const PsTeleportSavedPosition(this.index,this.mapId,this.x,this.y,this.z);
+
+  static PsTeleportSavedPosition parseRecord(Uint8List b,int offset){
+    if(offset<0||offset+15>b.length){
+      throw FormatException('Posición guardada truncada en $offset/${b.length}.');
+    }
+    final d=ByteData.sublistView(b);
+    return PsTeleportSavedPosition(
+      b[offset],d.getUint16(offset+1,Endian.little),
+      d.getFloat32(offset+3,Endian.little),
+      d.getFloat32(offset+7,Endian.little),
+      d.getFloat32(offset+11,Endian.little),
+    );
+  }
+}
+
+List<PsTeleportSavedPosition> parseTeleportSavedPositions(PsPacket p){
+  if(p.type!=PsPacketType.teleportSavePositionList||p.body.isEmpty){
+    throw FormatException('TELEPORT_SAVE_POSITION_LIST inválido: ${p.body.length}.');
+  }
+  final count=p.body[0],expected=1+count*15;
+  if(p.body.length<expected){
+    throw FormatException('TELEPORT_SAVE_POSITION_LIST truncado: count=$count bytes=${p.body.length}.');
+  }
+  return List<PsTeleportSavedPosition>.generate(
+    count,(i)=>PsTeleportSavedPosition.parseRecord(p.body,1+i*15),growable:false,
+  );
+}
+
+class PsTeleportSavedPositionResult {
+  final bool success;
+  final PsTeleportSavedPosition position;
+  const PsTeleportSavedPositionResult(this.success,this.position);
+  static PsTeleportSavedPositionResult parse(PsPacket p){
+    if(p.type!=PsPacketType.teleportSavePosition||p.body.length<16){
+      throw FormatException('TELEPORT_SAVE_POSITION truncado: ${p.body.length}.');
+    }
+    return PsTeleportSavedPositionResult(
+      p.body[0]==0,PsTeleportSavedPosition.parseRecord(p.body,1),
+    );
+  }
+}
+
+class PsAccountPoints {
+  final int points,unknown;
+  const PsAccountPoints(this.points,this.unknown);
+  static PsAccountPoints parse(PsPacket p){
+    if(p.type!=PsPacketType.accountPoints||p.body.length<5){
+      throw FormatException('ACCOUNT_POINTS truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsAccountPoints(d.getUint32(0,Endian.little),p.body[4]);
+  }
+}
+
+class PsObelisk {
+  final int id,country;
+  final double x,z;
+  const PsObelisk(this.id,this.country,this.x,this.z);
+}
+
+List<PsObelisk> parseObeliskList(PsPacket p){
+  if(p.type!=PsPacketType.obeliskList||p.body.isEmpty){
+    throw FormatException('OBELISK_LIST inválido: ${p.body.length}.');
+  }
+  final count=p.body[0],expected=1+count*13;
+  if(p.body.length<expected){
+    throw FormatException('OBELISK_LIST truncado: count=$count bytes=${p.body.length}.');
+  }
+  final d=ByteData.sublistView(p.body);
+  return List<PsObelisk>.generate(count,(i){
+    final o=1+i*13;
+    return PsObelisk(
+      d.getUint32(o,Endian.little),p.body[o+4],
+      d.getFloat32(o+5,Endian.little),d.getFloat32(o+9,Endian.little),
+    );
+  },growable:false);
+}
+
+class PsObeliskChange {
+  final int id,country;
+  const PsObeliskChange(this.id,this.country);
+  static PsObeliskChange parse(PsPacket p){
+    if(p.type!=PsPacketType.obeliskChange||p.body.length<5){
+      throw FormatException('OBELISK_CHANGE truncado: ${p.body.length}.');
+    }
+    return PsObeliskChange(ByteData.sublistView(p.body).getUint32(0,Endian.little),p.body[4]);
+  }
+}
+
+class PsNotice {
+  final int type;
+  final String message;
+  const PsNotice(this.type,this.message);
+
+  static PsNotice parse(PsPacket p){
+    const types=<int>{
+      PsPacketType.noticeAdmins,PsPacketType.noticeFaction,PsPacketType.noticePlayer,
+      PsPacketType.noticeMap,PsPacketType.noticeWorld,
+    };
+    if(!types.contains(p.type)||p.body.isEmpty){
+      throw FormatException('NOTICE inválido: type=0x${p.type.toRadixString(16)} bytes=${p.body.length}.');
+    }
+    final chars=p.body[0],remaining=p.body.length-1;
+    if(chars==0)return PsNotice(p.type,'');
+    if(remaining>=chars*2){
+      final d=ByteData.sublistView(p.body),units=<int>[];
+      for(var i=0;i<chars;i++)units.add(d.getUint16(1+i*2,Endian.little));
+      return PsNotice(p.type,String.fromCharCodes(units).replaceAll('\u0000','').trim());
+    }
+    if(remaining>=chars){
+      final raw=p.body.sublist(1,1+chars);
+      return PsNotice(p.type,utf8.decode(raw,allowMalformed:true).replaceAll('\u0000','').trim());
+    }
+    throw FormatException('NOTICE truncado: chars=$chars bytes=${p.body.length}.');
+  }
 }
 
 class PsInventorySortMove {
@@ -2484,6 +2676,26 @@ class PsWorldSession {
     final returned=ByteData.sublistView(packet.body).getUint32(1,Endian.little);
     if(returned!=characterId)throw StateError('RESTORE_CHARACTER devolvió id inesperado: $returned.');
     return packet.body[0]==0;
+  }
+
+  Future<PsBankClaim> claimBankItem(int bankSlot) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de reclamar el banco.');
+    if(bankSlot<0||bankSlot>255)throw RangeError('Bank slot fuera de byte.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.bankClaimItem);
+    await connection.send(PsPacketType.bankClaimItem,[bankSlot,..._i32Bytes(0),..._i32Bytes(0)]);
+    return PsBankClaim.parse(await response);
+  }
+
+  Future<PsTeleportSavedPositionResult> saveTeleportPosition(
+    int index,int mapId,double x,double y,double z,
+  ) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de guardar una posición.');
+    if(index<0||index>255||mapId<0||mapId>0xffff)throw RangeError('Posición/MapId fuera de rango.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.teleportSavePosition);
+    await connection.send(PsPacketType.teleportSavePosition,[
+      index,..._u16Bytes(mapId),..._f32Bytes(x),..._f32Bytes(y),..._f32Bytes(z),
+    ]);
+    return PsTeleportSavedPositionResult.parse(await response);
   }
 
   Future<void> requestInventorySort(List<PsInventorySortMove> moves) async {
