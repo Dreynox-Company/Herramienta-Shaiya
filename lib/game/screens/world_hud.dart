@@ -24,7 +24,9 @@ class WorldHud extends StatelessWidget {
   final UiAssetCache ui;
   final List<String> messages;
   final bool questOpen;
+  final bool questActive,rewardSelection;
   final int questId;
+  final ValueChanged<int> onSelectReward;
   final VoidCallback onAcceptQuest;
   final VoidCallback onCancelQuest;
 
@@ -47,7 +49,10 @@ class WorldHud extends StatelessWidget {
     required this.ui,
     required this.messages,
     required this.questOpen,
+    required this.questActive,
+    required this.rewardSelection,
     required this.questId,
+    required this.onSelectReward,
     required this.onAcceptQuest,
     required this.onCancelQuest,
   });
@@ -555,12 +560,50 @@ class WorldHud extends StatelessWidget {
     ]),
   );
 
+  Widget _questRewardCell(QuestRewardItem reward,int index){
+    final rule=metadata?.item(reward.type,reward.id);
+    final icon=rule?.iconPath;
+    final name=catalog.itemName(reward.type,reward.id,locale);
+    final text=catalog.itemText(reward.type,reward.id,locale)?.text.trim()??'';
+    final cell=Container(
+      width:42,height:42,
+      decoration:BoxDecoration(
+        color:const Color(0x66d9cfb6),
+        border:Border.all(color:rewardSelection?const Color(0xffffd45f):const Color(0xff6a4b2d),width:rewardSelection?2:1),
+      ),
+      child:Stack(children:[
+        Positioned.fill(
+          child:icon==null
+            ?const Icon(Icons.auto_awesome,color:Color(0xff6e5ac8),size:21)
+            :DataImage(
+                cache:ui,path:icon,fit:BoxFit.contain,
+                fallback:const Icon(Icons.auto_awesome,color:Color(0xff6e5ac8),size:21),
+              ),
+        ),
+        if(reward.count>1)Positioned(
+          right:1,bottom:0,
+          child:Text('x${reward.count}',style:const TextStyle(fontSize:8,color:Colors.white,shadows:[Shadow(color:Colors.black,blurRadius:2)])),
+        ),
+      ]),
+    );
+    return Tooltip(
+      message:name+
+        '\n${reward.type}:${reward.id} · x${reward.count}'+
+        (text.isEmpty?'':'\n\n'+text)+
+        (rewardSelection?'\n\n'+(locale=='spn'?'Haz clic para elegir esta recompensa.':'Click to choose this reward.'):''),
+      waitDuration:const Duration(milliseconds:250),
+      child:rewardSelection?GestureDetector(onTap:()=>onSelectReward(index),child:cell):cell,
+    );
+  }
+
   Widget _questWindow() {
     final text=catalog.questText(locale)?.quest(questId);
+    final rule=metadata?.quests[questId];
     final title=text!=null&&text.name.isNotEmpty?text.name:'Operación básica de la interfaz';
     final body=text!=null&&text.initialDescription.isNotEmpty
       ?text.initialDescription
       :'Aprende a moverte, reconocer la interfaz y hablar con los habitantes de la zona.';
+    final rewards=rule?.rewards??const <QuestRewardItem>[];
 
     return Stack(children:[
       Positioned.fill(
@@ -586,7 +629,7 @@ class WorldHud extends StatelessWidget {
         ),
       ),
       Positioned(
-        left:18,top:62,right:18,height:254,
+        left:18,top:62,right:18,height:238,
         child:SingleChildScrollView(
           child:Text(
             body,
@@ -600,51 +643,78 @@ class WorldHud extends StatelessWidget {
         ),
       ),
       Positioned(
-        left:18,top:333,
-        child:Text(
-          locale=='spn'?'Objeto de recompensa':'Reward item',
-          style:const TextStyle(
-            color:Color(0xff321d11),
-            fontSize:10,
-            fontWeight:FontWeight.w600,
+        left:18,top:309,right:18,
+        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(
+            rewardSelection
+              ?(locale=='spn'?'Elige tu recompensa':'Choose your reward')
+              :(locale=='spn'?'Recompensa':'Reward'),
+            style:const TextStyle(color:Color(0xff321d11),fontSize:10,fontWeight:FontWeight.w600),
           ),
-        ),
-      ),
-      Positioned(
-        left:19,top:356,width:39,height:39,
-        child:Stack(children:[
-          Positioned.fill(
-            child:DataImage(
-              cache:ui,
-              path:'interface/quest/itemslot.tga',
-              fit:BoxFit.fill,
-              fallback:DecoratedBox(
-                decoration:BoxDecoration(
-                  color:const Color(0x66d9cfb6),
-                  border:Border.all(color:const Color(0xff6a4b2d)),
-                ),
+          const SizedBox(height:5),
+          Row(children:[
+            ...List.generate(rewards.length.clamp(0,4),(i)=>Padding(
+              padding:const EdgeInsets.only(right:6),
+              child:_questRewardCell(rewards[i],i),
+            )),
+            if(rewards.isEmpty)
+              Container(
+                width:42,height:42,
+                decoration:BoxDecoration(color:const Color(0x66d9cfb6),border:Border.all(color:const Color(0xff6a4b2d))),
+                child:const Icon(Icons.auto_awesome,color:Color(0xff6e5ac8),size:20),
               ),
-            ),
-          ),
-          const Center(
-            child:Icon(Icons.auto_awesome,color:Color(0xff6e5ac8),size:20),
+          ]),
+          const SizedBox(height:5),
+          Text(
+            'XP ${rule?.xp??0} · Oro ${rule?.money??0}'+
+              ((rule?.nextQuestId??0)>0?' · → Q${rule!.nextQuestId}':''),
+            style:const TextStyle(fontSize:8.5,color:Color(0xff432817)),
           ),
         ]),
       ),
-      Positioned(
-        left:35,right:35,bottom:18,
-        child:Row(
-          mainAxisAlignment:MainAxisAlignment.spaceBetween,
-          children:[
-            shaiyaRedButton(locale=='spn'?'Aceptar':'Accept',onAcceptQuest,width:65,height:28,fontSize:10),
-            shaiyaRedButton(locale=='spn'?'Cancelar':'Cancel',onCancelQuest,width:65,height:28,fontSize:10),
-          ],
+      if(!rewardSelection)
+        Positioned(
+          left:35,right:35,bottom:18,
+          child:Row(
+            mainAxisAlignment:MainAxisAlignment.spaceBetween,
+            children:[
+              SizedBox(
+                width:78,height:31,
+                child:ShaiyaButton(
+                  label:questActive
+                    ?(locale=='spn'?'Completar':'Complete')
+                    :(locale=='spn'?'Aceptar':'Accept'),
+                  onPressed:onAcceptQuest,
+                  compact:true,
+                ),
+              ),
+              SizedBox(
+                width:78,height:31,
+                child:ShaiyaButton(
+                  label:locale=='spn'?'Cancelar':'Cancel',
+                  onPressed:onCancelQuest,
+                  compact:true,
+                ),
+              ),
+            ],
+          ),
+        )
+      else
+        Positioned(
+          left:35,right:35,bottom:18,
+          child:Center(
+            child:SizedBox(
+              width:100,height:31,
+              child:ShaiyaButton(
+                label:locale=='spn'?'Cerrar':'Close',
+                onPressed:onCancelQuest,
+                compact:true,
+              ),
+            ),
+          ),
         ),
-      ),
     ]);
   }
-
-}
 
 class _MiniMapPainter extends CustomPainter {
   final StudioScene scene;
