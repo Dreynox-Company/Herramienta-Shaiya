@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
-
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -2992,7 +2990,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         children: [
           if (source.canExtractAll)
             Container(
-              minHeight: 44,
+              constraints: const BoxConstraints(minHeight: 44),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: const BoxDecoration(
                 color: Color(0xff12251d),
