@@ -2236,8 +2236,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
   Future<void> openCoreTableEditor(
     String path,
-    String label,
-  ) => runAction(() async {
+    String label, {
+    String? fieldGroup,
+  }) => runAction(() async {
     if (!source.canExtractAll) {
       throw const SpkFailure(
         'SPK_CORE_EDITOR_PROFILE',
@@ -2289,6 +2290,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           builder: (_) => DataEditorPage(
             library: library,
             initialPath: canonical,
+            initialFieldGroup: fieldGroup,
           ),
         ),
       );
@@ -2870,13 +2872,25 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             onSelected: (value) {
               if (value == 'profile') loadResourceProfile();
               if (value == 'coreItem') {
-                openCoreTableEditor('BinarySData/DBItemData.SData', 'Objetos / trade');
+                openCoreTableEditor(
+                  'BinarySData/DBItemData.SData',
+                  'Objetos / trade',
+                  fieldGroup: 'Requisitos',
+                );
               }
               if (value == 'coreMonster') {
-                openCoreTableEditor('BinarySData/DBMonsterData.SData', 'Mobs / drops');
+                openCoreTableEditor(
+                  'BinarySData/DBMonsterData.SData',
+                  'Mobs / drops',
+                  fieldGroup: 'Botín y oro',
+                );
               }
               if (value == 'coreSkill') {
-                openCoreTableEditor('BinarySData/DBSkillData.SData', 'Skills');
+                openCoreTableEditor(
+                  'BinarySData/DBSkillData.SData',
+                  'Skills',
+                  fieldGroup: 'Habilidades',
+                );
               }
               if (value == 'discover') discoverCoreTables();
               if (value == 'audit') auditAllResources();
