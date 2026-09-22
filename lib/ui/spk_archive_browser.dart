@@ -190,7 +190,7 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
     final file = File(candidate);
     if (!await file.exists()) continue;
     try {
-      final value = jsonDecode(await file.readAsString());
+      final value = await readSpkJsonFile(file);
       if (value is! Map) continue;
       final data = Map<String, dynamic>.from(value);
       final declared =
@@ -273,7 +273,7 @@ Future<void> loadAutomaticSpkNameMap(
     final file = File(candidate);
     if (!await file.exists()) continue;
     try {
-      final value = jsonDecode(await file.readAsString());
+      final value = await readSpkJsonFile(file);
       if (value is! Map) continue;
       final map = Map<String, dynamic>.from(value);
       final declared = map['spkIndexSha256']?.toString().toLowerCase();
@@ -309,7 +309,7 @@ Future<bool> loadAutomaticSpkFullAudit(
   final file = File('$spkPath.audit.json');
   if (!await file.exists()) return false;
   try {
-    final raw = jsonDecode(await file.readAsString());
+    final raw = await readSpkJsonFile(file);
     if (raw is! Map) return false;
     return source.restoreFullResourceValidation(
       Map<String, dynamic>.from(raw),
@@ -319,6 +319,11 @@ Future<bool> loadAutomaticSpkFullAudit(
   }
 }
 
+
+Future<dynamic> readSpkJsonFile(File file) async {
+  final bytes = await file.readAsBytes();
+  return jsonDecode(utf8.decode(bytes, allowMalformed: true));
+}
 
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
@@ -425,7 +430,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     for (final file in candidates) {
       if (!await file.exists()) continue;
       try {
-        final value = jsonDecode(await file.readAsString());
+        final value = await readSpkJsonFile(file);
         if (value is Map) {
           return SpkCryptoProfile.fromJson(Map<String, dynamic>.from(value));
         }
@@ -468,7 +473,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       confirmButtonText: 'Usar perfil',
     );
     if (profileFile == null) return null;
-    final value = jsonDecode(await File(profileFile.path).readAsString());
+    final value = await readSpkJsonFile(File(profileFile.path));
     if (value is! Map) {
       throw const FormatException('Perfil SPK JSON inválido.');
     }
@@ -1096,7 +1101,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         },
       );
     }
-    final raw = jsonDecode(await profileFile.readAsString());
+    final raw = await readSpkJsonFile(profileFile);
     if (raw is! Map) {
       throw const FormatException('ResourceProbe produjo un JSON inválido.');
     }
@@ -1195,7 +1200,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       confirmButtonText: 'Aplicar perfil de recursos',
     );
     if (picked == null) return;
-    final raw = jsonDecode(await File(picked.path).readAsString());
+    final raw = await readSpkJsonFile(File(picked.path));
     if (raw is! Map) {
       throw const FormatException('Perfil SPK JSON inválido.');
     }
