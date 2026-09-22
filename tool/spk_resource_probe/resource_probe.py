@@ -175,7 +175,7 @@ def derive_profile(rows):
     chunk_tags=bool(chunks) and all(r.get('metadataTagMatch') for r in chunks)
     result={
       'schema':4,
-      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v9',
+      'profileId':'shaiya-spk-v3-resources-a3ea7e3b-v10',
       'indexSha256':EXPECTED_INDEX,
       'offlineValidated':len(valid),
       'simpleValidated':len(simple),
