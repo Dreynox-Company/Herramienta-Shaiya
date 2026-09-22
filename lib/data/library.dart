@@ -540,6 +540,17 @@ class Library {
     return null;
   }
 
+  bool _isTechnicalSpkPath(String canonical, SpkRecord record) {
+    final source = spk;
+    if (source == null || !source.fullyValidatedResources) return false;
+    final format = source.validatedFormat(record.entryId) ?? 'BIN';
+    final technical = canon(
+      '_SPK_SinNombre/${record.idHex}'
+      '${SpkArchiveSource.extensionFor(format)}',
+    );
+    return canonical == technical;
+  }
+
   File _spkOverlayFile(String path) {
     final root = spkOverlayRoot;
     if (root == null) {
@@ -577,10 +588,19 @@ class Library {
         );
       }
       final record = _spkRecords[files[canonical]];
-      if (record == null || !spk!.names.isConfirmed(record.entryId)) {
+      if (record == null) {
+        throw FormatException(
+          'No se encontró el registro SPK de ${entry.key}.',
+        );
+      }
+      final confirmedName = spk!.names.isConfirmed(record.entryId);
+      final technicalIdPath = _isTechnicalSpkPath(canonical, record);
+      if (!confirmedName && !technicalIdPath) {
         throw FormatException(
           'La ruta ${entry.key} todavía es inferida. Antes de editarla, '
-          'confírmala por SHA-256 o con el descubrimiento estructural de tablas.',
+          'confírmala por SHA-256 o con el descubrimiento estructural de tablas. '
+          'Los recursos sin nombre sí pueden editarse por su ruta técnica '
+          'Entry ID después de la auditoría completa.',
         );
       }
       final expected = expectedHashes[entry.key] ?? expectedHashes[canonical];
@@ -655,8 +675,13 @@ class Library {
         }
       }
       await temp.rename(target.path);
+      final record = _spkRecords[files[item.canonical]];
       entries[item.canonical] = {
         'entryId': files[item.canonical],
+        'nameAuthority':
+            record != null && spk!.names.isConfirmed(record.entryId)
+            ? 'confirmed-path'
+            : 'technical-entry-id',
         'originalSha256': item.originalSha,
         'overlaySha256': expectedWritten,
         'bytes': item.bytes.length,
