@@ -1957,6 +1957,126 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  String _hexAsciiDump(Uint8List bytes, {int maxBytes = 4096}) {
+    final limit = math.min(bytes.length, maxBytes);
+    final rows = <String>[];
+    for (var offset = 0; offset < limit; offset += 16) {
+      final end = math.min(offset + 16, limit);
+      final chunk = bytes.sublist(offset, end);
+      final hex = chunk
+          .map((value) => value.toRadixString(16).padLeft(2, '0'))
+          .join(' ')
+          .padRight(47);
+      final printable = String.fromCharCodes(
+        chunk.map(
+          (value) => value >= 32 && value <= 126 ? value : 46,
+        ),
+      );
+      rows.add(
+        '${offset.toRadixString(16).padLeft(8, '0')}  $hex  |$printable|',
+      );
+    }
+    if (limit < bytes.length) {
+      rows.add('');
+      rows.add(
+        '… vista HEX limitada a $limit de ${bytes.length} bytes …',
+      );
+    }
+    return rows.join('\n');
+  }
+
+  List<String> _embeddedBinaryStrings(
+    Uint8List bytes, {
+    int maxScanBytes = 1024 * 1024,
+    int maxStrings = 120,
+  }) {
+    final limit = math.min(bytes.length, maxScanBytes);
+    final found = <String>{};
+
+    void add(List<int> values) {
+      if (values.length < 4 || found.length >= maxStrings) return;
+      final value = String.fromCharCodes(values).trim();
+      if (value.length >= 4) found.add(value);
+    }
+
+    var current = <int>[];
+    for (var i = 0; i < limit && found.length < maxStrings; i++) {
+      final value = bytes[i];
+      if (value >= 32 && value <= 126) {
+        current.add(value);
+      } else {
+        add(current);
+        current = <int>[];
+      }
+    }
+    add(current);
+
+    for (final phase in const [0, 1]) {
+      current = <int>[];
+      for (var i = phase; i + 1 < limit && found.length < maxStrings; i += 2) {
+        final low = bytes[i];
+        final high = bytes[i + 1];
+        if (high == 0 && low >= 32 && low <= 126) {
+          current.add(low);
+        } else {
+          add(current);
+          current = <int>[];
+        }
+      }
+      add(current);
+    }
+
+    return found.take(maxStrings).toList(growable: false);
+  }
+
+  Widget _binaryInspectionPreview(
+    SpkReadResult result,
+    String path, {
+    String? warning,
+  }) {
+    final strings = _embeddedBinaryStrings(result.bytes);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${result.format} · ${result.bytes.length} bytes · visor HEX + ASCII',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+        if (warning != null && warning.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          Text(
+            warning,
+            style: const TextStyle(fontSize: 10, color: Color(0xffd7ad63)),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Expanded(
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              child: SelectableText(
+                [
+                  'Ruta: $path',
+                  '',
+                  'CADENAS DETECTADAS'
+                      '${strings.isEmpty ? ' · ninguna en la muestra' : ''}',
+                  if (strings.isNotEmpty) ...strings.map((value) => '  $value'),
+                  '',
+                  'HEX + ASCII',
+                  _hexAsciiDump(result.bytes),
+                ].join('\n'),
+                style: const TextStyle(
+                  fontFamily: 'Consolas',
+                  fontSize: 10,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _inspectionPreview(
     SpkReadResult result,
     String path, {
@@ -2269,18 +2389,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           );
           break;
         default:
-          preview = SelectableText(
-            'Primeros 256 bytes:\n'
-            '${spkHex(result.bytes.take(256))}',
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
-          );
+          preview = _binaryInspectionPreview(result, path);
       }
     } catch (error) {
-      preview = SelectableText(
-        'El payload fue autenticado, pero la vista estructurada falló:\n'
-        '$error\n\n'
-        'Primeros 256 bytes:\n${spkHex(result.bytes.take(256))}',
-        style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+      preview = _binaryInspectionPreview(
+        result,
+        path,
+        warning:
+            'El payload fue autenticado, pero la vista estructurada falló: '
+            '$error',
       );
     }
     return preview;
@@ -2436,6 +2553,85 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  Future<void> replaceRecordInOverlay(SpkRecord record) => runAction(() async {
+    if (!source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_OVERLAY_PROFILE',
+        'Para reemplazar un recurso deben estar autenticados los recursos '
+            'simples y fragmentados.',
+      );
+    }
+    if (!source.fullyValidatedResources) {
+      operation = 'Auditando DATA.SPK antes de habilitar el reemplazo…';
+      if (mounted) setState(() {});
+      await _auditAllResources(source);
+    }
+
+    final path = _editableLibraryPath(record);
+    final picked = await openFile(
+      confirmButtonText: 'Usar como reemplazo',
+    );
+    if (picked == null) return;
+
+    final replacementFile = File(picked.path);
+    final replacementBytes = await replacementFile.readAsBytes();
+    const maxReplacementBytes = 128 * 1024 * 1024;
+    if (replacementBytes.length > maxReplacementBytes) {
+      throw const FormatException(
+        'El reemplazo supera el límite de 128 MiB del workspace SPK.',
+      );
+    }
+
+    final expectedFormat = source.validatedFormat(record.entryId) ?? 'BIN';
+    final replacementFormat = SpkArchiveSource.detectFormat(replacementBytes);
+    if (expectedFormat != 'BIN' && replacementFormat != expectedFormat) {
+      throw SpkFailure(
+        'SPK_REPLACEMENT_FORMAT',
+        'El archivo elegido no conserva el formato autenticado del recurso.',
+        {
+          'expectedFormat': expectedFormat,
+          'replacementFormat': replacementFormat,
+          'path': path,
+        },
+      );
+    }
+
+    operation = 'Montando overlay editable para $path…';
+    if (mounted) setState(() {});
+    final library = await Library.fromSpk(
+      source,
+      requireCharacter: false,
+      progress: (message) {
+        if (mounted) setState(() => operation = message);
+      },
+    );
+    try {
+      final current = await library.read(
+        path,
+        limit: maxReplacementBytes,
+      );
+      final expectedHash = sha256.convert(current).toString();
+      await library.writeSpkOverlay(
+        {path: replacementBytes},
+        expectedHashes: {path: expectedHash},
+      );
+    } finally {
+      library.dispose();
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Reemplazo guardado en overlay · $replacementFormat · '
+          '${bytesLabel(replacementBytes.length)} · $path. '
+          'DATA.SPK original permanece intacto.',
+        ),
+        duration: const Duration(seconds: 10),
+      ),
+    );
+  });
+
   Future<Uint8List?> _matchingTexturePng(
     SpkRecord meshRecord,
     String meshPath,
@@ -2530,6 +2726,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               },
               icon: const Icon(Icons.edit_note_outlined),
               label: Text(_editorActionLabel(record)),
+            ),
+          if (source.canExtractAll)
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(c);
+                replaceRecordInOverlay(record);
+              },
+              icon: const Icon(Icons.swap_horiz_outlined),
+              label: const Text('Reemplazar en overlay'),
             ),
           TextButton(
             onPressed: () => Navigator.pop(c),
@@ -2907,6 +3112,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             onPressed: busy ? null : () => openRecordInEditor(record),
             icon: const Icon(Icons.edit_note_outlined, size: 17),
             label: Text(_editorActionLabel(record)),
+          ),
+        ],
+        if (source.canReadRecord(record) && source.canExtractAll) ...[
+          const SizedBox(height: 7),
+          OutlinedButton.icon(
+            onPressed: busy ? null : () => replaceRecordInOverlay(record),
+            icon: const Icon(Icons.swap_horiz_outlined, size: 17),
+            label: const Text('Reemplazar en overlay'),
           ),
         ],
         OutlinedButton.icon(
