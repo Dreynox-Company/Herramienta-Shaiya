@@ -92,6 +92,19 @@ void main(){
     expect((reflected.targetId,reflected.senderId,reflected.hpDamage),(202,101,7));
   });
 
+  test('parses authoritative character attack and movement speed',(){
+    final b=Uint8List(6),d=ByteData.sublistView(b);
+    d.setUint32(0,77,Endian.little);
+    b[4]=8;
+    b[5]=3;
+    final speed=PsCharacterSpeed.parse(
+      PsPacket(PsPacketType.characterAttackMovementSpeed,b),
+    );
+    expect((speed.characterId,speed.attackSpeed,speed.moveSpeed),(77,8,3));
+    expect(speed.canAttack,isTrue);
+    expect(speed.canMove,isTrue);
+  });
+
   test('parses character auto attack against mob',(){
     final b=_body(15),d=ByteData.sublistView(b);
     b[0]=0;
