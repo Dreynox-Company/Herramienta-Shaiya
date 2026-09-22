@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p qa-sources/formatted
-          dart format lib/core/spk_archive.dart lib/data/spk_source.dart lib/data/spk_table_discovery.dart lib/data/spk_writer.dart lib/data/library.dart lib/data/catalog.dart lib/ui/spk_archive_browser.dart lib/ui/data_editor.dart lib/ui/editor_pickers.dart lib/editor/field_semantics.dart lib/main.dart test/spk_archive_test.dart test/spk_profile_discovery_test.dart test/spk_fragment_payload_test.dart test/spk_payload_validation_test.dart test/spk_table_discovery_test.dart tool/run_all_local.dart
+          dart format lib/core/spk_archive.dart lib/data/spk_source.dart lib/data/spk_table_discovery.dart lib/data/spk_writer.dart lib/data/library.dart lib/data/catalog.dart lib/ui/spk_archive_browser.dart lib/ui/data_editor.dart lib/ui/editor_pickers.dart lib/editor/field_semantics.dart lib/main.dart test/spk_archive_test.dart test/spk_profile_discovery_test.dart test/spk_fragment_payload_test.dart test/spk_payload_validation_test.dart test/spk_table_discovery_test.dart test/spk_writer_test.dart tool/run_all_local.dart
           cp lib/core/spk_archive.dart qa-sources/formatted/spk_archive.dart.txt
           cp lib/data/spk_source.dart qa-sources/formatted/spk_source.dart.txt
           cp lib/ui/spk_archive_browser.dart qa-sources/formatted/spk_archive_browser.dart.txt
