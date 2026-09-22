@@ -139,6 +139,9 @@ class _GameClientPageState extends State<GameClientPage> {
   PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
   int blacksmithExtractPosition=0;
   PsLinkingPossibility? blacksmithExtractPossibility;
+  PsInventoryItem? blacksmithEnchantItem,blacksmithLapisia;
+  PsEnchantRate? blacksmithEnchantRate;
+  PsInventoryItem? blacksmithComposeItem,blacksmithRune,blacksmithVial;
   bool blacksmithBusy=false;
   NpcGateRule? activeGate;
   int? activeShopNpcGlobalId;
@@ -3215,7 +3218,9 @@ class _GameClientPageState extends State<GameClientPage> {
     blacksmithItem=blacksmithGem=blacksmithHammer=null;
     blacksmithPossibility=null;
     blacksmithExtractItem=blacksmithExtractHammer=null;
-    blacksmithExtractPosition=0;blacksmithExtractPossibility=null;blacksmithBusy=false;
+    blacksmithExtractPosition=0;blacksmithExtractPossibility=null;
+    blacksmithEnchantItem=blacksmithLapisia=null;blacksmithEnchantRate=null;
+    blacksmithComposeItem=blacksmithRune=blacksmithVial=null;blacksmithBusy=false;
     activeGate=null;
     activeShopNpcGlobalId=null;
     activeGateNpcGlobalId=null;
@@ -3482,8 +3487,140 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
   }
   void _setBlacksmithMode(int mode){
-    blacksmithMode=mode.clamp(0,1).toInt();
+    blacksmithMode=mode.clamp(0,4).toInt();
     if(mounted)setState((){});
+  }
+
+  void _replaceInventoryCraftName(int bag,int slot,String craftName){
+    final index=liveInventory.indexWhere((x)=>x.bag==bag&&x.slot==slot);
+    if(index<0)return;
+    final old=liveInventory[index];
+    liveInventory[index]=PsInventoryItem(
+      bag:old.bag,slot:old.slot,type:old.type,typeId:old.typeId,quality:old.quality,
+      count:old.count,gems:old.gems,craftName:craftName,dyed:old.dyed,
+    );
+  }
+
+  Future<void> _refreshEnchantRate() async {
+    final item=blacksmithEnchantItem,lapisia=blacksmithLapisia,session=liveWorld;
+    blacksmithEnchantRate=null;
+    if(item==null||lapisia==null||session==null){if(mounted)setState((){});return;}
+    final itemRule=metadata?.item(item.type,item.typeId),lapisiaRule=metadata?.item(lapisia.type,lapisia.typeId);
+    if(itemRule==null||lapisiaRule==null||!itemRule.enchantTarget||!lapisiaRule.lapisia){
+      messages.insert(0,'[Herrero] Selección de encantamiento inválida.');
+      if(mounted)setState((){});return;
+    }
+    final compatible=itemRule.weaponEnchantTarget
+      ?lapisiaRule.weaponLapisia
+      :itemRule.shieldEnchantTarget
+        ?lapisiaRule.weaponLapisia
+        :itemRule.armorEnchantTarget&&lapisiaRule.armorLapisia;
+    final level=item.enchantLevel,min=lapisiaRule.minEnchantLevel,max=lapisiaRule.maxEnchantLevel;
+    final levelAllowed=level>=min&&(min==max||level<max);
+    if(!compatible||!levelAllowed||level>=20){
+      messages.insert(0,'[Herrero] La lapisia no es compatible con este objeto/nivel.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      blacksmithEnchantRate=await session.enchantRates(
+        itemBag:item.bag,itemSlot:item.slot,lapisias:[(lapisia.bag,lapisia.slot)],
+      );
+      final rate=blacksmithEnchantRate!.rates.firstOrNull??0,gold=blacksmithEnchantRate!.gold.firstOrNull??0;
+      messages.insert(0,'[Herrero] Encantamiento: '+(rate/100).toStringAsFixed(2)+'% · '+gold.toString()+' oro.');
+    }catch(e){messages.insert(0,'[Herrero] ENCHANT_RATE: '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+  }
+
+  void _selectEnchantItem(PsInventoryItem? item){
+    blacksmithEnchantItem=item;blacksmithEnchantRate=null;unawaited(_refreshEnchantRate());
+  }
+  void _selectLapisia(PsInventoryItem? item){
+    blacksmithLapisia=item;blacksmithEnchantRate=null;unawaited(_refreshEnchantRate());
+  }
+
+  Future<void> _enchantSelectedItem() async {
+    final item=blacksmithEnchantItem,lapisia=blacksmithLapisia,session=liveWorld,quote=blacksmithEnchantRate;
+    if(item==null||lapisia==null||session==null||quote==null||blacksmithBusy)return;
+    final cost=quote.gold.firstOrNull??0;
+    if(liveGold!=null&&liveGold!<cost){
+      messages.insert(0,'[Herrero] Oro insuficiente para encantar.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final result=await session.enchantItem(
+        lapisiaBag:lapisia.bag,lapisiaSlot:lapisia.slot,itemBag:item.bag,itemSlot:item.slot,
+      );
+      liveGold=result.gold;
+      _replaceInventoryCount(result.lapisiaBag,result.lapisiaSlot,result.lapisiaCount);
+      if(result.itemBag==0&&result.itemSlot==0&&!result.success&&item.bag!=0){
+        liveInventory.removeWhere((x)=>x.bag==item.bag&&x.slot==item.slot);
+        blacksmithEnchantItem=null;
+      }else{
+        _replaceInventoryCraftName(result.itemBag,result.itemSlot,result.craftName);
+        blacksmithEnchantItem=liveInventory.where((x)=>x.bag==result.itemBag&&x.slot==result.itemSlot).firstOrNull;
+      }
+      blacksmithLapisia=liveInventory.where((x)=>x.bag==result.lapisiaBag&&x.slot==result.lapisiaSlot).firstOrNull;
+      blacksmithEnchantRate=null;
+      messages.insert(0,result.success?'[Herrero] Encantamiento aplicado por World.':'[Herrero] Encantamiento falló según World.');
+    }catch(e){messages.insert(0,'[Herrero] ENCHANT_ADD: '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+    if(blacksmithEnchantItem!=null&&blacksmithLapisia!=null)unawaited(_refreshEnchantRate());
+  }
+
+  void _selectComposeItem(PsInventoryItem? item){
+    blacksmithComposeItem=item;if(mounted)setState((){});
+  }
+  void _selectComposeRune(PsInventoryItem? item){
+    blacksmithRune=item;if(mounted)setState((){});
+  }
+  void _selectComposeVial(PsInventoryItem? item){
+    blacksmithVial=item;if(mounted)setState((){});
+  }
+
+  Future<void> _composeSelectedItem() async {
+    final item=blacksmithComposeItem,rune=blacksmithRune,session=liveWorld;
+    if(item==null||rune==null||session==null||blacksmithBusy)return;
+    final itemRule=metadata?.item(item.type,item.typeId),runeRule=metadata?.item(rune.type,rune.typeId);
+    if(itemRule==null||runeRule==null||!itemRule.composable||(!runeRule.recreationRune&&!runeRule.absoluteRecreationRune)){
+      messages.insert(0,'[Herrero] Objeto o runa de recreación inválidos.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final result=await session.composeItem(
+        runeBag:rune.bag,runeSlot:rune.slot,itemBag:item.bag,itemSlot:item.slot,
+        absolute:runeRule.absoluteRecreationRune,
+      );
+      if(result.success&&result.craftName.isNotEmpty){
+        _replaceInventoryCraftName(item.bag,item.slot,result.craftName);
+        blacksmithComposeItem=liveInventory.where((x)=>x.bag==item.bag&&x.slot==item.slot).firstOrNull;
+      }
+      messages.insert(0,result.success
+        ?(result.absolute?'[Herrero] Recreación absoluta calculada por World.':'[Herrero] Recreación aplicada por World.')
+        :'[Herrero] La recreación fue rechazada por World.');
+    }catch(e){messages.insert(0,'[Herrero] ITEM_COMPOSE: '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
+  }
+
+  Future<void> _synthesizeSelectedRune() async {
+    final rune=blacksmithRune,vial=blacksmithVial,session=liveWorld;
+    if(rune==null||vial==null||session==null||blacksmithBusy)return;
+    final runeRule=metadata?.item(rune.type,rune.typeId),vialRule=metadata?.item(vial.type,vial.typeId);
+    if(runeRule?.special!=62||rune.count<2||vialRule?.recreationVial!=true){
+      messages.insert(0,'[Herrero] Se requieren 2 runas de recreación y un vial compatible.');
+      if(mounted)setState((){});return;
+    }
+    blacksmithBusy=true;if(mounted)setState((){});
+    try{
+      final result=await session.synthesizeRune(
+        runeBag:rune.bag,runeSlot:rune.slot,vialBag:vial.bag,vialSlot:vial.slot,
+      );
+      messages.insert(0,result.success?'[Herrero] Runa perfecta sintetizada por World.':'[Herrero] Síntesis rechazada por World.');
+      if(result.success){blacksmithRune=null;blacksmithVial=null;}
+    }catch(e){messages.insert(0,'[Herrero] RUNE_SYNTHESIZE: '+e.toString());}
+    finally{blacksmithBusy=false;if(mounted)setState((){});}
   }
 
   Future<void> _refreshExtractPossibility() async {
@@ -4131,6 +4268,12 @@ class _GameClientPageState extends State<GameClientPage> {
             blacksmithExtractHammer:blacksmithExtractHammer,
             blacksmithExtractPosition:blacksmithExtractPosition,
             blacksmithExtractPossibility:blacksmithExtractPossibility,
+            blacksmithEnchantItem:blacksmithEnchantItem,
+            blacksmithLapisia:blacksmithLapisia,
+            blacksmithEnchantRate:blacksmithEnchantRate,
+            blacksmithComposeItem:blacksmithComposeItem,
+            blacksmithRune:blacksmithRune,
+            blacksmithVial:blacksmithVial,
             blacksmithBusy:blacksmithBusy,
             onCloseShop:()=>setState(()=>shopOpen=false),
             onCloseBlacksmith:()=>setState(()=>blacksmithOpen=false),
@@ -4145,6 +4288,14 @@ class _GameClientPageState extends State<GameClientPage> {
             onSelectExtractHammer:_selectExtractHammer,
             onLinkGem:()=>unawaited(_linkSelectedGem()),
             onExtractGem:()=>unawaited(_extractSelectedGem()),
+            onEnchantItem:()=>unawaited(_enchantSelectedItem()),
+            onComposeItem:()=>unawaited(_composeSelectedItem()),
+            onSynthesizeRune:()=>unawaited(_synthesizeSelectedRune()),
+            onSelectEnchantItem:_selectEnchantItem,
+            onSelectLapisia:_selectLapisia,
+            onSelectComposeItem:_selectComposeItem,
+            onSelectComposeRune:_selectComposeRune,
+            onSelectComposeVial:_selectComposeVial,
             onBuyShopProduct:(index)=>unawaited(_buyShopProduct(index)),
             onUseGate:(index)=>unawaited(_useGatekeeperTarget(index)),
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),

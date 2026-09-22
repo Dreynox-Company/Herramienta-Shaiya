@@ -63,11 +63,15 @@ class WorldHud extends StatelessWidget {
   final PsLinkingPossibility? blacksmithPossibility;
   final PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
   final PsLinkingPossibility? blacksmithExtractPossibility;
+  final PsInventoryItem? blacksmithEnchantItem,blacksmithLapisia;
+  final PsEnchantRate? blacksmithEnchantRate;
+  final PsInventoryItem? blacksmithComposeItem,blacksmithRune,blacksmithVial;
   final bool blacksmithBusy;
   final bool inventoryOpen,socialOpen,guildOpen,guildWarehouseAvailable,guildWarehouseOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
-  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem;
+  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem,onEnchantItem,onComposeItem,onSynthesizeRune;
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
-  final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
+  final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer,
+    onSelectEnchantItem,onSelectLapisia,onSelectComposeItem,onSelectComposeRune,onSelectComposeVial;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse,onStoreGuildWarehouse,onWithdrawGuildWarehouse;
   final ValueChanged<PsMapItem> onPickMapItem;
   final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onToggleVehicle,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
@@ -190,6 +194,12 @@ class WorldHud extends StatelessWidget {
     required this.blacksmithExtractHammer,
     required this.blacksmithExtractPosition,
     required this.blacksmithExtractPossibility,
+    required this.blacksmithEnchantItem,
+    required this.blacksmithLapisia,
+    required this.blacksmithEnchantRate,
+    required this.blacksmithComposeItem,
+    required this.blacksmithRune,
+    required this.blacksmithVial,
     required this.blacksmithBusy,
     required this.inventoryOpen,
     required this.socialOpen,
@@ -209,6 +219,9 @@ class WorldHud extends StatelessWidget {
     required this.onCloseWarehouse,
     required this.onLinkGem,
     required this.onExtractGem,
+    required this.onEnchantItem,
+    required this.onComposeItem,
+    required this.onSynthesizeRune,
     required this.onBlacksmithMode,
     required this.onSelectBlacksmithItem,
     required this.onSelectBlacksmithGem,
@@ -216,6 +229,11 @@ class WorldHud extends StatelessWidget {
     required this.onSelectExtractItem,
     required this.onSelectExtractPosition,
     required this.onSelectExtractHammer,
+    required this.onSelectEnchantItem,
+    required this.onSelectLapisia,
+    required this.onSelectComposeItem,
+    required this.onSelectComposeRune,
+    required this.onSelectComposeVial,
     required this.onBuyShopProduct,
     required this.onUseGate,
     required this.onSellInventory,
@@ -2506,19 +2524,26 @@ class WorldHud extends StatelessWidget {
     ]);
   }
 
-  Widget _blacksmithTabs()=>Row(children:[
-    Expanded(child:shaiyaRedButton(
-      locale=='spn'?'Enlazar':'Link',
-      blacksmithMode==0?null:()=>onBlacksmithMode(0),
-      width:180,height:28,fontSize:9.5,
-    )),
-    const SizedBox(width:6),
-    Expanded(child:shaiyaRedButton(
-      locale=='spn'?'Extraer':'Extract',
-      blacksmithMode==1?null:()=>onBlacksmithMode(1),
-      width:180,height:28,fontSize:9.5,
-    )),
-  ]);
+  Widget _blacksmithTabs()=>Wrap(
+    spacing:4,runSpacing:4,
+    children:[
+      for(final tab in <(int,String,String)>[
+        (0,'Enlazar','Link'),
+        (1,'Extraer','Extract'),
+        (2,'Encantar','Enchant'),
+        (3,'Recrear','Recreate'),
+        (4,'Sintetizar','Synthesize'),
+      ])
+        SizedBox(
+          width:74,height:28,
+          child:shaiyaRedButton(
+            locale=='spn'?tab.$2:tab.$3,
+            blacksmithMode==tab.$1?null:()=>onBlacksmithMode(tab.$1),
+            width:74,height:28,fontSize:8.2,
+          ),
+        ),
+    ],
+  );
 
   Widget _blacksmithLinkingBody(){
     final targets=inventory.where((item){
@@ -2672,23 +2697,201 @@ class WorldHud extends StatelessWidget {
     ]);
   }
 
+  Widget _blacksmithEnchantBody(){
+    final targets=inventory.where((item){
+      if(item.bag==0)return false;
+      return metadata?.item(item.type,item.typeId)?.enchantTarget==true;
+    }).toList();
+    final selectedRule=blacksmithEnchantItem==null?null:metadata?.item(blacksmithEnchantItem!.type,blacksmithEnchantItem!.typeId);
+    final lapisias=inventory.where((item){
+      if(item.bag==0)return false;
+      final rule=metadata?.item(item.type,item.typeId);
+      if(rule?.lapisia!=true)return false;
+      if(selectedRule==null)return true;
+      if(selectedRule.weaponEnchantTarget||selectedRule.shieldEnchantTarget)return rule!.weaponLapisia;
+      if(selectedRule.armorEnchantTarget)return rule!.armorLapisia;
+      return false;
+    }).toList();
+    final quote=blacksmithEnchantRate,rate=quote?.rates.firstOrNull??0,cost=quote?.gold.firstOrNull??0;
+    final canEnchant=!blacksmithBusy&&blacksmithEnchantItem!=null&&blacksmithLapisia!=null&&quote!=null&&rate>0&&gold>=cost;
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      _blacksmithPick(
+        title:locale=='spn'?'1. Arma/armadura':'1. Weapon/armor',
+        items:targets,selected:blacksmithEnchantItem,onSelect:onSelectEnchantItem,
+      ),
+      const SizedBox(height:9),
+      _blacksmithPick(
+        title:locale=='spn'?'2. Lapisia compatible':'2. Compatible lapisia',
+        items:lapisias,selected:blacksmithLapisia,onSelect:onSelectLapisia,
+      ),
+      const SizedBox(height:10),
+      Container(
+        width:double.infinity,padding:const EdgeInsets.all(9),
+        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(
+            quote==null
+              ?(blacksmithBusy?(locale=='spn'?'Consultando a World…':'Querying World…'):(locale=='spn'?'Selecciona objeto y lapisia.':'Select item and lapisia.'))
+              :(locale=='spn'?'Probabilidad: ':'Chance: ')+(rate/100).toStringAsFixed(2)+'% · '+(locale=='spn'?'Coste: ':'Cost: ')+cost.toString(),
+            style:TextStyle(fontSize:10,color:quote==null?Colors.white54:(rate>=5000?const Color(0xff9dff90):const Color(0xffffb46d))),
+          ),
+          if(blacksmithEnchantItem!=null)...[
+            const SizedBox(height:5),
+            Text(
+              (locale=='spn'?'Nivel actual: +':'Current level: +')+blacksmithEnchantItem!.enchantLevel.toString()+
+              ' · '+(locale=='spn'?'máximo +20':'maximum +20'),
+              style:const TextStyle(fontSize:8,color:Colors.white54),
+            ),
+          ],
+        ]),
+      ),
+      const Spacer(),
+      Row(children:[
+        Text('Oro: $gold',style:const TextStyle(fontSize:9.5,color:Color(0xffffd26a))),
+        const Spacer(),
+        SizedBox(
+          width:104,height:29,
+          child:shaiyaRedButton(
+            blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Encantar':'Enchant'),
+            canEnchant?onEnchantItem:null,width:104,height:29,fontSize:9,
+          ),
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _blacksmithComposeBody(){
+    final targets=inventory.where((item)=>
+      item.bag!=0&&metadata?.item(item.type,item.typeId)?.composable==true
+    ).toList();
+    final runes=inventory.where((item){
+      if(item.bag==0)return false;
+      final rule=metadata?.item(item.type,item.typeId);
+      return rule?.recreationRune==true||rule?.absoluteRecreationRune==true;
+    }).toList();
+    final runeRule=blacksmithRune==null?null:metadata?.item(blacksmithRune!.type,blacksmithRune!.typeId);
+    final canCompose=!blacksmithBusy&&blacksmithComposeItem!=null&&blacksmithRune!=null;
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      _blacksmithPick(
+        title:locale=='spn'?'1. Objeto recreable':'1. Re-creatable item',
+        items:targets,selected:blacksmithComposeItem,onSelect:onSelectComposeItem,
+      ),
+      const SizedBox(height:9),
+      _blacksmithPick(
+        title:locale=='spn'?'2. Runa de recreación':'2. Recreation rune',
+        items:runes,selected:blacksmithRune,onSelect:onSelectComposeRune,
+      ),
+      const SizedBox(height:10),
+      Container(
+        width:double.infinity,padding:const EdgeInsets.all(9),
+        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(
+            runeRule?.absoluteRecreationRune==true
+              ?(locale=='spn'?'Recreación absoluta: World calcula opciones nuevas antes de confirmar.':'Absolute recreation: World calculates the new options before confirmation.')
+              :(locale=='spn'?'La runa recalcula los atributos de recreación del objeto.':'The rune rerolls the item recreation attributes.'),
+            style:const TextStyle(fontSize:8.4,color:Colors.white60),
+          ),
+          if(blacksmithComposeItem?.craftName.isNotEmpty==true)...[
+            const SizedBox(height:5),
+            Text('Craft: '+blacksmithComposeItem!.craftName,style:const TextStyle(fontSize:7.5,color:Color(0xffd8c59a))),
+          ],
+        ]),
+      ),
+      const Spacer(),
+      Row(children:[
+        const Spacer(),
+        SizedBox(
+          width:112,height:29,
+          child:shaiyaRedButton(
+            blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Recrear':'Recreate'),
+            canCompose?onComposeItem:null,width:112,height:29,fontSize:9,
+          ),
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _blacksmithSynthesisBody(){
+    final runes=inventory.where((item)=>
+      item.bag!=0&&item.count>=2&&metadata?.item(item.type,item.typeId)?.special==62
+    ).toList();
+    final vials=inventory.where((item)=>
+      item.bag!=0&&metadata?.item(item.type,item.typeId)?.recreationVial==true
+    ).toList();
+    final canSynthesize=!blacksmithBusy&&blacksmithRune!=null&&blacksmithRune!.count>=2&&blacksmithVial!=null;
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      _blacksmithPick(
+        title:locale=='spn'?'1. Dos runas de recreación':'1. Two recreation runes',
+        items:runes,selected:blacksmithRune,onSelect:onSelectComposeRune,
+      ),
+      const SizedBox(height:9),
+      _blacksmithPick(
+        title:locale=='spn'?'2. Vial de atributo':'2. Attribute vial',
+        items:vials,selected:blacksmithVial,onSelect:onSelectComposeVial,
+      ),
+      const SizedBox(height:10),
+      Container(
+        width:double.infinity,padding:const EdgeInsets.all(9),
+        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        child:Text(
+          locale=='spn'
+            ?'World consume 2 runas y 1 vial y genera la runa perfecta correspondiente al atributo.'
+            :'World consumes 2 runes and 1 vial and creates the matching perfect recreation rune.',
+          style:const TextStyle(fontSize:8.4,color:Colors.white60),
+        ),
+      ),
+      const Spacer(),
+      Row(children:[
+        const Spacer(),
+        SizedBox(
+          width:112,height:29,
+          child:shaiyaRedButton(
+            blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Sintetizar':'Synthesize'),
+            canSynthesize?onSynthesizeRune:null,width:112,height:29,fontSize:9,
+          ),
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _blacksmithBody()=>switch(blacksmithMode){
+    0=>_blacksmithLinkingBody(),
+    1=>_blacksmithExtractionBody(),
+    2=>_blacksmithEnchantBody(),
+    3=>_blacksmithComposeBody(),
+    _=>_blacksmithSynthesisBody(),
+  };
+
+  String get _blacksmithTitle=>switch(blacksmithMode){
+    0=>locale=='spn'?'Herrero · Enlace de lapis':'Blacksmith · Lapis linking',
+    1=>locale=='spn'?'Herrero · Extracción de lapis':'Blacksmith · Lapis extraction',
+    2=>locale=='spn'?'Herrero · Encantamiento':'Blacksmith · Enchantment',
+    3=>locale=='spn'?'Herrero · Recreación':'Blacksmith · Recreation',
+    _=>locale=='spn'?'Herrero · Síntesis de runas':'Blacksmith · Rune synthesis',
+  };
+
   Widget _blacksmithWindow()=>_panelShell(
-    blacksmithMode==0
-      ?(locale=='spn'?'Herrero · Enlace de lapis':'Blacksmith · Lapis linking')
-      :(locale=='spn'?'Herrero · Extracción de lapis':'Blacksmith · Lapis extraction'),
+    _blacksmithTitle,
     Padding(
       padding:const EdgeInsets.all(10),
       child:Column(children:[
         _blacksmithTabs(),
         const SizedBox(height:9),
-        Expanded(child:blacksmithMode==0?_blacksmithLinkingBody():_blacksmithExtractionBody()),
+        Expanded(child:_blacksmithBody()),
       ]),
     ),
     footer:Container(
       height:30,padding:const EdgeInsets.symmetric(horizontal:8),
       child:Row(children:[
         Text(
-          blacksmithMode==0?(locale=='spn'?'Linking':'Linking'):(locale=='spn'?'Extracción':'Extraction'),
+          switch(blacksmithMode){
+            0=>'Linking',
+            1=>locale=='spn'?'Extracción':'Extraction',
+            2=>locale=='spn'?'Encantamiento':'Enchantment',
+            3=>locale=='spn'?'Recreación':'Recreation',
+            _=>locale=='spn'?'Síntesis':'Synthesis',
+          },
           style:const TextStyle(fontSize:8,color:Colors.white38),
         ),
         const Spacer(),

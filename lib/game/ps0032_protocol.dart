@@ -2252,6 +2252,10 @@ class PsInventoryItem {
     required this.quality,required this.count,required this.gems,required this.craftName,required this.dyed,
   });
   String get key=>'${type}:${typeId}';
+  int get enchantLevel{
+    if(craftName.length<20)return 0;
+    return int.tryParse(craftName.substring(18,20))??0;
+  }
 }
 
 List<PsInventoryItem> parseInventoryItems(PsPacket p){
