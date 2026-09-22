@@ -22,14 +22,15 @@ class OfflineBackend {
   }
 
   Future<bool> start() async {
-    if(Platform.environment['SHAIYA_QA_DISABLE_BACKEND']=='1'){
-      log('QA visual: backend desactivado; se usan SVMAP y metadatos empaquetados.');
-      return false;
-    }
     if(ready)return true;
     final loginExe=File('$root${Platform.pathSeparator}servicios${Platform.pathSeparator}login${Platform.pathSeparator}Imgeneus.Login.exe');
     final worldExe=File('$root${Platform.pathSeparator}servicios${Platform.pathSeparator}world${Platform.pathSeparator}Imgeneus.World.exe');
-    if(!await loginExe.exists()||!await worldExe.exists()){log('Backend offline no empaquetado; se mantiene modo visual local.');return false;}
+    final packaged=await loginExe.exists()&&await worldExe.exists();
+    if(Platform.environment['SHAIYA_QA_DISABLE_BACKEND']=='1'&&!packaged){
+      log('QA visual: backend desactivado; se usan SVMAP y metadatos empaquetados.');
+      return false;
+    }
+    if(!packaged){log('Backend offline no empaquetado; se mantiene modo visual local.');return false;}
     final save=Directory(saveRoot);await save.create(recursive:true);
     password=_hex(8);token=_hex(24);
     final env={...Platform.environment,'SHAIYA_OFFLINE_SLOT':save.path,'SHAIYA_OFFLINE_FACTION':'light','SHAIYA_OFFLINE_PASSWORD':password!,'SHAIYA_OFFLINE_TOKEN':token!};
