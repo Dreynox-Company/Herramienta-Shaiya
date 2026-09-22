@@ -20,6 +20,9 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("Desbloquear con AutoPerfil SPK", browser)
         self.assertIn("rutas aún no confirmadas por contenido", browser)
         self.assertIn("SPK_TEXT_ENCODING_INVALID", browser)
+        self.assertIn("RUTA INFERIDA", browser)
+        self.assertIn("Ruta inferida", browser)
+        self.assertIn(": captureResourceProfile", browser)
 
     def test_spk_editor_exposes_verified_repack(self):
         editor = (ROOT / 'lib' / 'ui' / 'data_editor.dart').read_text(
