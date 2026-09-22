@@ -139,6 +139,11 @@ var items = itemData?.Records.Select(i => new {
     duration = (int)i.Duration,
     grade = (int)i.Grade,
     special = (int)i.Special,
+    reqWis = (int)i.Wis,
+    reqRec = (int)i.Rec,
+    country = (int)i.Country,
+    range = (int)i.Range,
+    attackTime = (int)i.AttackTime,
     hp = (int)i.ConstHp,
     sp = (int)i.ConstSp,
     mp = (int)i.ConstMp,
@@ -178,7 +183,7 @@ var skills = skillData?.Records.Select(s => new {
 }).ToArray() ?? Array.Empty<object>();
 
 var doc = new {
-    schema = 2,
+    schema = 3,
     source = "NpcQuest.SData + DBMonsterData.SData parsed with backend Parsec EP8",
     npcCount = npc.Count,
     questCount = parsed.Quests.Count,
