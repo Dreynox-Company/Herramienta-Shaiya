@@ -130,6 +130,25 @@ void main(){
         'metadataNpcs':state.metadata?.npcs.length??0,
         'metadataQuests':state.metadata?.quests.length??0,
       };
+      if(requireReal&&stage==GameStage.world){
+        final actor=state.scene.character!;
+        final fromX=actor.root.position.x,fromZ=actor.root.position.z;
+        state.scene.setMovement(0,1);
+        for(var i=0;i<60;i++)state.scene.tick(1/30);
+        state.scene.clearMovement();
+        state.scene.tick(1/30);
+        await tester.pump(const Duration(milliseconds:250));
+        final dx=actor.root.position.x-fromX,dz=actor.root.position.z-fromZ;
+        final moved=math.sqrt(dx*dx+dz*dz);
+        expect(moved,greaterThan(.5),reason:'world movement parity probe must advance the avatar.');
+        await shot(state,'worldMoved');
+        report['worldMoved']={
+          'from':[fromX,fromZ],
+          'to':[actor.root.position.x,actor.root.position.z],
+          'distance':moved,
+          'collisionTriangles':state.scene.worldCollision?.triangles.length??0,
+        };
+      }
       await tester.pumpWidget(const ColoredBox(color:Colors.black));
       await tester.pump(const Duration(seconds:2));
     }
