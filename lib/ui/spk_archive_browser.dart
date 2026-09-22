@@ -283,7 +283,18 @@ Future<void> loadAutomaticSpkNameMap(
         continue;
       }
       source.names = SpkNameMap.fromJson(map);
-      source.names.removeAmbiguousHints();
+      final removed = source.names.removeAmbiguousHints();
+      if (removed > 0) {
+        await file.writeAsString(
+          const JsonEncoder.withIndent('  ').convert({
+            ...map,
+            ...source.names.toJson(),
+            'spkIndexSha256': source.index.encryptedIndexSha256,
+            'sanitizedAmbiguousHints': removed,
+          }),
+          flush: true,
+        );
+      }
       return;
     } catch (_) {
       // Un mapa opcional dañado no impide abrir un SPK válido.
