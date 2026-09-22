@@ -104,36 +104,78 @@ class CharacterCreateRule {
   );
   String get key=>country.toString()+':'+job.toString();
 }
+class QuestRewardItem {
+  final int type,id,count;
+  const QuestRewardItem(this.type,this.id,this.count);
+  String get key=>'$type:$id';
+}
+
 class QuestRule {
-  final int id,minLevel,maxLevel,startNpcType,startNpcId,endNpcType,endNpcId;
+  final int id,minLevel,maxLevel,startType,startNpcType,startNpcId,endType,endNpcType,endNpcId;
   final int requiredMobId1,requiredMobCount1,requiredMobId2,requiredMobCount2;
+  final int resultType,resultUserSelect,xp,money,nextQuestId;
+  final List<QuestRewardItem> rewards;
   const QuestRule({
     required this.id,
     required this.minLevel,
     required this.maxLevel,
+    required this.startType,
     required this.startNpcType,
     required this.startNpcId,
+    required this.endType,
     required this.endNpcType,
     required this.endNpcId,
     required this.requiredMobId1,
     required this.requiredMobCount1,
     required this.requiredMobId2,
     required this.requiredMobCount2,
+    required this.resultType,
+    required this.resultUserSelect,
+    required this.xp,
+    required this.money,
+    required this.nextQuestId,
+    required this.rewards,
   });
 
-  factory QuestRule.fromJson(Map<String,dynamic> j)=>QuestRule(
-    id:(j['id'] as num).toInt(),
-    minLevel:(j['minLevel'] as num).toInt(),
-    maxLevel:(j['maxLevel'] as num).toInt(),
-    startNpcType:(j['startNpcType'] as num).toInt(),
-    startNpcId:(j['startNpcId'] as num).toInt(),
-    endNpcType:(j['endNpcType'] as num).toInt(),
-    endNpcId:(j['endNpcId'] as num).toInt(),
-    requiredMobId1:(j['requiredMobId1'] as num).toInt(),
-    requiredMobCount1:(j['requiredMobCount1'] as num).toInt(),
-    requiredMobId2:(j['requiredMobId2'] as num).toInt(),
-    requiredMobCount2:(j['requiredMobCount2'] as num).toInt(),
-  );
+  bool get chooseReward=>resultUserSelect>0;
+
+  factory QuestRule.fromJson(Map<String,dynamic> j){
+    final rewards=<QuestRewardItem>[];
+    var xp=0,money=0,next=0;
+    for(final raw in (j['results'] as List? ?? const [])){
+      final result=Map<String,dynamic>.from(raw as Map);
+      xp+=(result['exp'] as num? ?? 0).toInt();
+      money+=(result['money'] as num? ?? 0).toInt();
+      final n=(result['nextQuestId'] as num? ?? 0).toInt();
+      if(next==0&&n>0)next=n;
+      for(final key in const ['item1','item2','item3']){
+        final item=Map<String,dynamic>.from(result[key] as Map? ?? const {});
+        final type=(item['type'] as num? ?? 0).toInt();
+        final id=(item['id'] as num? ?? 0).toInt();
+        final count=(item['count'] as num? ?? 0).toInt();
+        if(type>0&&id>0&&count>0)rewards.add(QuestRewardItem(type,id,count));
+      }
+    }
+    return QuestRule(
+      id:(j['id'] as num).toInt(),
+      minLevel:(j['minLevel'] as num).toInt(),
+      maxLevel:(j['maxLevel'] as num).toInt(),
+      startType:(j['startType'] as num? ?? 0).toInt(),
+      startNpcType:(j['startNpcType'] as num).toInt(),
+      startNpcId:(j['startNpcId'] as num).toInt(),
+      endType:(j['endType'] as num? ?? 0).toInt(),
+      endNpcType:(j['endNpcType'] as num).toInt(),
+      endNpcId:(j['endNpcId'] as num).toInt(),
+      requiredMobId1:(j['requiredMobId1'] as num).toInt(),
+      requiredMobCount1:(j['requiredMobCount1'] as num).toInt(),
+      requiredMobId2:(j['requiredMobId2'] as num).toInt(),
+      requiredMobCount2:(j['requiredMobCount2'] as num).toInt(),
+      resultType:(j['resultType'] as num? ?? 0).toInt(),
+      resultUserSelect:(j['resultUserSelect'] as num? ?? 0).toInt(),
+      xp:xp,money:money,nextQuestId:next,
+      rewards:List.unmodifiable(rewards),
+    );
+  }
 }
 
 class ServerMetadata {
