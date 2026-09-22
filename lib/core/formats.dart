@@ -1014,6 +1014,22 @@ class WorldData {
 }
 
 
+class WtrData {
+  final double unknown1;
+  final int unknown2,unknown3;
+  final List<String> textures;
+  const WtrData(this.unknown1,this.unknown2,this.unknown3,this.textures);
+}
+
+WtrData readWtr(Uint8List bytes,String source){
+  final r=Bin(bytes,source);
+  final unknown1=r.f32(),unknown2=r.u32(),unknown3=r.i32();
+  final count=r.count(4096);
+  final textures=List<String>.generate(count,(_)=>r.str(256),growable:false);
+  r.end();
+  return WtrData(unknown1,unknown2,unknown3,List.unmodifiable(textures));
+}
+
 class DgPart {
   final String texture;
   final MeshData mesh;
