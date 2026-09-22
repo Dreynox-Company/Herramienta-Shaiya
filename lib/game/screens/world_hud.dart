@@ -29,9 +29,13 @@ class WorldHud extends StatelessWidget {
   final int gold;
   final NpcShopRule? shop;
   final NpcGateRule? gate;
-  final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,gateOpen,warehouseOpen;
-  final VoidCallback onCloseShop,onCloseGate,onCloseWarehouse;
+  final PsInventoryItem? blacksmithItem,blacksmithGem,blacksmithHammer;
+  final PsLinkingPossibility? blacksmithPossibility;
+  final bool blacksmithBusy;
+  final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
+  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem;
   final ValueChanged<int> onBuyShopProduct,onUseGate;
+  final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
   final ValueChanged<int> onAddStat;
@@ -76,16 +80,27 @@ class WorldHud extends StatelessWidget {
     required this.gold,
     required this.shop,
     required this.gate,
+    required this.blacksmithItem,
+    required this.blacksmithGem,
+    required this.blacksmithHammer,
+    required this.blacksmithPossibility,
+    required this.blacksmithBusy,
     required this.inventoryOpen,
     required this.statusOpen,
     required this.skillsOpen,
     required this.questLogOpen,
     required this.shopOpen,
+    required this.blacksmithOpen,
     required this.gateOpen,
     required this.warehouseOpen,
     required this.onCloseShop,
+    required this.onCloseBlacksmith,
     required this.onCloseGate,
     required this.onCloseWarehouse,
+    required this.onLinkGem,
+    required this.onSelectBlacksmithItem,
+    required this.onSelectBlacksmithGem,
+    required this.onSelectBlacksmithHammer,
     required this.onBuyShopProduct,
     required this.onUseGate,
     required this.onSellInventory,
@@ -140,6 +155,11 @@ class WorldHud extends StatelessWidget {
             Positioned(
               right:198,top:250,width:292,height:390,
               child:_shopWindow(),
+            ),
+          if(blacksmithOpen)
+            Positioned(
+              right:150,top:175,width:420,height:465,
+              child:_blacksmithWindow(),
             ),
           if(gateOpen&&gate!=null)
             Positioned(
@@ -937,6 +957,134 @@ class WorldHud extends StatelessWidget {
       ]),
     );
   }
+  Widget _blacksmithPick({
+    required String title,
+    required List<PsInventoryItem> items,
+    required PsInventoryItem? selected,
+    required ValueChanged<PsInventoryItem?> onSelect,
+  }){
+    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(title,style:const TextStyle(fontSize:9.5,color:Color(0xffffdc72),fontWeight:FontWeight.w600)),
+      const SizedBox(height:4),
+      SizedBox(
+        height:64,
+        child:items.isEmpty
+          ?Container(
+              alignment:Alignment.centerLeft,
+              padding:const EdgeInsets.symmetric(horizontal:8),
+              decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff514231))),
+              child:Text(locale=='spn'?'No hay objetos compatibles.':'No compatible items.',style:const TextStyle(fontSize:8.5,color:Colors.white38)),
+            )
+          :ListView.separated(
+              scrollDirection:Axis.horizontal,
+              itemCount:items.length,
+              separatorBuilder:(_,__)=>const SizedBox(width:5),
+              itemBuilder:(context,index){
+                final item=items[index],rule=metadata?.item(item.type,item.typeId);
+                final icon=rule?.iconPath,name=catalog.itemName(item.type,item.typeId,locale);
+                final chosen=selected?.bag==item.bag&&selected?.slot==item.slot;
+                return Tooltip(
+                  waitDuration:const Duration(milliseconds:250),
+                  message:name+'\nBag ${item.bag} · Slot ${item.slot} · ${item.type}:${item.typeId}',
+                  child:GestureDetector(
+                    onTap:()=>onSelect(chosen?null:item),
+                    child:Container(
+                      width:58,padding:const EdgeInsets.all(4),
+                      decoration:BoxDecoration(
+                        color:const Color(0xff17120e),
+                        border:Border.all(color:chosen?const Color(0xffffd15b):const Color(0xff5c4a35),width:chosen?2:1),
+                      ),
+                      child:Column(children:[
+                        Expanded(child:icon==null
+                          ?const Icon(Icons.inventory_2,size:26,color:Color(0xffd7c18b))
+                          :DataImage(cache:ui,path:icon,fit:BoxFit.contain,fallback:const Icon(Icons.inventory_2,size:26,color:Color(0xffd7c18b)))),
+                        Text(name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:6.7,color:Colors.white70)),
+                      ]),
+                    ),
+                  ),
+                );
+              },
+            ),
+      ),
+    ]);
+  }
+
+  Widget _blacksmithWindow(){
+    final targets=inventory.where((item){
+      if(item.bag==0||item.type==30)return false;
+      final rule=metadata?.item(item.type,item.typeId);
+      return rule!=null&&rule.slot>0;
+    }).toList();
+    final gems=inventory.where((item)=>item.bag!=0&&item.type==30).toList();
+    final hammers=inventory.where((item){
+      final special=metadata?.item(item.type,item.typeId)?.special??0;
+      return item.bag!=0&&(special==36||special==69);
+    }).toList();
+    final p=blacksmithPossibility;
+    final canLink=!blacksmithBusy&&p!=null&&p.available&&blacksmithItem!=null&&blacksmithGem!=null&&gold>=p.gold;
+
+    return _panelShell(
+      locale=='spn'?'Herrero · Enlace de lapis':'Blacksmith · Lapis linking',
+      Padding(
+        padding:const EdgeInsets.all(10),
+        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          _blacksmithPick(
+            title:locale=='spn'?'1. Objeto':'1. Item',
+            items:targets,selected:blacksmithItem,onSelect:onSelectBlacksmithItem,
+          ),
+          const SizedBox(height:9),
+          _blacksmithPick(
+            title:locale=='spn'?'2. Lapis':'2. Lapis',
+            items:gems,selected:blacksmithGem,onSelect:onSelectBlacksmithGem,
+          ),
+          const SizedBox(height:9),
+          _blacksmithPick(
+            title:locale=='spn'?'3. Martillo opcional':'3. Optional hammer',
+            items:hammers,selected:blacksmithHammer,onSelect:onSelectBlacksmithHammer,
+          ),
+          const Spacer(),
+          Container(
+            width:double.infinity,
+            padding:const EdgeInsets.all(9),
+            decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(
+                p==null
+                  ?(blacksmithBusy?(locale=='spn'?'Consultando a World…':'Querying World…'):(locale=='spn'?'Selecciona objeto y lapis para consultar.':'Select item and lapis to query.'))
+                  :'Probabilidad: ${p.rate.toStringAsFixed(2)}% · Coste: ${p.gold} oro',
+                style:TextStyle(fontSize:10,color:p==null?Colors.white54:(p.rate>=50?const Color(0xff9dff90):const Color(0xffffb46d))),
+              ),
+              const SizedBox(height:5),
+              Text(
+                locale=='spn'
+                  ?'El resultado es aleatorio y lo decide World. Un fallo puede consumir el lapis.'
+                  :'World decides the random result. Failure may consume the lapis.',
+                style:const TextStyle(fontSize:7.8,color:Colors.white38),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+      footer:Container(
+        height:42,padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          Text('Oro: $gold',style:const TextStyle(fontSize:9.5,color:Color(0xffffd26a))),
+          const Spacer(),
+          SizedBox(
+            width:92,height:29,
+            child:ShaiyaButton(
+              label:blacksmithBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Enlazar':'Link'),
+              onPressed:canLink?onLinkGem:null,
+              compact:true,
+            ),
+          ),
+          const SizedBox(width:7),
+          GestureDetector(onTap:onCloseBlacksmith,child:const Icon(Icons.close,size:18,color:Colors.white70)),
+        ]),
+      ),
+    );
+  }
+
   Widget _gateWindow(){
     final g=gate!;
     final localized=catalog.questText(locale)?.npc(g.type,g.typeId);
