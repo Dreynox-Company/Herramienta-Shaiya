@@ -59,14 +59,16 @@ class GameActorLabel {
   final Actor actor;
   final String text;
   final bool quest,mob;
-  const GameActorLabel(this.actor,this.text,{this.quest=false,this.mob=false});
+  final int globalId;
+  const GameActorLabel(this.actor,this.text,{this.quest=false,this.mob=false,this.globalId=0});
 }
 
 class ProjectedGameLabel {
   final double x,y;
   final String text;
   final bool quest,mob;
-  const ProjectedGameLabel(this.x,this.y,this.text,this.quest,this.mob);
+  final int globalId;
+  const ProjectedGameLabel(this.x,this.y,this.text,this.quest,this.mob,this.globalId);
 }
 class StudioScene extends ChangeNotifier {
   final void Function(String) report;StudioScene(this.report);
@@ -219,6 +221,7 @@ class StudioScene extends ChangeNotifier {
           a,
           (localized?.name.isNotEmpty??false)?localized!.name:'NPC $key',
           quest:questNpcKeys?.contains(key)??false,
+          globalId:p.globalId,
         ));
       }catch(e){report('LIVE NPC ${p.type}:${p.typeId}: $e');}
     }
@@ -244,10 +247,20 @@ class StudioScene extends ChangeNotifier {
         a.root.rotation.y=math.atan2(-x,-z);
         gameActors.add(a);view!.scene.add(a.root);mobsLoaded++;
         if(p.globalId!=0)networkMobActors[p.globalId]=a;
-        gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true));
+        gameLabels.add(GameActorLabel(a,catalog!.monsterName(p.mobId,locale),mob:true,globalId:p.globalId));
       }catch(e){report('LIVE mob ${p.mobId}: $e');}
     }
     say('$npcsLoaded NPC y $mobsLoaded criaturas renderizados desde paquetes ps0032.');
+  }
+
+  int? pickNetworkMob(double screenX,double screenY,double width,double height,{double radius=34}){
+    int? bestId;var best=radius*radius;
+    for(final p in projectGameLabels(width,height)){
+      if(!p.mob||p.globalId==0)continue;
+      final dx=p.x-screenX,dy=p.y-screenY,d=dx*dx+dy*dy;
+      if(d<best){best=d;bestId=p.globalId;}
+    }
+    return bestId;
   }
 
   int? nearestNetworkNpcId({double maxDistance=4.5}){
@@ -405,7 +418,7 @@ class StudioScene extends ChangeNotifier {
       final p=t.Vector3(a.root.position.x,a.root.position.y+a.height+0.28,a.root.position.z);
       p.project(camera);
       if(p.z<-1||p.z>1||p.x<-1.25||p.x>1.25||p.y<-1.25||p.y>1.25)continue;
-      out.add(ProjectedGameLabel((p.x+1)*.5*width,(1-p.y)*.5*height,label.text,label.quest,label.mob));
+      out.add(ProjectedGameLabel((p.x+1)*.5*width,(1-p.y)*.5*height,label.text,label.quest,label.mob,label.globalId));
     }
     return out;
   }
