@@ -2540,6 +2540,65 @@ class _WeatherPainter extends CustomPainter {
   bool shouldRepaint(covariant _WeatherPainter oldDelegate)=>true;
 }
 
+class _TradeMoneyInput extends StatefulWidget {
+  final String locale;
+  final int maxMoney,current;
+  final ValueChanged<int> onSubmit;
+  const _TradeMoneyInput({
+    required this.locale,required this.maxMoney,required this.current,required this.onSubmit,
+  });
+
+  @override
+  State<_TradeMoneyInput> createState()=>_TradeMoneyInputState();
+}
+
+class _TradeMoneyInputState extends State<_TradeMoneyInput> {
+  final controller=TextEditingController();
+
+  @override
+  void initState(){super.initState();controller.text=widget.current.toString();}
+
+  @override
+  void didUpdateWidget(covariant _TradeMoneyInput oldWidget){
+    super.didUpdateWidget(oldWidget);
+    if(oldWidget.current!=widget.current&&!FocusScope.of(context).hasFocus){
+      controller.text=widget.current.toString();
+    }
+  }
+
+  @override
+  void dispose(){controller.dispose();super.dispose();}
+
+  void submit(){
+    final value=int.tryParse(controller.text.trim())??0;
+    widget.onSubmit(value.clamp(0,widget.maxMoney).toInt());
+  }
+
+  @override
+  Widget build(BuildContext context)=>SizedBox(
+    height:30,
+    child:TextField(
+      controller:controller,
+      keyboardType:TextInputType.number,
+      onSubmitted:(_)=>submit(),
+      style:const TextStyle(fontSize:8.5,color:Color(0xffffd36c)),
+      decoration:InputDecoration(
+        isDense:true,
+        contentPadding:const EdgeInsets.symmetric(horizontal:7,vertical:7),
+        prefixText:widget.locale=='spn'?'Oro: ':'Gold: ',
+        prefixStyle:const TextStyle(fontSize:8,color:Colors.white54),
+        suffixIcon:IconButton(
+          onPressed:submit,
+          visualDensity:VisualDensity.compact,
+          icon:const Icon(Icons.check,size:15,color:Color(0xff78d982)),
+        ),
+        filled:true,fillColor:const Color(0xff16120e),
+        enabledBorder:const OutlineInputBorder(borderSide:BorderSide(color:Color(0xff594832))),
+        focusedBorder:const OutlineInputBorder(borderSide:BorderSide(color:Color(0xff9d7d49))),
+      ),
+    ),
+  );
+}
 class _GuildCreateInput extends StatefulWidget {
   final String locale;
   final void Function(String,String) onCreate;
