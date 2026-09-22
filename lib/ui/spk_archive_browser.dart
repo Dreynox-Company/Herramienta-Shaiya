@@ -2018,6 +2018,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (mounted) setState(() {});
       await _auditAllResources(source);
     }
+    if (source.validatedFormat(record.entryId) == 'SDATA' &&
+        !source.names.isConfirmed(record.entryId)) {
+      operation = 'Identificando la tabla SData por estructura…';
+      if (mounted) setState(() {});
+      await _discoverCoreTables(source);
+    }
     final path = _editableLibraryPath(record);
     final library = await Library.fromSpk(
       source,
