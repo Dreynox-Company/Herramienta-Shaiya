@@ -796,7 +796,7 @@ class StudioScene extends ChangeNotifier {
   }
   bool _worldPositionBlocked(double x,double z){
     if(world==null||worldCollision.isEmpty)return false;
-    final radius=mount==null?.32:.52;
+    final radius=mount==null ? .32 : .52;
     final height=mount==null?1.65:math.max(1.65,mount!.height+riderHeight*.75);
     return worldCollision.blocksPosition(x,_worldGroundAtLocal(x,z),z,radius:radius,height:height);
   }
