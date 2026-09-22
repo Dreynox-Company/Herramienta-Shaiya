@@ -1277,35 +1277,75 @@ class WorldHud extends StatelessWidget {
         Expanded(
           flex:4,
           child:raid!=null
-            ?Padding(
-                padding:const EdgeInsets.all(10),
-                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  Text(
-                    (locale=='spn'?'Líder: ':'Leader: ')+(raid!.leader?.member.name??'-'),
-                    style:const TextStyle(fontSize:9,color:Color(0xffffdc72)),
-                  ),
-                  const SizedBox(height:4),
-                  Text(
-                    (locale=='spn'?'Sub-líder: ':'Sub-leader: ')+(raid!.subLeader?.member.name??'-'),
-                    style:const TextStyle(fontSize:8.5,color:Color(0xff9fd9ff)),
-                  ),
-                  const SizedBox(height:5),
-                  Text(
-                    (locale=='spn'?'Loot: ':'Loot: ')+(raid!.dropType==1?'Grupo':raid!.dropType==2?'Aleatorio':'Líder')+
-                      ' · AutoJoin '+(raid!.autoJoin?'ON':'OFF'),
-                    style:const TextStyle(fontSize:8,color:Colors.white54),
-                  ),
-                  const SizedBox(height:8),
-                  Text(
-                    locale=='spn'
-                      ?'La cuadrícula RAID de 30 posiciones se muestra junto al HUD.'
-                      :'The 30-slot RAID grid is shown next to the HUD.',
-                    style:const TextStyle(fontSize:7.5,color:Colors.white38),
-                  ),
-                ]),
+            ?ListView.builder(
+                padding:const EdgeInsets.symmetric(horizontal:8),
+                itemCount:raid!.members.length,
+                itemBuilder:(context,index){
+                  final row=raid!.members[index],m=row.member;
+                  final leader=row.index==raid!.leaderIndex,sub=row.index==raid!.subLeaderIndex&&!leader;
+                  final canManage=raidLeader||raidSubLeader;
+                  return Container(
+                    height:42,
+                    margin:const EdgeInsets.only(bottom:3),
+                    padding:const EdgeInsets.only(left:7),
+                    decoration:BoxDecoration(
+                      color:leader?const Color(0xff302510):sub?const Color(0xff1c2930):const Color(0xff17120e),
+                      border:Border.all(color:leader?const Color(0xffffcc5c):sub?const Color(0xff74bde1):const Color(0xff493c2c)),
+                    ),
+                    child:Row(children:[
+                      if(leader)const Icon(Icons.workspace_premium,size:14,color:Color(0xffffd45f)),
+                      if(sub)const Icon(Icons.star_half,size:14,color:Color(0xff8fdcff)),
+                      if(leader||sub)const SizedBox(width:4),
+                      Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                        Text(m.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:9.5,color:Color(0xffffe7b2))),
+                        Text(
+                          'G'+(row.index~/6+1).toString()+'.'+(row.index%6+1).toString()+' · Lv.'+m.level.toString()+' · '+_professionName(m.profession)+' · M'+m.mapId.toString(),
+                          style:const TextStyle(fontSize:7,color:Colors.white38),
+                        ),
+                      ])),
+                      if(canManage)
+                        PopupMenuButton<String>(
+                          tooltip:locale=='spn'?'Administrar miembro':'Manage member',
+                          padding:EdgeInsets.zero,
+                          icon:const Icon(Icons.more_vert,size:16,color:Colors.white54),
+                          onSelected:(value){
+                            if(value=='leader'){onChangeRaidLeader(row);return;}
+                            if(value=='sub'){onChangeRaidSubLeader(row);return;}
+                            if(value=='kick'){onKickRaid(row);return;}
+                            if(value.startsWith('g')){
+                              final group=int.tryParse(value.substring(1));
+                              if(group!=null)onMoveRaidGroup(row,group);
+                            }
+                          },
+                          itemBuilder:(context)=><PopupMenuEntry<String>>[
+                            if(raidLeader&&m.id!=selfCharacterId)
+                              PopupMenuItem(value:'leader',child:Text(locale=='spn'?'Hacer líder':'Make leader')),
+                            if(raidLeader&&m.id!=selfCharacterId)
+                              PopupMenuItem(value:'sub',child:Text(locale=='spn'?'Hacer sub-líder':'Make sub-leader')),
+                            for(var group=0;group<5;group++)
+                              if(row.index~/6!=group)
+                                PopupMenuItem(value:'g'+group.toString(),child:Text((locale=='spn'?'Mover a grupo ':'Move to group ')+(group+1).toString())),
+                            if(raidLeader&&m.id!=selfCharacterId)
+                              PopupMenuItem(value:'kick',child:Text(locale=='spn'?'Expulsar':'Kick')),
+                          ],
+                        ),
+                    ]),
+                  );
+                },
               )
             :partyMembers.isEmpty
-              ?Center(child:Text(locale=='spn'?'No estás en un grupo.':'Not in a party.',style:const TextStyle(fontSize:9,color:Colors.white38)))
+              ?Padding(
+                  padding:const EdgeInsets.all(9),
+                  child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
+                    Text(locale=='spn'?'No estás en un grupo o RAID.':'Not in a party or RAID.',style:const TextStyle(fontSize:9,color:Colors.white38)),
+                    const SizedBox(height:8),
+                    _SocialNameInput(
+                      locale:locale,onSubmit:onJoinRaid,
+                      hint:locale=='spn'?'Nombre de miembro de RAID':'RAID member name',
+                      actionLabel:locale=='spn'?'AutoJoin':'AutoJoin',
+                    ),
+                  ]),
+                )
               :ListView.builder(
                 padding:const EdgeInsets.symmetric(horizontal:8),
                 itemCount:partyMembers.length,
