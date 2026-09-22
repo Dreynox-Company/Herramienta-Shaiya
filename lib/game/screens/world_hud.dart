@@ -28,6 +28,7 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
   final ValueChanged<int> onHotbar,onOpenQuest;
+  final ValueChanged<PsLearnedSkill> onAssignSkill;
   final ValueChanged<String> onSendChat;
   final UiAssetCache ui;
   final List<String> messages;
@@ -78,6 +79,7 @@ class WorldHud extends StatelessWidget {
     required this.onToggleQuestLog,
     required this.onHotbar,
     required this.onOpenQuest,
+    required this.onAssignSkill,
     required this.onSendChat,
     required this.locale,
     required this.ui,
@@ -684,7 +686,7 @@ class WorldHud extends StatelessWidget {
               final name=catalog.skillName(s.skillId,s.level,locale);
               final text=catalog.skillText(s.skillId,s.level,locale)?.text.trim()??'';
               final icon=rule?.iconPath;
-              return Tooltip(
+              final tile=Tooltip(
                 waitDuration:const Duration(milliseconds:250),
                 message:name+
                   (text.isEmpty?'':'\n\n'+text)+
@@ -711,13 +713,17 @@ class WorldHud extends StatelessWidget {
                   ]),
                 ),
               );
+              return GestureDetector(
+                onDoubleTap:()=>onAssignSkill(s),
+                child:tile,
+              );
             },
           ),
       footer:Container(
         height:30,padding:const EdgeInsets.symmetric(horizontal:10),
         alignment:Alignment.centerRight,
         child:Text(
-          (locale=='spn'?'Puntos disponibles: ':'Available points: ')+(skillBook?.skillPoints??details?.skillPoint??0).toString(),
+          (locale=='spn'?'Doble clic para añadir a barra · Puntos: ':'Double click to add to bar · Points: ')+(skillBook?.skillPoints??details?.skillPoint??0).toString(),
           style:const TextStyle(fontSize:9,color:Color(0xffffd26a)),
         ),
       ),
