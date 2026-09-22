@@ -1,4 +1,4 @@
-# SPK real reader / writer — estado auditado 0.6.15
+# SPK real reader / writer — estado auditado 0.6.16
 
 Fecha de corte: 2026-09-22.
 
@@ -30,6 +30,30 @@ Los cinco registros técnicos reales tienen `dataOffset = 0`; se preservan como
 metadatos y no se tratan como payloads.
 
 El índice AES-GCM y su frame Zstandard están entendidos y validados.
+
+## Correcciones 0.6.16 a partir de la prueba real
+
+La ejecución real más reciente confirmó que el explorador todavía estaba
+mostrando inferencias mientras los payloads seguían cifrados. También se observó
+`FormatException: Missing extension byte` durante AutoPerfil en Windows.
+
+Se corrigieron ambos frentes:
+
+- ResourceProbe fuerza UTF-8 en todos sus JSON de evidencia;
+- Studio fuerza UTF-8 en el proceso hijo y tolera bytes malformados de consola,
+  evitando que una codificación regional de Windows aborte AutoPerfil;
+- recursos cifrados ya no permiten **Leer / inspeccionar**, doble clic ni
+  extracción directa;
+- el explorador muestra un aviso explícito de **CONTENIDO CIFRADO**;
+- columnas de formato/tamaño se etiquetan como estimadas/declaradas mientras el
+  payload no esté autenticado;
+- rutas inferidas se aceptan solo con correspondencia uno-a-uno tanto en el SPK
+  como en la DATA de referencia;
+- inferencias antiguas que asignaban la misma ruta a varios Entry IDs se
+  descartan al cargar el mapa en vez de mostrarse como archivos duplicados;
+- si AutoPerfil no obtiene una clave válida, Studio informa la carpeta exacta
+  de diagnóstico para revisar `derived-resource-profile.json` y
+  `resource-observations.json`.
 
 ## Evidencia real recibida hasta ahora
 
@@ -234,7 +258,7 @@ con el cliente real.
 
 ## Próxima ejecución requerida
 
-Usar el build Windows 0.6.15 sobre la instalación real, preferiblemente offline:
+Usar el build Windows 0.6.16 sobre la instalación real, preferiblemente offline:
 
 1. abrir el `data.spk`;
 2. pulsar **AutoPerfil SPK**;
