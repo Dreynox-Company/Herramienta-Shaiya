@@ -2770,40 +2770,93 @@ class _GameClientPageState extends State<GameClientPage> {
   }
   Future<void> _useHotbarSlot(int index) async {
     if(stage!=GameStage.world||dead||rebirthPending)return;
+    final session=liveWorld;
+    if(session==null)return;
     final slots=_primaryQuickSlots;
     final slot=slots.where((s)=>s.slot==index).firstOrNull??(index<slots.length?slots[index]:null);
-    if(slot==null){messages.insert(0,'[Skillbar] Slot '+(index+1).toString()+' vacío.');if(mounted)setState((){});return;}
-    if(!slot.isSkill){messages.insert(0,'[Skillbar] Slot '+(index+1).toString()+' contiene bag '+slot.bag.toString()+', item '+slot.number.toString()+'.');if(mounted)setState((){});return;}
+    if(slot==null){
+      messages.insert(0,'[Skillbar] Slot '+(index+1).toString()+' vacío.');
+      if(mounted)setState((){});
+      return;
+    }
+    if(!slot.isSkill){
+      messages.insert(0,'[Skillbar] Slot '+(index+1).toString()+' contiene bag '+slot.bag.toString()+', item '+slot.number.toString()+'.');
+      if(mounted)setState((){});
+      return;
+    }
     final learned=liveSkills?.bySkillId(slot.number);
-    if(learned==null){messages.insert(0,'[Skillbar] SkillId '+slot.number.toString()+' no está aprendida.');if(mounted)setState((){});return;}
-
-    final pvp=targetPlayerId;
-    if(pvp!=null&&scene.networkPlayerActors.containsKey(pvp)){
-      try{
-        unawaited(scene.networkPlayerAttackCharacter(pvp));
-        await liveWorld?.useCharacterSkill(learned.number,pvp);
-        messages.insert(0,'[PvP] Skill '+learned.skillId.toString()+' Lv.'+learned.level.toString()+' → '+(targetPlayerName??pvp.toString())+'.');
-        if(mounted)setState((){});
-      }catch(e){messages.insert(0,'[PvP] '+e.toString());if(mounted)setState((){});}
+    if(learned==null){
+      messages.insert(0,'[Skillbar] SkillId '+slot.number.toString()+' no está aprendida.');
+      if(mounted)setState((){});
       return;
     }
 
-    final selected=targetMobGlobalId;
-    final target=selected!=null&&scene.networkMobActors.containsKey(selected)?selected:scene.nearestNetworkMobId(maxDistance:18);
-    if(target==null){messages.insert(0,'[Combate] No hay objetivo seleccionado/cercano.');if(mounted)setState((){});return;}
-    final logical=liveSnapshot?.mobs.where((m)=>m.globalId==target).firstOrNull;
-    targetMobGlobalId=target;
-    if(logical!=null){
-      targetMobTypeId=logical.mobId;
-      targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
-      targetMobHp??=targetMobMaxHp;
-    }
-    try{
-      unawaited(scene.networkPlayerAttack(target));
-      await liveWorld?.useMobSkill(learned.number,target);
-      messages.insert(0,'[Combate] Skill '+learned.skillId.toString()+' Lv.'+learned.level.toString()+' → mob '+target.toString()+'.');
+    final rule=metadata?.skill(learned.skillId,learned.level);
+    final targetType=rule?.targetType??3;
+    final label=catalog?.skillName(learned.skillId,learned.level,uiLocale)
+      ??('Skill '+learned.skillId.toString());
+
+    // TargetType mirrors the original ps0032 DBSkillData contract:
+    // 0 passive, 1 any enemy, 2 caster, 3 selected enemy,
+    // 4 allies near caster, 5 allies except caster, 6 enemies near caster,
+    // 7 enemies near target, 8 party members.
+    if(targetType==0){
+      messages.insert(0,'[Skill] '+label+' es pasiva y no se lanza desde la barra.');
       if(mounted)setState((){});
-    }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
+      return;
+    }
+
+    try{
+      if(const <int>{2,4,5,6,8}.contains(targetType)){
+        // Imgeneus ps0032 treats CHARACTER_TARGET_SKILL targetId=0 as a
+        // null target; World expands caster/party/range skills authoritatively.
+        await session.useCharacterSkill(learned.number,0);
+        messages.insert(0,'[Skill] '+label+' · objetivo determinado por World.');
+        if(mounted)setState((){});
+        return;
+      }
+
+      final pvp=targetPlayerId;
+      if(pvp!=null&&scene.networkPlayerActors.containsKey(pvp)){
+        unawaited(scene.networkPlayerAttackCharacter(pvp));
+        await session.useCharacterSkill(learned.number,pvp);
+        messages.insert(0,'[PvP] '+label+' → '+(targetPlayerName??pvp.toString())+'.');
+        if(mounted)setState((){});
+        return;
+      }
+
+      var target=targetMobGlobalId;
+      if(target!=null&&!scene.networkMobActors.containsKey(target))target=null;
+      if(target==null&&targetType==1){
+        target=scene.nearestNetworkMobId(maxDistance:(rule?.attackRange??18)+4.0);
+      }
+      if(target==null){
+        final requiresSelected=targetType==3||targetType==7;
+        messages.insert(
+          0,
+          requiresSelected
+            ?'[Skill] '+label+': selecciona un objetivo.'
+            :'[Skill] '+label+': no hay enemigo válido.',
+        );
+        if(mounted)setState((){});
+        return;
+      }
+
+      final logical=liveSnapshot?.mobs.where((m)=>m.globalId==target).firstOrNull;
+      targetMobGlobalId=target;
+      if(logical!=null){
+        targetMobTypeId=logical.mobId;
+        targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+        targetMobHp??=targetMobMaxHp;
+      }
+      unawaited(scene.networkPlayerAttack(target));
+      await session.useMobSkill(learned.number,target);
+      messages.insert(0,'[Combate] '+label+' → mob '+target.toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){
+      messages.insert(0,'[Skill] '+label+': '+e.toString());
+      if(mounted)setState((){});
+    }
   }
   void _closeWorldPanels(){
     inventoryOpen=false;
