@@ -336,7 +336,7 @@ class _GameClientPageState extends State<GameClientPage> {
       liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
       if(liveWorld!.faction==0)faction='light';
       if(liveWorld!.faction==1)faction='fury';
-      characterCreated=liveCharacter!=null;
+      characterCreated=liveCharacters.any((s)=>s.exists&&!s.isDelete);
       messages.insert(0,'[ps0032] Sesión World real lista · ${liveCharacters.where((c)=>c.exists).length} personaje(s).');
     }catch(e){
       messages.insert(0,'[ps0032] Fallback visual: '+e.toString());
@@ -353,6 +353,96 @@ class _GameClientPageState extends State<GameClientPage> {
     hairIndex=slot.hair.clamp(0,4);
     modeIndex=slot.mode>=3?1:0;
     if(slot.name.isNotEmpty)nameController.text=slot.name;
+  }
+
+  PsCharacterSlot _emptyCharacterSlot(int slot)=>PsCharacterSlot(
+    slot:slot,id:0,mapId:0,level:0,race:0,mode:0,hair:0,face:0,height:0,
+    profession:0,gender:0,name:'',isDelete:false,isRename:false,
+  );
+
+  List<PsCharacterSlot> _characterSelectionSlots(){
+    if(liveCharacters.isNotEmpty){
+      return List<PsCharacterSlot>.generate(5,(i)=>liveCharacters.where((x)=>x.slot==i).firstOrNull??_emptyCharacterSlot(i));
+    }
+    final out=List<PsCharacterSlot>.generate(5,_emptyCharacterSlot);
+    if(characterCreated){
+      out[0]=PsCharacterSlot(
+        slot:0,id:1,mapId:liveMapId,level:liveCharacter?.level??1,
+        race:_protocolRace(),mode:_protocolMode(),hair:hairIndex,face:faceIndex,height:2,
+        profession:_protocolProfession(classIndex),gender:genderIndex,
+        name:nameController.text,isDelete:false,isRename:false,
+      );
+    }
+    return out;
+  }
+
+  Future<void> _selectCharacterSlot(PsCharacterSlot slot) async {
+    if(!slot.exists)return;
+    liveCharacter=slot;_syncUiFromLiveCharacter(slot);
+    if(mounted)setState((){});
+    try{await _applyDefaultAppearance();}
+    catch(e){messages.insert(0,'[Personaje] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _restoreSelectedCharacter() async {
+    final current=liveCharacter,session=liveWorld;
+    if(current==null||!current.isDelete)return;
+    if(session==null){
+      liveCharacter=current.copyWith(isDelete:false);
+      characterCreated=true;
+      if(mounted)setState((){});
+      return;
+    }
+    if(mounted)setState(()=>loading=true);
+    try{
+      final ok=await session.restoreCharacter(current.id);
+      if(!ok)throw StateError('World rechazó RESTORE_CHARACTER.');
+      final restored=current.copyWith(isDelete:false);
+      liveCharacters=liveCharacters.map((x)=>x.id==current.id?restored:x).toList();
+      liveCharacter=restored;characterCreated=true;
+      _syncUiFromLiveCharacter(restored);
+      messages.insert(0,'[ps0032] Personaje restaurado por World.');
+    }catch(e){messages.insert(0,'[ps0032] RESTORE_CHARACTER: '+e.toString());}
+    finally{if(mounted)setState(()=>loading=false);}
+  }
+
+  Future<void> _renameSelectedCharacter() async {
+    final current=liveCharacter,session=liveWorld;
+    if(current==null||current.isDelete||!current.isRename||session==null)return;
+    final controller=TextEditingController(text:current.name);
+    final next=await showDialog<String>(
+      context:context,
+      builder:(dialogContext)=>AlertDialog(
+        backgroundColor:const Color(0xff1c1510),
+        title:Text(uiLocale=='spn'?'Renombrar personaje':'Rename character',style:const TextStyle(color:Color(0xffffd36b))),
+        content:TextField(
+          controller:controller,maxLength:20,autofocus:true,
+          style:const TextStyle(color:Colors.white),
+          decoration:InputDecoration(
+            labelText:uiLocale=='spn'?'Nuevo nombre':'New name',
+            labelStyle:const TextStyle(color:Colors.white70),
+          ),
+        ),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialogContext),child:Text(uiLocale=='spn'?'Cancelar':'Cancel')),
+          TextButton(onPressed:()=>Navigator.pop(dialogContext,controller.text.trim()),child:Text(uiLocale=='spn'?'Renombrar':'Rename')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if(next==null||next.isEmpty||next==current.name)return;
+    if(mounted)setState(()=>loading=true);
+    try{
+      if(!await session.checkCharacterName(next))throw StateError('El nombre "'+next+'" no está disponible.');
+      final ok=await session.renameSelectedCharacter(current.id,next);
+      if(!ok)throw StateError('World rechazó RENAME_CHARACTER.');
+      final renamed=current.copyWith(name:next,isRename:false);
+      liveCharacters=liveCharacters.map((x)=>x.id==current.id?renamed:x).toList();
+      liveCharacter=renamed;nameController.text=next;
+      messages.insert(0,'[ps0032] Personaje renombrado por World.');
+    }catch(e){messages.insert(0,'[ps0032] RENAME_CHARACTER: '+e.toString());}
+    finally{if(mounted)setState(()=>loading=false);}
   }
 
   Future<void> _selectFactionAndContinue() async {
@@ -556,9 +646,11 @@ class _GameClientPageState extends State<GameClientPage> {
 
     final session=liveWorld;
     if(session!=null){
-      liveCharacter??=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+      if(liveCharacter==null||liveCharacter!.isDelete){
+        liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
+      }
       final current=liveCharacter;
-      if(current==null){
+      if(current==null||current.isDelete){
         messages.insert(0,'[ps0032] No existe personaje para Game Start.');
         await _goCreate();
         if(mounted)setState(()=>loading=false);
@@ -3580,14 +3672,15 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState(()=>loading=true);
     try{
       final current=liveCharacter;
-      if(liveWorld!=null&&current!=null){
+      if(liveWorld!=null&&current!=null&&!current.isDelete){
         await liveWorld!.deleteCharacter(current.id);
-        liveCharacters=liveCharacters.where((s)=>s.id!=current.id).toList();
-        liveCharacter=liveCharacters.where((s)=>s.exists&&!s.isDelete).firstOrNull;
-        characterCreated=liveCharacter!=null;
-        if(liveCharacter!=null)_syncUiFromLiveCharacter(liveCharacter!);
-        messages.insert(0,'[ps0032] Personaje eliminado en World.');
-      }else{
+        final deleted=current.copyWith(isDelete:true);
+        liveCharacters=liveCharacters.map((s)=>s.id==current.id?deleted:s).toList();
+        liveCharacter=deleted;
+        characterCreated=liveCharacters.any((s)=>s.exists&&!s.isDelete);
+        messages.insert(0,'[ps0032] Personaje marcado como eliminado en World; puede restaurarse.');
+      }else if(current!=null){
+        liveCharacter=current.copyWith(isDelete:true);
         characterCreated=false;
       }
       if(mounted)setState((){});
@@ -3731,11 +3824,14 @@ class _GameClientPageState extends State<GameClientPage> {
           ),
           GameStage.characterSelect=>CharacterSelectScreen(
             ui:ui!,
-            created:characterCreated,
-            name:nameController.text,
+            slots:_characterSelectionSlots(),
+            selectedSlot:liveCharacter?.slot,
             locale:uiLocale,
+            onSelect:(slot)=>unawaited(_selectCharacterSlot(slot)),
             onCreate:()=>unawaited(_goCreate()),
             onDelete:()=>unawaited(_deleteSelectedCharacter()),
+            onRestore:()=>unawaited(_restoreSelectedCharacter()),
+            onRename:()=>unawaited(_renameSelectedCharacter()),
             onStart:()=>unawaited(_enterWorld()),
             onBack:()=>unawaited(_goFaction()),
           ),
