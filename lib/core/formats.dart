@@ -680,6 +680,31 @@ class WorldLayer {
   WorldLayer(this.texture, this.tile, this.sound);
 }
 
+class WorldBounds {
+  final v.Vector3 lower,upper;
+  const WorldBounds(this.lower,this.upper);
+  bool contains(double x,double y,double z)=>x>=lower.x&&x<=upper.x&&
+    y>=lower.y&&y<=upper.y&&z>=lower.z&&z<=upper.z;
+}
+
+class WorldMusicZone {
+  final WorldBounds bounds;
+  final double radius;
+  final int assetId,unknown;
+  const WorldMusicZone(this.bounds,this.radius,this.assetId,this.unknown);
+}
+
+class WorldSoundEffect {
+  final int assetId;
+  final v.Vector3 center;
+  final double radius;
+  const WorldSoundEffect(this.assetId,this.center,this.radius);
+  bool contains(double x,double y,double z){
+    final dx=x-center.x,dy=y-center.y,dz=z-center.z;
+    return dx*dx+dy*dy+dz*dz<=radius*radius;
+  }
+}
+
 class WorldInstance {
   final String category, asset;
   final v.Vector3 position, forward, up;
@@ -731,6 +756,9 @@ class WorldData {
   final List<WorldInstance> objects;
   final String layout;
   final String skyFile,primaryCloudFile,secondaryCloudFile;
+  final List<String> musicAssets,soundEffectAssets;
+  final List<WorldMusicZone> musicZones;
+  final List<WorldSoundEffect> soundEffects;
   final v.Vector3 fogColor;
   final double fogStart,fogEnd;
   WorldData(
@@ -743,6 +771,10 @@ class WorldData {
     this.skyFile='',
     this.primaryCloudFile='',
     this.secondaryCloudFile='',
+    this.musicAssets=const [],
+    this.musicZones=const [],
+    this.soundEffectAssets=const [],
+    this.soundEffects=const [],
     v.Vector3? fogColor,
     this.fogStart=0,
     this.fogEnd=0,
@@ -800,6 +832,8 @@ class WorldData {
 
     var skyFile='',primaryCloud='',secondaryCloud='';
     var fog=v.Vector3.zero(),fogStart=0.0,fogEnd=0.0;
+    var musicAssets=<String>[],soundEffectAssets=<String>[];
+    final musicZones=<WorldMusicZone>[],soundEffects=<WorldSoundEffect>[];
 
     // Full WLD tail.  Older lab fixtures intentionally ended after the seven
     // legacy categories, so keep that minimal form readable for unit tests.
@@ -813,9 +847,16 @@ class WorldData {
       // Entity/Object is a real render category used by the native client.
       readCategory('Object');
 
-      skipNames(); // music
-      final musicZones=r.count(1000000);r.skip(musicZones*36);
-      skipNames(); // sound effect assets
+      final musicCount=r.count(20000);
+      musicAssets=List.generate(musicCount,(_)=>r.str(256));
+      final musicZoneCount=r.count(1000000);
+      for(var i=0;i<musicZoneCount;i++){
+        final lower=r.vec(),upper=r.vec(),radius=r.f32(),assetId=r.i32(),unknown=r.i32();
+        if(assetId<0||assetId>=musicAssets.length)r.fail('Zona de música referencia asset inexistente: $assetId.');
+        musicZones.add(WorldMusicZone(WorldBounds(lower,upper),radius,assetId,unknown));
+      }
+      final soundCount=r.count(20000);
+      soundEffectAssets=List.generate(soundCount,(_)=>r.str(256));
 
       final zones=r.count(1000000);
       for(var i=0;i<zones;i++){
@@ -823,7 +864,12 @@ class WorldData {
         final ids=r.count(1000000);r.skip(ids*4);
       }
 
-      final soundEffects=r.count(1000000);r.skip(soundEffects*20);
+      final soundEffectCount=r.count(1000000);
+      for(var i=0;i<soundEffectCount;i++){
+        final assetId=r.i32(),center=r.vec(),radius=r.f32();
+        if(assetId<0||assetId>=soundEffectAssets.length)r.fail('Efecto de sonido referencia asset inexistente: $assetId.');
+        soundEffects.add(WorldSoundEffect(assetId,center,radius));
+      }
       final restricted=r.count(1000000);r.skip(restricted*28);
       final portals=r.count(1000000);r.skip(portals*556);
       final spawns=r.count(1000000);r.skip(spawns*40);
@@ -858,6 +904,10 @@ class WorldData {
       skyFile:skyFile,
       primaryCloudFile:primaryCloud,
       secondaryCloudFile:secondaryCloud,
+      musicAssets:List.unmodifiable(musicAssets),
+      musicZones:List.unmodifiable(musicZones),
+      soundEffectAssets:List.unmodifiable(soundEffectAssets),
+      soundEffects:List.unmodifiable(soundEffects),
       fogColor:fog,
       fogStart:fogStart,
       fogEnd:fogEnd,
