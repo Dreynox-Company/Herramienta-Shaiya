@@ -126,14 +126,17 @@ sido descifrados. Falta ejecutar 0.6.17 contra el par real
 10. Evidencia de auditoría solo se restaura si coinciden índice, hash de la clave
     de recursos, regla de chunks y cobertura total de Entry IDs.
 
-## AutoPerfil / ResourceProbe V10
+## AutoPerfil / ResourceProbe V11
+
+Antes de instrumentar `game.exe`, V11 ejecuta un barrido estático acotado y fail-closed: prueba derivaciones de la clave del índice y constantes próximas a evidencia AES/GCM dentro del cliente y DLLs. Ninguna candidata se acepta por semejanza: debe autenticar tres ciphertexts simples reales con sus tags GCM. Si ninguna coincide, continúa automáticamente con instrumentación dinámica x86/x64.
+
 
 AutoPerfil sigue este orden:
 
 1. intenta offline si la clave autenticada del índice también autentica
    payloads;
 2. si falla, no reutiliza esa clave;
-3. en Windows ejecuta ResourceProbe V10 contra el `game.exe` de la misma
+3. en Windows ejecuta ResourceProbe V11 contra el `game.exe` de la misma
    instalación y sin red;
 4. ResourceProbe observa únicamente operaciones cuyo ciphertext coincide con un
    recurso/chunk real del índice;
@@ -285,7 +288,7 @@ con el cliente real.
 
 ## Próxima ejecución requerida
 
-Usar el build Windows 0.6.16 sobre la instalación real, preferiblemente offline:
+Usar el build Windows 0.6.17 sobre la instalación real, preferiblemente offline:
 
 1. abrir el `data.spk`;
 2. pulsar **AutoPerfil SPK**;
