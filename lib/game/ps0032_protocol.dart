@@ -3023,20 +3023,17 @@ class PsWorldSession {
     return PsInventoryMove.parse(response);
   }
   Future<PsEnchantRate> enchantRates({
-    required int itemBag,required int itemSlot,required List<(int bag,int slot)> lapisias,
+    required int itemBag,required int itemSlot,required List<(int,int)> lapisias,
   }) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de consultar encantamiento.');
     if(lapisias.length>10)throw RangeError('ENCHANT_RATE admite máximo 10 lapisias.');
-    final padded=<({int bag,int slot})>[
-      for(final x in lapisias)(bag:x.$1,slot:x.$2),
-      while(false)(bag:0,slot:0),
-    ];
-    while(padded.length<10)padded.add((bag:0,slot:0));
+    final padded=<(int,int)>[...lapisias];
+    while(padded.length<10)padded.add((0,0));
     final response=connection.waitStream((p)=>p.type==PsPacketType.enchantRate);
     await connection.send(PsPacketType.enchantRate,[
       itemBag&0xff,itemSlot&0xff,
-      for(final x in padded)x.bag&0xff,
-      for(final x in padded)x.slot&0xff,
+      for(final x in padded)x.$1&0xff,
+      for(final x in padded)x.$2&0xff,
     ]);
     return PsEnchantRate.parse(await response);
   }
