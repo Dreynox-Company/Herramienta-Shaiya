@@ -42,6 +42,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsCharacterDetails? liveDetails;
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
+  int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
@@ -655,7 +656,31 @@ class _GameClientPageState extends State<GameClientPage> {
 
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
-    if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
+    if(packet.type==PsPacketType.targetMobHpUpdate&&packet.body.length>=10){
+      final hp=PsTargetMobHp.parse(packet);
+      targetMobGlobalId=hp.targetId;targetMobHp=hp.currentHp;
+      final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hp.targetId).firstOrNull;
+      if(logical!=null){
+        targetMobTypeId=logical.mobId;
+        targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+      }
+    }else if(packet.type==PsPacketType.useMobTargetSkill&&packet.body.length>=19){
+      final hit=PsSkillHit.parse(packet);
+      targetMobGlobalId=hit.targetId;
+      final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hit.targetId).firstOrNull;
+      if(logical!=null){
+        targetMobTypeId=logical.mobId;
+        targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+      }
+      if(hit.success&&targetMobHp!=null)targetMobHp=math.max(0,targetMobHp!-hit.hpDamage);
+      messages.insert(0,'[Combate] Skill '+hit.skillId.toString()+' Lv.'+hit.skillLevel.toString()+' · daño '+hit.hpDamage.toString()+'.');
+    }else if(packet.type==PsPacketType.mobAttack&&packet.body.length>=15){
+      final hit=PsMobAttack.parse(packet);
+      if(hit.success)messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' te golpea por '+hit.hpDamage.toString()+'.');
+    }else if(packet.type==PsPacketType.mobSkillUse&&packet.body.length>=19){
+      final hit=PsMobSkillHit.parse(packet);
+      if(hit.success)messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');
+    }else if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
       liveHitpoints=PsHitpoints.parse(packet);
     }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
       liveAdditionalStats=PsAdditionalStats.parse(packet);
@@ -707,8 +732,9 @@ class _GameClientPageState extends State<GameClientPage> {
       final d=ByteData.sublistView(packet.body);
       scene.removeNetworkActor(d.getUint32(0,Endian.little),mob:false);
     }else if(packet.type==PsPacketType.mobDeath&&packet.body.length>=4){
-      final d=ByteData.sublistView(packet.body);
-      unawaited(scene.killNetworkMob(d.getUint32(0,Endian.little)));
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little);
+      if(targetMobGlobalId==id)targetMobHp=0;
+      unawaited(scene.killNetworkMob(id));
     }
     if(mounted)setState((){});
   }
@@ -755,6 +781,13 @@ class _GameClientPageState extends State<GameClientPage> {
     if(learned==null){messages.insert(0,'[Skillbar] SkillId ${slot.number} no está aprendida.');if(mounted)setState((){});return;}
     final target=scene.nearestNetworkMobId(maxDistance:18);
     if(target==null){messages.insert(0,'[Combate] No hay criatura viva a menos de 18 m.');if(mounted)setState((){});return;}
+    final logical=liveSnapshot?.mobs.where((m)=>m.globalId==target).firstOrNull;
+    targetMobGlobalId=target;
+    if(logical!=null){
+      targetMobTypeId=logical.mobId;
+      targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+      targetMobHp??=targetMobMaxHp;
+    }
     try{
       await liveWorld?.useMobSkill(learned.number,target);
       messages.insert(0,'[Combate] Skill ${learned.skillId} Lv.${learned.level} → mob $target.');
@@ -1153,6 +1186,9 @@ class _GameClientPageState extends State<GameClientPage> {
             level:liveCharacter?.level??1,
             details:liveDetails,
             hitpoints:liveHitpoints,
+            targetMobId:targetMobTypeId,
+            targetHp:targetMobHp,
+            targetMaxHp:targetMobMaxHp,
             skillBook:liveSkills,
             skillBar:liveSkillBar,
             inventory:liveInventory,
