@@ -2426,22 +2426,42 @@ class _GameClientPageState extends State<GameClientPage> {
     try{await session.sendNormalChat(value);}
     catch(e){messages.insert(0,'[Chat] '+e.toString());if(mounted)setState((){});}
   }
-  Future<void> _selectMobAt(Offset position) async {
+  Future<void> _selectTargetAt(Offset position) async {
     if(stage!=GameStage.world||dead||rebirthPending)return;
     focus.requestFocus();
-    final id=scene.pickNetworkMob(position.dx,position.dy,1024,742);
-    if(id==null)return;
-    final logical=liveSnapshot?.mobs.where((m)=>m.globalId==id).firstOrNull;
-    targetMobGlobalId=id;
-    if(logical!=null){
-      targetMobTypeId=logical.mobId;
-      targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+    final picked=scene.pickNetworkCombatTarget(position.dx,position.dy,1024,742);
+    if(picked==null)return;
+    if(picked.player){
+      final id=picked.id;
+      targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+      targetPlayerId=id;
+      targetPlayerName=remotePlayerShapes[id]?.name??_knownCharacterName(id);
+      try{
+        final selected=await liveWorld?.selectCharacterTarget(id);
+        if(selected!=null){
+          targetPlayerId=selected.targetId;targetPlayerMaxHp=selected.maxHp;targetPlayerHp=selected.currentHp;
+        }
+        final refreshed=await liveWorld?.refreshCharacterTargetHp(id);
+        if(refreshed!=null){
+          targetPlayerHp=refreshed.currentHp;targetPlayerMaxHp=refreshed.maxHp;
+        }
+        final label=targetPlayerName?.isNotEmpty==true?targetPlayerName!:('#'+id.toString());
+        messages.insert(0,'[PvP Target] '+label);
+      }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
+    }else{
+      final id=picked.id,logical=liveSnapshot?.mobs.where((m)=>m.globalId==picked.id).firstOrNull;
+      targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;targetPlayerName=null;
+      targetMobGlobalId=id;
+      if(logical!=null){
+        targetMobTypeId=logical.mobId;
+        targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+      }
+      try{
+        final hp=await liveWorld?.selectMobTarget(id);
+        if(hp!=null){targetMobHp=hp.currentHp;targetMobGlobalId=hp.targetId;}
+        messages.insert(0,'[Target] '+(logical==null?'Mob '+id.toString():catalog!.monsterName(logical.mobId,uiLocale)));
+      }catch(e){messages.insert(0,'[Target] '+e.toString());}
     }
-    try{
-      final hp=await liveWorld?.selectMobTarget(id);
-      if(hp!=null){targetMobHp=hp.currentHp;targetMobGlobalId=hp.targetId;}
-      messages.insert(0,'[Target] '+(logical==null?'Mob '+id.toString():catalog!.monsterName(logical.mobId,uiLocale)));
-    }catch(e){messages.insert(0,'[Target] '+e.toString());}
     if(mounted)setState((){});
   }
   Future<void> _addStat(int index) async {
@@ -2494,15 +2514,21 @@ class _GameClientPageState extends State<GameClientPage> {
   }
   Future<void> _autoAttackAt(Offset position) async {
     if(stage!=GameStage.world||dead||rebirthPending)return;
-    final id=scene.pickNetworkMob(position.dx,position.dy,1024,742);
-    if(id==null)return;
-    await _selectMobAt(position);
-    final target=targetMobGlobalId;
-    if(target==null)return;
+    final picked=scene.pickNetworkCombatTarget(position.dx,position.dy,1024,742);
+    if(picked==null)return;
+    await _selectTargetAt(position);
     try{
-      unawaited(scene.networkPlayerAttack(target));
-      await liveWorld?.startMobAutoAttack(target);
-      messages.insert(0,'[Combate] Autoataque iniciado → '+target.toString()+'.');
+      if(targetPlayerId!=null){
+        final target=targetPlayerId!;
+        unawaited(scene.networkPlayerAttackCharacter(target));
+        await liveWorld?.startCharacterAutoAttack(target);
+        messages.insert(0,'[PvP] Autoataque iniciado → '+(targetPlayerName??target.toString())+'.');
+      }else if(targetMobGlobalId!=null){
+        final target=targetMobGlobalId!;
+        unawaited(scene.networkPlayerAttack(target));
+        await liveWorld?.startMobAutoAttack(target);
+        messages.insert(0,'[Combate] Autoataque iniciado → '+target.toString()+'.');
+      }
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
   }
@@ -2510,13 +2536,25 @@ class _GameClientPageState extends State<GameClientPage> {
     if(stage!=GameStage.world||dead||rebirthPending)return;
     final slots=_primaryQuickSlots;
     final slot=slots.where((s)=>s.slot==index).firstOrNull??(index<slots.length?slots[index]:null);
-    if(slot==null){messages.insert(0,'[Skillbar] Slot ${index+1} vacío.');if(mounted)setState((){});return;}
-    if(!slot.isSkill){messages.insert(0,'[Skillbar] Slot ${index+1} contiene bag ${slot.bag}, item ${slot.number}.');if(mounted)setState((){});return;}
+    if(slot==null){messages.insert(0,'[Skillbar] Slot '+(index+1).toString()+' vacío.');if(mounted)setState((){});return;}
+    if(!slot.isSkill){messages.insert(0,'[Skillbar] Slot '+(index+1).toString()+' contiene bag '+slot.bag.toString()+', item '+slot.number.toString()+'.');if(mounted)setState((){});return;}
     final learned=liveSkills?.bySkillId(slot.number);
-    if(learned==null){messages.insert(0,'[Skillbar] SkillId ${slot.number} no está aprendida.');if(mounted)setState((){});return;}
+    if(learned==null){messages.insert(0,'[Skillbar] SkillId '+slot.number.toString()+' no está aprendida.');if(mounted)setState((){});return;}
+
+    final pvp=targetPlayerId;
+    if(pvp!=null&&scene.networkPlayerActors.containsKey(pvp)){
+      try{
+        unawaited(scene.networkPlayerAttackCharacter(pvp));
+        await liveWorld?.useCharacterSkill(learned.number,pvp);
+        messages.insert(0,'[PvP] Skill '+learned.skillId.toString()+' Lv.'+learned.level.toString()+' → '+(targetPlayerName??pvp.toString())+'.');
+        if(mounted)setState((){});
+      }catch(e){messages.insert(0,'[PvP] '+e.toString());if(mounted)setState((){});}
+      return;
+    }
+
     final selected=targetMobGlobalId;
     final target=selected!=null&&scene.networkMobActors.containsKey(selected)?selected:scene.nearestNetworkMobId(maxDistance:18);
-    if(target==null){messages.insert(0,'[Combate] No hay criatura viva seleccionada/cercana.');if(mounted)setState((){});return;}
+    if(target==null){messages.insert(0,'[Combate] No hay objetivo seleccionado/cercano.');if(mounted)setState((){});return;}
     final logical=liveSnapshot?.mobs.where((m)=>m.globalId==target).firstOrNull;
     targetMobGlobalId=target;
     if(logical!=null){
@@ -2527,7 +2565,7 @@ class _GameClientPageState extends State<GameClientPage> {
     try{
       unawaited(scene.networkPlayerAttack(target));
       await liveWorld?.useMobSkill(learned.number,target);
-      messages.insert(0,'[Combate] Skill ${learned.skillId} Lv.${learned.level} → mob $target.');
+      messages.insert(0,'[Combate] Skill '+learned.skillId.toString()+' Lv.'+learned.level.toString()+' → mob '+target.toString()+'.');
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
   }
@@ -3236,7 +3274,7 @@ class _GameClientPageState extends State<GameClientPage> {
       },
       child:GestureDetector(
         behavior:HitTestBehavior.opaque,
-        onTapDown:(d){if(stage==GameStage.world&&!dead&&!rebirthPending)unawaited(_selectMobAt(d.localPosition));else focus.requestFocus();},
+        onTapDown:(d){if(stage==GameStage.world&&!dead&&!rebirthPending)unawaited(_selectTargetAt(d.localPosition));else focus.requestFocus();},
         onDoubleTapDown:(d){if(stage==GameStage.world&&!dead&&!rebirthPending)unawaited(_autoAttackAt(d.localPosition));},
         onScaleStart:(_){gestureScale=1;focus.requestFocus();},
         onScaleUpdate:(d){
@@ -3371,8 +3409,9 @@ class _GameClientPageState extends State<GameClientPage> {
             weather:liveWeather,
             targetMobGlobalId:targetMobGlobalId,
             targetMobId:targetMobTypeId,
-            targetHp:targetMobHp,
-            targetMaxHp:targetMobMaxHp,
+            targetPlayerName:targetPlayerName,
+            targetHp:targetPlayerId!=null?targetPlayerHp:targetMobHp,
+            targetMaxHp:targetPlayerId!=null?targetPlayerMaxHp:targetMobMaxHp,
             skillBook:liveSkills,
             skillBar:liveSkillBar,
             inventory:liveInventory,
