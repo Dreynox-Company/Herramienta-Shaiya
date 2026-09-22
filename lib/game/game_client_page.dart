@@ -2958,7 +2958,13 @@ class _GameClientPageState extends State<GameClientPage> {
     if(stage!=GameStage.world||dead||rebirthPending)return;
     focus.requestFocus();
     final picked=scene.pickNetworkCombatTarget(position.dx,position.dy,1024,742);
-    if(picked==null)return;
+    if(picked==null){
+      try{await liveWorld?.clearTarget();}catch(_){}
+      _clearCombatTarget();
+      if(mounted)setState((){});
+      return;
+    }
+    targetBuffs=<PsTargetBuff>[];
     if(picked.player){
       final id=picked.id;
       targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
@@ -2973,6 +2979,8 @@ class _GameClientPageState extends State<GameClientPage> {
         if(refreshed!=null){
           targetPlayerHp=refreshed.currentHp;targetPlayerMaxHp=refreshed.maxHp;
         }
+        final buffs=await liveWorld?.requestCharacterTargetBuffs(id);
+        if(buffs!=null)targetBuffs=buffs.buffs.toList();
         final label=targetPlayerName?.isNotEmpty==true?targetPlayerName!:('#'+id.toString());
         messages.insert(0,'[PvP Target] '+label);
       }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
@@ -2987,6 +2995,8 @@ class _GameClientPageState extends State<GameClientPage> {
       try{
         final hp=await liveWorld?.selectMobTarget(id);
         if(hp!=null){targetMobHp=hp.currentHp;targetMobGlobalId=hp.targetId;}
+        final buffs=await liveWorld?.requestMobTargetBuffs(id);
+        if(buffs!=null)targetBuffs=buffs.buffs.toList();
         messages.insert(0,'[Target] '+(logical==null?'Mob '+id.toString():catalog!.monsterName(logical.mobId,uiLocale)));
       }catch(e){messages.insert(0,'[Target] '+e.toString());}
     }
