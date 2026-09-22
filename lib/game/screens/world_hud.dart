@@ -1101,6 +1101,231 @@ class WorldHud extends StatelessWidget {
       ),
     );
   }
+  Widget _guildApplicantCard(PsGuildJoinApplicant a){
+    return Container(
+      height:42,
+      margin:const EdgeInsets.only(bottom:4),
+      padding:const EdgeInsets.symmetric(horizontal:7),
+      decoration:BoxDecoration(color:const Color(0xff21180f),border:Border.all(color:const Color(0xff725c3e))),
+      child:Row(children:[
+        const Icon(Icons.person_add_alt_1,size:18,color:Color(0xffffd45f)),
+        const SizedBox(width:7),
+        Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(a.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:9.5,color:Color(0xffffe2a6),fontWeight:FontWeight.w600)),
+          Text('Lv.'+a.level.toString()+' · '+_professionName(a.job),style:const TextStyle(fontSize:7.5,color:Colors.white54)),
+        ])),
+        IconButton(
+          tooltip:locale=='spn'?'Aceptar':'Accept',
+          onPressed:()=>onRespondGuildApplicant(a,true),
+          visualDensity:VisualDensity.compact,
+          icon:const Icon(Icons.check_circle,size:18,color:Color(0xff72d67b)),
+        ),
+        IconButton(
+          tooltip:locale=='spn'?'Rechazar':'Reject',
+          onPressed:()=>onRespondGuildApplicant(a,false),
+          visualDensity:VisualDensity.compact,
+          icon:const Icon(Icons.cancel,size:18,color:Color(0xffd56e63)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _guildDirectory(){
+    if(guildListLoading&&guildDirectory.isEmpty){
+      return const Center(child:CircularProgressIndicator(strokeWidth:2));
+    }
+    if(guildDirectory.isEmpty){
+      return Center(child:Text(
+        locale=='spn'?'No hay guilds disponibles.':'No guilds available.',
+        style:const TextStyle(fontSize:9,color:Colors.white38),
+      ));
+    }
+    return ListView.builder(
+      padding:const EdgeInsets.symmetric(horizontal:8),
+      itemCount:guildDirectory.length,
+      itemBuilder:(context,index){
+        final g=guildDirectory[index];
+        return Container(
+          minHeight:54,
+          margin:const EdgeInsets.only(bottom:4),
+          padding:const EdgeInsets.all(7),
+          decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff51432f))),
+          child:Row(children:[
+            Container(
+              width:34,height:34,alignment:Alignment.center,
+              decoration:BoxDecoration(color:const Color(0xff302415),border:Border.all(color:const Color(0xff7b633d))),
+              child:Text(g.rank.toString(),style:const TextStyle(fontSize:12,color:Color(0xffffd56b),fontWeight:FontWeight.bold)),
+            ),
+            const SizedBox(width:8),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(g.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:10,color:Color(0xffffe4aa),fontWeight:FontWeight.w600)),
+              Text(
+                (locale=='spn'?'Maestro: ':'Master: ')+g.masterName+' · '+
+                  (locale=='spn'?'Puntos: ':'Points: ')+g.points.toString(),
+                style:const TextStyle(fontSize:7.5,color:Colors.white54),
+              ),
+              if(g.message.trim().isNotEmpty)Text(
+                g.message.trim(),maxLines:1,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(fontSize:7,color:Colors.white38),
+              ),
+            ])),
+            TextButton(
+              onPressed:()=>onRequestGuildJoin(g),
+              style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xff8ed7ff)),
+              child:Text(locale=='spn'?'Solicitar':'Join',style:const TextStyle(fontSize:8)),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+
+  Widget _guildMemberList(){
+    final admin=guildRank>0&&guildRank<=3;
+    if(guildMembers.isEmpty){
+      return Center(child:Text(
+        locale=='spn'?'Aún no se cargaron los miembros.':'Guild members not loaded yet.',
+        style:const TextStyle(fontSize:9,color:Colors.white38),
+      ));
+    }
+    return ListView.builder(
+      padding:const EdgeInsets.symmetric(horizontal:8),
+      itemCount:guildMembers.length,
+      itemBuilder:(context,index){
+        final m=guildMembers[index],self=m.id==selfCharacterId;
+        return Container(
+          height:43,
+          margin:const EdgeInsets.only(bottom:3),
+          padding:const EdgeInsets.symmetric(horizontal:7),
+          decoration:BoxDecoration(
+            color:const Color(0xff17120e),
+            border:Border.all(color:self?const Color(0xff816a3a):const Color(0xff493c2c)),
+          ),
+          child:Row(children:[
+            Container(
+              width:7,height:7,
+              decoration:BoxDecoration(shape:BoxShape.circle,color:m.online?const Color(0xff6ddd78):const Color(0xff666666)),
+            ),
+            const SizedBox(width:7),
+            Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(m.name,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:9.5,color:m.online?const Color(0xffffe7b2):Colors.white54,fontWeight:self?FontWeight.bold:FontWeight.normal)),
+              Text('R'+m.rank.toString()+' · Lv.'+m.level.toString()+' · '+_professionName(m.job),style:const TextStyle(fontSize:7,color:Colors.white38)),
+            ])),
+            if(admin&&!self&&m.rank>2)
+              IconButton(
+                tooltip:locale=='spn'?'Ascender':'Promote',
+                onPressed:()=>onPromoteGuild(m),
+                visualDensity:VisualDensity.compact,
+                icon:const Icon(Icons.arrow_upward,size:15,color:Color(0xff76d68b)),
+              ),
+            if(admin&&!self&&m.rank<9)
+              IconButton(
+                tooltip:locale=='spn'?'Descender':'Demote',
+                onPressed:()=>onDemoteGuild(m),
+                visualDensity:VisualDensity.compact,
+                icon:const Icon(Icons.arrow_downward,size:15,color:Color(0xffd3a65e)),
+              ),
+            if(admin&&!self)
+              IconButton(
+                tooltip:locale=='spn'?'Expulsar':'Kick',
+                onPressed:()=>onKickGuild(m),
+                visualDensity:VisualDensity.compact,
+                icon:const Icon(Icons.person_remove,size:16,color:Color(0xffd87368)),
+              ),
+          ]),
+        );
+      },
+    );
+  }
+
+  Widget _guildWindow(){
+    final inGuild=guildId!=0;
+    final admin=inGuild&&guildRank>0&&guildRank<=3;
+    return _panelShell(
+      inGuild
+        ?(guildName.isEmpty?(locale=='spn'?'Guild':'Guild'):guildName+' · R'+guildRank.toString())
+        :(locale=='spn'?'Guilds':'Guilds'),
+      Column(children:[
+        if(pendingGuildCreateInvite!=null)
+          _requestCard(
+            title:pendingGuildCreateInvite!.name,
+            subtitle:(locale=='spn'?'Crear guild con ':'Create guild with ')+pendingGuildCreateInvite!.name,
+            accept:()=>onRespondGuildCreate(true),
+            reject:()=>onRespondGuildCreate(false),
+          ),
+        if(!inGuild)...[
+          Padding(
+            padding:const EdgeInsets.fromLTRB(8,7,8,4),
+            child:_GuildCreateInput(locale:locale,onCreate:onCreateGuild),
+          ),
+          const Divider(height:1,color:Color(0xff5a4934)),
+          Expanded(child:_guildDirectory()),
+        ]else...[
+          if(admin&&guildApplicants.isNotEmpty)...[
+            Padding(
+              padding:const EdgeInsets.fromLTRB(10,7,10,4),
+              child:Row(children:[
+                const Icon(Icons.how_to_reg,size:14,color:Color(0xffffd45f)),
+                const SizedBox(width:5),
+                Text(
+                  (locale=='spn'?'Solicitudes':'Requests')+' ('+guildApplicants.length.toString()+')',
+                  style:const TextStyle(fontSize:9.5,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
+                ),
+              ]),
+            ),
+            SizedBox(
+              height:math.min(145.0,guildApplicants.length*46.0),
+              child:ListView(
+                padding:const EdgeInsets.symmetric(horizontal:8),
+                children:guildApplicants.map(_guildApplicantCard).toList(),
+              ),
+            ),
+            const Divider(height:1,color:Color(0xff5a4934)),
+          ],
+          Padding(
+            padding:const EdgeInsets.fromLTRB(10,7,10,4),
+            child:Row(children:[
+              const Icon(Icons.groups,size:15,color:Color(0xff8ed7ff)),
+              const SizedBox(width:5),
+              Expanded(child:Text(
+                (locale=='spn'?'Miembros':'Members')+' ('+guildMembers.length.toString()+')',
+                style:const TextStyle(fontSize:9.5,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
+              )),
+              Text('R'+guildRank.toString(),style:const TextStyle(fontSize:8,color:Colors.white54)),
+            ]),
+          ),
+          Expanded(child:_guildMemberList()),
+        ],
+      ]),
+      footer:Container(
+        height:34,
+        padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          if(inGuild)
+            TextButton(
+              onPressed:onLeaveGuild,
+              style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffd98678)),
+              child:Text(locale=='spn'?'Salir':'Leave',style:const TextStyle(fontSize:8)),
+            ),
+          if(inGuild&&guildRank==1)
+            TextButton(
+              onPressed:onDismantleGuild,
+              style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:const Color(0xffe15f55)),
+              child:Text(locale=='spn'?'Disolver':'Dismantle',style:const TextStyle(fontSize:8)),
+            ),
+          const Spacer(),
+          if(!inGuild&&guildListLoading)
+            const SizedBox(width:14,height:14,child:CircularProgressIndicator(strokeWidth:1.5)),
+          const SizedBox(width:6),
+          TextButton(
+            onPressed:onToggleGuild,
+            style:TextButton.styleFrom(visualDensity:VisualDensity.compact,foregroundColor:Colors.white60),
+            child:Text(locale=='spn'?'Cerrar':'Close',style:const TextStyle(fontSize:8)),
+          ),
+        ]),
+      ),
+    );
+  }
   Widget _statLine(String label,Object? base,Object? total,{VoidCallback? onAdd})=>Padding(
     padding:const EdgeInsets.symmetric(vertical:3),
     child:Row(children:[
