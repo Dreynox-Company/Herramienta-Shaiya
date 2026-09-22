@@ -34,6 +34,13 @@ class Bin {
     return x;
   }
 
+  int i16() {
+    need(2);
+    final x = data.getInt16(offset, Endian.little);
+    offset += 2;
+    return x;
+  }
+
   int u32() {
     need(4);
     final x = data.getUint32(offset, Endian.little);
@@ -717,6 +724,45 @@ class WorldInstance {
   );
 }
 
+class WorldManiInstance {
+  final String buildingAsset,maniAsset;
+  final v.Vector3 position,forward,up;
+  const WorldManiInstance(
+    this.buildingAsset,this.maniAsset,this.position,this.forward,this.up,
+  );
+  WorldInstance get building=>WorldInstance('Building',buildingAsset,position,forward,up);
+}
+
+class ManiData {
+  final int version,unknown1,unknown5,unknown6,enableRotation,unknownShort1,unknownShort2,unknown13;
+  final v.Vector3 unknownVec1,unknownVec2,rotation,unknownVec4;
+  final double unknown2,unknown3,unknown4,unknown7,unknown8,animationSpeed,unknown11,unknown12;
+  const ManiData({
+    required this.version,required this.unknown1,required this.unknownVec1,
+    required this.unknown2,required this.unknown3,required this.unknown4,
+    required this.unknown5,required this.unknown6,required this.unknownVec2,
+    required this.unknown7,required this.unknown8,required this.enableRotation,
+    required this.rotation,required this.animationSpeed,required this.unknownShort1,
+    required this.unknownShort2,required this.unknownVec4,required this.unknown11,
+    required this.unknown12,required this.unknown13,
+  });
+  static ManiData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final out=ManiData(
+      version:r.i32(),unknown1:r.i32(),unknownVec1:r.vec(),
+      unknown2:r.f32(),unknown3:r.f32(),unknown4:r.f32(),
+      unknown5:r.i32(),unknown6:r.i32(),unknownVec2:r.vec(),
+      unknown7:r.f32(),unknown8:r.f32(),enableRotation:r.i32(),
+      rotation:r.vec(),animationSpeed:r.f32(),
+      unknownShort1:r.i16(),unknownShort2:r.i16(),unknownVec4:r.vec(),
+      unknown11:r.f32(),unknown12:r.f32(),unknown13:r.i32(),
+    );
+    r.end();
+    if(out.version!=0x21)throw FormatException('$source · versión MAni inesperada: ${out.version}.');
+    return out;
+  }
+}
+
 v.Matrix4 worldInstanceMatrix(WorldInstance obj,double originX,double originZ){
   v.Vector3 safe(v.Vector3 value,v.Vector3 fallback){
     final out=value.clone();
@@ -754,6 +800,7 @@ class WorldData {
   final Uint8List types;
   final List<WorldLayer> layers;
   final List<WorldInstance> objects;
+  final List<WorldManiInstance> maniInstances;
   final String layout;
   final String skyFile,primaryCloudFile,secondaryCloudFile;
   final List<String> musicAssets,soundEffectAssets;
@@ -768,6 +815,7 @@ class WorldData {
     this.layers,
     this.objects,
     this.layout,{
+    this.maniInstances=const [],
     this.skyFile='',
     this.primaryCloudFile='',
     this.secondaryCloudFile='',
@@ -804,9 +852,9 @@ class WorldData {
       }
     }
 
-    final layout = r.str(256), objects = <WorldInstance>[];
+    final layout = r.str(256), objects = <WorldInstance>[],maniInstances=<WorldManiInstance>[];
 
-    void readCategory(String category,{bool keep=true}) {
+    List<String> readCategory(String category,{bool keep=true}) {
       final names = List.generate(r.count(20000), (_) => r.str(256));
       final n = r.count(1000000);
       r.need(n * 40);
@@ -815,14 +863,11 @@ class WorldData {
         if (id < 0 || id >= names.length) r.fail('Objeto WLD no definido.');
         if(keep)objects.add(WorldInstance(category, names[id], p, f, u));
       }
-    }
-    void skipNames(){
-      final n=r.count(20000);
-      for(var i=0;i<n;i++)r.str(256);
+      return names;
     }
     void skipBox()=>r.skip(24);
 
-    readCategory('Building');
+    final buildingAssets=readCategory('Building');
     readCategory('Shape');
     readCategory('Tree');
     readCategory('Grass');
@@ -838,8 +883,21 @@ class WorldData {
     // Full WLD tail.  Older lab fixtures intentionally ended after the seven
     // legacy categories, so keep that minimal form readable for unit tests.
     if(r.offset < bytes.length){
-      skipNames(); // MAni asset names.
-      final mani=r.count(1000000);r.skip(mani*44);
+      final maniAssets=List.generate(r.count(20000),(_)=>r.str(256));
+      final maniCount=r.count(1000000);
+      r.need(maniCount*44);
+      for(var i=0;i<maniCount;i++){
+        final buildingId=r.i32(),maniId=r.i32(),p=r.vec(),forward=r.vec(),up=r.vec();
+        if(buildingId<0||buildingId>=buildingAssets.length){
+          r.fail('MAni referencia Building inexistente: $buildingId.');
+        }
+        if(maniId<0||maniId>=maniAssets.length){
+          r.fail('MAni referencia asset inexistente: $maniId.');
+        }
+        maniInstances.add(WorldManiInstance(
+          buildingAssets[buildingId],maniAssets[maniId],p,forward,up,
+        ));
+      }
       r.str(256); // EFT file.
       final effects=r.count(1000000);r.skip(effects*40);
       r.skip(12); // Unknown1..3.
@@ -901,6 +959,7 @@ class WorldData {
 
     return WorldData(
       size, heights, types, layers, objects, layout,
+      maniInstances:List.unmodifiable(maniInstances),
       skyFile:skyFile,
       primaryCloudFile:primaryCloud,
       secondaryCloudFile:secondaryCloud,
