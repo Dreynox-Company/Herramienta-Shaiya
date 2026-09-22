@@ -123,6 +123,15 @@ void main(){
         'actors':state.scene.gameActors.length,
         'loadedWorldAssets':state.scene.loadedWorldAssets,
         'missingWorldAssets':state.scene.missingWorldAssets,
+        'worldCategoryCounts':{
+          for(final category in (state.scene.world?.objects.map((o)=>o.category).toSet()??const <String>{}))
+            category:state.scene.world!.objects.where((o)=>o.category==category).length,
+        },
+        'animatedWorldParts':state.scene.animatedWorldParts.length,
+        'worldMusicNames':state.scene.world?.musicNames.length??0,
+        'worldMusicZones':state.scene.world?.musicZones.length??0,
+        'worldSoundNames':state.scene.world?.soundEffectNames.length??0,
+        'worldSoundEffects':state.scene.world?.soundEffects.length??0,
         'collisionTriangles':state.scene.worldCollision?.triangles.length??0,
         'originX':state.scene.originX,
         'originZ':state.scene.originZ,
