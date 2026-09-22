@@ -55,6 +55,7 @@ class _GameClientPageState extends State<GameClientPage> {
   List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
   List<PsFriend> liveFriends=<PsFriend>[];
   List<PsPartyMember> livePartyMembers=<PsPartyMember>[];
+  PsRaidState? liveRaid;
   List<PsGuildSummary> guildDirectory=<PsGuildSummary>[];
   List<PsGuildMember> liveGuildMembers=<PsGuildMember>[];
   List<PsGuildJoinApplicant> guildApplicants=<PsGuildJoinApplicant>[];
@@ -73,6 +74,7 @@ class _GameClientPageState extends State<GameClientPage> {
   double duelCenterX=0,duelCenterZ=0;
   String duelResultText='';
   int? partyLeaderId,pendingPartyRequesterId,outgoingPartyInviteId;
+  int? pendingRaidRequesterId;
   String? pendingFriendRequestName;
   StreamSubscription<PsPacket>? livePacketSubscription;
   Timer? movementTimer;
@@ -1170,7 +1172,80 @@ class _GameClientPageState extends State<GameClientPage> {
           return m.copyWith(buffs:List.unmodifiable(next));
         });
       }catch(e){messages.insert(0,'[Party] '+e.toString());}
-    }else if([
+    }else if(packet.type==PsPacketType.raidInvite&&packet.body.length>=4){
+      pendingRaidRequesterId=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      _closeWorldPanels();socialOpen=true;
+      messages.insert(0,'[Raid] Invitación de #'+pendingRaidRequesterId.toString()+'.');
+    }else if(packet.type==PsPacketType.raidList&&packet.body.length>=8){
+      try{
+        liveRaid=PsRaidState.parse(packet);pendingRaidRequesterId=null;livePartyMembers=[];partyLeaderId=null;
+        messages.insert(0,'[Raid] Sincronizada · '+liveRaid!.members.length.toString()+'/30 miembros.');
+      }catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    }else if(packet.type==PsPacketType.raidEnter){
+      try{
+        final row=parseRaidEnter(packet),raid=liveRaid;
+        if(raid!=null){
+          final members=[...raid.members.where((m)=>m.member.id!=row.member.id),row]..sort((a,b)=>a.index.compareTo(b.index));
+          liveRaid=PsRaidState(leaderIndex:raid.leaderIndex,subLeaderIndex:raid.subLeaderIndex,dropType:raid.dropType,autoJoin:raid.autoJoin,members:List.unmodifiable(members));
+        }
+        messages.insert(0,'[Raid] '+row.member.name+' entró.');
+      }catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    }else if((packet.type==PsPacketType.raidLeave||packet.type==PsPacketType.raidKick)&&packet.body.length>=4){
+      final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little),raid=liveRaid;
+      if(id==liveCharacter?.id){liveRaid=null;messages.insert(0,'[Raid] Has salido del raid.');}
+      else if(raid!=null){
+        final members=raid.members.where((m)=>m.member.id!=id).toList();
+        liveRaid=PsRaidState(leaderIndex:raid.leaderIndex,subLeaderIndex:raid.subLeaderIndex,dropType:raid.dropType,autoJoin:raid.autoJoin,members:List.unmodifiable(members));
+      }
+    }else if(packet.type==PsPacketType.raidDismantle){
+      liveRaid=null;messages.insert(0,'[Raid] Raid disuelto.');
+    }else if(packet.type==PsPacketType.raidChangeLoot&&packet.body.length>=4){
+      final raid=liveRaid;if(raid!=null){
+        liveRaid=PsRaidState(leaderIndex:raid.leaderIndex,subLeaderIndex:raid.subLeaderIndex,dropType:ByteData.sublistView(packet.body).getInt32(0,Endian.little),autoJoin:raid.autoJoin,members:raid.members);
+      }
+    }else if(packet.type==PsPacketType.raidChangeAutoInvite&&packet.body.isNotEmpty){
+      final raid=liveRaid;if(raid!=null){
+        liveRaid=PsRaidState(leaderIndex:raid.leaderIndex,subLeaderIndex:raid.subLeaderIndex,dropType:raid.dropType,autoJoin:packet.body[0]!=0,members:raid.members);
+      }
+    }else if((packet.type==PsPacketType.raidChangeLeader||packet.type==PsPacketType.raidChangeSubLeader)&&packet.body.length>=4){
+      final raid=liveRaid,id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      if(raid!=null){
+        final row=raid.members.where((m)=>m.member.id==id).firstOrNull;
+        if(row!=null){
+          liveRaid=PsRaidState(
+            leaderIndex:packet.type==PsPacketType.raidChangeLeader?row.index:raid.leaderIndex,
+            subLeaderIndex:packet.type==PsPacketType.raidChangeSubLeader?row.index:raid.subLeaderIndex,
+            dropType:raid.dropType,autoJoin:raid.autoJoin,members:raid.members,
+          );
+        }
+      }
+    }else if(packet.type==PsPacketType.raidMovePlayer&&packet.body.length>=16){
+      try{
+        final move=PsRaidMove.parse(packet),raid=liveRaid;
+        if(raid!=null){
+          final members=<PsRaidMember>[];
+          for(final row in raid.members){
+            if(row.index==move.sourceIndex)members.add(row.copyWith(index:move.destinationIndex));
+            else if(row.index==move.destinationIndex)members.add(row.copyWith(index:move.sourceIndex));
+            else members.add(row);
+          }
+          members.sort((a,b)=>a.index.compareTo(b.index));
+          liveRaid=PsRaidState(leaderIndex:move.leaderIndex,subLeaderIndex:move.subLeaderIndex,dropType:raid.dropType,autoJoin:raid.autoJoin,members:List.unmodifiable(members));
+        }
+      }catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    }else if((packet.type==PsPacketType.raidCharacterSpMp||packet.type==PsPacketType.raidSetMax)&&packet.body.length>=9){
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little),type=packet.body[4],value=d.getInt32(5,Endian.little),maximum=packet.type==PsPacketType.raidSetMax;
+      _updateRaidMember(id,(m){
+        if(maximum){if(type==0)return m.copyWith(maxHp:value);if(type==1)return m.copyWith(maxSp:value);return m.copyWith(maxMp:value);}
+        if(type==0)return m.copyWith(hp:value);if(type==1)return m.copyWith(sp:value);return m.copyWith(mp:value);
+      });
+    }else if((packet.type==PsPacketType.raidAddedBuff||packet.type==PsPacketType.raidRemovedBuff)&&packet.body.length>=7){
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little),skillId=d.getUint16(4,Endian.little),level=packet.body[6];
+      _updateRaidMember(id,(m){
+        final buffs=[...m.buffs.where((b)=>!(b.skillId==skillId&&b.skillLevel==level))];
+        if(packet.type==PsPacketType.raidAddedBuff)buffs.add(PsPartyBuff(skillId,level,-1));
+        return m.copyWith(buffs:List.unmodifiable(buffs));
+      });    }else if([
       PsPacketType.chatNormal,PsPacketType.chatWhisper,PsPacketType.chatWorld,
       PsPacketType.chatGuild,PsPacketType.chatParty,PsPacketType.chatMap,
     ].contains(packet.type)){
@@ -1475,6 +1550,17 @@ class _GameClientPageState extends State<GameClientPage> {
     });
   }
 
+  void _updateRaidMember(int id,PsPartyMember Function(PsPartyMember) update){
+    final raid=liveRaid;if(raid==null)return;
+    final next=<PsRaidMember>[];
+    for(final row in raid.members){
+      next.add(row.member.id==id?row.copyWith(member:update(row.member)):row);
+    }
+    liveRaid=PsRaidState(
+      leaderIndex:raid.leaderIndex,subLeaderIndex:raid.subLeaderIndex,dropType:raid.dropType,
+      autoJoin:raid.autoJoin,members:List.unmodifiable(next),
+    );
+  }
   void _upsertPartyMember(PsPartyMember member){
     livePartyMembers=[
       ...livePartyMembers.where((m)=>m.id!=member.id),
@@ -1934,6 +2020,42 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<void> _createRaid() async {
+    final session=liveWorld;if(session==null)return;
+    try{await session.createRaid(autoJoin:true,dropType:1);messages.insert(0,'[Raid] Creación solicitada.');}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _leaveRaid() async {
+    try{await liveWorld?.leaveRaid();}catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
+
+  Future<void> _dismantleRaid() async {
+    try{await liveWorld?.dismantleRaid();}catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
+
+  Future<void> _respondRaid(bool accepted) async {
+    final id=pendingRaidRequesterId;if(id==null)return;
+    try{await liveWorld?.respondRaid(id,declined:!accepted);if(!accepted)pendingRaidRequesterId=null;}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _inviteRaidCharacter(int id) async {
+    try{await liveWorld?.inviteRaid(id);messages.insert(0,'[Raid] Invitación enviada a #'+id.toString()+'.');}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _changeRaidLoot(int value) async {
+    try{await liveWorld?.changeRaidLoot(value);}catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
+
+  Future<void> _toggleRaidAutoJoin() async {
+    final raid=liveRaid;if(raid==null)return;
+    try{await liveWorld?.changeRaidAutoJoin(!raid.autoJoin);}catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
   Future<void> _leaveParty() async {
     final session=liveWorld;if(session==null)return;
     try{
