@@ -680,7 +680,8 @@ class _GameClientPageState extends State<GameClientPage> {
       scene.yaw=0;scene.pitch=.12;scene.distance=5.9;scene.targetY=1.18;
       if(scene.character!=null)scene.character!.root.rotation.y=math.pi;
       scene.updateCamera();
-      messages.insert(0,'[Mapa] Teleport → ${teleport.mapId} · ${teleport.x.toStringAsFixed(1)}, ${teleport.z.toStringAsFixed(1)}.');
+      await liveWorld?.confirmMapLoaded();
+      messages.insert(0,'[Mapa] Teleport → ${teleport.mapId} · ${teleport.x.toStringAsFixed(1)}, ${teleport.z.toStringAsFixed(1)} · 0x0201 confirmado.');
     }catch(e){
       messages.insert(0,'[Mapa] Teleport ${teleport.mapId}: '+e.toString());
     }finally{
