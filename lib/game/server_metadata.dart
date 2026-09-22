@@ -68,6 +68,26 @@ class ItemRule {
   );
 }
 
+int weaponFamilyForItemType(int type){
+  if(type>=1&&type<=15)return type;
+  return switch(type){
+    45=>1,46=>2,47=>3,48=>4,
+    49||50=>5,51||52=>6,53||54=>7,55||56=>8,
+    57=>9,58=>10,59=>11,60||61=>12,62||63=>13,64=>14,65=>15,
+    _=>0,
+  };
+}
+
+Slot? appearanceSlotForEquipmentSlot(int slot)=>switch(slot){
+  0=>Slot.helmet,
+  1=>Slot.upper,
+  2=>Slot.lower,
+  3=>Slot.hand,
+  4=>Slot.foot,
+  15=>Slot.upper,
+  _=>null,
+};
+
 List<int> equipmentSlotsForItemType(int type){
   if((type>=1&&type<=15)||(type>=45&&type<=65))return const [5];
   if(const {16,31,66,72,81,87}.contains(type))return const [0];
