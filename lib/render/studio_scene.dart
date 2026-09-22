@@ -1061,7 +1061,7 @@ class StudioScene extends ChangeNotifier {
       final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree','Grass','VAni','Object'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
       for(final obj in nearby){
         if(loaded>=140)break;
-        final model=lib.resolve(obj.asset,['entity/${obj.category}']);
+        final model=lib.resolve(obj.asset,['entity/${obj.category}'],uniqueFallback:true);
         if(model==null){
           missingWorldAssets.add('${obj.category}:${obj.asset}');
           continue;
