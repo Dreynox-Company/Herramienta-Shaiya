@@ -137,7 +137,9 @@ class StudioScene extends ChangeNotifier {
   bool running=false,touchRun=false;
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];final List<VaniActor> animatedWorldActors=[];final List<ManiActor> maniWorldActors=[];
-  WorldData? world;DgData? dungeon;String? worldPath,effectPath,skyPath,primaryCloudPath,secondaryCloudPath;
+  WorldData? world;DgData? dungeon;WtrData? waterAnimation;
+  String? worldPath,effectPath,skyPath,primaryCloudPath,secondaryCloudPath,waterPath;
+  final List<String> waterTexturePaths=[];
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
   final WorldCollisionIndex worldCollision=WorldCollisionIndex();
@@ -1116,7 +1118,7 @@ class StudioScene extends ChangeNotifier {
 
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();waterAnimation=null;waterPath=null;waterTexturePaths.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -1173,6 +1175,7 @@ class StudioScene extends ChangeNotifier {
         for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();
         for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
+        waterAnimation=null;waterPath=null;waterTexturePaths.clear();
         worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);_applyWorldFog(w);
         character?.root.position.setValues(0,groundY,0);
         enemy?.root.position.setValues(1.8,groundY,0);
@@ -1188,6 +1191,26 @@ class StudioScene extends ChangeNotifier {
     }
 
     if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
+    waterAnimation=null;waterPath=null;waterTexturePaths.clear();
+    if(w.layout.toLowerCase().endsWith('.wtr')){
+      final candidate=lib.resolve(w.layout,['entity/water','world/water'],uniqueFallback:true);
+      if(candidate!=null){
+        try{
+          final table=WtrData.parse(await lib.read(candidate),candidate);
+          waterAnimation=table;waterPath=candidate;
+          for(final name in table.textures){
+            final lower=name.toLowerCase();
+            final dds=lower.endsWith('.tga')||lower.endsWith('.jpg')||lower.endsWith('.bmp')
+              ?name.substring(0,name.length-4)+'.dds'
+              :name;
+            final texture=lib.resolve(
+              dds,['entity/water','world/water'],uniqueFallback:true,
+            )??lib.resolve(name,['entity/water','world/water'],uniqueFallback:true);
+            if(texture!=null)waterTexturePaths.add(texture);
+          }
+        }catch(e){report('WTR ${w.layout}: $e');}
+      }
+    }
     final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[],animated=<VaniActor>[],maniAnimated=<ManiActor>[],collision=WorldCollisionIndex();
     try{
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
@@ -1411,7 +1434,7 @@ class StudioScene extends ChangeNotifier {
         }
       }
       final mix=loadedByCategory.entries.map((e)=>'${e.key}=${e.value}').join(' · ');
-      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · ${worldCollision.triangleCount} triángulos de colisión nativos.');
+      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · WTR ${waterTexturePaths.length}/${waterAnimation?.textures.length??0} · ${worldCollision.triangleCount} triángulos de colisión nativos.');
     }catch(_){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}for(final a in maniAnimated){a.dispose();}rethrow;}
   }
   @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
