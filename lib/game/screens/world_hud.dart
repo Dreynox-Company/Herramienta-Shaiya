@@ -1042,6 +1042,13 @@ class WorldHud extends StatelessWidget {
                           visualDensity:VisualDensity.compact,
                           icon:const Icon(Icons.group_add,size:17,color:Color(0xff86c8ff)),
                         ),
+                      if(f.online)
+                        IconButton(
+                          tooltip:locale=='spn'?'Intercambiar':'Trade',
+                          onPressed:()=>onRequestTrade(f.id),
+                          visualDensity:VisualDensity.compact,
+                          icon:const Icon(Icons.handshake,size:17,color:Color(0xffffd373)),
+                        ),
                       IconButton(
                         tooltip:locale=='spn'?'Eliminar amigo':'Delete friend',
                         onPressed:()=>onDeleteFriend(f),
@@ -1097,6 +1104,12 @@ class WorldHud extends StatelessWidget {
                         Text(m.name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:9.5,color:Color(0xffffe7b2))),
                         Text('Lv.'+m.level.toString()+' · '+_professionName(m.profession)+' · M'+m.mapId.toString(),style:const TextStyle(fontSize:7,color:Colors.white38)),
                       ])),
+                      IconButton(
+                        tooltip:locale=='spn'?'Intercambiar':'Trade',
+                        onPressed:()=>onRequestTrade(m.id),
+                        visualDensity:VisualDensity.compact,
+                        icon:const Icon(Icons.handshake,size:16,color:Color(0xffffd373)),
+                      ),
                       if(selfLeader&&!leader)
                         IconButton(
                           tooltip:locale=='spn'?'Hacer líder':'Make leader',
@@ -1406,6 +1419,13 @@ class WorldHud extends StatelessWidget {
               Text(m.name,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:9.5,color:m.online?const Color(0xffffe7b2):Colors.white54,fontWeight:self?FontWeight.bold:FontWeight.normal)),
               Text('R'+m.rank.toString()+' · Lv.'+m.level.toString()+' · '+_professionName(m.job),style:const TextStyle(fontSize:7,color:Colors.white38)),
             ])),
+            if(m.online&&!self)
+              IconButton(
+                tooltip:locale=='spn'?'Intercambiar':'Trade',
+                onPressed:()=>onRequestTrade(m.id),
+                visualDensity:VisualDensity.compact,
+                icon:const Icon(Icons.handshake,size:16,color:Color(0xffffd373)),
+              ),
             if(admin&&!self&&m.rank>2)
               IconButton(
                 tooltip:locale=='spn'?'Ascender':'Promote',
