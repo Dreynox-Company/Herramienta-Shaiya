@@ -539,7 +539,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   }
 
   String _friendlyError(Object error) {
-    if (error is SpkFailure) return '${error.code}: ${error.message}';
+    if (error is SpkFailure) {
+      final output = error.report['output']?.toString();
+      final failure = error.report['failure']?.toString();
+      final details = <String>[
+        if (failure != null && failure.isNotEmpty) failure,
+        if (output != null && output.isNotEmpty) 'Diagnóstico: $output',
+      ];
+      return '${error.code}: ${error.message}'
+          '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
+    }
     if (error is FormatException) {
       return error.message;
     }
@@ -1057,6 +1066,18 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       throw const FormatException('ResourceProbe produjo un JSON inválido.');
     }
     final data = Map<String, dynamic>.from(raw);
+    if (data['readyForSimple'] != true) {
+      throw SpkFailure(
+        'SPK_PROBE_NO_VALID_KEY',
+        'ResourceProbe terminó, pero todavía no obtuvo una clave AES-GCM '
+            'que autentique recursos simples reales.',
+        {
+          'output': output.path,
+          if (data['failure'] != null) 'failure': data['failure'],
+          'logTail': recent,
+        },
+      );
+    }
     final declared = data['indexSha256']?.toString().toLowerCase();
     if (declared != source.index.encryptedIndexSha256.toLowerCase()) {
       throw const SpkFailure(
