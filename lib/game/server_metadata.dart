@@ -46,22 +46,50 @@ class MobRule {
 
 class ItemRule {
   final int type,id,image,icon,level,quality,slot,count,duration,grade;
-  final int special,hp,sp,mp,itemSkill,buy,sell;
+  final int special,reqWis,reqRec,country,range,attackTime,hp,sp,mp,itemSkill,buy,sell;
   const ItemRule({
     required this.type,required this.id,required this.image,required this.icon,
     required this.level,required this.quality,required this.slot,required this.count,
-    required this.duration,required this.grade,required this.special,required this.hp,
-    required this.sp,required this.mp,required this.itemSkill,required this.buy,required this.sell,
+    required this.duration,required this.grade,required this.special,
+    required this.reqWis,required this.reqRec,required this.country,required this.range,required this.attackTime,
+    required this.hp,required this.sp,required this.mp,required this.itemSkill,required this.buy,required this.sell,
   });
   String get key=>'$type:$id';
   String? get iconPath=>icon<=0?null:'interface/icon/${icon.toString().padLeft(2,'0')}.tga';
+  bool get composable=>reqWis>0;
+  bool get lapisia=>special==78||type==95;
+  bool get recreationRune=>special==62||const <int>{86,87,88,89,90,91}.contains(special);
+  bool get absoluteRecreationRune=>special==117;
+  bool get recreationVial=>special>=93&&special<=98;
+  bool get enchantTarget=>const <int>{
+    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+    16,17,18,20,21,31,32,33,35,36,
+    45,46,47,48,49,50,51,52,53,54,55,56,57,59,60,61,62,63,64,65,
+    67,68,69,70,71,72,73,74,76,77,82,83,84,85,86,87,88,89,91,92,
+  }.contains(type);
+  bool get weaponEnchantTarget=>const <int>{
+    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,45,46,47,48,49,50,51,52,53,54,55,56,57,59,60,61,62,63,64,65,
+  }.contains(type);
+  bool get armorEnchantTarget=>const <int>{
+    16,17,18,20,21,31,32,33,35,36,67,68,70,71,72,73,74,76,77,82,83,85,86,87,88,89,91,92,
+  }.contains(type);
+  bool get shieldEnchantTarget=>const <int>{69,84}.contains(type);
+  bool get weaponLapisia=>level>0;
+  bool get armorLapisia=>country>0;
+  int get minEnchantLevel=>range.clamp(0,255);
+  int get maxEnchantLevel=>attackTime.clamp(0,255);
+  int get explicitEnchantRate=>reqRec;
   factory ItemRule.fromJson(Map<String,dynamic> j)=>ItemRule(
     type:(j['type'] as num).toInt(),id:(j['id'] as num).toInt(),
     image:(j['image'] as num).toInt(),icon:(j['icon'] as num).toInt(),
     level:(j['level'] as num).toInt(),quality:(j['quality'] as num).toInt(),
     slot:(j['slot'] as num).toInt(),count:(j['count'] as num).toInt(),
     duration:(j['duration'] as num).toInt(),grade:(j['grade'] as num).toInt(),
-    special:(j['special'] as num? ?? 0).toInt(),hp:(j['hp'] as num? ?? 0).toInt(),
+    special:(j['special'] as num? ?? 0).toInt(),
+    reqWis:(j['reqWis'] as num? ?? 0).toInt(),reqRec:(j['reqRec'] as num? ?? 0).toInt(),
+    country:(j['country'] as num? ?? 0).toInt(),range:(j['range'] as num? ?? 0).toInt(),
+    attackTime:(j['attackTime'] as num? ?? 0).toInt(),
+    hp:(j['hp'] as num? ?? 0).toInt(),
     sp:(j['sp'] as num? ?? 0).toInt(),mp:(j['mp'] as num? ?? 0).toInt(),
     itemSkill:(j['itemSkill'] as num? ?? 0).toInt(),
     buy:(j['buy'] as num).toInt(),sell:(j['sell'] as num).toInt(),
