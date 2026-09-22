@@ -3,7 +3,7 @@ import pathlib
 import tempfile
 import unittest
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MODULE = ROOT / 'tool' / 'spk_resource_probe' / 'resource_probe.py'
@@ -60,7 +60,7 @@ class ResourceProbeContractTest(unittest.TestCase):
                 path.write_bytes(blob)
                 self.assertEqual(probe.pe_arch(path), expected)
 
-    def test_static_key_sweep_finds_nearby_resource_key_only_after_gcm_auth(self):
+    def test_static_key_sweep_accepts_only_candidate_authenticated_by_oracle(self):
         index_key = bytes.fromhex('9a1f9c1bd3e9488dba7aa4543a466a5f')
         resource_key = bytes.fromhex('102132435465768798a9bacbdcedfe0f')
         with tempfile.TemporaryDirectory() as td:
@@ -70,96 +70,96 @@ class ResourceProbeContractTest(unittest.TestCase):
             out = root / 'probe'
             out.mkdir()
 
-            payload = bytearray(128)
-            records = []
-            for ordinal in range(3):
-                plain = (b'DDS ' + bytes([ordinal + 1]) * (64 + ordinal))
-                nonce = bytes(range(ordinal, ordinal + 12))
-                encrypted = AESGCM(resource_key).encrypt(nonce, plain, None)
-                cipher, tag = encrypted[:-16], encrypted[-16:]
-                offset = len(payload)
-                payload.extend(cipher)
-                metadata = nonce + tag + (0).to_bytes(4, 'little')
-                records.append({
-                    'ordinal': ordinal,
-                    'entryId': f'{0x1000 + ordinal:016x}',
-                    'dataOffset': offset,
-                    'storedBytes': len(cipher),
-                    'decodedBytes': len(plain),
-                    'recordType': 1,
-                    'auxStart': 0xffffffff,
-                    'chunkCount': 0,
-                    'metadataHex': metadata.hex(),
-                })
-            spk.write_bytes(payload)
+            # The discovery mechanics are tested without importing the optional
+            # runtime cryptography wheel used by the packaged Windows helper.
+            spk.write_bytes(b'fixture')
             game.write_bytes(
                 b'MZ' + b'X' * 512 + index_key + b'Y' * 64 +
                 resource_key + b'Z' * 512
             )
-            cat = {'records': records, 'aux': []}
-
-            key, source, report = probe.discover_static_resource_key(
-                game,
-                spk,
-                cat,
-                index_key,
-                probe.EXPECTED_INDEX,
-                out,
-            )
+            records = [
+                {
+                    'ordinal': n,
+                    'entryId': f'{0x1000+n:016x}',
+                    'dataOffset': 0,
+                    'storedBytes': 1,
+                    'decodedBytes': 1,
+                    'recordType': 1,
+                    'auxStart': 0xffffffff,
+                    'chunkCount': 0,
+                    'metadataHex': '00' * 32,
+                }
+                for n in range(3)
+            ]
+            with patch.object(
+                probe,
+                '_key_authenticates_samples',
+                side_effect=lambda _spk, _rows, key: key == resource_key,
+            ):
+                key, source, report = probe.discover_static_resource_key(
+                    game,
+                    spk,
+                    {'records': records, 'aux': []},
+                    index_key,
+                    probe.EXPECTED_INDEX,
+                    out,
+                )
             self.assertEqual(key, resource_key)
             self.assertIsNotNone(source)
             self.assertGreater(report['tested'], 0)
             self.assertIsNotNone(report['match'])
             self.assertTrue((out / 'static-key-sweep.json').is_file())
 
-    def test_static_key_sweep_rejects_unrelated_nearby_constants(self):
+    def test_static_key_sweep_rejects_every_candidate_when_gcm_oracle_fails(self):
         index_key = bytes.fromhex('9a1f9c1bd3e9488dba7aa4543a466a5f')
-        resource_key = bytes.fromhex('102132435465768798a9bacbdcedfe0f')
         with tempfile.TemporaryDirectory() as td:
             root = pathlib.Path(td)
             spk = root / 'data.spk'
             game = root / 'game.exe'
             out = root / 'probe'
             out.mkdir()
-
-            payload = bytearray(128)
-            records = []
-            for ordinal in range(3):
-                plain = b'DDS ' + bytes([ordinal + 9]) * 80
-                nonce = bytes(range(ordinal + 20, ordinal + 32))
-                encrypted = AESGCM(resource_key).encrypt(nonce, plain, None)
-                cipher, tag = encrypted[:-16], encrypted[-16:]
-                offset = len(payload)
-                payload.extend(cipher)
-                records.append({
-                    'ordinal': ordinal,
-                    'entryId': f'{0x2000 + ordinal:016x}',
-                    'dataOffset': offset,
-                    'storedBytes': len(cipher),
-                    'decodedBytes': len(plain),
-                    'recordType': 1,
-                    'auxStart': 0xffffffff,
-                    'chunkCount': 0,
-                    'metadataHex': (nonce + tag + b'\0\0\0\0').hex(),
-                })
-            spk.write_bytes(payload)
+            spk.write_bytes(b'fixture')
             game.write_bytes(
                 b'MZ' + b'R' * 256 + index_key +
                 bytes.fromhex('ffeeddccbbaa99887766554433221100') +
                 b'S' * 256
             )
-
-            key, source, report = probe.discover_static_resource_key(
-                game,
-                spk,
-                {'records': records, 'aux': []},
-                index_key,
-                probe.EXPECTED_INDEX,
-                out,
-            )
+            records = [
+                {
+                    'ordinal': n,
+                    'entryId': f'{0x2000+n:016x}',
+                    'dataOffset': 0,
+                    'storedBytes': 1,
+                    'decodedBytes': 1,
+                    'recordType': 1,
+                    'auxStart': 0xffffffff,
+                    'chunkCount': 0,
+                    'metadataHex': '00' * 32,
+                }
+                for n in range(3)
+            ]
+            with patch.object(
+                probe,
+                '_key_authenticates_samples',
+                return_value=False,
+            ):
+                key, source, report = probe.discover_static_resource_key(
+                    game,
+                    spk,
+                    {'records': records, 'aux': []},
+                    index_key,
+                    probe.EXPECTED_INDEX,
+                    out,
+                )
             self.assertIsNone(key)
             self.assertIsNone(source)
             self.assertIsNone(report['match'])
+
+    def test_static_authenticator_is_aes_gcm_fail_closed(self):
+        text = MODULE.read_text(encoding='utf-8')
+        self.assertIn('AESGCM(key)', text)
+        self.assertIn('aes.decrypt(nonce,ct+tag,None)', text)
+        self.assertIn('return False', text)
 
     def test_simple_and_chunks_same_key_make_ready_for_all(self):
         key = '11' * 32
