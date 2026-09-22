@@ -130,6 +130,7 @@ class _GameClientPageState extends State<GameClientPage> {
   bool questLogOpen=false;
   bool shopOpen=false;
   bool blacksmithOpen=false;
+  bool dyeingOpen=false;
   bool gateOpen=false;
   bool warehouseOpen=false;
   NpcShopRule? activeShop;
@@ -143,6 +144,10 @@ class _GameClientPageState extends State<GameClientPage> {
   PsEnchantRate? blacksmithEnchantRate;
   PsInventoryItem? blacksmithComposeItem,blacksmithRune,blacksmithVial;
   bool blacksmithBusy=false;
+  PsInventoryItem? dyeItem,dyeTarget;
+  PsDyePalette? dyePalette;
+  PsDyeConfirmResult? dyeResult;
+  bool dyeBusy=false;
   NpcGateRule? activeGate;
   int? activeShopNpcGlobalId;
   int? activeGateNpcGlobalId;
@@ -3211,6 +3216,7 @@ class _GameClientPageState extends State<GameClientPage> {
     questLogOpen=false;
     shopOpen=false;
     blacksmithOpen=false;
+    dyeingOpen=false;
     gateOpen=false;
     warehouseOpen=false;
     activeShop=null;
@@ -3221,6 +3227,7 @@ class _GameClientPageState extends State<GameClientPage> {
     blacksmithExtractPosition=0;blacksmithExtractPossibility=null;
     blacksmithEnchantItem=blacksmithLapisia=null;blacksmithEnchantRate=null;
     blacksmithComposeItem=blacksmithRune=blacksmithVial=null;blacksmithBusy=false;
+    dyeItem=dyeTarget=null;dyePalette=null;dyeResult=null;dyeBusy=false;
     activeGate=null;
     activeShopNpcGlobalId=null;
     activeGateNpcGlobalId=null;
@@ -3392,6 +3399,14 @@ class _GameClientPageState extends State<GameClientPage> {
 
       final rule=metadata?.item(item.type,item.typeId);
       if(rule==null){messages.insert(0,'[Objeto] No hay metadata para '+item.key+'.');if(mounted)setState((){});return;}
+      if(rule.dyeItem){
+        _closeWorldPanels();
+        dyeingOpen=true;dyeItem=item;dyeTarget=null;dyePalette=null;dyeResult=null;dyeBusy=false;
+        questOpen=false;
+        messages.insert(0,'[Tinte] '+catalog!.itemName(item.type,item.typeId,uiLocale)+' listo para usar.');
+        if(mounted)setState((){});
+        return;
+      }
       final usable=item.type==27||item.type==28||item.type==29||item.type==30||item.type==98||item.type==99||
         rule.special!=0||rule.hp!=0||rule.mp!=0||rule.sp!=0||rule.itemSkill!=0;
       if(!usable){messages.insert(0,'[Objeto] '+catalog!.itemName(item.type,item.typeId,uiLocale)+' no es equipable ni utilizable.');if(mounted)setState((){});return;}
@@ -3486,6 +3501,74 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Almacén] '+e.toString());if(mounted)setState((){});}
   }
+  Future<void> _selectDyeTarget(PsInventoryItem? target) async {
+    final source=dyeItem,session=liveWorld;
+    dyeTarget=null;dyePalette=null;dyeResult=null;
+    if(target==null||source==null||session==null){if(mounted)setState((){});return;}
+    final sourceRule=metadata?.item(source.type,source.typeId),targetRule=metadata?.item(target.type,target.typeId);
+    if(sourceRule==null||targetRule==null||!targetRule.canBeDyedBy(sourceRule)){
+      messages.insert(0,'[Tinte] El objeto no es compatible con este tinte.');
+      if(mounted)setState((){});
+      return;
+    }
+    dyeBusy=true;if(mounted)setState((){});
+    try{
+      final selected=await session.selectDyeTarget(
+        dyeBag:source.bag,dyeSlot:source.slot,targetBag:target.bag,targetSlot:target.slot,
+      );
+      if(!selected.success)throw StateError('World rechazó DYE_SELECT_ITEM.');
+      dyeTarget=target;
+      dyePalette=await session.rerollDyeColors();
+      messages.insert(0,'[Tinte] World generó '+dyePalette!.colors.where((x)=>x.enabled).length.toString()+' colores.');
+    }catch(e){
+      dyeTarget=null;dyePalette=null;
+      messages.insert(0,'[Tinte] '+e.toString());
+    }finally{
+      dyeBusy=false;if(mounted)setState((){});
+    }
+  }
+
+  Future<void> _rerollDyePalette() async {
+    final session=liveWorld;
+    if(session==null||dyeTarget==null||dyeItem==null||dyeBusy)return;
+    dyeBusy=true;dyeResult=null;if(mounted)setState((){});
+    try{
+      dyePalette=await session.rerollDyeColors();
+      messages.insert(0,'[Tinte] Paleta regenerada por World.');
+    }catch(e){messages.insert(0,'[Tinte] DYE_REROLL: '+e.toString());}
+    finally{dyeBusy=false;if(mounted)setState((){});}
+  }
+
+  void _markDyeTargetLocally(PsInventoryItem target){
+    final index=liveInventory.indexWhere((x)=>x.bag==target.bag&&x.slot==target.slot);
+    if(index<0)return;
+    final old=liveInventory[index];
+    liveInventory[index]=PsInventoryItem(
+      bag:old.bag,slot:old.slot,type:old.type,typeId:old.typeId,quality:old.quality,
+      count:old.count,gems:old.gems,craftName:old.craftName,dyed:true,
+    );
+    dyeTarget=liveInventory[index];
+  }
+
+  Future<void> _confirmDye() async {
+    final source=dyeItem,target=dyeTarget,session=liveWorld;
+    if(source==null||target==null||session==null||dyeBusy)return;
+    dyeBusy=true;if(mounted)setState((){});
+    try{
+      final result=await session.confirmDye(
+        dyeBag:source.bag,dyeSlot:source.slot,targetBag:target.bag,targetSlot:target.slot,
+      );
+      dyeResult=result;
+      if(result.success){
+        _markDyeTargetLocally(target);
+        messages.insert(0,'[Tinte] Color confirmado por World.');
+      }else{
+        messages.insert(0,'[Tinte] World rechazó DYE_CONFIRM.');
+      }
+    }catch(e){messages.insert(0,'[Tinte] DYE_CONFIRM: '+e.toString());}
+    finally{dyeBusy=false;if(mounted)setState((){});}
+  }
+
   void _setBlacksmithMode(int mode){
     blacksmithMode=mode.clamp(0,4).toInt();
     if(mounted)setState((){});
@@ -4258,6 +4341,7 @@ class _GameClientPageState extends State<GameClientPage> {
             gate:activeGate,
             shopOpen:shopOpen,
             blacksmithOpen:blacksmithOpen,
+            dyeingOpen:dyeingOpen,
             gateOpen:gateOpen,
             blacksmithMode:blacksmithMode,
             blacksmithItem:blacksmithItem,
@@ -4275,6 +4359,11 @@ class _GameClientPageState extends State<GameClientPage> {
             blacksmithRune:blacksmithRune,
             blacksmithVial:blacksmithVial,
             blacksmithBusy:blacksmithBusy,
+            dyeItem:dyeItem,
+            dyeTarget:dyeTarget,
+            dyePalette:dyePalette,
+            dyeResult:dyeResult,
+            dyeBusy:dyeBusy,
             onCloseShop:()=>setState(()=>shopOpen=false),
             onCloseBlacksmith:()=>setState(()=>blacksmithOpen=false),
             onCloseGate:()=>setState(()=>gateOpen=false),
@@ -4291,6 +4380,10 @@ class _GameClientPageState extends State<GameClientPage> {
             onEnchantItem:()=>unawaited(_enchantSelectedItem()),
             onComposeItem:()=>unawaited(_composeSelectedItem()),
             onSynthesizeRune:()=>unawaited(_synthesizeSelectedRune()),
+            onCloseDyeing:()=>setState(()=>dyeingOpen=false),
+            onSelectDyeTarget:(item)=>unawaited(_selectDyeTarget(item)),
+            onRerollDye:()=>unawaited(_rerollDyePalette()),
+            onConfirmDye:()=>unawaited(_confirmDye()),
             onSelectEnchantItem:_selectEnchantItem,
             onSelectLapisia:_selectLapisia,
             onSelectComposeItem:_selectComposeItem,
