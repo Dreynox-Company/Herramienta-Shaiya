@@ -99,14 +99,14 @@ sido descifrados. Falta ejecutar 0.6.16 contra el par real
 10. Evidencia de auditoría solo se restaura si coinciden índice, hash de la clave
     de recursos, regla de chunks y cobertura total de Entry IDs.
 
-## AutoPerfil / ResourceProbe V9
+## AutoPerfil / ResourceProbe V10
 
 AutoPerfil sigue este orden:
 
 1. intenta offline si la clave autenticada del índice también autentica
    payloads;
 2. si falla, no reutiliza esa clave;
-3. en Windows ejecuta ResourceProbe V9 contra el `game.exe` de la misma
+3. en Windows ejecuta ResourceProbe V10 contra el `game.exe` de la misma
    instalación y sin red;
 4. ResourceProbe observa únicamente operaciones cuyo ciphertext coincide con un
    recurso/chunk real del índice;
