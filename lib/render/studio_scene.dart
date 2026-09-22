@@ -1076,12 +1076,12 @@ class StudioScene extends ChangeNotifier {
         'VAni':4,
         'Grass':5,
       };
-      double distance(WorldInstance o)=>(o.position.x-ox).abs()+(o.position.z-oz).abs();
+      double objectDistance(WorldInstance o)=>(o.position.x-ox).abs()+(o.position.z-oz).abs();
       final nearby=w.objects.where((o)=>
         (o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&budgets.containsKey(o.category)
       ).toList()..sort((a,b){
         final category=(priority[a.category]??99).compareTo(priority[b.category]??99);
-        return category!=0?category:distance(a).compareTo(distance(b));
+        return category!=0?category:objectDistance(a).compareTo(objectDistance(b));
       });
       for(final obj in nearby){
         final limit=budgets[obj.category]??0;
