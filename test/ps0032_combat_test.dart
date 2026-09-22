@@ -41,6 +41,57 @@ void main(){
     expect(p.keepActivated,isTrue);
   });
 
+  test('parses ps0032 cast range keep and mirror skill packets',(){
+    final cast=Uint8List(11),cd=ByteData.sublistView(cast);
+    cd.setUint32(0,101,Endian.little);
+    cd.setUint32(4,202,Endian.little);
+    cd.setUint16(8,303,Endian.little);
+    cast[10]=4;
+    final casting=PsSkillCasting.parse(
+      PsPacket(PsPacketType.characterSkillCasting,cast),
+    );
+    expect((casting.casterId,casting.targetId,casting.skillId,casting.skillLevel),(101,202,303,4));
+
+    final range=Uint8List(19),rd=ByteData.sublistView(range);
+    range[0]=1;
+    rd.setUint32(1,101,Endian.little);
+    rd.setUint32(5,202,Endian.little);
+    rd.setUint16(9,303,Endian.little);
+    range[11]=4;
+    rd.setUint16(12,40,Endian.little);
+    rd.setUint16(14,5,Endian.little);
+    rd.setUint16(16,6,Endian.little);
+    range[18]=0;
+    final ranged=PsCharacterSkillHit.parse(
+      PsPacket(PsPacketType.useCharacterRangeSkill,range),
+    );
+    expect(ranged.hpDamage,40);
+    expect(ranged.targetId,202);
+
+    final keep=Uint8List(13),kd=ByteData.sublistView(keep);
+    kd.setUint32(0,101,Endian.little);
+    kd.setUint16(4,303,Endian.little);
+    keep[6]=4;
+    kd.setUint16(7,11,Endian.little);
+    kd.setUint16(9,12,Endian.little);
+    kd.setUint16(11,13,Endian.little);
+    final periodic=PsSkillKeep.parse(
+      PsPacket(PsPacketType.characterSkillKeep,keep),
+    );
+    expect((periodic.hpDamage,periodic.spDamage,periodic.mpDamage),(11,12,13));
+
+    final mirror=Uint8List(14),md=ByteData.sublistView(mirror);
+    md.setUint32(0,202,Endian.little);
+    md.setUint32(4,101,Endian.little);
+    md.setUint16(8,7,Endian.little);
+    md.setUint16(10,8,Endian.little);
+    md.setUint16(12,9,Endian.little);
+    final reflected=PsSkillMirror.parse(
+      PsPacket(PsPacketType.characterSkillMirror,mirror),
+    );
+    expect((reflected.targetId,reflected.senderId,reflected.hpDamage),(202,101,7));
+  });
+
   test('parses character auto attack against mob',(){
     final b=_body(15),d=ByteData.sublistView(b);
     b[0]=0;
