@@ -49,6 +49,13 @@ void main(){
     expect(PsMoneyUpdate.parse(PsPacket(PsPacketType.setMoney,money)).gold,987654);
   });
 
+  test('parses authoritative auto-stat allocation',(){
+    final body=Uint8List.fromList([3,2,1,4,5,6]);
+    final stats=PsAutoStats.parse(PsPacket(PsPacketType.autoStatsList,body));
+    expect(stats.values,[3,2,1,4,5,6]);
+    expect(stats.total,21);
+  });
+
   test('decodes the native packed Shaiya world clock',(){
     const year=2020,month=1,day=1,hour=12,minute=30,second=0;
     final packedHour=hour+32*(day+32*(month+16*(year-16)));
