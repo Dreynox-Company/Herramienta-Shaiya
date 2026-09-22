@@ -941,48 +941,59 @@ class WorldHud extends StatelessWidget {
         ],
       );
 
-  Widget _chat()=>Stack(children:[
-    Positioned.fill(
-      child:DataImage(
-        cache:ui,
-        path:'interface/chat/chat.tga',
-        fit:BoxFit.fill,
-      ),
-    ),
-    const Positioned(
-      left:18,top:12,
-      child:Text(
-        'World',
-        style:TextStyle(
-          fontSize:13,
-          color:Colors.white,
-          shadows:[Shadow(color:Colors.black,blurRadius:2)],
+  bool _internalChatMessage(String value){
+    const internal=<String>[
+      '[Backend]','[Mapa]','[Sistema]','[ps0032]','[SVMAP]','[QA]',
+      '[Jugador remoto]','[Target State]','[Max HP]',
+    ];
+    return internal.any(value.startsWith);
+  }
+
+  Widget _chat(){
+    final visible=messages.where((m)=>!_internalChatMessage(m)).take(12).toList();
+    return Stack(children:[
+      Positioned.fill(
+        child:DataImage(
+          cache:ui,
+          path:'interface/chat/chat.tga',
+          fit:BoxFit.fill,
         ),
       ),
-    ),
-    Positioned(
-      left:12,top:52,right:20,bottom:36,
-      child:ListView(
-        reverse:true,
-        padding:EdgeInsets.zero,
-        children:messages.take(12).map((m)=>Padding(
-          padding:const EdgeInsets.only(bottom:5),
-          child:Text(
-            m,
-            style:const TextStyle(
-              fontSize:10,
-              color:Colors.white,
-              shadows:[Shadow(color:Colors.black,blurRadius:2)],
-            ),
+      const Positioned(
+        left:18,top:12,
+        child:Text(
+          'World',
+          style:TextStyle(
+            fontSize:13,
+            color:Colors.white,
+            shadows:[Shadow(color:Colors.black,blurRadius:2)],
           ),
-        )).toList(),
+        ),
       ),
-    ),
-    Positioned(
-      left:11,right:18,bottom:8,height:24,
-      child:_ChatInput(onSend:onSendChat),
-    ),
-  ]);
+      Positioned(
+        left:12,top:52,right:20,bottom:36,
+        child:ListView(
+          reverse:true,
+          padding:EdgeInsets.zero,
+          children:visible.map((m)=>Padding(
+            padding:const EdgeInsets.only(bottom:5),
+            child:Text(
+              m,
+              style:const TextStyle(
+                fontSize:10,
+                color:Colors.white,
+                shadows:[Shadow(color:Colors.black,blurRadius:2)],
+              ),
+            ),
+          )).toList(),
+        ),
+      ),
+      Positioned(
+        left:11,right:18,bottom:8,height:24,
+        child:_ChatInput(onSend:onSendChat),
+      ),
+    ]);
+  }
 
   Widget _bottomButton(String path,{VoidCallback? onTap})=>GestureDetector(
     onTap:onTap,
