@@ -52,6 +52,8 @@ void main(){
         expect(state.svmap,isNotNull,reason:'world SVMAP must be loaded.');
         expect(state.metadata,isNotNull,reason:'server NPC/quest metadata must be loaded.');
         expect(state.scene.gameActors,isNotEmpty,reason:'world must contain rendered NPC/mob actors.');
+        expect(state.scene.worldCollision,isNotNull,reason:'world must build SMOD collision data.');
+        expect(state.scene.worldCollision!.triangles,isNotEmpty,reason:'world must expose native SMOD collision triangles.');
       }
       if(requireReal){
         final critical=switch(stage){
