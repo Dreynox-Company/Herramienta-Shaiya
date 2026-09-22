@@ -2811,11 +2811,30 @@ class PsWorldSession {
     await connection.send(PsPacketType.rebirthNearestTown,[useRune?4:2]);
   }
 
-  Future<void> sendNormalChat(String message) async {
+  Future<void> _sendChatMessage(int type,String message) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar chat.');
     final text=message.trim();if(text.isEmpty)return;
     if(text.length>255)throw RangeError('El mensaje supera 255 caracteres.');
-    await connection.send(PsPacketType.chatNormal,[text.length,..._utf16Le(text)]);
+    await connection.send(type,[text.length,..._utf16Le(text)]);
+  }
+
+  Future<void> sendNormalChat(String message)=>_sendChatMessage(PsPacketType.chatNormal,message);
+  Future<void> sendPartyChat(String message)=>_sendChatMessage(PsPacketType.chatParty,message);
+  Future<void> sendGuildChat(String message)=>_sendChatMessage(PsPacketType.chatGuild,message);
+  Future<void> sendMapChat(String message)=>_sendChatMessage(PsPacketType.chatMap,message);
+  Future<void> sendWorldChat(String message)=>_sendChatMessage(PsPacketType.chatWorld,message);
+
+  Future<void> sendWhisper(String targetName,String message) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar whisper.');
+    final target=targetName.trim(),text=message.trim();
+    if(target.isEmpty||target.length>20)throw RangeError('Nombre de whisper inválido.');
+    if(text.isEmpty)return;
+    if(text.length>255)throw RangeError('El mensaje supera 255 caracteres.');
+    await connection.send(PsPacketType.chatWhisper,[
+      ..._fixedStringBytes(target,21),
+      text.length,
+      ..._utf16Le(text),
+    ]);
   }
   Future<PsInventoryMove> moveItem(int currentBag,int currentSlot,int destinationBag,int destinationSlot) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de mover objetos.');
