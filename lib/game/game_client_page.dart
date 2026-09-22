@@ -719,6 +719,81 @@ class _GameClientPageState extends State<GameClientPage> {
     lastNetworkMoving=lastNetworkRun=false;
   }
 
+  Slot? _appearanceSlotForEquipmentSlot(int slot)=>switch(slot){
+    0=>Slot.helmet,1=>Slot.upper,2=>Slot.lower,3=>Slot.hand,4=>Slot.foot,15=>Slot.upper,_=>null,
+  };
+
+  PsInventoryItem? _equippedItem(int slot)=>
+    liveInventory.where((i)=>i.bag==0&&i.slot==slot&&i.type!=0&&i.typeId!=0).firstOrNull;
+
+  Future<void> _applyBodyEquipmentSlot(int equipmentSlot,ItemRule? rule) async {
+    final renderSlot=_appearanceSlotForEquipmentSlot(equipmentSlot),look=scene.appearance;
+    if(renderSlot==null||look==null)return;
+    PartRecord? part;
+    if(rule!=null){
+      part=look.archetype.parts[renderSlot]?.where((p)=>p.raw.id==rule.image).firstOrNull;
+      if(part==null){
+        messages.insert(0,'[Equipo 3D] No existe MLT image '+rule.image.toString()+' para '+renderSlot.name+'.');
+      }
+    }
+    try{
+      await scene.setAppearance(look.withPart(renderSlot,part));
+    }catch(e){messages.insert(0,'[Equipo 3D] '+e.toString());}
+  }
+
+  Future<void> _applyWeaponVisual(ItemRule? rule) async {
+    if(rule==null){await scene.equip(null);return;}
+    final family=weaponFamilyForItemType(rule.type);
+    final exact=catalog?.weapons.where((w)=>w.id==rule.image&&weaponFamily(w)==family).firstOrNull;
+    final fallback=exact??catalog?.weapons.where((w)=>w.id==rule.image).firstOrNull;
+    if(fallback==null){
+      messages.insert(0,'[Equipo 3D] Arma ITM no encontrada · family '+family.toString()+' image '+rule.image.toString()+'.');
+      await scene.equip(null);
+      return;
+    }
+    try{await scene.equip(fallback);}catch(e){messages.insert(0,'[Equipo 3D] '+e.toString());}
+  }
+
+  Future<void> _applyWingVisual(ItemRule? rule) async {
+    if(rule==null){await scene.selectCreature(null,'wing');return;}
+    final record=catalog?.wings.where((w)=>w.id==rule.image).firstOrNull;
+    if(record==null){
+      messages.insert(0,'[Equipo 3D] Alas MON image '+rule.image.toString()+' no encontradas.');
+      await scene.selectCreature(null,'wing');
+      return;
+    }
+    try{await scene.selectCreature(record,'wing');}catch(e){messages.insert(0,'[Equipo 3D] '+e.toString());}
+  }
+
+  Future<void> _syncVisibleEquipmentFromInventory() async {
+    // Primary body slots first, costume last so its full-set semantics can override armor.
+    for(final slot in const [0,1,2,3,4]){
+      final item=_equippedItem(slot),rule=item==null?null:metadata?.item(item.type,item.typeId);
+      await _applyBodyEquipmentSlot(slot,rule);
+    }
+    final costume=_equippedItem(15);
+    if(costume!=null)await _applyBodyEquipmentSlot(15,metadata?.item(costume.type,costume.typeId));
+    final weaponItem=_equippedItem(5);
+    await _applyWeaponVisual(weaponItem==null?null:metadata?.item(weaponItem.type,weaponItem.typeId));
+    final wingItem=_equippedItem(16);
+    await _applyWingVisual(wingItem==null?null:metadata?.item(wingItem.type,wingItem.typeId));
+  }
+
+  Future<void> _applyEquipmentVisual(PsEquipmentChange change) async {
+    if(change.characterId!=liveCharacter?.id)return;
+    final rule=(change.type==0||change.typeId==0)?null:metadata?.item(change.type,change.typeId);
+    if(change.slot==5){await _applyWeaponVisual(rule);return;}
+    if(change.slot==16){await _applyWingVisual(rule);return;}
+    if(_appearanceSlotForEquipmentSlot(change.slot)!=null){
+      // Costume removal restores the ordinary upper armor from live bag-0 state.
+      if(change.slot==15&&rule==null){
+        final upper=_equippedItem(1);
+        await _applyBodyEquipmentSlot(1,upper==null?null:metadata?.item(upper.type,upper.typeId));
+      }else{
+        await _applyBodyEquipmentSlot(change.slot,rule);
+      }
+    }
+  }
   void _sortInventory(){
     liveInventory.sort((a,b){
       final bag=a.bag.compareTo(b.bag);
