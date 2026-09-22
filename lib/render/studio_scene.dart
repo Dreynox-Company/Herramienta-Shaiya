@@ -1072,7 +1072,11 @@ class StudioScene extends ChangeNotifier {
       if(view!=null)view!.scene.background=t.Color.fromHex32(0x11151e);
       notifyListeners();return;
     }
-    final lib=catalog!.library,model=lib.resolve('sky.3do',['sky']);
+    final lib=catalog!.library,model=lib.resolve(
+      'sky.3do',
+      const <String>['sky','entity/sky','entity/texture','entity/textures'],
+      uniqueFallback:true,
+    );
     if(model==null)throw const FormatException('No se encuentra la cúpula original Sky/sky.3DO.');
     final skyBytes=await lib.read(path);
     final background=await compute(_averageTextureColor,{'bytes':skyBytes,'path':path});
@@ -1421,14 +1425,29 @@ class StudioScene extends ChangeNotifier {
       maniWorldActors..clear()..addAll(maniAnimated);
       environment.removeFromParent();environment=stage;view!.scene.add(stage);
       worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
-      if(catalog!.skies.isNotEmpty){
-        final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
-          ??lib.resolve('sky_a1.bmp',['sky'])
-          ??lib.resolve('sky.bmp',['sky'])
-          ??catalog!.skies.first;
-        final cloud1=w.primaryCloudFile.isEmpty?null:lib.resolve(w.primaryCloudFile,['sky'],uniqueFallback:true);
-        final cloud2=w.secondaryCloudFile.isEmpty?null:lib.resolve(w.secondaryCloudFile,['sky'],uniqueFallback:true);
-        if(skyPath!=choice||primaryCloudPath!=cloud1||secondaryCloudPath!=cloud2){
+      {
+        const skyRoots=<String>[
+          'sky','entity/sky','entity/texture','entity/textures','world/field','world',
+        ];
+        String? choice;
+        try{
+          choice=w.skyFile.isEmpty?null:lib.resolve(w.skyFile,skyRoots,uniqueFallback:true);
+        }catch(e){report('Cielo WLD ${w.skyFile}: $e');}
+        choice??=lib.resolve('sky_a1.bmp',skyRoots,uniqueFallback:true)
+          ??lib.resolve('sky.bmp',skyRoots,uniqueFallback:true)
+          ??catalog!.skies.firstOrNull;
+        String? cloud1,cloud2;
+        try{
+          cloud1=w.primaryCloudFile.isEmpty?null:lib.resolve(
+            w.primaryCloudFile,skyRoots,uniqueFallback:true,
+          );
+        }catch(e){report('Nube WLD ${w.primaryCloudFile}: $e');}
+        try{
+          cloud2=w.secondaryCloudFile.isEmpty?null:lib.resolve(
+            w.secondaryCloudFile,skyRoots,uniqueFallback:true,
+          );
+        }catch(e){report('Nube WLD ${w.secondaryCloudFile}: $e');}
+        if(choice!=null&&(skyPath!=choice||primaryCloudPath!=cloud1||secondaryCloudPath!=cloud2)){
           try{await setSky(choice,primaryCloudPath:cloud1,secondaryCloudPath:cloud2);}
           catch(e){report('Cielo/nubes: $e');}
         }
