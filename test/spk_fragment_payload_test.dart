@@ -5,6 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/spk_archive.dart';
 import 'package:herramienta_shaiya/data/spk_source.dart';
 
+Uint8List _recordOrdinalNonce(int recordOrdinal, int localChunk) {
+  final bytes = Uint8List(12);
+  final data = ByteData.sublistView(bytes);
+  data.setUint64(0, recordOrdinal, Endian.little);
+  data.setUint32(8, localChunk, Endian.little);
+  return bytes;
+}
+
 Uint8List _offsetChunkNonce(int dataOffset, int localChunk) {
   final bytes = Uint8List(12);
   final data = ByteData.sublistView(bytes);
@@ -159,4 +167,58 @@ void main() {
       );
     },
   );
+
+  test('SPK nonce derivation can prove record-ordinal chunk nonces', () async {
+    final key = Uint8List.fromList(
+      List<int>.generate(16, (i) => 0x30 + i),
+    );
+    final samples = <SpkFragmentAuthSample>[];
+    var offset = 4096;
+    for (final tuple in <(int, int)>[(7, 31), (12, 44)]) {
+      final clear = Uint8List.fromList(
+        List<int>.generate(
+          41 + tuple.$1,
+          (i) => (i * 7 + tuple.$1) & 0xff,
+        ),
+      );
+      final box = await _encrypt(
+        clear,
+        key,
+        _recordOrdinalNonce(tuple.$1, 0),
+      );
+      final record = SpkRecord(
+        ordinal: tuple.$1,
+        entryId: 0x100000000000000 + tuple.$1,
+        dataOffset: offset,
+        storedBytes: box.cipherText.length,
+        decodedBytes: clear.length,
+        recordType: 3,
+        auxiliaryStart: tuple.$2,
+        chunkCount: 1,
+        metadata: Uint8List(32),
+      );
+      final part = SpkAuxRecord(
+        ordinal: tuple.$2,
+        dataOffset: offset,
+        storedBytes: box.cipherText.length,
+        metadata: Uint8List.fromList(box.mac.bytes),
+      );
+      samples.add(
+        SpkFragmentAuthSample(
+          record: record,
+          part: part,
+          localOrdinal: 0,
+          cipherText: Uint8List.fromList(box.cipherText),
+        ),
+      );
+      offset += box.cipherText.length;
+    }
+
+    final rule = await SpkArchiveSource.deriveChunkNonceRuleFromSamples(
+      samples: samples,
+      key: key,
+      minimumAuthenticatedSamples: 2,
+    );
+    expect(rule, 'record_ordinal_chunk_le96');
+  });
 }
