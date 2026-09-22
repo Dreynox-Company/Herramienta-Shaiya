@@ -303,6 +303,33 @@ class StudioScene extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> networkMobHit(int globalId,int damage) async {
+    final a=networkMobActors[globalId];if(a==null)return;
+    final clip=a.clips['Daño']??a.clips['Damage']??a.clips['Golpe'];
+    if(clip!=null)a.play(clip,repeat:false);
+    lastImpact='Impacto −'+damage.toString();
+    hitLife=.65;
+    if(hitSprite!=null){
+      hitSprite!.visible=true;
+      hitSprite!.position.setValues(a.root.position.x,a.root.position.y+1,-.1+a.root.position.z);
+    }
+    notifyListeners();
+  }
+
+  Future<void> networkPlayerHit(int damage) async {
+    final a=character;if(a==null)return;
+    final index=damageMotion(weaponFamily(weaponRecord));
+    final candidates=animations.where((p)=>index!=null?motionIndex(p)==index:p.toLowerCase().contains('damage')).toList();
+    final clip=await firstCompatible(a,candidates);
+    if(clip!=null&&a==character)a.play(clip,repeat:false);
+    lastImpact='Recibido −'+damage.toString();
+    hitLife=.65;
+    if(hitSprite!=null){
+      hitSprite!.visible=true;
+      hitSprite!.position.setValues(a.root.position.x,a.root.position.y+1,-.1+a.root.position.z);
+    }
+    notifyListeners();
+  }
   Future<void> killNetworkMob(int globalId) async {
     final a=networkMobActors[globalId];if(a==null)return;
     final death=a.clips['Caída']??a.clips['Muerte'];
