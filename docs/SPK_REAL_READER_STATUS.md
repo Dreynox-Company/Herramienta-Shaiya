@@ -74,7 +74,7 @@ Studio la prueba contra tags GCM reales y la descarta si no autentica.
 
 Por tanto, el código está preparado para lectura/escritura completa, pero no se
 debe afirmar todavía que los 50.135 payloads del archivo real del usuario han
-sido descifrados. Falta ejecutar 0.6.15 contra el par real
+sido descifrados. Falta ejecutar 0.6.16 contra el par real
 `game.exe + data.spk` y obtener la auditoría.
 
 ## Avances consolidados del lector
