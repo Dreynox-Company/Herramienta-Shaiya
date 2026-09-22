@@ -56,7 +56,11 @@ void main(){
     final body=Uint8List(4);
     ByteData.sublistView(body).setInt32(0,raw,Endian.little);
     final time=PsWorldTime.parse(PsPacket(PsPacketType.worldDay,body));
-    expect((time.year,time.month,time.day),(year,month,day));
+    // Imgeneus writes the DateTime year into the native 32-bit Shaiya
+    // field. Only six year bits survive the signed int packing, so 2020 is
+    // represented on the wire as 36 (16 + ((2020 - 16) & 0x3f)).
+    final wireYear=16+((year-16)&0x3f);
+    expect((time.year,time.month,time.day),(wireYear,month,day));
     expect((time.hour,time.minute,time.second),(hour,minute,second));
   });
 
