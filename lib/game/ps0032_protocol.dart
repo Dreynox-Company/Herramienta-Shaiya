@@ -535,7 +535,9 @@ class PsCharacterMove {
   final int characterId,angle,motion;
   final double x,y,z;
   const PsCharacterMove(this.characterId,this.angle,this.motion,this.x,this.y,this.z);
-  bool get moving=>motion!=0;
+  bool get walking=>motion==0;
+  bool get running=>motion==1;
+  bool get immobilized=>motion==193;
   static PsCharacterMove parse(PsPacket p){
     if(p.type!=PsPacketType.characterMove||p.body.length<19){
       throw FormatException('CHARACTER_MOVE remoto truncado: ${p.body.length}.');
