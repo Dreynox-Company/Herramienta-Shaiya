@@ -865,8 +865,8 @@ class PsSkillHit {
   });
   bool get success=>result==0||result==1||result==4;
   static PsSkillHit parse(PsPacket p){
-    if(p.type!=PsPacketType.useMobTargetSkill||p.body.length<19){
-      throw FormatException('USE_MOB_TARGET_SKILL response truncado: ${p.body.length}');
+    if(!const <int>{PsPacketType.useMobTargetSkill,PsPacketType.useMobRangeSkill}.contains(p.type)||p.body.length<19){
+      throw FormatException('MOB_SKILL_HIT truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
     }
     final d=ByteData.sublistView(p.body);
     return PsSkillHit(
