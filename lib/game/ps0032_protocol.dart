@@ -62,6 +62,10 @@ class PsPacketType {
   static const chatGuild=0x1104;
   static const chatParty=0x1105;
   static const chatMap=0x1111;
+  static const gemAdd=0x0801;
+  static const gemRemove=0x0802;
+  static const gemAddPossibility=0x0809;
+  static const gemRemovePossibility=0x080A;
   static const npcBuyItem=0x0702;
   static const warehouseItemList=0x0711;
   static const npcSellItem=0x0703;
@@ -927,6 +931,21 @@ class PsInventoryMove {
   }
 }
 
+class PsLinkingPossibility {
+  final bool available;
+  final double rate;
+  final int gold;
+  const PsLinkingPossibility(this.available,this.rate,this.gold);
+  static PsLinkingPossibility parse(PsPacket p){
+    if(p.type!=PsPacketType.gemAddPossibility&&p.type!=PsPacketType.gemRemovePossibility){
+      throw FormatException('No es un paquete de posibilidad de lapis.');
+    }
+    if(p.body.length<13)throw FormatException('Gem possibility truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsLinkingPossibility(p.body[0]!=0,d.getFloat64(1,Endian.little),d.getInt32(9,Endian.little));
+  }
+}
+
 class PsNpcTradeResult {
   final int result,bag,slot,type,typeId,count,gold;
   const PsNpcTradeResult(this.result,this.bag,this.slot,this.type,this.typeId,this.count,this.gold);
@@ -1345,6 +1364,23 @@ class PsWorldSession {
     await connection.send(PsPacketType.inventoryMoveItem,[currentBag,currentSlot,destinationBag,destinationSlot]);
     final response=await responseFuture;
     return PsInventoryMove.parse(response);
+  }
+  Future<PsLinkingPossibility> gemAddPossibility({
+    required int gemBag,required int gemSlot,required int itemBag,required int itemSlot,
+    int hammerBag=0,int hammerSlot=0,
+  }) async {
+    final response=connection.waitStream((p)=>p.type==PsPacketType.gemAddPossibility);
+    await connection.send(PsPacketType.gemAddPossibility,[gemBag,gemSlot,itemBag,itemSlot,hammerBag,hammerSlot]);
+    return PsLinkingPossibility.parse(await response);
+  }
+
+  Future<PsLinkingPossibility> gemRemovePossibility({
+    required int itemBag,required int itemSlot,bool specific=false,int gemPosition=0,
+    int hammerBag=0,int hammerSlot=0,
+  }) async {
+    final response=connection.waitStream((p)=>p.type==PsPacketType.gemRemovePossibility);
+    await connection.send(PsPacketType.gemRemovePossibility,[itemBag,itemSlot,specific?1:0,gemPosition,hammerBag,hammerSlot]);
+    return PsLinkingPossibility.parse(await response);
   }
   Future<PsNpcTradeResult> buyNpcItem(int npcGlobalId,int productIndex,int count) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de comprar.');
