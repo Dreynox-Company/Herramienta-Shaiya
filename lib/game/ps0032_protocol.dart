@@ -37,12 +37,15 @@ class PsPacketType {
   static const removeItem=0x0206;
   static const characterMove=0x0501;
   static const characterMobAutoAttack=0x0503;
+  static const sendEquipment=0x0507;
+  static const useItem=0x050A;
   static const useMobTargetSkill=0x0517;
   static const usedSpMp=0x050C;
   static const buffAdd=0x050D;
   static const buffRemove=0x050E;
   static const characterDeath=0x0504;
   static const deadRebirth=0x0551;
+  static const useItem2=0x0557;
   static const rebirthNearestTown=0x0553;
   static const characterLeaveDead=0x0406;
   static const characterCurrentHitpoints=0x0521;
@@ -436,6 +439,39 @@ class PsMapWeather {
   }
 }
 
+
+class PsEquipmentChange {
+  final int characterId,slot,type,typeId,enchant;
+  final bool hasColor;
+  final int alpha,r,g,b;
+  const PsEquipmentChange({
+    required this.characterId,required this.slot,required this.type,required this.typeId,
+    required this.enchant,required this.hasColor,required this.alpha,required this.r,required this.g,required this.b,
+  });
+  static PsEquipmentChange parse(PsPacket p){
+    if(p.type!=PsPacketType.sendEquipment||p.body.length<13){
+      throw FormatException('SEND_EQUIPMENT truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsEquipmentChange(
+      characterId:d.getUint32(0,Endian.little),slot:p.body[4],type:p.body[5],typeId:p.body[6],
+      enchant:p.body[7],hasColor:p.body[8]!=0,
+      alpha:p.body[9],r:p.body[10],g:p.body[11],b:p.body[12],
+    );
+  }
+}
+
+class PsUsedItem {
+  final int characterId,bag,slot,type,typeId,count;
+  const PsUsedItem(this.characterId,this.bag,this.slot,this.type,this.typeId,this.count);
+  static PsUsedItem parse(PsPacket p){
+    if(p.type!=PsPacketType.useItem||p.body.length<9){
+      throw FormatException('USE_ITEM event truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsUsedItem(d.getUint32(0,Endian.little),p.body[4],p.body[5],p.body[6],p.body[7],p.body[8]);
+  }
+}
 
 class PsTargetMobHp {
   final int targetId,currentHp,attackSpeed,moveSpeed;
@@ -1324,6 +1360,15 @@ class PsWorldSession {
     final response=connection.waitStream((p)=>p.type==PsPacketType.npcSellItem);
     await connection.send(PsPacketType.npcSellItem,[bag,slot,count]);
     return PsNpcTradeResult.parse(await response);
+  }
+  Future<void> useInventoryItem(int bag,int slot,{int? targetGlobalId}) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar objetos.');
+    if(bag<0||bag>255||slot<0||slot>255)throw RangeError('Bag/slot fuera de byte.');
+    if(targetGlobalId==null){
+      await connection.send(PsPacketType.useItem,[bag,slot]);
+    }else{
+      await connection.send(PsPacketType.useItem2,[bag,slot,..._u32Bytes(targetGlobalId)]);
+    }
   }
   Future<void> startMobAutoAttack(int targetGlobalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de atacar.');
