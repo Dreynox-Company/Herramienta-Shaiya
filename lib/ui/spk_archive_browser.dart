@@ -2620,9 +2620,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               final active = identical(selected, record);
               return InkWell(
                 onTap: () => setState(() => selected = record),
-                onDoubleTap: source.canReadRecord(record)
+                onDoubleTap: busy
+                    ? null
+                    : source.canReadRecord(record)
                     ? () => inspectResource(record)
-                    : null,
+                    : captureResourceProfile,
                 child: Container(
                   color: active ? const Color(0xff29384f) : null,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -2750,6 +2752,18 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           fileName(record),
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         ),
+        if (!source.names.isConfirmed(record.entryId)) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'RUTA INFERIDA · todavía no confirmada por contenido',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: Color(0xffd9b66f),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         property('ID', record.idHex),
         property('Tipo', record.recordType.toString()),
@@ -2757,7 +2771,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         property('Almacenado', bytesLabel(record.storedBytes)),
         property('Decodificado', bytesLabel(record.decodedBytes)),
         property('Fragmentos', record.chunkCount.toString()),
-        property('Ruta', source.technicalPath(record)),
+        property(
+          source.names.isConfirmed(record.entryId) ? 'Ruta' : 'Ruta inferida',
+          source.technicalPath(record),
+        ),
         property(
           'Estado',
           source.canReadRecord(record)
