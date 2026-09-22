@@ -24,6 +24,9 @@ class PsPacketType {
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
+  static const inventoryMoveItem=0x0204;
+  static const addItem=0x0205;
+  static const removeItem=0x0206;
   static const characterMove=0x0501;
   static const useMobTargetSkill=0x0517;
   static const characterCurrentHitpoints=0x0521;
@@ -553,6 +556,61 @@ List<PsInventoryItem> parseInventoryItems(PsPacket p){
     ));
   }
   return out;
+}
+
+class PsInventoryRemoval {
+  final int bag,slot,type,typeId,count;
+  const PsInventoryRemoval(this.bag,this.slot,this.type,this.typeId,this.count);
+  bool get fullRemove=>type==0&&typeId==0&&count==0;
+  static PsInventoryRemoval parse(PsPacket p){
+    if(p.type!=PsPacketType.removeItem||p.body.length<5){
+      throw FormatException('REMOVE_ITEM truncado: ${p.body.length}');
+    }
+    return PsInventoryRemoval(p.body[0],p.body[1],p.body[2],p.body[3],p.body[4]);
+  }
+}
+
+PsInventoryItem _inventory102(Uint8List b,int o){
+  if(o<0||o+102>b.length)throw FormatException('Inventory item 102 truncado en $o/${b.length}.');
+  final d=ByteData.sublistView(b),gems=List<int>.generate(6,(j)=>d.getInt32(o+57+j*4,Endian.little));
+  final rawName=b.sublist(o+81,o+101),zero=rawName.indexOf(0);
+  final craft=utf8.decode(zero<0?rawName:rawName.sublist(0,zero),allowMalformed:true);
+  return PsInventoryItem(
+    bag:b[o],slot:b[o+1],type:b[o+2],typeId:b[o+3],
+    count:b[o+4],quality:d.getUint16(o+5,Endian.little),
+    gems:List.unmodifiable(gems),craftName:craft,dyed:b[o+30]!=0,
+  );
+}
+
+PsInventoryItem parseAddedInventoryItem(PsPacket p){
+  if(p.type!=PsPacketType.addItem||p.body.length<106){
+    throw FormatException('ADD_ITEM truncado/no-item: ${p.body.length}');
+  }
+  final b=p.body,d=ByteData.sublistView(b),gems=List<int>.generate(6,(j)=>d.getInt32(11+j*4,Endian.little));
+  final rawName=b.sublist(85,105),zero=rawName.indexOf(0);
+  final craft=utf8.decode(zero<0?rawName:rawName.sublist(0,zero),allowMalformed:true);
+  return PsInventoryItem(
+    bag:b[0],slot:b[1],type:b[2],typeId:b[3],count:b[4],
+    quality:d.getUint16(5,Endian.little),gems:List.unmodifiable(gems),
+    craftName:craft,dyed:b[58]!=0,
+  );
+}
+
+class PsInventoryMove {
+  final PsInventoryItem source,destination;
+  final int gold;
+  const PsInventoryMove(this.source,this.destination,this.gold);
+  static PsInventoryMove parse(PsPacket p){
+    if(p.type!=PsPacketType.inventoryMoveItem){
+      throw FormatException('No es INVENTORY_MOVE_ITEM.');
+    }
+    final b=p.body;
+    final prefix=b.length>=212?4:0;
+    if(b.length<prefix+208)throw FormatException('INVENTORY_MOVE_ITEM truncado: ${b.length}');
+    final source=_inventory102(b,prefix),destination=_inventory102(b,prefix+102);
+    final gold=ByteData.sublistView(b).getUint32(prefix+204,Endian.little);
+    return PsInventoryMove(source,destination,gold);
+  }
 }
 
 class PsLearnedSkill {
