@@ -133,6 +133,8 @@ void main(){
         'waterTablePath':state.scene.waterPath,
         'waterFrameCount':state.scene.waterAnimation?.textures.length??0,
         'waterResolvedTextures':state.scene.waterTexturePaths,
+        'waterSurfaceLoaded':state.scene.waterSurface!=null,
+        'waterSurfaceTextureFrames':state.scene.waterSurface?.frames.length??0,
         'mapTextureCandidates':state.catalog==null
           ?<String>[]
           :state.catalog!.library.files.keys.where((String path){
