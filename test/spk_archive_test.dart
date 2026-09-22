@@ -284,6 +284,23 @@ void main() {
       expect(map.evidence(2), 'decoded-size+zstd3-size');
     });
 
+    test('ambiguous duplicate inferred paths are discarded fail-closed', () {
+      final map = SpkNameMap.empty();
+      map.mergeHints(
+        {
+          7: 'Character/Elf/3DC/elmm_upper001.3DC',
+          8: 'Character/Elf/3DC/elmm_upper001.3DC',
+          9: 'Character/Elf/3DC/elmm_lower001.3DC',
+        },
+        confidence: 'strong-inferred',
+        evidence: 'decoded-size+zstd3-size',
+      );
+      expect(map.removeAmbiguousHints(), 2);
+      expect(map[7], isNull);
+      expect(map[8], isNull);
+      expect(map[9], 'Character/Elf/3DC/elmm_lower001.3DC');
+    });
+
     test('name map merge keeps confirmed paths authoritative', () {
       final map = SpkNameMap.empty();
       map.mergeHints(
