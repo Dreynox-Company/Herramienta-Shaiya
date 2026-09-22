@@ -29,13 +29,16 @@ class WorldHud extends StatelessWidget {
   final int gold;
   final NpcShopRule? shop;
   final NpcGateRule? gate;
+  final int blacksmithMode,blacksmithExtractPosition;
   final PsInventoryItem? blacksmithItem,blacksmithGem,blacksmithHammer;
   final PsLinkingPossibility? blacksmithPossibility;
+  final PsInventoryItem? blacksmithExtractItem,blacksmithExtractHammer;
+  final PsLinkingPossibility? blacksmithExtractPossibility;
   final bool blacksmithBusy;
   final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
-  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem;
-  final ValueChanged<int> onBuyShopProduct,onUseGate;
-  final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer;
+  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem;
+  final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
+  final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
   final ValueChanged<int> onAddStat;
@@ -80,10 +83,15 @@ class WorldHud extends StatelessWidget {
     required this.gold,
     required this.shop,
     required this.gate,
+    required this.blacksmithMode,
     required this.blacksmithItem,
     required this.blacksmithGem,
     required this.blacksmithHammer,
     required this.blacksmithPossibility,
+    required this.blacksmithExtractItem,
+    required this.blacksmithExtractHammer,
+    required this.blacksmithExtractPosition,
+    required this.blacksmithExtractPossibility,
     required this.blacksmithBusy,
     required this.inventoryOpen,
     required this.statusOpen,
@@ -98,9 +106,14 @@ class WorldHud extends StatelessWidget {
     required this.onCloseGate,
     required this.onCloseWarehouse,
     required this.onLinkGem,
+    required this.onExtractGem,
+    required this.onBlacksmithMode,
     required this.onSelectBlacksmithItem,
     required this.onSelectBlacksmithGem,
     required this.onSelectBlacksmithHammer,
+    required this.onSelectExtractItem,
+    required this.onSelectExtractPosition,
+    required this.onSelectExtractHammer,
     required this.onBuyShopProduct,
     required this.onUseGate,
     required this.onSellInventory,
