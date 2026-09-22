@@ -64,6 +64,14 @@ Future<void> main() async {
     await world.moveCharacter(x:moveX,y:moveY,z:moveZ,yawRadians:0,run:false);
     stdout.writeln('Movement 0x0501 -> x='+moveX.toString()+' y='+moveY.toString()+' z='+moveZ.toString());
 
+    final mobsByDistance=[...snapshot.mobs]..sort((a,b){
+      final adx=a.x-snapshot.self!.x,adz=a.z-snapshot.self!.z;
+      final bdx=b.x-snapshot.self!.x,bdz=b.z-snapshot.self!.z;
+      return (adx*adx+adz*adz).compareTo(bdx*bdx+bdz*bdz);
+    });
+    final targetMob=mobsByDistance.firstOrNull;
+    final targetHp=targetMob==null?null:await world.selectMobTarget(targetMob.globalId);
+    if(targetHp!=null)stdout.writeln('Target mob '+targetHp.targetId.toString()+' hp='+targetHp.currentHp.toString());
     final tutorialNpc=snapshot.npcs.where((n)=>n.type==7&&n.typeId==1167).firstOrNull;
     var questStartOk=false;
     if(tutorialNpc!=null&&!snapshot.quests.any((q)=>q.questId==3781)&&!snapshot.finishedQuests.any((q)=>q.questId==3781)){
@@ -103,6 +111,10 @@ Future<void> main() async {
       'questFinishedPackets':count(PsPacketType.questFinishedList),
       'enteredMapPackets':count(PsPacketType.characterEnteredMap),
       'movement':{'sent':true,'x':moveX,'y':moveY,'z':moveZ},
+      'targetMob':targetMob==null?null:{
+        'globalId':targetMob.globalId,'mobId':targetMob.mobId,
+        'hp':targetHp?.currentHp,'attackSpeed':targetHp?.attackSpeed,'moveSpeed':targetHp?.moveSpeed,
+      },
       'tutorialQuest':{
         'id':3781,'npcFound':tutorialNpc!=null,
         'npcGlobalId':tutorialNpc?.globalId,'startConfirmed':questStartOk,
@@ -149,6 +161,8 @@ Future<void> main() async {
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
+    if(targetMob==null||targetHp==null)throw StateError('TARGET_MOB_HP_UPDATE did not return a target.');
+    if(targetHp.targetId!=targetMob.globalId||targetHp.currentHp<=0)throw StateError('Target mob HP/state invalid.');
     if(tutorialNpc==null)throw StateError('Tutorial NPC 7:1167 is not present near map-1 spawn.');
     if(!questStartOk)throw StateError('Tutorial QUEST_START 3781 was not confirmed.');
   }finally{
