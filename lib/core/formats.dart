@@ -1205,7 +1205,7 @@ VaniData readVani(Uint8List bytes,String source){
   if(frameCount<=0)r.fail('VAni sin frames.');
   final meshes=<VaniMeshData>[];
   for(var m=0;m<meshCount;m++){
-    final texture=r.str(65536);
+    final texture=r.str();
     final faceCount=r.count(2000000);
     r.need(faceCount*6);
     final indices=Uint16List(faceCount*3);
