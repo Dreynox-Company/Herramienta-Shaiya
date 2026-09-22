@@ -2075,6 +2075,43 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<void> _joinRaidByName(String name) async {
+    final value=name.trim();if(value.isEmpty)return;
+    try{await liveWorld?.joinRaid(value);messages.insert(0,'[Raid] Solicitud AutoJoin → '+value+'.');}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _kickRaidMember(PsRaidMember row) async {
+    final raid=liveRaid;if(raid==null||raid.leader?.member.id!=liveCharacter?.id)return;
+    try{await liveWorld?.kickRaidMember(row.member.id);}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
+
+  Future<void> _changeRaidLeader(PsRaidMember row) async {
+    final raid=liveRaid;if(raid==null||raid.leader?.member.id!=liveCharacter?.id)return;
+    try{await liveWorld?.changeRaidLeader(row.member.id);}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
+
+  Future<void> _changeRaidSubLeader(PsRaidMember row) async {
+    final raid=liveRaid;if(raid==null||raid.leader?.member.id!=liveCharacter?.id)return;
+    try{await liveWorld?.changeRaidSubLeader(row.member.id);}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
+
+  Future<void> _moveRaidMemberToGroup(PsRaidMember row,int group) async {
+    final raid=liveRaid,self=liveCharacter?.id;
+    if(raid==null||self==null||group<0||group>4)return;
+    final allowed=raid.leader?.member.id==self||raid.subLeader?.member.id==self;
+    if(!allowed)return;
+    final occupied={for(final r in raid.members)r.index};
+    int destination=group*6;
+    for(var i=group*6;i<group*6+6;i++){if(!occupied.contains(i)){destination=i;break;}}
+    if(destination==row.index)return;
+    try{await liveWorld?.moveRaidMember(row.index,destination);}
+    catch(e){messages.insert(0,'[Raid] '+e.toString());}
+  }
   Future<void> _leaveRaid() async {
     try{await liveWorld?.leaveRaid();}catch(e){messages.insert(0,'[Raid] '+e.toString());}
   }
@@ -3214,6 +3251,11 @@ class _GameClientPageState extends State<GameClientPage> {
             onLeaveRaid:()=>unawaited(_leaveRaid()),
             onDismantleRaid:()=>unawaited(_dismantleRaid()),
             onInviteRaid:(id)=>unawaited(_inviteRaidCharacter(id)),
+            onJoinRaid:(name)=>unawaited(_joinRaidByName(name)),
+            onKickRaid:(row)=>unawaited(_kickRaidMember(row)),
+            onChangeRaidLeader:(row)=>unawaited(_changeRaidLeader(row)),
+            onChangeRaidSubLeader:(row)=>unawaited(_changeRaidSubLeader(row)),
+            onMoveRaidGroup:(row,group)=>unawaited(_moveRaidMemberToGroup(row,group)),
             onChangeRaidLoot:(value)=>unawaited(_changeRaidLoot(value)),
             onToggleRaidAutoJoin:()=>unawaited(_toggleRaidAutoJoin()),
             onLeaveParty:()=>unawaited(_leaveParty()),
