@@ -127,6 +127,13 @@ class SpkCoreTableDiscovery {
             'autenticada de simples y fragmentados.',
       );
     }
+    if (!source.fullyValidatedResources) {
+      throw const SpkFailure(
+        'SPK_TABLE_DISCOVERY_AUDIT',
+        'Antes de identificar tablas deben auditarse todos los payloads del '
+            'SPK para disponer de tipos validados y evitar barridos heurísticos.',
+      );
+    }
 
     final recordsById = <int, SpkRecord>{
       for (final record in source.index.resources) record.entryId: record,
@@ -198,7 +205,11 @@ class SpkCoreTableDiscovery {
     final candidates = source.index.resources
         .where((record) {
           final known = source.names[record.entryId];
-          if (known != null && !known.toLowerCase().endsWith('.sdata')) {
+          if (known != null) {
+            if (!known.toLowerCase().endsWith('.sdata')) return false;
+            return _encodedLengthCandidate(record.decodedBytes);
+          }
+          if (source.validatedFormat(record.entryId) != 'SDATA') {
             return false;
           }
           return _encodedLengthCandidate(record.decodedBytes);
