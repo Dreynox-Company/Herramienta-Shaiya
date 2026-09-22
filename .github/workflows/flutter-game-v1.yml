@@ -1,7 +1,7 @@
 name: Flutter game client v1
 on:
   push:
-    branches: [work/flutter-game-client-v1, work/flutter-game-client-v7-stable, work/flutter-game-client-v8-complete]
+    branches: [work/flutter-game-client-v1, work/flutter-game-client-v7-stable, work/flutter-game-client-v8-complete, work/flutter-game-v8-mani]
   workflow_dispatch:
 permissions:
   contents: read
