@@ -66,6 +66,32 @@ class VaniActor {
   }
   void dispose(){root.removeFromParent();for(final binding in bindings)binding.part.dispose();}
 }
+class WaterSurface {
+  final t.Mesh mesh;
+  final List<t.Texture> frames;
+  final double framesPerSecond;
+  double time=0;
+  int frame=0;
+  WaterSurface(this.mesh,this.frames,{this.framesPerSecond=15});
+  void tick(double dt){
+    if(frames.length<=1||framesPerSecond<=0)return;
+    time+=dt;
+    final next=(time*framesPerSecond).floor()%frames.length;
+    if(next==frame)return;
+    frame=next;
+    final material=mesh.material;
+    if(material!=null){
+      material.map=frames[next];
+      material.needsUpdate=true;
+    }
+  }
+  void dispose(){
+    mesh.removeFromParent();
+    mesh.geometry?.dispose();
+    mesh.material?.dispose();
+    for(final texture in frames){texture.dispose();}
+  }
+}
 class ManiActor {
   final t.Group root,pivot;
   final List<RenderPart> parts;
@@ -138,6 +164,7 @@ class StudioScene extends ChangeNotifier {
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];final List<VaniActor> animatedWorldActors=[];final List<ManiActor> maniWorldActors=[];
   WorldData? world;DgData? dungeon;WtrData? waterAnimation;
+  WaterSurface? waterSurface;
   String? worldPath,effectPath,skyPath,primaryCloudPath,secondaryCloudPath,waterPath;
   final List<String> waterTexturePaths=[];
   final List<String> loadedWorldAssets=[];
@@ -916,6 +943,75 @@ class StudioScene extends ChangeNotifier {
       await player.play(DeviceFileSource(await _materializeAudio(next)));
     }catch(e){report((music?'Música':'Ambiente')+': '+e.toString());}
   }
+  Future<WaterSurface?> _buildWaterSurface(
+    WorldData w,double ox,double oz,t.Group stage,
+  ) async {
+    if(waterTexturePaths.isEmpty||waterAnimation==null)return null;
+    final tile=waterAnimation!.tileSize.abs()<1e-6?64.0:waterAnimation!.tileSize.abs();
+    const extent=82.0;
+    final positions=Float32List.fromList(<double>[
+      -extent,0,-extent,
+       extent,0,-extent,
+      -extent,0, extent,
+       extent,0, extent,
+    ]);
+    final normals=Float32List.fromList(<double>[
+      0,1,0, 0,1,0, 0,1,0, 0,1,0,
+    ]);
+    double u(double localX)=>(ox+localX)/tile;
+    double vv(double localZ)=>(oz-localZ)/tile;
+    final uv=Float32List.fromList(<double>[
+      u(-extent),vv(-extent),
+      u(extent),vv(-extent),
+      u(-extent),vv(extent),
+      u(extent),vv(extent),
+    ]);
+    final geometry=t.BufferGeometry();
+    geometry.setAttributeFromString(
+      'position',t.Float32BufferAttribute.fromList(positions.toList(),3),
+    );
+    geometry.setAttributeFromString(
+      'normal',t.Float32BufferAttribute.fromList(normals.toList(),3),
+    );
+    geometry.setAttributeFromString(
+      'uv',t.Float32BufferAttribute.fromList(uv.toList(),2),
+    );
+    geometry.setIndex(<int>[0,2,1,1,2,3]);
+
+    final textures=<t.Texture>[];
+    try{
+      for(final path in waterTexturePaths.take(48)){
+        final bytes=await catalog!.library.read(path);
+        final png=await compute(_decodeTexture,{'bytes':bytes,'path':path,'opaque':false});
+        final texture=await t.TextureLoader(flipY:false).fromBytes(png);
+        if(texture==null)continue;
+        texture.colorSpace=t.SRGBColorSpace;
+        texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
+        textures.add(texture);
+      }
+      if(textures.isEmpty){geometry.dispose();return null;}
+      final material=t.MeshLambertMaterial.fromMap({
+        'map':textures.first,
+        'color':0xb9dfff,
+        'side':t.DoubleSide,
+        'transparent':true,
+        'opacity':.72,
+        'depthWrite':false,
+        'depthTest':true,
+        'toneMapped':false,
+      });
+      final mesh=t.Mesh(geometry,material)
+        ..frustumCulled=false
+        ..renderOrder=25;
+      stage.add(mesh);
+      return WaterSurface(mesh,textures);
+    }catch(_){
+      geometry.dispose();
+      for(final texture in textures){texture.dispose();}
+      rethrow;
+    }
+  }
+
   Future<void> _playTerrainFootstep() async {
     if(!sound||catalog==null||world==null||character==null||mount!=null)return;
     final a=character!,worldX=originX+a.root.position.x,worldZ=originZ-a.root.position.z;
@@ -1015,7 +1111,7 @@ class StudioScene extends ChangeNotifier {
     if(disposed)return;_frameAccumulator+=dt;_uiAccumulator+=dt;if(_frameAccumulator<1/30)return;final delta=_frameAccumulator.clamp(0.0,.1);_frameAccumulator=0;
     final moving=walkX!=0||walkZ!=0;final transition=movementTransitions.update(x:walkX,z:walkZ,running:running,blocked:sceneCombatLocked);if(transition!=null)applyLocomotion(transition);final desired=movementClip(movementTransitions.requested);
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
-    for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}for(final a in animatedWorldActors){a.tick(delta);}for(final a in maniWorldActors){a.tick(delta);}
+    for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}for(final a in animatedWorldActors){a.tick(delta);}for(final a in maniWorldActors){a.tick(delta);}waterSurface?.tick(delta);
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
@@ -1118,7 +1214,7 @@ class StudioScene extends ChangeNotifier {
 
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();waterAnimation=null;waterPath=null;waterTexturePaths.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();worldCollision.clear();waterAnimation=null;waterPath=null;waterTexturePaths.clear();waterSurface?.dispose();waterSurface=null;for(final p in environmentParts){p.dispose();}environmentParts.clear();for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;dungeon=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;_applyWorldFog(null);unawaited(_syncWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -1175,7 +1271,7 @@ class StudioScene extends ChangeNotifier {
         for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();
         for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
-        waterAnimation=null;waterPath=null;waterTexturePaths.clear();
+        waterAnimation=null;waterPath=null;waterTexturePaths.clear();waterSurface?.dispose();waterSurface=null;
         worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);_applyWorldFog(w);
         character?.root.position.setValues(0,groundY,0);
         enemy?.root.position.setValues(1.8,groundY,0);
@@ -1419,6 +1515,9 @@ class StudioScene extends ChangeNotifier {
       animatedWorldActors..clear()..addAll(animated);
       for(final a in maniWorldActors){a.dispose();}
       maniWorldActors..clear()..addAll(maniAnimated);
+      waterSurface?.dispose();waterSurface=null;
+      try{waterSurface=await _buildWaterSurface(w,ox,oz,stage);}
+      catch(e){report('Agua WTR: '+e.toString());}
       environment.removeFromParent();environment=stage;view!.scene.add(stage);
       worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
       if(catalog!.skies.isNotEmpty){
@@ -1434,10 +1533,10 @@ class StudioScene extends ChangeNotifier {
         }
       }
       final mix=loadedByCategory.entries.map((e)=>'${e.key}=${e.value}').join(' · ');
-      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · WTR ${waterTexturePaths.length}/${waterAnimation?.textures.length??0} · ${worldCollision.triangleCount} triángulos de colisión nativos.');
+      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${maniWorldActors.length} MAni · WTR ${waterTexturePaths.length}/${waterAnimation?.textures.length??0} · agua ${waterSurface==null?'off':'render'} · ${worldCollision.triangleCount} triángulos de colisión nativos.');
     }catch(_){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}for(final a in maniAnimated){a.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();primaryCloud?.dispose();secondaryCloud?.dispose();waterSurface?.dispose();waterSurface=null;for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();for(final a in maniWorldActors){a.dispose();}maniWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
