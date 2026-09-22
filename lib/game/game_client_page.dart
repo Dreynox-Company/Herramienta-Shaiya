@@ -555,6 +555,7 @@ class _GameClientPageState extends State<GameClientPage> {
         final buffsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterActiveBuffs).firstOrNull;
         final friendsPacket=selected.packets.where((p)=>p.type==PsPacketType.friendList).lastOrNull;
         final partyPacket=selected.packets.where((p)=>p.type==PsPacketType.partyList).lastOrNull;
+        final raidPacket=selected.packets.where((p)=>p.type==PsPacketType.raidList).lastOrNull;
         final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
         final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
         liveInventory=selected.packets
@@ -578,7 +579,9 @@ class _GameClientPageState extends State<GameClientPage> {
             buff.id:buff,
         };
         if(friendsPacket!=null)liveFriends=parseFriendList(friendsPacket).toList();
-        if(partyPacket!=null){
+        if(raidPacket!=null){
+          liveRaid=PsRaidState.parse(raidPacket);livePartyMembers=[];partyLeaderId=null;
+        }else if(partyPacket!=null){
           final party=PsPartyList.parse(partyPacket);
           livePartyMembers=party.members.toList();
           if(partyLeaderId==null&&party.leaderIndex<party.members.length){
