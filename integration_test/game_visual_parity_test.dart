@@ -103,6 +103,27 @@ void main(){
       GameStage.world,
     ]){
       final state=await load(stage);
+      if(stage==GameStage.world&&Platform.environment['SHAIYA_CAMERA_SWEEP']=='1'){
+        final scene=state.scene;
+        final originalYaw=scene.yaw,originalPitch=scene.pitch,originalDistance=scene.distance,originalTargetY=scene.targetY;
+        for(final yaw in <double>[-.20,0,.20,.40]){
+          for(final pitch in <double>[.08,.18,.28]){
+            for(final distance in <double>[6.0,7.0,8.0,9.0]){
+              scene.yaw=yaw;scene.pitch=pitch;scene.distance=distance;scene.targetY=1.05;
+              scene.updateCamera();
+              await tester.pump(const Duration(milliseconds:160));
+              String code(double value)=>(value*100).round().toString().replaceFirst('-','m');
+              await shot(
+                state,
+                'camera-y'+code(yaw)+'-p'+code(pitch)+'-d'+code(distance),
+              );
+            }
+          }
+        }
+        scene.yaw=originalYaw;scene.pitch=originalPitch;scene.distance=originalDistance;scene.targetY=originalTargetY;
+        scene.updateCamera();
+        await tester.pump(const Duration(milliseconds:160));
+      }
       await shot(state,stage.name);
       report[stage.name]={
         'progress':state.progress,
