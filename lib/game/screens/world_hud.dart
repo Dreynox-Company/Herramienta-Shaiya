@@ -1146,7 +1146,7 @@ class WorldHud extends StatelessWidget {
       itemBuilder:(context,index){
         final g=guildDirectory[index];
         return Container(
-          minHeight:54,
+          constraints:const BoxConstraints(minHeight:54),
           margin:const EdgeInsets.only(bottom:4),
           padding:const EdgeInsets.all(7),
           decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff51432f))),
