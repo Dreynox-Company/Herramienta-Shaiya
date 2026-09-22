@@ -32,8 +32,7 @@ Future<SecretBox> _encrypt(
       nonce: nonce,
     );
 
-int _u64(int value) =>
-    value < 0 ? value + 0x10000000000000000 : value;
+int _u64(int value) => value.toUnsigned(64);
 
 Uint8List _metadata(
   Uint8List nonce,
