@@ -362,8 +362,13 @@ class SpkArchiveBrowserPage extends StatefulWidget {
         progress: (message, done, total) => progress.value = message,
       );
       if (source.profile.effectiveResourceSecret != null) {
-        progress.value = 'Autenticando perfil de payloads contra muestras reales…';
+        progress.value =
+            'Autenticando perfil de payloads contra muestras reales…';
         await source.validateSimpleResourceProfile();
+      } else {
+        progress.value =
+            'Probando de forma autenticada si el índice comparte clave con payloads…';
+        source = await source.tryIndexKeyAsResourceProfile() ?? source;
       }
       progress.value = 'Buscando perfil validado de recursos…';
       source = await loadAutomaticSpkResourceProfile(source, picked.path);
@@ -875,6 +880,53 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!await game.exists()) {
       throw const FileSystemException('No se encontró game.exe.');
     }
+
+    if (source.profile.effectiveResourceSecret == null) {
+      operation =
+          'Probando primero la clave del índice contra payloads reales…';
+      if (mounted) setState(() {});
+      var offline = await source.tryIndexKeyAsResourceProfile();
+      if (offline != null) {
+        offline = await deriveAutomaticFragmentProfile(
+          offline,
+          source.file.path,
+        );
+        if (offline.canExtractAll) {
+          await loadAutomaticSpkNameMap(offline, source.file.path);
+          operation =
+              'La clave compartida autenticó el SPK. Auditando todos los recursos…';
+          if (mounted) setState(() {});
+          final audit = await _auditAllResources(offline);
+          operation = 'Identificando tablas y rutas estructurales…';
+          if (mounted) setState(() {});
+          final discovery = await _discoverCoreTables(offline);
+          if (!mounted) return;
+          final tables = Map<String, dynamic>.from(
+            (discovery['confirmedTables'] as Map?) ?? const {},
+          ).length;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'AutoPerfil offline completado: '
+                '${audit['validatedResources']} recursos auditados, '
+                '0 fallos y $tables tablas núcleo confirmadas.',
+              ),
+              duration: const Duration(seconds: 10),
+            ),
+          );
+          await Navigator.of(context).pushReplacement<void, void>(
+            MaterialPageRoute(
+              builder: (_) => SpkArchiveBrowserPage(
+                source: offline!,
+                onMount: widget.onMount,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     final siblingSpk = File(p.join(game.parent.path, 'data.spk'));
     if (!await siblingSpk.exists()) {
       throw const SpkFailure(
