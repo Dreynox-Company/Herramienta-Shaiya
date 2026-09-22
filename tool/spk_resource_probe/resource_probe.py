@@ -161,11 +161,11 @@ def _nearby_binary_candidates(path:Path,index_key:bytes,max_candidates:int=30000
         seen.add(key);emitted+=1
         yield f'{path.name}:{label}:hex@0x{lo+match.start():x}',key
         if emitted>=max_candidates:return
-      # Raw constants close to an observed crypto/string anchor. Step 4 keeps
-      # the sweep bounded while covering normal constant-pool alignment.
+      # Raw constants close to an observed crypto/string anchor. Keys are not
+      # assumed to be aligned; the per-module candidate cap keeps this bounded.
       for width in (16,32):
         end=max(lo,hi-width+1)
-        for pos in range(lo,end,4):
+        for pos in range(lo,end):
           key=blob[pos:pos+width]
           if len(key)!=width or key in seen:continue
           if len(set(key))<6:continue
