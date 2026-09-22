@@ -1243,6 +1243,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   Future<void> extractSelected() => runAction(() async {
     final record = selected;
     if (record == null) return;
+    if (!source.canReadRecord(record)) {
+      throw const SpkFailure(
+        'SPK_CONTENT_LOCKED',
+        'El recurso sigue cifrado. Ejecuta AutoPerfil SPK antes de extraerlo.',
+      );
+    }
     final folder = await getDirectoryPath(
       confirmButtonText: 'Extraer recurso aquí',
     );
@@ -1456,6 +1462,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   Widget resourceTable() {
     final folders = search.isEmpty ? childFolders() : <String>[];
     final entries = visibleEntries();
+    final inferredPathCounts = <String, int>{};
+    for (final record in entries) {
+      final path = source.names.inferredPath(record.entryId);
+      if (path == null) continue;
+      final key = path.replaceAll('\\', '/').toLowerCase();
+      inferredPathCounts[key] = (inferredPathCounts[key] ?? 0) + 1;
+    }
     return Column(
       children: [
         Container(
@@ -1554,7 +1567,17 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       Expanded(
                         flex: 5,
                         child: Text(
-                          fileName(record),
+                          (() {
+                            final base = fileName(record);
+                            final inferred =
+                                source.names.inferredPath(record.entryId);
+                            if (inferred == null) return base;
+                            final key = inferred
+                                .replaceAll('\\', '/')
+                                .toLowerCase();
+                            if ((inferredPathCounts[key] ?? 0) < 2) return base;
+                            return '$base · candidato ${record.idHex.substring(0, 6)}';
+                          })(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1628,7 +1651,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         property('Decodificado', bytesLabel(record.decodedBytes)),
         property('Fragmentos', record.chunkCount.toString()),
         property('Ruta', source.technicalPath(record)),
-        property('Nombre', source.nameConfidence(record)),
+        property(
+          'Estado',
+          source.canReadRecord(record)
+              ? 'payload autenticado y legible'
+              : 'cifrado / no autenticado',
+        ),
+        property('Confianza', source.nameConfidence(record)),
         property('Evidencia', source.nameEvidence(record)),
         const Divider(height: 26),
         FilledButton.tonalIcon(
