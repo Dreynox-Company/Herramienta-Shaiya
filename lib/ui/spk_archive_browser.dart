@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
@@ -350,10 +351,12 @@ Future<dynamic> readSpkJsonFile(File file) async {
 class _SpkMeshPreview extends StatefulWidget {
   final MeshData mesh;
   final String label;
+  final Uint8List? texturePng;
 
   const _SpkMeshPreview({
     required this.mesh,
     required this.label,
+    this.texturePng,
   });
 
   @override
@@ -363,8 +366,9 @@ class _SpkMeshPreview extends StatefulWidget {
 class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
   late final NativeView view;
   t.Mesh? object;
+  t.Texture? previewTexture;
   bool ready = false;
-  bool wireframe = true;
+  late bool wireframe;
   double yaw = .45;
   double pitch = .18;
   double zoom = 1;
@@ -374,6 +378,7 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
   @override
   void initState() {
     super.initState();
+    wireframe = widget.texturePng == null;
     view = NativeView(
       settings: t.Settings(
         clearColor: 0x0b1018,
@@ -415,8 +420,19 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
     }
     geometry.setIndex(mesh.indices.toList());
 
+    if (widget.texturePng != null) {
+      previewTexture = await t.TextureLoader(
+        flipY: false,
+      ).fromBytes(widget.texturePng!);
+      if (previewTexture != null) {
+        previewTexture!.colorSpace = t.SRGBColorSpace;
+        previewTexture!.wrapS = t.RepeatWrapping;
+        previewTexture!.wrapT = t.RepeatWrapping;
+      }
+    }
     final material = t.MeshBasicMaterial.fromMap({
-      'color': 0xb8c7df,
+      if (previewTexture != null) 'map': previewTexture,
+      'color': previewTexture == null ? 0xb8c7df : 0xffffff,
       'side': t.DoubleSide,
       'wireframe': wireframe,
       'toneMapped': false,
@@ -468,6 +484,7 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
   void dispose() {
     object?.geometry?.dispose();
     object?.material?.dispose();
+    previewTexture?.dispose();
     view.dispose();
     super.dispose();
   }
@@ -1667,7 +1684,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
-  Widget _inspectionPreview(SpkReadResult result, String path) {
+  Widget _inspectionPreview(
+    SpkReadResult result,
+    String path, {
+    Uint8List? meshTexturePng,
+  }) {
     Widget preview;
     try {
       switch (result.format) {
@@ -1782,17 +1803,21 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           final mesh = MeshData.skinned(result.bytes, path);
           preview = _SpkMeshPreview(
             mesh: mesh,
+            texturePng: meshTexturePng,
             label:
                 '3DC · ${mesh.vertices} vértices · ${mesh.triangles} triángulos · '
-                '${mesh.requiredBones} huesos',
+                '${mesh.requiredBones} huesos'
+                '${meshTexturePng == null ? ' · sin textura asociada' : ' · textura DDS asociada'}',
           );
           break;
         case '3DO':
           final mesh = MeshData.object(result.bytes, path);
           preview = _SpkMeshPreview(
             mesh: mesh,
+            texturePng: meshTexturePng,
             label:
-                '3DO · ${mesh.vertices} vértices · ${mesh.triangles} triángulos',
+                '3DO · ${mesh.vertices} vértices · ${mesh.triangles} triángulos'
+                '${meshTexturePng == null ? ' · sin textura asociada' : ' · textura DDS asociada'}',
           );
           break;
         case 'ANI':
@@ -2053,6 +2078,45 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  Future<Uint8List?> _matchingTexturePng(
+    SpkRecord meshRecord,
+    String meshPath,
+    String meshFormat,
+  ) async {
+    if (meshFormat != '3DC' && meshFormat != '3DO') return null;
+    final normalized = meshPath.replaceAll('\\', '/');
+    final dot = normalized.lastIndexOf('.');
+    if (dot < 0) return null;
+    final stem = normalized.substring(0, dot);
+    final candidates = <String>{
+      '$stem.dds',
+      if (normalized.toLowerCase().contains('/3dc/'))
+        '${stem.replaceFirst(RegExp(r'/3dc/', caseSensitive: false), '/DDS/')}.dds',
+      if (normalized.toLowerCase().contains('/3do/'))
+        '${stem.replaceFirst(RegExp(r'/3do/', caseSensitive: false), '/DDS/')}.dds',
+    }.map((value) => value.toLowerCase()).toSet();
+
+    for (final record in source.index.resources) {
+      if (record.entryId == meshRecord.entryId ||
+          !source.canReadRecord(record)) {
+        continue;
+      }
+      final path = source.technicalPath(record).replaceAll('\\', '/');
+      if (!candidates.contains(path.toLowerCase())) continue;
+      try {
+        final result = await source.readEntry(record);
+        if (!const {'DDS', 'PNG', 'BMP', 'JPEG', 'GIF', 'TGA'}
+            .contains(result.format)) {
+          continue;
+        }
+        return Pixels.decode(result.bytes, path).png();
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
     if (!source.canReadRecord(record)) {
       throw const SpkFailure(
@@ -2064,6 +2128,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final result = await source.readEntry(record);
     if (!mounted) return;
     final path = source.technicalPath(record);
+    final meshTexturePng = await _matchingTexturePng(
+      record,
+      path,
+      result.format,
+    );
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
@@ -2083,7 +2153,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
               ),
               const Divider(height: 20),
-              Expanded(child: _inspectionPreview(result, path)),
+              Expanded(
+                child: _inspectionPreview(
+                  result,
+                  path,
+                  meshTexturePng: meshTexturePng,
+                ),
+              ),
             ],
           ),
         ),
