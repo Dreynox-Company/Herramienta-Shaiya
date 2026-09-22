@@ -885,7 +885,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!Platform.isWindows) {
       throw const SpkFailure(
         'SPK_PROBE_WINDOWS_ONLY',
-        'La captura automática del perfil de payloads requiere Windows x64.',
+        'La captura automática del perfil de payloads requiere Windows. '
+            'El cliente Shaiya puede ser x86 o x64.',
       );
     }
     final helper = File(spkResourceProbeExecutablePath());
