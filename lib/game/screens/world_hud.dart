@@ -282,6 +282,14 @@ class WorldHud extends StatelessWidget {
             Positioned(right:155,top:145,width:430,height:510,child:_guildWindow()),
           if(tradeOpen)
             Positioned(left:185,top:135,width:525,height:500,child:_tradeWindow()),
+          if(pendingDuelRequesterId!=null||duelTradeOpen)
+            Positioned(left:185,top:135,width:525,height:500,child:_duelWindow()),
+          if(duelReady)
+            Positioned(left:382,top:115,width:260,height:62,child:_duelReadyBanner()),
+          if(duelStarted)
+            Positioned(left:382,top:115,width:260,height:78,child:_duelActiveHud()),
+          if(duelResultText.isNotEmpty)
+            Positioned(left:397,top:205,width:230,height:78,child:_duelResultBanner()),
           if(statusOpen)
             Positioned(right:198,top:210,width:318,height:420,child:_statusWindow()),
           if(skillsOpen)
@@ -310,7 +318,7 @@ class WorldHud extends StatelessWidget {
             ),
           if(inventoryOpen)
             Positioned(
-              right:tradeOpen?8:198,top:tradeOpen?180:250,width:292,height:390,
+              right:(tradeOpen||duelTradeOpen)?8:198,top:(tradeOpen||duelTradeOpen)?180:250,width:292,height:390,
               child:_inventoryWindow(),
             ),
           if (questOpen&&!dead)
@@ -1339,6 +1347,202 @@ class WorldHud extends StatelessWidget {
       ),
     );
   }
+  Widget _duelItemCell(PsTradeItem? item,int slot,{required bool local}){
+    final rule=item==null?null:metadata?.item(item.type,item.typeId);
+    final icon=rule?.iconPath;
+    final name=item==null?'':catalog.itemName(item.type,item.typeId,locale);
+    final gems=item?.gems.where((g)=>g>0).length??0;
+    final cell=Container(
+      decoration:BoxDecoration(
+        color:const Color(0xff17120e),
+        border:Border.all(color:item==null?const Color(0xff42382d):const Color(0xff925246)),
+      ),
+      child:item==null
+        ?Center(child:Text((slot+1).toString(),style:const TextStyle(fontSize:7,color:Colors.white24)))
+        :Stack(children:[
+            Positioned.fill(child:Padding(
+              padding:const EdgeInsets.all(3),
+              child:icon==null
+                ?const Icon(Icons.inventory_2,size:25,color:Color(0xffd7bd88))
+                :DataImage(cache:ui,path:icon,fit:BoxFit.contain,fallback:const Icon(Icons.inventory_2,size:25,color:Color(0xffd7bd88))),
+            )),
+            Positioned(left:2,top:1,child:Text(
+              item.type.toString()+':'+item.typeId.toString(),
+              style:const TextStyle(fontSize:6,color:Colors.white54),
+            )),
+            if(item.count>1)Positioned(right:2,bottom:1,child:Text(
+              'x'+item.count.toString(),style:const TextStyle(fontSize:8,color:Colors.white),
+            )),
+            if(gems>0)Positioned(left:2,bottom:1,child:Text(
+              '◆'+gems.toString(),style:const TextStyle(fontSize:8,color:Color(0xff7fd9ff)),
+            )),
+          ]),
+    );
+    if(item==null)return cell;
+    return Tooltip(
+      waitDuration:const Duration(milliseconds:250),
+      message:name+'\n'+item.type.toString()+':'+item.typeId.toString()+
+        ' · x'+item.count.toString()+
+        (local?'\n\n'+(locale=='spn'?'Doble clic para retirar de la apuesta.':'Double click to remove from wager.'):''),
+      child:local?GestureDetector(onDoubleTap:()=>onRemoveDuelItem(slot),child:cell):cell,
+    );
+  }
+
+  Widget _duelOfferGrid(Map<int,PsTradeItem> items,{required bool local})=>GridView.builder(
+    padding:const EdgeInsets.all(6),
+    physics:const NeverScrollableScrollPhysics(),
+    gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount:4,crossAxisSpacing:4,mainAxisSpacing:4,childAspectRatio:1,
+    ),
+    itemCount:8,
+    itemBuilder:(context,index)=>_duelItemCell(items[index],index,local:local),
+  );
+
+  Widget _duelWindow(){
+    final pending=pendingDuelRequesterId!=null&&!duelTradeOpen;
+    final opponent=_tradeCharacterName(duelOpponentId??pendingDuelRequesterId);
+    if(pending){
+      return _panelShell(
+        locale=='spn'?'Desafío de duelo':'Duel challenge',
+        Center(child:Padding(
+          padding:const EdgeInsets.all(16),
+          child:_requestCard(
+            title:opponent,
+            subtitle:locale=='spn'?'Te reta a un duelo.':'Challenges you to a duel.',
+            accept:()=>onRespondDuel(true),
+            reject:()=>onRespondDuel(false),
+          ),
+        )),
+      );
+    }
+    return _panelShell(
+      (locale=='spn'?'Duelo contra ':'Duel vs ')+opponent,
+      Column(children:[
+        Padding(
+          padding:const EdgeInsets.fromLTRB(8,7,8,3),
+          child:Row(children:[
+            Expanded(child:Text(characterName,textAlign:TextAlign.center,style:const TextStyle(fontSize:9.5,color:Color(0xffffdf9a),fontWeight:FontWeight.w600))),
+            const SizedBox(width:8),
+            Expanded(child:Text(opponent,textAlign:TextAlign.center,style:const TextStyle(fontSize:9.5,color:Color(0xffff8f86),fontWeight:FontWeight.w600))),
+          ]),
+        ),
+        Expanded(child:Row(children:[
+          Expanded(child:_duelOfferGrid(localDuelItems,local:true)),
+          Container(width:1,color:const Color(0xff70463d)),
+          Expanded(child:_duelOfferGrid(remoteDuelItems,local:false)),
+        ])),
+        Padding(
+          padding:const EdgeInsets.fromLTRB(8,4,8,4),
+          child:Row(children:[
+            Expanded(child:_TradeMoneyInput(
+              locale:locale,maxMoney:gold,current:localDuelMoney,onSubmit:onSetDuelMoney,
+            )),
+            const SizedBox(width:12),
+            Expanded(child:Container(
+              height:30,alignment:Alignment.center,
+              decoration:BoxDecoration(color:const Color(0xff16120e),border:Border.all(color:const Color(0xff664036))),
+              child:Text(
+                (locale=='spn'?'Apuesta rival: ':'Opponent wager: ')+remoteDuelMoney.toString(),
+                style:const TextStyle(fontSize:8.5,color:Color(0xffff9b7c)),
+              ),
+            )),
+          ]),
+        ),
+        Padding(
+          padding:const EdgeInsets.symmetric(horizontal:8,vertical:4),
+          child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[
+            _tradeStateBadge(locale=='spn'?'Tú listo':'You ready',localDuelApproved,const Color(0xff75d77b)),
+            const SizedBox(width:6),
+            _tradeStateBadge(locale=='spn'?'Rival listo':'Opponent ready',remoteDuelApproved,const Color(0xffff746a)),
+          ]),
+        ),
+      ]),
+      footer:Container(
+        height:42,padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          TextButton(
+            onPressed:()=>onDecideDuel(!localDuelApproved),
+            style:TextButton.styleFrom(
+              backgroundColor:localDuelApproved?const Color(0xff4d3323):const Color(0xff5d2b27),
+              foregroundColor:const Color(0xffffe5b0),visualDensity:VisualDensity.compact,
+            ),
+            child:Text(
+              localDuelApproved?(locale=='spn'?'No listo':'Not ready'):(locale=='spn'?'Listo':'Ready'),
+              style:const TextStyle(fontSize:8.5),
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed:onCloseDuelTrade,
+            style:TextButton.styleFrom(foregroundColor:const Color(0xffe07b6d),visualDensity:VisualDensity.compact),
+            child:Text(locale=='spn'?'Cancelar duelo':'Cancel duel',style:const TextStyle(fontSize:8.5)),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _duelReadyBanner()=>Container(
+    padding:const EdgeInsets.all(9),
+    decoration:BoxDecoration(
+      color:const Color(0xe6281613),
+      border:Border.all(color:const Color(0xffffa45e),width:2),
+      boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:10)],
+    ),
+    child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
+      Text(
+        locale=='spn'?'DUELO PREPARADO':'DUEL READY',
+        style:const TextStyle(fontSize:13,color:Color(0xffffd27a),fontWeight:FontWeight.bold),
+      ),
+      Text(
+        locale=='spn'?'El combate comenzará en unos segundos.':'Combat starts in a few seconds.',
+        style:const TextStyle(fontSize:8.5,color:Colors.white70),
+      ),
+    ]),
+  );
+
+  Widget _duelActiveHud()=>Container(
+    padding:const EdgeInsets.all(8),
+    decoration:BoxDecoration(
+      color:const Color(0xe61e1110),
+      border:Border.all(color:const Color(0xffd64e45),width:2),
+      boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:10)],
+    ),
+    child:Row(children:[
+      const Icon(Icons.sports_martial_arts,size:28,color:Color(0xffff755f)),
+      const SizedBox(width:8),
+      Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisAlignment:MainAxisAlignment.center,children:[
+        Text(
+          (locale=='spn'?'Duelo vs ':'Duel vs ')+_tradeCharacterName(duelOpponentId),
+          maxLines:1,overflow:TextOverflow.ellipsis,
+          style:const TextStyle(fontSize:10.5,color:Color(0xffffd5bc),fontWeight:FontWeight.bold),
+        ),
+        Text(
+          locale=='spn'?'No te alejes más de 45 m del centro.':'Stay within 45 m of the duel center.',
+          style:const TextStyle(fontSize:7.5,color:Colors.white54),
+        ),
+      ])),
+      TextButton(
+        onPressed:onAdmitDuelDefeat,
+        style:TextButton.styleFrom(foregroundColor:const Color(0xffef8176),visualDensity:VisualDensity.compact),
+        child:Text(locale=='spn'?'Rendirse':'Forfeit',style:const TextStyle(fontSize:8)),
+      ),
+    ]),
+  );
+
+  Widget _duelResultBanner()=>Container(
+    alignment:Alignment.center,
+    decoration:BoxDecoration(
+      color:const Color(0xee1d1510),
+      border:Border.all(color:duelResultText.toUpperCase().contains('VICT')?const Color(0xffffd35f):const Color(0xffd85c52),width:2),
+      boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:14)],
+    ),
+    child:Text(
+      duelResultText,
+      style:const TextStyle(fontSize:22,color:Color(0xffffe2a3),fontWeight:FontWeight.w900,letterSpacing:1.2),
+    ),
+  );
+
   Widget _guildApplicantCard(PsGuildJoinApplicant a){
     return Container(
       height:42,
@@ -2332,12 +2536,17 @@ class WorldHud extends StatelessWidget {
                     ]),
                   ),
                 );
-                return tradeOpen
+                return duelTradeOpen
                   ?GestureDetector(
-                      onDoubleTap:()=>onTradeInventoryItem(item),
+                      onDoubleTap:()=>onDuelInventoryItem(item),
                       child:cell,
                     )
-                  :warehouseOpen
+                  :tradeOpen
+                    ?GestureDetector(
+                        onDoubleTap:()=>onTradeInventoryItem(item),
+                        child:cell,
+                      )
+                    :warehouseOpen
                     ?GestureDetector(
                         onDoubleTap:()=>onStoreWarehouse(item),
                         child:cell,
