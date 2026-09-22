@@ -2082,6 +2082,67 @@ class _WeatherPainter extends CustomPainter {
   bool shouldRepaint(covariant _WeatherPainter oldDelegate)=>true;
 }
 
+class _SocialNameInput extends StatefulWidget {
+  final String locale;
+  final ValueChanged<String> onSubmit;
+  const _SocialNameInput({required this.locale,required this.onSubmit});
+
+  @override
+  State<_SocialNameInput> createState()=>_SocialNameInputState();
+}
+
+class _SocialNameInputState extends State<_SocialNameInput> {
+  final controller=TextEditingController();
+
+  @override
+  void dispose(){controller.dispose();super.dispose();}
+
+  void submit(){
+    final value=controller.text.trim();
+    if(value.isEmpty)return;
+    widget.onSubmit(value);
+    controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context)=>SizedBox(
+    height:28,
+    child:Row(children:[
+      Expanded(
+        child:TextField(
+          controller:controller,
+          maxLength:20,
+          onSubmitted:(_)=>submit(),
+          style:const TextStyle(fontSize:9,color:Colors.white),
+          decoration:InputDecoration(
+            counterText:'',
+            isDense:true,
+            contentPadding:const EdgeInsets.symmetric(horizontal:8,vertical:7),
+            hintText:widget.locale=='spn'?'Nombre del personaje':'Character name',
+            hintStyle:const TextStyle(fontSize:8,color:Colors.white30),
+            filled:true,
+            fillColor:const Color(0xff120f0c),
+            enabledBorder:const OutlineInputBorder(borderSide:BorderSide(color:Color(0xff5b4b37))),
+            focusedBorder:const OutlineInputBorder(borderSide:BorderSide(color:Color(0xffa68854))),
+          ),
+        ),
+      ),
+      const SizedBox(width:5),
+      SizedBox(
+        width:72,
+        child:TextButton(
+          onPressed:submit,
+          style:TextButton.styleFrom(
+            visualDensity:VisualDensity.compact,
+            backgroundColor:const Color(0xff49331f),
+            foregroundColor:const Color(0xffffdf91),
+          ),
+          child:Text(widget.locale=='spn'?'Agregar':'Add',style:const TextStyle(fontSize:8.5)),
+        ),
+      ),
+    ]),
+  );
+}
 class _MiniMapPainter extends CustomPainter {
   final StudioScene scene;
   _MiniMapPainter(this.scene);
