@@ -1,4 +1,4 @@
-# Explorador DATA.SPK — integración 0.6.13
+# Explorador DATA.SPK — integración 0.6.15
 
 Shaiya Studio trata DATA.SPK como una fuente de recursos real, no como un
 archivo plano. El explorador mantiene una experiencia similar a WinRAR o al
@@ -138,6 +138,36 @@ arquetipo si hay cuerpo completo y cada parte tiene una pareja 3DC/DDS con
 nombre exacto.
 
 No se generan combinaciones aproximadas de malla/textura.
+
+## Escritura / reempaquetado 0.6.15
+
+Cuando el archivo ya superó auditoría integral, el workspace puede construir un
+**DATA.SPK nuevo y autoverificado** desde el overlay. El escritor no modifica el
+origen.
+
+La reconstrucción vuelve a generar:
+
+- payloads editados con AES-GCM;
+- cadenas fragmentadas y nonces;
+- tabla auxiliar;
+- offsets;
+- índice de 96 bytes por registro;
+- frame Zstandard del índice;
+- nonce/tag AES-GCM del índice.
+
+Los payloads fragmentados se reautentican incluso si no fueron editados cuando
+sus offsets cambian. Los recursos editados pueden crecer o reducir su cadena de
+chunks; los `auxiliaryStart` se recalculan en el nuevo índice.
+
+Antes de publicar el resultado, Studio vuelve a abrir el archivo temporal y
+ejecuta la validación de simples, fragmentos y la auditoría de todos los
+recursos. También escribe sidecars de perfil, nombres y auditoría ligados al
+SHA-256 del nuevo índice.
+
+El gate sintético Windows cubre round-trip de simples y fragmentados, crecimiento
+de chunks, preservación de footer/cabecera no interpretada y reapertura total.
+La aceptación por el cliente oficial sigue requiriendo una prueba con el
+`game.exe` exacto de la instalación real.
 
 ## Estado real del inventario recibido
 
