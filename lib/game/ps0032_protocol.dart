@@ -1434,33 +1434,40 @@ List<PsFinishedQuest> parseFinishedQuests(PsPacket p){
 
 class PsWorldSnapshot {
   final PsEnteredMap? self;
+  final List<PsEnteredMap> players;
   final List<PsNpcEnter> npcs;
   final List<PsMobEnter> mobs;
   final List<PsQuestProgress> quests;
   final List<PsFinishedQuest> finishedQuests;
   const PsWorldSnapshot({
-    required this.self,required this.npcs,required this.mobs,
+    required this.self,this.players=const <PsEnteredMap>[],required this.npcs,required this.mobs,
     required this.quests,required this.finishedQuests,
   });
 
   factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets,{int? selfCharacterId}){
     PsEnteredMap? self;
+    final playerById=<int,PsEnteredMap>{};
     final npcs=<PsNpcEnter>[],mobs=<PsMobEnter>[],quests=<PsQuestProgress>[],finished=<PsFinishedQuest>[];
     for(final p in packets){
       if(p.type==PsPacketType.characterEnteredMap){
         final entered=PsEnteredMap.parse(p);
         if(selfCharacterId==null){
-          self??=entered;
+          if(self==null)self=entered;
+          else if(entered.characterId!=self!.characterId)playerById[entered.characterId]=entered;
         }else if(entered.characterId==selfCharacterId){
-          self=entered;
+          self=entered;playerById.remove(entered.characterId);
+        }else{
+          playerById[entered.characterId]=entered;
         }
+      }else if(p.type==PsPacketType.characterLeftMap){
+        playerById.remove(PsCharacterLeftMap.parse(p).characterId);
       }else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
       else if(p.type==PsPacketType.mobEnter)mobs.add(PsMobEnter.parse(p));
       else if(p.type==PsPacketType.questList)quests.addAll(parseQuestList(p));
       else if(p.type==PsPacketType.questFinishedList)finished.addAll(parseFinishedQuests(p));
     }
     return PsWorldSnapshot(
-      self:self,npcs:List.unmodifiable(npcs),mobs:List.unmodifiable(mobs),
+      self:self,players:List.unmodifiable(playerById.values),npcs:List.unmodifiable(npcs),mobs:List.unmodifiable(mobs),
       quests:List.unmodifiable(quests),finishedQuests:List.unmodifiable(finished),
     );
   }
