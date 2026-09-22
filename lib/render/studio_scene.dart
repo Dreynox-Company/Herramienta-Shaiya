@@ -1057,13 +1057,42 @@ class StudioScene extends ChangeNotifier {
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
       for(final entry in grouped.entries){if(w.layers.isEmpty)break;final layer=w.layers[entry.key],tex=lib.resolve(w.layers[entry.key].texture,['terrain','terrain/texture','terrain/dds'],uniqueFallback:true);if(tex==null){report('Textura de terreno ausente: ${layer.texture}');continue;}final n=entry.value.length~/3,no=Float32List(n*3);for(var i=0;i<n;i++){no[i*3+1]=1;}final data=MeshData(Float32List.fromList(entry.value),no,Float32List.fromList(uv[entry.key]!),Uint16List.fromList(List.generate(n,(i)=>i)),Uint8List(0),Float32List(0),[],path);final part=await makePart(data,tex,opaque:true);parts.add(part);stage.add(part.mesh);}
-      if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');var loaded=0;
-      final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&['Building','Shape','Tree','Grass','VAni','Object'].contains(o.category)).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
+      if(parts.isEmpty)throw const FormatException('No se pudo construir el terreno de este sector.');
+      var loaded=0;
+      final loadedByCategory=<String,int>{};
+      const budgets=<String,int>{
+        'Building':32,
+        'Object':16,
+        'Shape':64,
+        'Tree':64,
+        'VAni':24,
+        'Grass':96,
+      };
+      const priority=<String,int>{
+        'Building':0,
+        'Object':1,
+        'Shape':2,
+        'Tree':3,
+        'VAni':4,
+        'Grass':5,
+      };
+      double distance(WorldInstance o)=>(o.position.x-ox).abs()+(o.position.z-oz).abs();
+      final nearby=w.objects.where((o)=>
+        (o.position.x-ox).abs()<78&&(o.position.z-oz).abs()<78&&budgets.containsKey(o.category)
+      ).toList()..sort((a,b){
+        final category=(priority[a.category]??99).compareTo(priority[b.category]??99);
+        return category!=0?category:distance(a).compareTo(distance(b));
+      });
       for(final obj in nearby){
-        if(loaded>=140)break;
+        final limit=budgets[obj.category]??0;
+        if((loadedByCategory[obj.category]??0)>=limit)continue;
         final model=lib.resolve(obj.asset,['entity/${obj.category}'],uniqueFallback:true);
         if(model==null){
-          missingWorldAssets.add('${obj.category}:${obj.asset}');
+          final stem=baseName(obj.asset).toLowerCase().split('.').first;
+          final candidates=lib.files.keys.where((p)=>baseName(p).toLowerCase().contains(stem)).take(3).toList();
+          missingWorldAssets.add(
+            '${obj.category}:${obj.asset}'+(candidates.isEmpty?'':' -> '+candidates.join(', ')),
+          );
           continue;
         }
         if(model.toLowerCase().endsWith('.vani')){
@@ -1092,7 +1121,8 @@ class StudioScene extends ChangeNotifier {
             final instanceMatrix=worldInstanceMatrix(obj,ox,oz);
             group.matrixAutoUpdate=false;group.matrix.copyFromArray(instanceMatrix.storage);group.matrixWorldNeedsUpdate=true;
             final actor=VaniActor(group,bindings,vani.frameCount);animated.add(actor);stage.add(group);
-            loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
+            loaded++;loadedByCategory[obj.category]=(loadedByCategory[obj.category]??0)+1;
+            loadedWorldAssets.add('${obj.category}:${obj.asset}');
           }catch(e){
             for(final binding in bindings){binding.part.dispose();}
             missingWorldAssets.add('error:${obj.asset}:$e');report('VAni $model: $e');
@@ -1143,7 +1173,8 @@ class StudioScene extends ChangeNotifier {
           group.matrixAutoUpdate=false;
           group.matrix.copyFromArray(instanceMatrix.storage);
           group.matrixWorldNeedsUpdate=true;
-          stage.add(group);loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
+          stage.add(group);loaded++;loadedByCategory[obj.category]=(loadedByCategory[obj.category]??0)+1;
+          loadedWorldAssets.add('${obj.category}:${obj.asset}');
         }catch(e){missingWorldAssets.add('error:${obj.asset}:$e');report('Objeto $model: $e');}
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}return;}
       }
@@ -1156,7 +1187,8 @@ class StudioScene extends ChangeNotifier {
           ??catalog!.skies.first;
         try{await setSky(choice);}catch(e){report('Cielo: $e');}
       }
-      say('Sector de 128 × 128 m · $loaded objetos · ${animatedWorldActors.length} VAni · ${worldCollision.triangleCount} triángulos de colisión nativos.');
+      final mix=loadedByCategory.entries.map((e)=>'${e.key}=${e.value}').join(' · ');
+      say('Sector de 128 × 128 m · $loaded objetos'+(mix.isEmpty?'':' · '+mix)+' · ${animatedWorldActors.length} VAni · ${worldCollision.triangleCount} triángulos de colisión nativos.');
     }catch(_){for(final p in parts){p.dispose();}for(final a in animated){a.dispose();}rethrow;}
   }
   @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}for(final a in animatedWorldActors){a.dispose();}animatedWorldActors.clear();effectTexture?.dispose();_audio?.dispose();_musicAudio?.dispose();_ambientAudio?.dispose();super.dispose();}
