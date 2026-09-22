@@ -30,6 +30,7 @@ class PsPacketType {
   static const addItem=0x0205;
   static const removeItem=0x0206;
   static const characterMove=0x0501;
+  static const characterMobAutoAttack=0x0503;
   static const useMobTargetSkill=0x0517;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
@@ -331,6 +332,22 @@ class PsEnteredMap {
       d.getFloat32(15,Endian.little),
       d.getUint32(19,Endian.little),
       d.getUint32(23,Endian.little),
+    );
+  }
+}
+
+class PsUsualHit {
+  final int result,attackerId,targetId,hpDamage,spDamage,mpDamage;
+  const PsUsualHit(this.result,this.attackerId,this.targetId,this.hpDamage,this.spDamage,this.mpDamage);
+  bool get success=>result==0||result==1;
+  static PsUsualHit parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMobAutoAttack||p.body.length<15){
+      throw FormatException('CHARACTER_MOB_AUTO_ATTACK truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsUsualHit(
+      p.body[0],d.getUint32(1,Endian.little),d.getUint32(5,Endian.little),
+      d.getUint16(9,Endian.little),d.getUint16(11,Endian.little),d.getUint16(13,Endian.little),
     );
   }
 }
@@ -1130,6 +1147,10 @@ class PsWorldSession {
     final response=connection.waitStream((p)=>p.type==PsPacketType.npcSellItem);
     await connection.send(PsPacketType.npcSellItem,[bag,slot,count]);
     return PsNpcTradeResult.parse(await response);
+  }
+  Future<void> startMobAutoAttack(int targetGlobalId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de atacar.');
+    await connection.send(PsPacketType.characterMobAutoAttack,_u32Bytes(targetGlobalId));
   }
   Future<void> useMobSkill(int skillNumber,int targetGlobalId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar skills.');
