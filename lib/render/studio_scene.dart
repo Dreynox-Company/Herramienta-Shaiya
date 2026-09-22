@@ -597,6 +597,42 @@ class StudioScene extends ChangeNotifier {
     return null;
   }
 
+  void clearAppearance() {
+    ++_appearanceRevision;
+    ++_weaponRevision;
+    ++_shieldRevision;
+    ++_clipRevision;
+    movementTransitions.invalidate();
+    _missingMovementWarnings.clear();
+
+    character?.dispose();
+    character = null;
+    appearance = null;
+
+    weapon?.dispose();
+    secondWeapon?.dispose();
+    shield?.dispose();
+    weapon = null;
+    secondWeapon = null;
+    shield = null;
+    weaponRecord = null;
+    shieldRecord = null;
+    weaponAttachment = null;
+    secondAttachment = null;
+    shieldAttachment = null;
+    selectedClass = null;
+    extraMotions = null;
+
+    attackClips.clear();
+    attackCounter = 0;
+    game.jump.reset();
+    game.jumpClip = null;
+    combat.reset();
+    _lastGuard = false;
+    clearMovement();
+    if (!disposed) notifyListeners();
+  }
+
   Future<void> setAppearance(Appearance next) async {
     final revision = ++_appearanceRevision;
     busy = true;
