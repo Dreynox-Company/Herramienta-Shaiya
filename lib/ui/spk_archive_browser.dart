@@ -2998,22 +2998,32 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   bottom: BorderSide(color: Color(0xff285c46)),
                 ),
               ),
-              child: Row(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 7,
+                runSpacing: 5,
                 children: [
-                  const Icon(
-                    Icons.verified_outlined,
-                    size: 18,
-                    color: Color(0xff83c69d),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'DATOS SPK',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                  const Padding(
+                    padding: EdgeInsets.only(right: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_outlined,
+                          size: 18,
+                          color: Color(0xff83c69d),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'DATOS SPK',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
                   FilledButton.tonalIcon(
                     onPressed: busy
                         ? null
@@ -3024,7 +3034,6 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     icon: const Icon(Icons.inventory_2_outlined, size: 16),
                     label: const Text('Objetos / trade'),
                   ),
-                  const SizedBox(width: 7),
                   FilledButton.tonalIcon(
                     onPressed: busy
                         ? null
@@ -3035,7 +3044,6 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     icon: const Icon(Icons.pest_control_outlined, size: 16),
                     label: const Text('Mobs / drops'),
                   ),
-                  const SizedBox(width: 7),
                   FilledButton.tonalIcon(
                     onPressed: busy
                         ? null
@@ -3046,7 +3054,6 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
                     label: const Text('Skills'),
                   ),
-                  const Spacer(),
                   if (widget.onMount != null)
                     TextButton.icon(
                       onPressed: busy ? null : mountInStudio,
