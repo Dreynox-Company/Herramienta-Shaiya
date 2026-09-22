@@ -1136,6 +1136,82 @@ class PsPartyBuffChange {
   }
 }
 
+class PsRaidMember {
+  final int index;
+  final PsPartyMember member;
+  const PsRaidMember(this.index,this.member);
+  PsRaidMember copyWith({int? index,PsPartyMember? member})=>PsRaidMember(index??this.index,member??this.member);
+}
+
+({PsRaidMember member,int next}) _parseRaidMember(Uint8List b,int offset){
+  if(offset<0||offset+69>b.length)throw FormatException('RaidMember truncado en '+offset.toString()+'/'+b.length.toString()+'.');
+  final d=ByteData.sublistView(b),index=d.getUint16(offset,Endian.little);
+  final count=b[offset+68],need=69+count*7;
+  if(offset+need>b.length)throw FormatException('RaidMember buffs truncados: '+count.toString()+'.');
+  final buffs=<PsPartyBuff>[];
+  var bo=offset+69;
+  for(var i=0;i<count;i++,bo+=7){
+    buffs.add(PsPartyBuff(
+      d.getUint16(bo,Endian.little),b[bo+2],d.getInt32(bo+3,Endian.little),
+    ));
+  }
+  final member=PsPartyMember(
+    id:d.getUint32(offset+2,Endian.little),
+    name:_fixedString(b,offset+6,21),
+    level:d.getUint16(offset+27,Endian.little),
+    profession:b[offset+29],
+    maxHp:d.getInt32(offset+30,Endian.little),hp:d.getInt32(offset+34,Endian.little),
+    maxSp:d.getInt32(offset+38,Endian.little),sp:d.getInt32(offset+42,Endian.little),
+    maxMp:d.getInt32(offset+46,Endian.little),mp:d.getInt32(offset+50,Endian.little),
+    mapId:d.getUint16(offset+54,Endian.little),
+    x:d.getFloat32(offset+56,Endian.little),y:d.getFloat32(offset+60,Endian.little),z:d.getFloat32(offset+64,Endian.little),
+    buffs:List.unmodifiable(buffs),
+  );
+  return (member:PsRaidMember(index,member),next:offset+need);
+}
+
+class PsRaidState {
+  final int leaderIndex,subLeaderIndex,dropType;
+  final bool autoJoin;
+  final List<PsRaidMember> members;
+  const PsRaidState({
+    required this.leaderIndex,required this.subLeaderIndex,required this.dropType,
+    required this.autoJoin,required this.members,
+  });
+  PsRaidMember? get leader=>members.where((m)=>m.index==leaderIndex).firstOrNull;
+  PsRaidMember? get subLeader=>members.where((m)=>m.index==subLeaderIndex).firstOrNull;
+
+  static PsRaidState parse(PsPacket p){
+    if(p.type!=PsPacketType.raidList||p.body.length<8)throw FormatException('RAID_LIST truncado: '+p.body.length.toString()+'.');
+    final b=p.body,d=ByteData.sublistView(b);
+    final count=b[7],members=<PsRaidMember>[];
+    var o=8;
+    for(var i=0;i<count;i++){final row=_parseRaidMember(b,o);members.add(row.member);o=row.next;}
+    return PsRaidState(
+      leaderIndex:b[1],subLeaderIndex:b[2],dropType:d.getUint16(3,Endian.little),
+      autoJoin:b[6]!=0,members:List.unmodifiable(members),
+    );
+  }
+}
+
+PsRaidMember parseRaidEnter(PsPacket p){
+  if(p.type!=PsPacketType.raidEnter)throw FormatException('No es RAID_ENTER.');
+  return _parseRaidMember(p.body,0).member;
+}
+
+class PsRaidMove {
+  final int sourceIndex,destinationIndex,leaderIndex,subLeaderIndex;
+  const PsRaidMove(this.sourceIndex,this.destinationIndex,this.leaderIndex,this.subLeaderIndex);
+  static PsRaidMove parse(PsPacket p){
+    if(p.type!=PsPacketType.raidMovePlayer||p.body.length<16)throw FormatException('RAID_MOVE_PLAYER truncado: '+p.body.length.toString()+'.');
+    final d=ByteData.sublistView(p.body);
+    return PsRaidMove(
+      d.getInt32(0,Endian.little),d.getInt32(4,Endian.little),
+      d.getInt32(8,Endian.little),d.getInt32(12,Endian.little),
+    );
+  }
+}
+
 class PsQuestProgress {
   final int questId,remaining,count1,count2,count3;
   const PsQuestProgress(this.questId,this.remaining,this.count1,this.count2,this.count3);
