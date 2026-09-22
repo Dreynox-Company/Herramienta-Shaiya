@@ -19,7 +19,12 @@ class WorldHud extends StatelessWidget {
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
   final List<PsInventoryItem> inventory;
-  final bool inventoryOpen;
+  final int gold;
+  final NpcShopRule? shop;
+  final bool inventoryOpen,shopOpen;
+  final VoidCallback onCloseShop;
+  final ValueChanged<int> onBuyShopProduct;
+  final ValueChanged<PsInventoryItem> onSellInventory;
   final VoidCallback onToggleInventory;
   final ValueChanged<int> onHotbar;
   final UiAssetCache ui;
@@ -47,7 +52,13 @@ class WorldHud extends StatelessWidget {
     required this.skillBook,
     required this.skillBar,
     required this.inventory,
+    required this.gold,
+    required this.shop,
     required this.inventoryOpen,
+    required this.shopOpen,
+    required this.onCloseShop,
+    required this.onBuyShopProduct,
+    required this.onSellInventory,
     required this.onToggleInventory,
     required this.onHotbar,
     required this.locale,
@@ -73,6 +84,11 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           ..._worldLabels(),
+          if(shopOpen&&shop!=null)
+            Positioned(
+              right:198,top:250,width:292,height:390,
+              child:_shopWindow(),
+            ),
           if(inventoryOpen)
             Positioned(
               right:198,top:250,width:292,height:390,
@@ -540,6 +556,108 @@ class WorldHud extends StatelessWidget {
     ),
   ]);
 
+  Widget _shopWindow(){
+    final s=shop!;
+    return Container(
+      decoration:BoxDecoration(
+        color:const Color(0xe6241a12),
+        border:Border.all(color:const Color(0xffa9824e),width:2),
+        boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:12)],
+      ),
+      child:Column(children:[
+        Container(
+          height:34,padding:const EdgeInsets.symmetric(horizontal:10),
+          decoration:const BoxDecoration(
+            gradient:LinearGradient(colors:[Color(0xff693b20),Color(0xff28150d)]),
+          ),
+          child:Row(children:[
+            Expanded(child:Text(
+              locale=='spn'?'Tienda':'Shop',
+              style:const TextStyle(color:Color(0xffffdc72),fontSize:12,fontWeight:FontWeight.bold),
+            )),
+            Text(
+              s.products.length.toString()+' productos',
+              style:const TextStyle(fontSize:9,color:Colors.white60),
+            ),
+            const SizedBox(width:6),
+            GestureDetector(onTap:onCloseShop,child:const Icon(Icons.close,size:17,color:Colors.white70)),
+          ]),
+        ),
+        Expanded(
+          child:GridView.builder(
+            padding:const EdgeInsets.all(9),
+            gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount:4,crossAxisSpacing:6,mainAxisSpacing:6,childAspectRatio:.86,
+            ),
+            itemCount:s.products.length,
+            itemBuilder:(context,index){
+              final product=s.products[index];
+              final rule=metadata?.item(product.type,product.id);
+              final name=catalog.itemName(product.type,product.id,locale);
+              final description=catalog.itemText(product.type,product.id,locale)?.text.trim()??'';
+              final price=rule?.buy??0;
+              final icon=rule?.iconPath;
+              final card=Container(
+                padding:const EdgeInsets.all(3),
+                decoration:BoxDecoration(
+                  color:const Color(0xff17120e),
+                  border:Border.all(color:const Color(0xff6f5a3b)),
+                ),
+                child:Column(children:[
+                  Expanded(
+                    child:icon==null
+                      ?const Icon(Icons.inventory_2,size:28,color:Color(0xffd8bd83))
+                      :DataImage(
+                          cache:ui,path:icon,fit:BoxFit.contain,
+                          fallback:const Icon(Icons.inventory_2,size:28,color:Color(0xffd8bd83)),
+                        ),
+                  ),
+                  Text(
+                    name,
+                    maxLines:1,overflow:TextOverflow.ellipsis,
+                    style:const TextStyle(fontSize:7.5,color:Color(0xffffe4a8)),
+                  ),
+                  Text(
+                    price.toString(),
+                    style:const TextStyle(fontSize:7,color:Color(0xffffcf55)),
+                  ),
+                ]),
+              );
+              return Tooltip(
+                waitDuration:const Duration(milliseconds:250),
+                message:name+
+                  '\n${product.type}:${product.id} · índice ${product.index}'+
+                  '\n'+(locale=='spn'?'Precio: ':'Price: ')+price.toString()+
+                  (description.isEmpty?'':'\n\n'+description),
+                child:GestureDetector(
+                  onDoubleTap:()=>onBuyShopProduct(product.index),
+                  child:card,
+                ),
+              );
+            },
+          ),
+        ),
+        Container(
+          height:38,
+          padding:const EdgeInsets.symmetric(horizontal:8),
+          decoration:const BoxDecoration(color:Color(0xff1b130d)),
+          child:Row(children:[
+            Expanded(child:Text(
+              locale=='spn'
+                ?'Doble clic: comprar · inventario: doble clic para vender'
+                :'Double click: buy · inventory: double click to sell',
+              style:const TextStyle(fontSize:7.5,color:Colors.white54),
+            )),
+            Text(
+              'Oro: $gold',
+              style:const TextStyle(fontSize:10,color:Color(0xffffdb70),fontWeight:FontWeight.bold),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
   Widget _inventoryWindow()=>Container(
     decoration:BoxDecoration(
       color:const Color(0xe6241a12),
@@ -577,7 +695,7 @@ class WorldHud extends StatelessWidget {
                 final description=localized?.text.trim()??'';
                 final rule=metadata?.item(item.type,item.typeId);
                 final iconPath=rule?.iconPath;
-                return Tooltip(
+                final cell=Tooltip(
                   waitDuration:const Duration(milliseconds:250),
                   message:itemName+
                     '\nBag ${item.bag} · Slot ${item.slot} · ${item.type}:${item.typeId}'+
@@ -620,13 +738,19 @@ class WorldHud extends StatelessWidget {
                     ]),
                   ),
                 );
+                return shopOpen
+                  ?GestureDetector(
+                      onDoubleTap:()=>onSellInventory(item),
+                      child:cell,
+                    )
+                  :cell;
               },
             ),
       ),
       Container(
         height:30,padding:const EdgeInsets.symmetric(horizontal:10),
         child:Row(children:[
-          Text('Oro: ${details?.gold??0}',style:const TextStyle(fontSize:10,color:Color(0xffffdb70))),
+          Text('Oro: $gold',style:const TextStyle(fontSize:10,color:Color(0xffffdb70))),
           const Spacer(),
           Text('Bolsas: ${inventory.map((e)=>e.bag).toSet().length}',style:const TextStyle(fontSize:9,color:Colors.white54)),
         ]),
