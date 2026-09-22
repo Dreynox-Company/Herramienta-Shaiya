@@ -2870,13 +2870,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             onSelected: (value) {
               if (value == 'profile') loadResourceProfile();
               if (value == 'coreItem') {
-                openCoreTableEditor('Item/Item.SData', 'Objetos / trade');
+                openCoreTableEditor('BinarySData/DBItemData.SData', 'Objetos / trade');
               }
               if (value == 'coreMonster') {
                 openCoreTableEditor('BinarySData/DBMonsterData.SData', 'Mobs / drops');
               }
               if (value == 'coreSkill') {
-                openCoreTableEditor('Skill/Skill.SData', 'Skills');
+                openCoreTableEditor('BinarySData/DBSkillData.SData', 'Skills');
               }
               if (value == 'discover') discoverCoreTables();
               if (value == 'audit') auditAllResources();
@@ -3018,7 +3018,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'Item/Item.SData',
+                              'BinarySData/DBItemData.SData',
                               'Objetos / trade',
                             ),
                     icon: const Icon(Icons.inventory_2_outlined, size: 16),
@@ -3040,7 +3040,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'Skill/Skill.SData',
+                              'BinarySData/DBSkillData.SData',
                               'Skills',
                             ),
                     icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
