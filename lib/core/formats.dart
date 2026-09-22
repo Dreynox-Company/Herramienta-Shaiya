@@ -687,6 +687,22 @@ class WorldLayer {
   WorldLayer(this.texture, this.tile, this.sound);
 }
 
+class WtrData {
+  final double tileSize;
+  final int unknown2,unknown3;
+  final List<String> textures;
+  const WtrData(this.tileSize,this.unknown2,this.unknown3,this.textures);
+
+  static WtrData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final tileSize=r.f32(),unknown2=r.u32(),unknown3=r.i32();
+    final count=r.count(256);
+    final textures=List<String>.generate(count,(_)=>r.str(256),growable:false);
+    r.end();
+    return WtrData(tileSize,unknown2,unknown3,List.unmodifiable(textures));
+  }
+}
+
 class WorldBounds {
   final v.Vector3 lower,upper;
   const WorldBounds(this.lower,this.upper);
