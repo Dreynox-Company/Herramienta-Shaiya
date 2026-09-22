@@ -339,6 +339,40 @@ void main() {
     }
   });
 
+  test('audited SPK can mount a table-only workspace without Character paths', () async {
+    final root = await Directory.systemTemp.createTemp('spk-table-only-');
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      await source.validateSimpleResourceProfile();
+      await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, _, _) {},
+      );
+
+      expect(
+        () => Library.fromSpk(
+          source,
+          overlayRoot: '${root.path}/strict-overlay',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+
+      final library = await Library.fromSpk(
+        source,
+        requireCharacter: false,
+        overlayRoot: '${root.path}/table-overlay',
+      );
+      expect(library.files.length, 3);
+      expect(
+        library.files.keys.every((path) => path.startsWith('_spk_sinnombre/')),
+        isTrue,
+      );
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test('fully audited SPK exposes unresolved resources by technical Entry ID', () async {
     final root = await Directory.systemTemp.createTemp('spk-technical-mount-');
     try {
