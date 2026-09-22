@@ -462,6 +462,29 @@ function attach(module) {
             return;
           }
 
+          const key = this.hit.key || {};
+          const auth = this.hit.auth || {};
+          const completeCrypto =
+              Boolean(key.secretHex) &&
+              [16, 32].includes(key.secretBytes) &&
+              Boolean(auth.nonceHex) &&
+              auth.nonceBytes === 12 &&
+              Boolean(auth.tagHex) &&
+              auth.tagBytes === 16;
+          if (!completeCrypto) {
+            event('RESOURCE_MATCH_INCOMPLETE_CRYPTO', {
+              caller: this.hit.caller,
+              hasKey: Boolean(key.secretHex),
+              secretBytes: key.secretBytes || 0,
+              hasAuth: Boolean(this.hit.auth),
+              nonceBytes: auth.nonceBytes || 0,
+              tagBytes: auth.tagBytes || 0,
+            });
+            // No se marca como visto: una llamada posterior con el mismo
+            // ciphertext puede ocurrir cuando el handle ya sea exportable.
+            return;
+          }
+
           seen.add(this.hit.prefix + ':' + this.hit.inputSha256);
           let bytes = null;
           let outputBytes = 0;
