@@ -2851,6 +2851,12 @@ class PsWorldSession {
     await connection.send(PsPacketType.npcSellItem,[bag,slot,count]);
     return PsNpcTradeResult.parse(await response);
   }
+  Future<void> pickupMapItem(int globalId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de recoger objetos.');
+    if(globalId<=0)throw RangeError('Id de objeto de mapa inválido.');
+    await connection.send(PsPacketType.addItem,_u32Bytes(globalId));
+  }
+
   Future<void> useInventoryItem(int bag,int slot,{int? targetGlobalId}) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de usar objetos.');
     if(bag<0||bag>255||slot<0||slot>255)throw RangeError('Bag/slot fuera de byte.');
