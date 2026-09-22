@@ -75,7 +75,11 @@ class StudioScene extends ChangeNotifier {
   t.ThreeJS? view;Catalog? catalog;
   t.LineSegments? grid;
   bool gridVisible=true;
-  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> networkNpcActors={},networkMobActors={},networkPlayerActors={};final Map<int,List<String>> networkPlayerAnimations={};Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];
+  final Map<int,Actor> networkNpcActors={},networkMobActors={},networkPlayerActors={},networkPlayerMountActors={};
+  final Map<int,List<String>> networkPlayerAnimations={};
+  final Map<int,double> networkPlayerGroundY={},networkPlayerRiderHeight={};
+  Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -162,6 +166,8 @@ class StudioScene extends ChangeNotifier {
       if(idle==null)throw FormatException('No hay reposo compatible para jugador remoto ${next.archetype.id}.');
       staged.walk=await firstCompatible(staged,groundMotionCandidates(next.archetype.animations,GroundMotion.walk));
       staged.run=await firstCompatible(staged,groundMotionCandidates(next.archetype.animations,GroundMotion.run));
+      staged.riderIdle=await firstCompatible(staged,next.archetype.animations.where((p)=>p.toLowerCase().endsWith('_021_veh_br.ani')).toList());
+      staged.riderMoving=await firstCompatible(staged,next.archetype.animations.where((p)=>p.toLowerCase().endsWith('_020_veh_run.ani')).toList());
       staged.idle=idle;staged.normal=idle;staged.play(idle);
       staged.root.scale.z=-1;
       return staged;
@@ -208,7 +214,7 @@ class StudioScene extends ChangeNotifier {
     int mobLimit=80,
   }) async {
     for(final a in gameActors){a.dispose();}
-    gameActors.clear();gameLabels.clear();networkNpcActors.clear();networkMobActors.clear();networkPlayerActors.clear();
+    gameActors.clear();gameLabels.clear();networkNpcActors.clear();networkMobActors.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();
     if(view==null||catalog==null)return;
 
     final npcRecords={for(final n in catalog!.npcs)n.id:n};
@@ -327,6 +333,7 @@ class StudioScene extends ChangeNotifier {
       final a=await loadAppearanceActor(appearance);
       a.root.position.setValues(lx,y,lz);
       a.root.rotation.y=-angle*(math.pi*2/65536.0);
+      networkPlayerGroundY[characterId]=y;
       gameActors.add(a);networkPlayerActors[characterId]=a;networkPlayerAnimations[characterId]=appearance.archetype.animations;view!.scene.add(a.root);
       gameLabels.add(GameActorLabel(a,name,player:true,globalId:characterId));
       notifyListeners();
@@ -335,20 +342,73 @@ class StudioScene extends ChangeNotifier {
 
   void moveNetworkPlayer(int characterId,double worldX,double worldY,double worldZ,int angle,int motion){
     final a=networkPlayerActors[characterId];if(a==null)return;
-    final nx=worldX-originX,nz=-(worldZ-originZ);
-    a.root.position.setValues(nx,worldY,nz);
+    final nx=worldX-originX,nz=-(worldZ-originZ),vehicle=networkPlayerMountActors[characterId];
+    networkPlayerGroundY[characterId]=worldY;
+    final seat=networkPlayerRiderHeight[characterId]??0;
+    a.root.position.setValues(nx,worldY+(vehicle==null?0:seat),nz);
     a.root.rotation.y=-angle*(math.pi*2/65536.0);
-    final clip=motion==1
-      ?(a.run??a.walk)
-      :motion==0
-        ?(a.walk??a.run)
-        :(a.idle??a.normal);
-    if(clip!=null&&a.clip!=clip)a.play(clip);
+    if(vehicle!=null){
+      vehicle.root.position.setValues(nx,worldY,nz);
+      vehicle.root.rotation.y=a.root.rotation.y;
+      final moving=motion==0||motion==1;
+      final rider=moving?(a.riderMoving??a.run??a.walk):(a.riderIdle??a.idle??a.normal);
+      if(rider!=null&&a.clip!=rider)a.play(rider);
+      final vehicleClip=moving
+        ?(vehicle.clips[motion==1?'Correr':'Caminar']??vehicle.clips['Correr']??vehicle.clips['Caminar'])
+        :(vehicle.clips['Respirar']??vehicle.clips['Reposo']??vehicle.normal);
+      if(vehicleClip!=null&&vehicle.clip!=vehicleClip)vehicle.play(vehicleClip);
+    }else{
+      final clip=motion==1
+        ?(a.run??a.walk)
+        :motion==0
+          ?(a.walk??a.run)
+          :(a.idle??a.normal);
+      if(clip!=null&&a.clip!=clip)a.play(clip);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setNetworkPlayerMount(int characterId,CreatureRecord? record) async {
+    final rider=networkPlayerActors[characterId];if(rider==null)return;
+    final old=networkPlayerMountActors.remove(characterId);
+    if(old!=null){gameActors.remove(old);old.dispose();}
+    networkPlayerRiderHeight.remove(characterId);
+    final ground=networkPlayerGroundY[characterId]??rider.root.position.y;
+    if(record==null){
+      rider.root.position.y=ground;
+      final idle=rider.idle??rider.normal;
+      if(idle!=null)rider.play(idle);
+      notifyListeners();return;
+    }
+    try{
+      final vehicle=await loadCreature(record);
+      if(networkPlayerActors[characterId]!=rider){vehicle.dispose();return;}
+      final seat=(vehicle.height*.58).clamp(.2,5.0);
+      networkPlayerRiderHeight[characterId]=seat;
+      vehicle.root.position.setValues(rider.root.position.x,ground,rider.root.position.z);
+      vehicle.root.rotation.y=rider.root.rotation.y;
+      rider.root.position.y=ground+seat;
+      final riderIdle=rider.riderIdle??rider.idle??rider.normal;
+      if(riderIdle!=null)rider.play(riderIdle);
+      gameActors.add(vehicle);networkPlayerMountActors[characterId]=vehicle;view!.scene.add(vehicle.root);
+      notifyListeners();
+    }catch(e){report('LIVE mount $characterId: $e');}
+  }
+
+  Future<void> applyNetworkPlayerMotion(int characterId,int motion) async {
+    final a=networkPlayerActors[characterId];if(a==null)return;
+    final paths=networkPlayerAnimations[characterId]??const <String>[];
+    final candidates=paths.where((p)=>motionIndex(p)==motion).toList();
+    final clip=await firstCompatible(a,candidates);
+    if(clip!=null&&networkPlayerActors[characterId]==a)a.play(clip,repeat:motion!=9);
     notifyListeners();
   }
 
   void removeNetworkPlayer(int characterId){
-    final a=networkPlayerActors.remove(characterId);networkPlayerAnimations.remove(characterId);if(a==null)return;
+    final a=networkPlayerActors.remove(characterId),vehicle=networkPlayerMountActors.remove(characterId);
+    networkPlayerAnimations.remove(characterId);networkPlayerGroundY.remove(characterId);networkPlayerRiderHeight.remove(characterId);
+    if(vehicle!=null){gameActors.remove(vehicle);vehicle.dispose();}
+    if(a==null)return;
     gameActors.remove(a);gameLabels.removeWhere((x)=>identical(x.actor,a));a.dispose();
     notifyListeners();
   }
@@ -914,7 +974,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original. Sin colisión con edificios.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
