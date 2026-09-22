@@ -161,6 +161,14 @@ void main(){
         'questId':state.questId,
         'metadataNpcs':state.metadata?.npcs.length??0,
         'metadataQuests':state.metadata?.quests.length??0,
+        'characterMakeUiCandidates':state.catalog==null
+          ?<String>[]
+          :state.catalog!.library.files.keys.where((String path){
+              final p=path.toLowerCase();
+              return p.contains('interface/charactermake/')&&
+                (p.contains('explain')||p.contains('basic')||p.contains('classinfo')||
+                 p.contains('appearance')||p.contains('mode')||p.contains('tab'));
+            }).take(180).toList(),
       };
       await tester.pumpWidget(const ColoredBox(color:Colors.black));
       await tester.pump(const Duration(seconds:2));
