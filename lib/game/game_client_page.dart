@@ -47,6 +47,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
   PsMapWeather? liveWeather;
+  PsWorldTime? liveWorldTime;
   Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
   List<PsTargetBuff> targetBuffs=<PsTargetBuff>[];
   final Map<int,PsMapItem> liveMapItems=<int,PsMapItem>{};
@@ -631,6 +632,11 @@ class _GameClientPageState extends State<GameClientPage> {
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         final weatherPacket=entered.where((p)=>p.type==PsPacketType.mapWeather).lastOrNull;
         if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
+        final worldTimePacket=entered.where((p)=>p.type==PsPacketType.worldDay).lastOrNull;
+        if(worldTimePacket!=null){
+          liveWorldTime=PsWorldTime.parse(worldTimePacket);
+          scene.applyWorldClock(liveWorldTime!.hour,liveWorldTime!.minute);
+        }
         final speedPacket=entered.where((p)=>p.type==PsPacketType.characterAttackMovementSpeed).lastOrNull;
         if(speedPacket!=null){
           final speed=PsCharacterSpeed.parse(speedPacket);
@@ -2097,6 +2103,12 @@ class _GameClientPageState extends State<GameClientPage> {
         final keep=PsSkillKeep.parse(packet);
         messages.insert(0,'[Combate] Mob '+keep.senderId.toString()+' mantiene skill '+keep.skillId.toString()+'.');
       }catch(e){messages.insert(0,'[Combate] MOB_SKILL_KEEP: '+e.toString());}
+    }else if(packet.type==PsPacketType.worldDay&&packet.body.length>=4){
+      try{
+        liveWorldTime=PsWorldTime.parse(packet);
+        scene.applyWorldClock(liveWorldTime!.hour,liveWorldTime!.minute);
+      }catch(e){messages.insert(0,'[Hora] '+e.toString());}
+      if(mounted)setState((){});
     }else if(packet.type==PsPacketType.characterAttackMovementSpeed&&packet.body.length>=6){
       try{
         final speed=PsCharacterSpeed.parse(packet);
