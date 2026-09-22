@@ -25,6 +25,9 @@ class PsPacketType {
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
+  static const characterEnteredPortal=0x020A;
+  static const characterMapTeleport=0x020B;
+  static const characterTeleportViaNpc=0x020C;
   static const targetMobHpUpdate=0x0305;
   static const inventoryMoveItem=0x0204;
   static const updateStats=0x0208;
@@ -316,6 +319,34 @@ class PsMobEnter {
       d.getFloat32(7,Endian.little),
       d.getFloat32(11,Endian.little),
     );
+  }
+}
+
+class PsMapTeleport {
+  final int characterId,mapId;
+  final double x,y,z;
+  const PsMapTeleport(this.characterId,this.mapId,this.x,this.y,this.z);
+  static PsMapTeleport parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMapTeleport||p.body.length<18){
+      throw FormatException('CHARACTER_MAP_TELEPORT truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMapTeleport(
+      d.getUint32(0,Endian.little),d.getUint16(4,Endian.little),
+      d.getFloat32(6,Endian.little),d.getFloat32(10,Endian.little),d.getFloat32(14,Endian.little),
+    );
+  }
+}
+
+class PsNpcTeleportResult {
+  final int reason,gold;
+  const PsNpcTeleportResult(this.reason,this.gold);
+  bool get success=>reason==0;
+  static PsNpcTeleportResult parse(PsPacket p){
+    if(p.type!=PsPacketType.characterTeleportViaNpc||p.body.length<5){
+      throw FormatException('CHARACTER_TELEPORT_VIA_NPC response truncado: ${p.body.length}');
+    }
+    return PsNpcTeleportResult(p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little));
   }
 }
 
@@ -1092,6 +1123,19 @@ class PsWorldSession {
       ]);
     }
     await connection.send(PsPacketType.characterSkillBar,body);
+  }
+  Future<void> enterPortal(int portalId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar portales.');
+    if(portalId<0||portalId>255)throw RangeError('PortalId fuera de byte: $portalId');
+    await connection.send(PsPacketType.characterEnteredPortal,[portalId]);
+  }
+
+  Future<PsNpcTeleportResult> teleportViaNpc(int npcGlobalId,int gateId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de usar gatekeepers.');
+    if(gateId<0||gateId>255)throw RangeError('GateId fuera de byte: $gateId');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.characterTeleportViaNpc);
+    await connection.send(PsPacketType.characterTeleportViaNpc,[..._u32Bytes(npcGlobalId),gateId]);
+    return PsNpcTeleportResult.parse(await response);
   }
   Future<void> moveCharacter({
     required double x,
