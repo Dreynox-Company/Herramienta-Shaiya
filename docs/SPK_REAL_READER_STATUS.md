@@ -1,4 +1,4 @@
-# SPK real reader — estado auditado 0.6.13
+# SPK real reader — estado auditado 0.6.14
 
 Fecha de corte: 2026-09-21.
 
@@ -6,6 +6,36 @@ Esta nota es el punto de reanudación del trabajo SPK. No volver a empezar desde
 cero: la rama `feat/studio-0612-spk-workspace` continúa el lector v3, el
 AutoPerfil de payloads y la integración de DATA.SPK como fuente de Shaiya
 Studio.
+
+## Avances 0.6.14
+
+- AutoPerfil prueba primero, sin instrumentar el cliente, si la clave del índice
+  también autentica payloads. La hipótesis solo se acepta si AES-GCM valida
+  muestras reales; si falla, se descarta.
+- ResourceProbe V9 puede recuperar una clave AES desde el handle vivo de
+  BCryptDecrypt mediante BCryptExportKey/KeyDataBlob incluso si la creación o
+  importación del handle ocurrió antes de instalar los hooks. También observa
+  GenerateSymmetricKey, ImportKey y DuplicateKey.
+- La derivación de nonce fragmentado amplió candidatos reproducibles
+  (offset/Entry ID/ordinal de registro/ordinal auxiliar, 0- y 1-based). Ninguna
+  regla se acepta por parecido: debe autenticar tags GCM reales en múltiples
+  chunks.
+- Tras validar simples y fragmentados existe una auditoría integral de todos los
+  recursos. Studio solo marca el SPK como totalmente auditado si cada recurso
+  se autentica, decodifica y coincide con la longitud declarada cuando ésta es
+  conocida.
+- La auditoría persiste formato por Entry ID y permite montar también recursos
+  sin nombre como `_SPK_SinNombre/<EntryID>.<ext>`. Así ningún payload
+  auditado queda inaccesible por faltar su ruta original.
+- Los recursos técnicos por Entry ID pueden editarse de forma segura mediante
+  overlay porque la identidad ya no depende de una ruta inferida.
+- El editor puede materializar una DATA completa descifrada y aplicar encima el
+  overlay verificado sin modificar el `data.spk` original.
+- Se añadieron detecciones estructurales de MLT, ITM, MON y SEED/SData para el
+  inventario auditado.
+- El descubrimiento de tablas ahora parte exclusivamente de payloads SData
+  previamente auditados, evitando barridos heurísticos sobre decenas de miles
+  de recursos.
 
 ## DATA.SPK de referencia
 
@@ -104,7 +134,7 @@ los tags de la tabla auxiliar.
 ## Estado de CI
 
 La base 0.6.12 ya pasó regresión completa y build nativo de Windows. Los cambios
-0.6.13 añaden descubrimiento automático antes del montaje, pruebas sintéticas
+0.6.14 añaden descubrimiento automático antes del montaje, pruebas sintéticas
 de identificación estructural de DBItem/DBMonster/DBSkill y cobertura del
 selector de intercambio de objetos. El gate definitivo de esta iteración es
 mantener verdes formato, análisis, suite Flutter/Dart/Python, integración nativa
