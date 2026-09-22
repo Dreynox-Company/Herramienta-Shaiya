@@ -880,6 +880,13 @@ class WorldHud extends StatelessWidget {
     );
   }
 
+  String get _nativeMiniMapPath {
+    final detailed='interface/minimap/minimap_'+mapId.toString()+'.tga';
+    if(catalog.library.files.containsKey(detailed))return detailed;
+    final legacy='interface/minimap/'+mapId.toString()+'.tga';
+    return catalog.library.files.containsKey(legacy)?legacy:detailed;
+  }
+
   Widget _minimap() => Stack(
         children: [
           Positioned.fill(
@@ -902,8 +909,8 @@ class WorldHud extends StatelessWidget {
                     Positioned.fill(
                       child:DataImage(
                         cache:ui,
-                        path:'interface/minimap/'+mapId.toString()+'.tga',
-                        fit:BoxFit.fill,
+                        path:_nativeMiniMapPath,
+                        fit:BoxFit.cover,
                       ),
                     ),
                     Positioned.fill(
