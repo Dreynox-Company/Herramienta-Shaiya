@@ -108,6 +108,38 @@ void main(){
     expect(p.spDamage,8);
     expect(p.mpDamage,9);
   });
+  test('parses mob range and persistent skill layouts',(){
+    final range=Uint8List(19),rd=ByteData.sublistView(range);
+    range[0]=1;
+    rd.setUint32(1,501,Endian.little);
+    rd.setUint32(5,601,Endian.little);
+    rd.setUint16(9,701,Endian.little);
+    range[11]=2;
+    rd.setUint16(12,80,Endian.little);
+    rd.setUint16(14,9,Endian.little);
+    rd.setUint16(16,10,Endian.little);
+    range[18]=0;
+    final area=PsMobRangeSkillHit.parse(
+      PsPacket(PsPacketType.mobRangeSkillUse,range),
+    );
+    expect((area.mobId,area.targetId,area.skillId),(501,601,701));
+    expect((area.hpDamage,area.spDamage,area.mpDamage),(80,9,10));
+
+    final keep=Uint8List(13),kd=ByteData.sublistView(keep);
+    kd.setUint32(0,501,Endian.little);
+    kd.setUint16(4,701,Endian.little);
+    keep[6]=2;
+    kd.setUint16(7,12,Endian.little);
+    kd.setUint16(9,3,Endian.little);
+    kd.setUint16(11,4,Endian.little);
+    final periodic=PsSkillKeep.parse(
+      PsPacket(PsPacketType.mobSkillKeep,keep),
+    );
+    expect(periodic.senderId,501);
+    expect(periodic.skillId,701);
+    expect(periodic.hpDamage,12);
+  });
+
   test('parses mob normal attack',(){
     final b=_body(15),d=ByteData.sublistView(b);
     b[0]=0;
