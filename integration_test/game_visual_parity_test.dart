@@ -114,7 +114,19 @@ void main(){
         'world':state.scene.worldPath,
         'backdrop':state.scene.backdropTexture!=null,
         'worldObjects':state.scene.world?.objects.length??0,
+        'worldObjectCategories':state.scene.world==null
+          ?<String,int>{}
+          :<String,int>{
+            for(final String category in (state.scene.world.objects as List).map<String>((dynamic o)=>o.category as String).toSet())
+              category:(state.scene.world.objects as List).where((dynamic o)=>o.category==category).length,
+          },
         'worldSky':state.scene.world?.skyFile??'',
+        'worldMusicAssets':state.scene.world?.musicAssets.length??0,
+        'worldMusicZones':state.scene.world?.musicZones.length??0,
+        'worldSoundAssets':state.scene.world?.soundEffectAssets.length??0,
+        'worldSoundEffects':state.scene.world?.soundEffects.length??0,
+        'animatedWorldActors':state.scene.animatedWorldActors.length,
+        'collisionTriangles':state.scene.worldCollision.triangleCount,
         'svmapNpcGroups':state.svmap?.npcs.length??0,
         'svmapNpcWaypoints':state.svmap==null?0:(state.svmap.npcs as List).map<int>((dynamic p)=>(p.route as List).length).fold<int>(0,(int a,int b)=>a+b),
         'actors':state.scene.gameActors.length,
