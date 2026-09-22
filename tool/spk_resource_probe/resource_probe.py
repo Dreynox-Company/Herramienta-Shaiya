@@ -126,7 +126,7 @@ class Sink:
          if len(decoded)<=8*1024*1024:
           fn=f"decoded-{len(self.rows)+1:02d}.{ext(row['format'])}";(self.out/fn).write_bytes(decoded);row['decodedFile']=fn
        except Exception as e:row['offlineError']=type(e).__name__+': '+str(e)[:300]
-       self.rows.append(row);(self.out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':self.rows,'events':self.events},ensure_ascii=False,indent=2))
+       self.rows.append(row);(self.out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':self.rows,'events':self.events},ensure_ascii=False,indent=2),encoding='utf-8')
        if row['offlineValid']:
         if target['kind']=='simple':self.valid_simple.append(row)
         else:self.valid_chunks.append(row)
@@ -231,7 +231,7 @@ def main():
       if str(e)=='La salida debe quedar fuera de la instalación del juego': raise
     out.mkdir(parents=True)
     print('Leyendo índice y construyendo mapa de 55.457 ciphertexts…',flush=True)
-    cat=parse_spk(spk);prefix,details=build_targets(spk,cat);(out/'target-summary.json').write_text(json.dumps({'spkBytes':cat['size'],'targets':len(prefix),'simple':48668,'chunks':6789},indent=2))
+    cat=parse_spk(spk);prefix,details=build_targets(spk,cat);(out/'target-summary.json').write_text(json.dumps({'spkBytes':cat['size'],'targets':len(prefix),'simple':48668,'chunks':6789},indent=2),encoding='utf-8')
     print('Desconecta Internet. Se abrirá game.exe; NO inicies sesión.',flush=True)
     if not a.noninteractive:
       print('Escribe CAPTURAR para continuar:',flush=True)
@@ -260,7 +260,7 @@ def main():
       if sess:
        try:sess.detach()
        except:pass
-    prof=derive_profile(sink.rows);prof['failure']=failure;(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2));(out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2))
+    prof=derive_profile(sink.rows);prof['failure']=failure;(out/'derived-resource-profile.json').write_text(json.dumps(prof,ensure_ascii=False,indent=2),encoding='utf-8');(out/'resource-observations.json').write_text(json.dumps({'schema':2,'rows':sink.rows,'events':sink.events},ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(prof,ensure_ascii=False,indent=2));
     if prof['readyForFragmented']:print('ÉXITO: simples + fragmentos reproducidos offline.');return 0
     if prof['readyForSimple']:print('Simples autenticados; Shaiya Studio revalidará la clave y derivará los chunks offline.');return 4
