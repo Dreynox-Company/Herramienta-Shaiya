@@ -49,6 +49,11 @@ class _GameClientPageState extends State<GameClientPage> {
   PsMapWeather? liveWeather;
   Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
   int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
+  final Map<int,PsEnteredMap> remotePlayerEntries=<int,PsEnteredMap>{};
+  final Map<int,PsPlayerShape> remotePlayerShapes=<int,PsPlayerShape>{};
+  final Set<int> remoteShapeLoads=<int>{};
+  int? targetPlayerId,targetPlayerHp,targetPlayerMaxHp;
+  String? targetPlayerName;
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
@@ -706,6 +711,11 @@ class _GameClientPageState extends State<GameClientPage> {
     stage=GameStage.world;
     questOpen=true;
     _startWorldRealtime();
+    for(final player in liveSnapshot?.players??const <PsEnteredMap>[]){
+      if(player.characterId==liveCharacter?.id)continue;
+      remotePlayerEntries[player.characterId]=player;
+      unawaited(_ensureRemotePlayer(player));
+    }
     if(mounted)setState(()=>loading=false);
     focus.requestFocus();
     await Future<void>.delayed(const Duration(milliseconds:350));
@@ -715,6 +725,8 @@ class _GameClientPageState extends State<GameClientPage> {
   bool _isMapActorPacket(int type)=>{
     PsPacketType.mobEnter,PsPacketType.mobMove,PsPacketType.mobLeave,
     PsPacketType.mapNpcEnter,PsPacketType.mapNpcMove,PsPacketType.mapNpcLeave,
+    PsPacketType.characterEnteredMap,PsPacketType.characterLeftMap,
+    PsPacketType.characterMove,PsPacketType.characterShape,
   }.contains(type);
 
   Future<void> _applyMapTeleport(PsMapTeleport teleport) async {
@@ -725,7 +737,8 @@ class _GameClientPageState extends State<GameClientPage> {
     guildWarehouseAvailable=false;liveGuildWarehouse=[];guildWarehouseOpen=false;
     _closeWorldPanels();
     scene.clearMovement();
-    targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+    _clearCombatTarget();
+    remotePlayerEntries.clear();remotePlayerShapes.clear();remoteShapeLoads.clear();
     final previous=liveSnapshot;
     liveMapId=teleport.mapId;
     try{
@@ -750,6 +763,7 @@ class _GameClientPageState extends State<GameClientPage> {
           teleport.characterId,oldSelf?.isAdmin??0,oldSelf?.angle??0,
           teleport.x,teleport.y,teleport.z,oldSelf?.guildId??0,oldSelf?.vehicleId??0,
         ),
+        players:const <PsEnteredMap>[],
         npcs:const <PsNpcEnter>[],mobs:const <PsMobEnter>[],
         quests:previous?.quests??const <PsQuestProgress>[],
         finishedQuests:previous?.finishedQuests??const <PsFinishedQuest>[],
@@ -865,6 +879,102 @@ class _GameClientPageState extends State<GameClientPage> {
       }
     }
   }
+  String? _remoteRaceKey(int race)=>switch(race){
+    0=>'human',1=>'elf',2=>'vile',3=>'deatheater',_=>null,
+  };
+
+  Appearance? _remoteAppearance(PsPlayerShape shape){
+    final c=catalog,race=_remoteRaceKey(shape.race);
+    if(c==null||race==null)return null;
+    final female=shape.gender!=0;
+    final candidates=c.archetypes.where((a)=>a.race==race&&a.female==female).toList();
+    if(candidates.isEmpty)return null;
+
+    int score(Archetype a){
+      var value=0;
+      for(final equipment in shape.equipment){
+        if(equipment.empty)continue;
+        final slot=_appearanceSlotForEquipmentSlot(equipment.slot);
+        if(slot==null)continue;
+        final rule=metadata?.item(equipment.type,equipment.typeId);
+        if(rule==null)continue;
+        if((a.parts[slot]??const <PartRecord>[]).any((p)=>p.raw.id==rule.image)){
+          value+=slot==Slot.upper?4:2;
+        }
+      }
+      return value;
+    }
+
+    candidates.sort((a,b)=>score(b).compareTo(score(a)));
+    try{
+      var look=Appearance.initial(candidates.first);
+      final faces=look.archetype.parts[Slot.face]??const <PartRecord>[];
+      final hairs=look.archetype.parts[Slot.hair]??const <PartRecord>[];
+      if(shape.face>=0&&shape.face<faces.length)look=look.withPart(Slot.face,faces[shape.face]);
+      if(shape.hair>=0&&shape.hair<hairs.length)look=look.withPart(Slot.hair,hairs[shape.hair]);
+
+      for(final equipmentSlot in const [0,1,2,3,4]){
+        final equipment=shape.equipment.where((e)=>e.slot==equipmentSlot&&!e.empty).firstOrNull;
+        if(equipment==null)continue;
+        final slot=_appearanceSlotForEquipmentSlot(equipmentSlot),rule=metadata?.item(equipment.type,equipment.typeId);
+        if(slot==null||rule==null)continue;
+        final part=(look.archetype.parts[slot]??const <PartRecord>[]).where((p)=>p.raw.id==rule.image).firstOrNull;
+        if(part!=null)look=look.withPart(slot,part);
+      }
+
+      final costume=shape.equipment.where((e)=>e.slot==15&&!e.empty).firstOrNull;
+      if(costume!=null){
+        final rule=metadata?.item(costume.type,costume.typeId);
+        if(rule!=null){
+          final part=(look.archetype.parts[Slot.upper]??const <PartRecord>[]).where((p)=>p.raw.id==rule.image).firstOrNull;
+          if(part!=null)look=look.withPart(Slot.upper,part);
+        }
+      }
+      return look;
+    }catch(e){
+      messages.insert(0,'[Jugador remoto] Apariencia '+shape.characterId.toString()+': '+e.toString());
+      return null;
+    }
+  }
+
+  Future<void> _renderRemotePlayer(PsEnteredMap entered,PsPlayerShape shape) async {
+    if(entered.characterId==liveCharacter?.id||stage!=GameStage.world)return;
+    final appearance=_remoteAppearance(shape);
+    if(appearance==null){
+      messages.insert(0,'[Jugador remoto] Sin arquetipo compatible para '+shape.name+' ('+shape.characterId.toString()+').');
+      return;
+    }
+    await scene.addNetworkPlayer(
+      characterId:entered.characterId,appearance:appearance,
+      name:shape.name.isEmpty?('#'+shape.characterId.toString()):shape.name,
+      x:entered.x,y:entered.y,z:entered.z,angle:entered.angle,
+    );
+    if(shape.dead)unawaited(scene.networkRemotePlayerDeath(entered.characterId));
+  }
+
+  Future<void> _ensureRemotePlayer(PsEnteredMap entered) async {
+    final id=entered.characterId,session=liveWorld;
+    if(id==liveCharacter?.id||session==null||!remoteShapeLoads.add(id))return;
+    try{
+      final shape=remotePlayerShapes[id]??await session.requestCharacterShape(id);
+      remotePlayerShapes[id]=shape;
+      final latest=remotePlayerEntries[id]??entered;
+      if(stage==GameStage.world&&remotePlayerEntries.containsKey(id)){
+        await _renderRemotePlayer(latest,shape);
+      }
+    }catch(e){
+      messages.insert(0,'[Jugador remoto] CHARACTER_SHAPE '+id.toString()+': '+e.toString());
+    }finally{
+      remoteShapeLoads.remove(id);
+      if(mounted)setState((){});
+    }
+  }
+
+  void _clearCombatTarget(){
+    targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+    targetPlayerId=targetPlayerHp=targetPlayerMaxHp=null;targetPlayerName=null;
+  }
+
   void _sortInventory(){
     liveInventory.sort((a,b){
       final bag=a.bag.compareTo(b.bag);
@@ -911,7 +1021,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _snapshotAddNpc(PsNpcEnter npc){
     final s=liveSnapshot;if(s==null)return;
     liveSnapshot=PsWorldSnapshot(
-      self:s.self,
+      self:s.self,players:s.players,
       npcs:[...s.npcs.where((x)=>x.globalId!=npc.globalId),npc],
       mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
     );
@@ -920,7 +1030,7 @@ class _GameClientPageState extends State<GameClientPage> {
   void _snapshotAddMob(PsMobEnter mob){
     final s=liveSnapshot;if(s==null)return;
     liveSnapshot=PsWorldSnapshot(
-      self:s.self,npcs:s.npcs,
+      self:s.self,players:s.players,npcs:s.npcs,
       mobs:[...s.mobs.where((x)=>x.globalId!=mob.globalId),mob],
       quests:s.quests,finishedQuests:s.finishedQuests,
     );
@@ -929,18 +1039,148 @@ class _GameClientPageState extends State<GameClientPage> {
   void _snapshotRemoveActor(int globalId,{required bool mob}){
     final s=liveSnapshot;if(s==null)return;
     liveSnapshot=PsWorldSnapshot(
-      self:s.self,
+      self:s.self,players:s.players,
       npcs:mob?s.npcs:s.npcs.where((x)=>x.globalId!=globalId).toList(),
       mobs:mob?s.mobs.where((x)=>x.globalId!=globalId).toList():s.mobs,
       quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
+  void _snapshotUpsertPlayer(PsEnteredMap player){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,
+      players:[...s.players.where((x)=>x.characterId!=player.characterId),player],
+      npcs:s.npcs,mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
+  void _snapshotRemovePlayer(int characterId){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,players:s.players.where((x)=>x.characterId!=characterId).toList(),
+      npcs:s.npcs,mobs:s.mobs,quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if(mapSwitching&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
     if(packet.type==PsPacketType.characterMapTeleport&&packet.body.length>=18){
       try{unawaited(_applyMapTeleport(PsMapTeleport.parse(packet)));}
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
+      return;
+    }
+    if(packet.type==PsPacketType.characterEnteredMap&&packet.body.length>=27){
+      try{
+        final entered=PsEnteredMap.parse(packet);
+        if(entered.characterId!=liveCharacter?.id){
+          remotePlayerEntries[entered.characterId]=entered;
+          _snapshotUpsertPlayer(entered);
+          unawaited(_ensureRemotePlayer(entered));
+        }
+      }catch(e){messages.insert(0,'[Jugador remoto] ENTER_MAP: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterShape&&packet.body.length>=685){
+      try{
+        final shape=PsPlayerShape.parse(packet);
+        if(shape.characterId!=liveCharacter?.id){
+          remotePlayerShapes[shape.characterId]=shape;
+          final entered=remotePlayerEntries[shape.characterId];
+          if(entered!=null&&!remoteShapeLoads.contains(shape.characterId)){
+            unawaited(_renderRemotePlayer(entered,shape));
+          }
+          if(targetPlayerId==shape.characterId)targetPlayerName=shape.name;
+        }
+      }catch(e){messages.insert(0,'[Jugador remoto] SHAPE: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterMove&&packet.body.length>=19){
+      try{
+        final move=PsCharacterMove.parse(packet);
+        if(move.characterId!=liveCharacter?.id){
+          final old=remotePlayerEntries[move.characterId];
+          final entered=PsEnteredMap(
+            move.characterId,old?.isAdmin??0,move.angle,move.x,move.y,move.z,
+            old?.guildId??0,old?.vehicleId??0,
+          );
+          remotePlayerEntries[move.characterId]=entered;_snapshotUpsertPlayer(entered);
+          if(scene.networkPlayerActors.containsKey(move.characterId)){
+            scene.moveNetworkPlayer(move.characterId,move.x,move.y,move.z,move.angle,move.motion);
+          }else{
+            unawaited(_ensureRemotePlayer(entered));
+          }
+        }
+      }catch(e){messages.insert(0,'[Jugador remoto] MOVE: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterLeftMap&&packet.body.length>=4){
+      try{
+        final left=PsCharacterLeftMap.parse(packet),id=left.characterId;
+        if(id!=liveCharacter?.id){
+          remotePlayerEntries.remove(id);remotePlayerShapes.remove(id);remoteShapeLoads.remove(id);
+          _snapshotRemovePlayer(id);scene.removeNetworkPlayer(id);
+          if(targetPlayerId==id)_clearCombatTarget();
+        }
+      }catch(e){messages.insert(0,'[Jugador remoto] LEFT_MAP: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.targetCharacterMaxHp&&packet.body.length>=12){
+      try{
+        final hp=PsTargetCharacterSelection.parse(packet);
+        targetPlayerId=hp.targetId;targetPlayerMaxHp=hp.maxHp;targetPlayerHp=hp.currentHp;
+        targetPlayerName=remotePlayerShapes[hp.targetId]?.name??_knownCharacterName(hp.targetId);
+        targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+      }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.targetCharacterHpUpdate&&packet.body.length>=14){
+      try{
+        final hp=PsTargetCharacterHp.parse(packet);
+        if(targetPlayerId==hp.targetId){
+          targetPlayerHp=hp.currentHp;targetPlayerMaxHp=hp.maxHp;
+          targetPlayerName=remotePlayerShapes[hp.targetId]?.name??targetPlayerName??_knownCharacterName(hp.targetId);
+        }
+      }catch(e){messages.insert(0,'[PvP Target] '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.characterCharacterAutoAttack&&packet.body.length>=15){
+      try{
+        final hit=PsCharacterUsualHit.parse(packet),self=liveCharacter?.id;
+        if(hit.success&&self!=null){
+          if(hit.attackerId==self){
+            if(targetPlayerId==hit.targetId&&targetPlayerHp!=null)targetPlayerHp=math.max(0,targetPlayerHp!-hit.hpDamage);
+            unawaited(scene.networkPlayerAttackCharacter(hit.targetId));
+            if(hit.hpDamage>0)unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+          }else if(hit.targetId==self){
+            final hp=liveHitpoints;
+            if(hp!=null)liveHitpoints=PsHitpoints(math.max(0,hp.hp-hit.hpDamage),math.max(0,hp.mp-hit.mpDamage),math.max(0,hp.sp-hit.spDamage));
+            if(hit.hpDamage>0)unawaited(scene.networkPlayerHit(hit.hpDamage));
+          }else if(hit.hpDamage>0){
+            unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+          }
+        }
+      }catch(e){messages.insert(0,'[PvP] Autoataque: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.useCharacterTargetSkill&&packet.body.length>=19){
+      try{
+        final hit=PsCharacterSkillHit.parse(packet),self=liveCharacter?.id;
+        if(hit.success&&self!=null){
+          if(hit.attackerId==self){
+            if(targetPlayerId==hit.targetId&&targetPlayerHp!=null)targetPlayerHp=math.max(0,targetPlayerHp!-hit.hpDamage);
+            unawaited(scene.networkPlayerAttackCharacter(hit.targetId));
+            if(hit.hpDamage>0)unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+          }else if(hit.targetId==self){
+            final hp=liveHitpoints;
+            if(hp!=null)liveHitpoints=PsHitpoints(math.max(0,hp.hp-hit.hpDamage),math.max(0,hp.mp-hit.mpDamage),math.max(0,hp.sp-hit.spDamage));
+            if(hit.hpDamage>0)unawaited(scene.networkPlayerHit(hit.hpDamage));
+          }else if(hit.hpDamage>0){
+            unawaited(scene.networkRemotePlayerHit(hit.targetId,hit.hpDamage));
+          }
+        }
+      }catch(e){messages.insert(0,'[PvP] Skill: '+e.toString());}
+      if(mounted)setState((){});
       return;
     }
     if(packet.type==PsPacketType.duelRequest&&packet.body.length>=8){
@@ -1299,6 +1539,9 @@ class _GameClientPageState extends State<GameClientPage> {
           if(hp!=null)liveHitpoints=PsHitpoints(0,hp.mp,hp.sp);
           unawaited(scene.networkPlayerDeath());
           messages.insert(0,'[Muerte] Has muerto · killer '+death.killerId.toString()+'.');
+        }else if(remotePlayerEntries.containsKey(death.characterId)){
+          if(targetPlayerId==death.characterId)targetPlayerHp=0;
+          unawaited(scene.networkRemotePlayerDeath(death.characterId));
         }
       }catch(e){messages.insert(0,'[Muerte] '+e.toString());}
     }else if(packet.type==PsPacketType.characterLeaveDead&&packet.body.length>=4){
@@ -1314,6 +1557,11 @@ class _GameClientPageState extends State<GameClientPage> {
           lastRebirth=info;dead=false;rebirthPending=false;
           unawaited(scene.networkPlayerRebirth(info.x,info.y,info.z));
           messages.insert(0,'[Renacer] Posición '+info.x.toStringAsFixed(1)+', '+info.z.toStringAsFixed(1)+' · penalización '+info.expLoss.toString()+'.');
+        }else if(remotePlayerEntries.containsKey(info.characterId)){
+          final old=remotePlayerEntries[info.characterId]!;
+          final entered=PsEnteredMap(info.characterId,old.isAdmin,old.angle,info.x,info.y,info.z,old.guildId,old.vehicleId);
+          remotePlayerEntries[info.characterId]=entered;_snapshotUpsertPlayer(entered);
+          unawaited(scene.networkRemotePlayerRebirth(info.characterId,info.x,info.y,info.z,old.angle));
         }
       }catch(e){messages.insert(0,'[Renacer] '+e.toString());}
     }else if(packet.type==PsPacketType.targetMobHpUpdate&&packet.body.length>=10){
