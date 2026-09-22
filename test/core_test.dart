@@ -429,6 +429,27 @@ void main() {
       expect(n.y,greaterThan(0));
       expect(n.z,closeTo(0,1e-6));
     });
+    test('terrain layer lookup follows native half-resolution type map',(){
+      final w=WorldData(
+        4,
+        Uint16List.fromList(List<int>.filled(9,100)),
+        Uint8List.fromList(<int>[
+          0,1,1,
+          0,1,0,
+          0,0,0,
+        ]),
+        <WorldLayer>[
+          WorldLayer('grass.tga',4,'step_grass.wav'),
+          WorldLayer('stone.tga',4,'step_stone.wav'),
+        ],
+        const <WorldInstance>[],
+        '',
+      );
+      expect(w.layerIndexAt(2,0),1);
+      expect(w.layerAt(2,0)!.sound,'step_stone.wav');
+      expect(w.layerAt(0,0)!.sound,'step_grass.wav');
+      expect(w.layerIndexAt(999,999),0);
+    });
   });
 
   group('VAni',(){
