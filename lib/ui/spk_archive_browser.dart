@@ -904,7 +904,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
     }
     if (error is FormatException) {
-      return error.message;
+      final message = error.message.toString();
+      if (message.contains('Missing extension byte') ||
+          message.contains('Unexpected extension byte')) {
+        return 'SPK_TEXT_ENCODING_INVALID: se intentó interpretar como UTF-8 '
+            'un recurso que no contiene UTF-8 válido. Studio no modificó el '
+            'payload; usa la codificación legacy correcta o la vista binaria.';
+      }
+      return message;
     }
     return error.toString();
   }
@@ -2760,22 +2767,39 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         property('Confianza', source.nameConfidence(record)),
         property('Evidencia', source.nameEvidence(record)),
         const Divider(height: 26),
-        FilledButton.tonalIcon(
-          onPressed: busy || !source.canReadRecord(record)
-              ? null
-              : () => inspectResource(record),
-          icon: Icon(
-            source.canReadRecord(record)
-                ? Icons.manage_search
-                : Icons.lock_outline,
-            size: 17,
+        if (!source.canReadRecord(record)) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xff202637),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xff6b5b3e)),
+            ),
+            child: Text(
+              source.names.isConfirmed(record.entryId)
+                  ? 'PAYLOAD NO LEÍDO: el registro existe en el índice, pero '
+                        'su contenido AES-GCM todavía no está autenticado.'
+                  : 'PAYLOAD NO LEÍDO: la ruta mostrada es '
+                        '${source.nameConfidence(record)}. Hasta autenticar '
+                        'el payload no se habilitan visor ni edición.',
+              style: const TextStyle(
+                fontSize: 10,
+                color: Color(0xffd9b66f),
+              ),
+            ),
           ),
-          label: Text(
-            source.canReadRecord(record)
-                ? 'Leer / inspeccionar'
-                : 'Contenido cifrado',
+          const SizedBox(height: 7),
+          FilledButton.icon(
+            onPressed: busy ? null : captureResourceProfile,
+            icon: const Icon(Icons.key_outlined, size: 17),
+            label: const Text('Desbloquear con AutoPerfil SPK'),
           ),
-        ),
+        ] else
+          FilledButton.tonalIcon(
+            onPressed: busy ? null : () => inspectResource(record),
+            icon: const Icon(Icons.manage_search, size: 17),
+            label: const Text('Leer / inspeccionar'),
+          ),
         const SizedBox(height: 7),
         if (source.canReadRecord(record) &&
             _recordHasStructuredEditor(record)) ...[
@@ -3313,9 +3337,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                           ),
                         )
                       else
-                        const Text(
-                          'Índice y rutas listos · contenido aún cifrado · ejecuta AutoPerfil SPK',
-                          style: TextStyle(
+                        Text(
+                          'Índice validado · ${source.reads} payloads leídos · '
+                          'rutas aún no confirmadas por contenido · '
+                          'ejecuta AutoPerfil SPK',
+                          style: const TextStyle(
                             fontSize: 9,
                             color: Color(0xffd3ac76),
                           ),
