@@ -3197,6 +3197,44 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<bool> _pickupNearestMapItem() async {
+    final session=liveWorld,a=scene.character,self=liveCharacter?.id;
+    if(session==null||a==null||liveMapItems.isEmpty)return false;
+    final wx=scene.originX+a.root.position.x;
+    final wy=a.root.position.y;
+    final wz=scene.originZ-a.root.position.z;
+    PsMapItem? best;
+    var bestDistance=3.2*3.2;
+    for(final item in liveMapItems.values){
+      if(item.ownerId!=0&&self!=null&&item.ownerId!=self)continue;
+      final dx=item.x-wx,dy=item.y-wy,dz=item.z-wz;
+      final distance=dx*dx+dy*dy+dz*dz;
+      if(distance<bestDistance){
+        bestDistance=distance;
+        best=item;
+      }
+    }
+    if(best==null)return false;
+    try{
+      await session.pickupMapItem(best.globalId);
+      final label=best.type==26
+        ?(uiLocale=='spn'?'Oro':'Gold')
+        :(catalog?.itemName(best.type,best.typeId,uiLocale)??'Item');
+      messages.insert(0,'[Drop] '+label+' · recogida solicitada a World.');
+      if(mounted)setState((){});
+      return true;
+    }catch(e){
+      messages.insert(0,'[Drop] '+e.toString());
+      if(mounted)setState((){});
+      return true;
+    }
+  }
+
+  Future<void> _interactNearest() async {
+    if(await _pickupNearestMapItem())return;
+    await _interactNearestNpc();
+  }
+
   Future<void> _interactNearestNpc() async {
     if(stage!=GameStage.world||dead||rebirthPending)return;
     final globalId=scene.nearestNetworkNpcId();
@@ -3850,7 +3888,7 @@ class _GameClientPageState extends State<GameClientPage> {
     onAction:(key){
       if(stage!=GameStage.world||dead||rebirthPending)return;
       if(key==LogicalKeyboardKey.keyR){scene.resetCombat();return;}
-      if(key==LogicalKeyboardKey.keyE){unawaited(_interactNearestNpc());return;}
+      if(key==LogicalKeyboardKey.keyE){unawaited(_interactNearest());return;}
       if(key==LogicalKeyboardKey.keyM){unawaited(_toggleVehicle());return;}
       final keys=<LogicalKeyboardKey>[
         LogicalKeyboardKey.digit1,LogicalKeyboardKey.digit2,
@@ -4013,6 +4051,7 @@ class _GameClientPageState extends State<GameClientPage> {
             inventory:liveInventory,
             warehouse:liveWarehouse,
             guildWarehouse:liveGuildWarehouse,
+            mapItems:liveMapItems.values.toList(growable:false),
             guildWarehouseAvailable:guildWarehouseAvailable,
             guildWarehouseOpen:guildWarehouseOpen,
             friends:liveFriends,
