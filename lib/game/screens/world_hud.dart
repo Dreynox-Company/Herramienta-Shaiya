@@ -198,15 +198,12 @@ class WorldHud extends StatelessWidget {
           style:const TextStyle(fontSize:10.5,color:Colors.white70,height:1.35),
         ),
         const SizedBox(height:16),
-        SizedBox(
-          width:150,height:34,
-          child:ShaiyaButton(
-            label:rebirthPending
-              ?(locale=='spn'?'Renaciendo…':'Rebirthing…')
-              :(locale=='spn'?'Renacer en ciudad':'Rebirth in town'),
-            onPressed:rebirthPending?null:onRebirth,
-            compact:true,
-          ),
+        shaiyaRedButton(
+          rebirthPending
+            ?(locale=='spn'?'Renaciendo…':'Rebirthing…')
+            :(locale=='spn'?'Renacer en ciudad':'Rebirth in town'),
+          rebirthPending?null:onRebirth,
+          width:150,height:34,fontSize:10.5,
         ),
       ]),
     ),
