@@ -1836,6 +1836,7 @@ class _GameClientPageState extends State<GameClientPage> {
       try{
         final party=PsPartyList.parse(packet);
         livePartyMembers=party.members.toList();
+        partySearchRegistered=false;livePartySearchers=[];
         if(partyLeaderId==null){
           if(outgoingPartyInviteId!=null)partyLeaderId=liveCharacter?.id;
           else if(party.leaderIndex<party.members.length)partyLeaderId=party.members[party.leaderIndex].id;
@@ -1846,6 +1847,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }else if(packet.type==PsPacketType.partyEnter){
       try{
         final member=parsePartyEnter(packet);_upsertPartyMember(member);
+        partySearchRegistered=false;livePartySearchers=[];
         messages.insert(0,'[Party] '+member.name+' entró al grupo.');
       }catch(e){messages.insert(0,'[Party] '+e.toString());}
     }else if((packet.type==PsPacketType.partyLeave||packet.type==PsPacketType.partyKick)&&packet.body.length>=4){
