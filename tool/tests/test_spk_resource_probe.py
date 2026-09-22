@@ -22,10 +22,13 @@ class ResourceProbeContractTest(unittest.TestCase):
 
     def test_windows_probe_and_studio_force_utf8_safe_evidence(self):
         probe_text = MODULE.read_text(encoding='utf-8')
-        self.assertNotRegex(
-            probe_text,
-            r"write_text\([^\n]+\)(?![^\n]*encoding=['\"]utf-8['\"])",
-        )
+        write_lines = [
+            line for line in probe_text.splitlines()
+            if '.write_text(' in line
+        ]
+        self.assertGreaterEqual(len(write_lines), 3)
+        for line in write_lines:
+            self.assertIn("encoding='utf-8'", line)
         browser = (
             ROOT / 'lib' / 'ui' / 'spk_archive_browser.dart'
         ).read_text(encoding='utf-8')
