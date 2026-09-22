@@ -1046,6 +1046,25 @@ class PsNpcAttack {
   }
 }
 
+class PsWorldTime {
+  final int raw,year,month,day,hour,minute,second;
+  const PsWorldTime(this.raw,this.year,this.month,this.day,this.hour,this.minute,this.second);
+  static PsWorldTime parse(PsPacket p){
+    if(p.type!=PsPacketType.worldDay||p.body.length<4){
+      throw FormatException('WORLD_DAY truncado: ${p.body.length}.');
+    }
+    final raw=ByteData.sublistView(p.body).getInt32(0,Endian.little);
+    final second=raw&0x3f;
+    final minute=(raw>>6)&0x3f;
+    final packed=raw>>12;
+    final hour=packed&0x1f;
+    final day=(packed>>5)&0x1f;
+    final month=(packed>>10)&0x0f;
+    final year=16+(packed>>14);
+    return PsWorldTime(raw,year,month,day,hour,minute,second);
+  }
+}
+
 class PsMapWeather {
   final bool setType;
   final int state,power;
