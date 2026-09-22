@@ -98,6 +98,9 @@ class PsPacketType {
   static const guildCreateAgree=0x0D22;
   static const guildList=0x0D2F;
   static const guildListAdd=0x0D30;
+  static const guildWarehouseItemList=0x0D29;
+  static const guildWarehouseItemAdd=0x0D31;
+  static const guildWarehouseItemRemove=0x0D32;
   static const guildRankUpdate=0x0D37;
   static const partyList=0x0B01;
   static const partyRequest=0x0B02;
@@ -982,6 +985,40 @@ class PsGuildCreateInvite {
     if(p.type!=PsPacketType.guildCreateAgree||p.body.length<94)throw FormatException('GUILD_CREATE_AGREE truncado: ${p.body.length}.');
     final d=ByteData.sublistView(p.body);
     return PsGuildCreateInvite(d.getUint32(0,Endian.little),_fixedString(p.body,4,25),_fixedString(p.body,29,65));
+  }
+}
+
+PsInventoryItem _guildWarehouseItem(Uint8List b,int offset){
+  if(offset<0||offset+100>b.length)throw FormatException('GuildWarehouseItem truncado en '+offset.toString()+'/'+b.length.toString()+'.');
+  final d=ByteData.sublistView(b);
+  final gems=List<int>.generate(6,(i)=>d.getInt32(offset+5+i*4,Endian.little));
+  final raw=b.sublist(offset+79,offset+99),zero=raw.indexOf(0);
+  final craft=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+  return PsInventoryItem(
+    bag:255,slot:b[offset],type:b[offset+1],typeId:b[offset+2],
+    quality:d.getUint16(offset+3,Endian.little),count:b[offset+29],
+    gems:List.unmodifiable(gems),craftName:craft,dyed:b[offset+52]!=0,
+  );
+}
+
+List<PsInventoryItem> parseGuildWarehouseItems(PsPacket p){
+  if(p.type!=PsPacketType.guildWarehouseItemList||p.body.isEmpty)return const [];
+  final count=p.body[0],need=1+count*100;
+  if(p.body.length<need)throw FormatException('GUILD_WAREHOUSE_ITEM_LIST truncado: count='+count.toString()+' bytes='+p.body.length.toString()+'.');
+  return List<PsInventoryItem>.generate(count,(i)=>_guildWarehouseItem(p.body,1+i*100),growable:false);
+}
+
+class PsGuildWarehouseMutation {
+  final PsInventoryItem item;
+  final int characterId;
+  const PsGuildWarehouseMutation(this.item,this.characterId);
+  static PsGuildWarehouseMutation parse(PsPacket p){
+    if((p.type!=PsPacketType.guildWarehouseItemAdd&&p.type!=PsPacketType.guildWarehouseItemRemove)||p.body.length<104){
+      throw FormatException('GUILD_WAREHOUSE mutation truncado: '+p.body.length.toString()+'.');
+    }
+    final item=_guildWarehouseItem(p.body,0);
+    final characterId=ByteData.sublistView(p.body).getUint32(100,Endian.little);
+    return PsGuildWarehouseMutation(item,characterId);
   }
 }
 
