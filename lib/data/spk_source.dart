@@ -442,15 +442,21 @@ class SpkArchiveSource {
     }
 
     final fileHashes = <String, String>{};
-    final confirmed = <int, String>{};
+    final recordsByDigest = <String, List<SpkRecord>>{};
+    final pathsByDigest = <String, Set<String>>{};
     final resources = index.simpleResources.toList(growable: false);
     for (var i = 0; i < resources.length; i++) {
       control.check();
       final record = resources[i];
       final candidates = bySize[record.decodedBytes];
       if (candidates == null || candidates.isEmpty) continue;
+
       final result = await readEntry(record);
       final digest = sha256.convert(result.bytes).toString();
+      recordsByDigest
+          .putIfAbsent(digest, () => <SpkRecord>[])
+          .add(record);
+
       for (final candidate in candidates) {
         control.check();
         final candidateHash = fileHashes[candidate.path] ??= sha256
@@ -460,24 +466,47 @@ class SpkArchiveSource {
         final relative = p
             .relative(candidate.path, from: reference.path)
             .replaceAll('\\', '/');
-        confirmed[record.entryId] = relative;
-        break;
+        pathsByDigest.putIfAbsent(digest, () => <String>{}).add(relative);
       }
       if ((i + 1) % 100 == 0) {
         progress('Confirmando rutas por SHA-256…', i + 1, resources.length);
       }
     }
+
+    final confirmed = <int, String>{};
+    var ambiguousRecords = 0;
+    var ambiguousReferencePaths = 0;
+    for (final entry in recordsByDigest.entries) {
+      final matchingRecords = entry.value;
+      final matchingPaths = pathsByDigest[entry.key] ?? const <String>{};
+      if (matchingRecords.length == 1 && matchingPaths.length == 1) {
+        confirmed[matchingRecords.single.entryId] = matchingPaths.single;
+        continue;
+      }
+      if (matchingRecords.length > 1 && matchingPaths.isNotEmpty) {
+        ambiguousRecords += matchingRecords.length;
+      }
+      if (matchingPaths.length > 1) {
+        ambiguousReferencePaths += matchingPaths.length;
+      }
+    }
+
     names.mergeConfirmed(confirmed);
+    final ambiguousHintsRemoved = names.removeAmbiguousHints();
     progress(
-      'Rutas confirmadas: ${confirmed.length}.',
+      'Rutas confirmadas: ${confirmed.length} · '
+      '$ambiguousRecords recursos ambiguos omitidos.',
       resources.length,
       resources.length,
     );
     return {
       'scannedFiles': scanned,
       'confirmed': confirmed.length,
+      'ambiguousRecords': ambiguousRecords,
+      'ambiguousReferencePaths': ambiguousReferencePaths,
+      'ambiguousHintsRemoved': ambiguousHintsRemoved,
       'remainingHints': names.hints.length,
-      'method': 'decoded-sha256-reference',
+      'method': 'decoded-sha256-one-to-one-reference',
     };
   }
 
@@ -1524,6 +1553,10 @@ class SpkArchiveSource {
     final incoming = SpkNameMap.fromJson(jsonDecode(text));
     names.mergeHintRecords(incoming.hints);
     names.mergeConfirmed(incoming.paths);
+    // External/legacy maps may contain the same visible path assigned to
+    // several Entry IDs. Keep those aliases fail-closed instead of showing
+    // duplicate files that look authoritative.
+    names.removeAmbiguousHints();
   }
 
   Future<Map<String, Object?>> extract(
