@@ -891,7 +891,111 @@ class _GameClientPageState extends State<GameClientPage> {
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
       return;
     }
-    if([
+    if(packet.type==PsPacketType.friendList){
+      try{liveFriends=parseFriendList(packet).toList();}
+      catch(e){messages.insert(0,'[Friends] '+e.toString());}
+    }else if(packet.type==PsPacketType.friendRequest&&packet.body.length>=21){
+      try{
+        pendingFriendRequestName=parseFriendRequestName(packet);
+        _closeWorldPanels();socialOpen=true;
+        messages.insert(0,'[Friends] Solicitud de '+pendingFriendRequestName!+'.');
+      }catch(e){messages.insert(0,'[Friends] '+e.toString());}
+    }else if(packet.type==PsPacketType.friendResponse&&packet.body.isNotEmpty){
+      final accepted=packet.body[0]!=0;
+      messages.insert(0,'[Friends] Solicitud '+(accepted?'aceptada.':'rechazada.'));
+    }else if(packet.type==PsPacketType.friendAdd&&packet.body.length>=26){
+      try{
+        final friend=parseFriendAdd(packet);_upsertFriend(friend);
+        messages.insert(0,'[Friends] '+friend.name+' agregado.');
+      }catch(e){messages.insert(0,'[Friends] '+e.toString());}
+    }else if(packet.type==PsPacketType.friendDelete&&packet.body.length>=4){
+      final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      final old=liveFriends.where((f)=>f.id==id).firstOrNull;
+      liveFriends=liveFriends.where((f)=>f.id!=id).toList();
+      if(old!=null)messages.insert(0,'[Friends] '+old.name+' eliminado.');
+    }else if(packet.type==PsPacketType.friendOnline&&packet.body.length>=5){
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little),online=packet.body[4]!=0;
+      final old=liveFriends.where((f)=>f.id==id).firstOrNull;
+      if(old!=null)_upsertFriend(old.copyWith(online:online));
+    }else if(packet.type==PsPacketType.partyRequest&&packet.body.length>=4){
+      pendingPartyRequesterId=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      _closeWorldPanels();socialOpen=true;
+      final known=liveFriends.where((f)=>f.id==pendingPartyRequesterId).firstOrNull;
+      messages.insert(0,'[Party] Invitación de '+(known?.name??('#'+pendingPartyRequesterId.toString()))+'.');
+    }else if(packet.type==PsPacketType.partyResponse&&packet.body.length>=5){
+      final accepted=packet.body[0]!=0;
+      final id=ByteData.sublistView(packet.body).getUint32(1,Endian.little);
+      if(!accepted){
+        outgoingPartyInviteId=null;
+        messages.insert(0,'[Party] '+(liveFriends.where((f)=>f.id==id).firstOrNull?.name??('#'+id.toString()))+' rechazó la invitación.');
+      }
+    }else if(packet.type==PsPacketType.partyList&&packet.body.length>=2){
+      try{
+        final party=PsPartyList.parse(packet);
+        livePartyMembers=party.members.toList();
+        if(partyLeaderId==null){
+          if(outgoingPartyInviteId!=null)partyLeaderId=liveCharacter?.id;
+          else if(party.leaderIndex<party.members.length)partyLeaderId=party.members[party.leaderIndex].id;
+        }
+        outgoingPartyInviteId=null;
+        messages.insert(0,'[Party] Grupo sincronizado · '+party.members.length.toString()+' miembros remotos.');
+      }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    }else if(packet.type==PsPacketType.partyEnter){
+      try{
+        final member=parsePartyEnter(packet);_upsertPartyMember(member);
+        messages.insert(0,'[Party] '+member.name+' entró al grupo.');
+      }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    }else if((packet.type==PsPacketType.partyLeave||packet.type==PsPacketType.partyKick)&&packet.body.length>=4){
+      final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      if(id==liveCharacter?.id){
+        livePartyMembers=[];partyLeaderId=null;
+        messages.insert(0,packet.type==PsPacketType.partyKick?'[Party] Fuiste expulsado del grupo.':'[Party] Grupo disuelto/salida confirmada.');
+      }else{
+        final old=livePartyMembers.where((m)=>m.id==id).firstOrNull;
+        livePartyMembers=livePartyMembers.where((m)=>m.id!=id).toList();
+        if(old!=null)messages.insert(0,'[Party] '+old.name+(packet.type==PsPacketType.partyKick?' fue expulsado.':' salió del grupo.'));
+      }
+    }else if(packet.type==PsPacketType.partyChangeLeader&&packet.body.length>=4){
+      partyLeaderId=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      final leader=livePartyMembers.where((m)=>m.id==partyLeaderId).firstOrNull;
+      messages.insert(0,'[Party] Nuevo líder: '+(leader?.name??(partyLeaderId==liveCharacter?.id?nameController.text:'#'+partyLeaderId.toString()))+'.');
+    }else if(packet.type==PsPacketType.partyMemberHpSpMp&&packet.body.length>=16){
+      try{
+        final v=PsPartyVitals.parse(packet,maximum:false);
+        _updatePartyMember(v.id,(m)=>m.copyWith(hp:v.hp,sp:v.sp,mp:v.mp));
+      }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    }else if(packet.type==PsPacketType.partyMemberMaxHpSpMp&&packet.body.length>=16){
+      try{
+        final v=PsPartyVitals.parse(packet,maximum:true);
+        _updatePartyMember(v.id,(m)=>m.copyWith(maxHp:v.hp,maxSp:v.sp,maxMp:v.mp));
+      }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    }else if((packet.type==PsPacketType.partyCharacterSpMp||packet.type==PsPacketType.partySetMax)&&packet.body.length>=9){
+      try{
+        final v=PsPartySingleValue.parse(packet),maximum=packet.type==PsPacketType.partySetMax;
+        _updatePartyMember(v.id,(m){
+          if(maximum){
+            if(v.type==0)return m.copyWith(maxHp:v.value);
+            if(v.type==1)return m.copyWith(maxSp:v.value);
+            return m.copyWith(maxMp:v.value);
+          }
+          if(v.type==0)return m.copyWith(hp:v.value);
+          if(v.type==1)return m.copyWith(sp:v.value);
+          return m.copyWith(mp:v.value);
+        });
+      }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    }else if(packet.type==PsPacketType.partyMemberLevel&&packet.body.length>=6){
+      final d=ByteData.sublistView(packet.body),id=d.getUint32(0,Endian.little),level=d.getUint16(4,Endian.little);
+      _updatePartyMember(id,(m)=>m.copyWith(level:level));
+    }else if((packet.type==PsPacketType.partyAddedBuff||packet.type==PsPacketType.partyRemovedBuff)&&packet.body.length>=7){
+      try{
+        final change=PsPartyBuffChange.parse(packet);
+        _updatePartyMember(change.id,(m){
+          final next=[...m.buffs.where((b)=>!(b.skillId==change.skillId&&b.skillLevel==change.skillLevel))];
+          if(packet.type==PsPacketType.partyAddedBuff)next.add(PsPartyBuff(change.skillId,change.skillLevel,-1));
+          return m.copyWith(buffs:List.unmodifiable(next));
+        });
+      }catch(e){messages.insert(0,'[Party] '+e.toString());}
+    }else if([
       PsPacketType.chatNormal,PsPacketType.chatWhisper,PsPacketType.chatWorld,
       PsPacketType.chatGuild,PsPacketType.chatParty,PsPacketType.chatMap,
     ].contains(packet.type)){
