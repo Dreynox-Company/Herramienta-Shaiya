@@ -351,8 +351,14 @@ jobs:
             'worldMoved':'11-after-movement.png',
           }
           def flutter_image(stage):
-            os_capture=root/f'os-{stage}.png'
-            source=os_capture if os_capture.exists() else root/f'{stage}.png'
+            # The integration framebuffer is the authoritative Flutter render.
+            # CopyFromScreen on Windows/ANGLE can capture partially presented
+            # swapchain rows as sky-colored bands even when the real client is
+            # rendered correctly. Keep os-*.png as an executable smoke artifact,
+            # but never use it as the visual-parity source.
+            source=root/f'{stage}.png'
+            if not source.exists():
+              raise FileNotFoundError(source)
             return Image.open(source).convert('RGB').resize((1024,742))
           def native_image(name):
             p=next(native.rglob(name))
@@ -377,7 +383,8 @@ jobs:
               'edgeCorrelation':round(edge,5),
               'luminanceCorrelation':round(lum,5),
               'native':str(rp),
-              'flutter':str((root/f'os-{stage}.png') if (root/f'os-{stage}.png').exists() else (root/f'{stage}.png')),
+              'flutter':str(root/f'{stage}.png'),
+              'osCapture':str(root/f'os-{stage}.png') if (root/f'os-{stage}.png').exists() else None,
             }
             diff=ImageChops.difference(fa,nb)
             ImageEnhance.Contrast(diff).enhance(2.0).save(root/f'diff-{stage}.png')
