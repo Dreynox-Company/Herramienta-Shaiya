@@ -19,6 +19,7 @@ class WorldHud extends StatelessWidget {
   final PsAdditionalStats? additionalStats;
   final PsHitpoints? hitpoints;
   final List<PsActiveBuff> buffs;
+  final PsMapWeather? weather;
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
@@ -58,6 +59,7 @@ class WorldHud extends StatelessWidget {
     required this.additionalStats,
     required this.hitpoints,
     required this.buffs,
+    required this.weather,
     required this.targetMobGlobalId,
     required this.targetMobId,
     required this.targetHp,
@@ -119,6 +121,8 @@ class WorldHud extends StatelessWidget {
             Positioned(left:390,top:60,width:245,height:48,child:_targetHud()),
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
+          if(weather!=null&&weather!.state!=0)
+            Positioned.fill(child:IgnorePointer(child:CustomPaint(painter:_WeatherPainter(weather!)))),
           ..._worldLabels(),
           if(statusOpen)
             Positioned(right:198,top:210,width:318,height:420,child:_statusWindow()),
@@ -1432,6 +1436,41 @@ class _ChatInputState extends State<_ChatInput> {
       ),
     ),
   );
+}
+
+class _WeatherPainter extends CustomPainter {
+  final PsMapWeather weather;
+  _WeatherPainter(this.weather);
+
+  @override
+  void paint(Canvas canvas,Size size){
+    final power=weather.power.clamp(1,3);
+    final count=weather.rain?(35+power*28):(weather.snow?25+power*20:0);
+    if(count==0)return;
+    final tick=DateTime.now().millisecondsSinceEpoch~/50;
+    if(weather.rain){
+      final paint=Paint()
+        ..color=Color.fromARGB(55+power*22,180,210,255)
+        ..strokeWidth=.7+power*.25
+        ..strokeCap=StrokeCap.round;
+      for(var i=0;i<count;i++){
+        final x=((i*83+tick*11)%1000)/1000*size.width;
+        final y=((i*173+tick*23)%1000)/1000*size.height;
+        final len=6.0+power*3+i%4;
+        canvas.drawLine(Offset(x,y),Offset(x-2.5-power,y+len),paint);
+      }
+    }else if(weather.snow){
+      final paint=Paint()..color=Color.fromARGB(95+power*32,245,250,255);
+      for(var i=0;i<count;i++){
+        final x=((i*97+tick*(2+power))%1000)/1000*size.width;
+        final y=((i*151+tick*(3+power))%1000)/1000*size.height;
+        canvas.drawCircle(Offset(x,y),.8+((i+power)%3)*.55,paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WeatherPainter oldDelegate)=>true;
 }
 
 class _MiniMapPainter extends CustomPainter {
