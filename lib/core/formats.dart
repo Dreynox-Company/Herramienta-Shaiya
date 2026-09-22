@@ -1159,6 +1159,82 @@ class StaticPart {
   StaticPart(this.texture, this.mesh);
 }
 
+
+class VaniMeshData {
+  final String texture;
+  final Uint16List indices;
+  final List<Float32List> positions;
+  final List<Float32List> normals;
+  final List<Float32List> uv;
+  const VaniMeshData(this.texture,this.indices,this.positions,this.normals,this.uv);
+
+  int get frameCount=>positions.length;
+  int get vertices=>positions.isEmpty?0:positions.first.length~/3;
+
+  MeshData frame(int index,String source){
+    if(positions.isEmpty)throw StateError('VAni sin frames.');
+    final i=index.clamp(0,positions.length-1).toInt();
+    return MeshData(
+      Float32List.fromList(positions[i]),
+      Float32List.fromList(normals[i]),
+      Float32List.fromList(uv[i]),
+      Uint16List.fromList(indices),
+      Uint8List(0),
+      Float32List(0),
+      const <v.Matrix4>[],
+      source,
+    );
+  }
+}
+
+class VaniData {
+  final v.Vector3 center,lower,upper,lower2,upper2;
+  final double radius;
+  final int frameCount,unknown1,unknown2;
+  final List<VaniMeshData> meshes;
+  const VaniData(
+    this.center,this.radius,this.lower,this.upper,this.frameCount,this.unknown1,
+    this.meshes,this.lower2,this.upper2,this.unknown2,
+  );
+}
+
+VaniData readVani(Uint8List bytes,String source){
+  final r=Bin(bytes,source);
+  final center=r.vec(),radius=r.f32(),lower=r.vec(),upper=r.vec();
+  final meshCount=r.count(10000),frameCount=r.count(10000),unknown1=r.i32();
+  if(frameCount<=0)r.fail('VAni sin frames.');
+  final meshes=<VaniMeshData>[];
+  for(var m=0;m<meshCount;m++){
+    final texture=r.str(65536);
+    final faceCount=r.count(2000000);
+    r.need(faceCount*6);
+    final indices=Uint16List(faceCount*3);
+    for(var i=0;i<indices.length;i++)indices[i]=r.u16();
+    final vertexCount=r.count(65536);
+    final positions=List<Float32List>.generate(frameCount,(_)=>Float32List(vertexCount*3),growable:false);
+    final normals=List<Float32List>.generate(frameCount,(_)=>Float32List(vertexCount*3),growable:false);
+    final uv=List<Float32List>.generate(frameCount,(_)=>Float32List(vertexCount*2),growable:false);
+    for(var frame=0;frame<frameCount;frame++){
+      for(var i=0;i<vertexCount;i++){
+        final p=r.vec(),n=r.vec();
+        r.i32(); // VAni bone id, normally -1.
+        final u=r.f32(),v0=r.f32();
+        positions[frame][i*3]=p.x;positions[frame][i*3+1]=p.y;positions[frame][i*3+2]=p.z;
+        normals[frame][i*3]=n.x;normals[frame][i*3+1]=n.y;normals[frame][i*3+2]=n.z;
+        uv[frame][i*2]=u;uv[frame][i*2+1]=v0;
+      }
+    }
+    for(final index in indices){if(index>=vertexCount)r.fail('Triángulo VAni fuera de la malla.');}
+    meshes.add(VaniMeshData(texture,indices,positions,normals,uv));
+  }
+  final lower2=r.vec(),upper2=r.vec(),unknown2=r.i32();
+  r.end();
+  return VaniData(
+    center,radius,lower,upper,frameCount,unknown1,
+    List.unmodifiable(meshes),lower2,upper2,unknown2,
+  );
+}
+
 class SmodCollisionMesh {
   final List<v.Vector3> vertices;
   final Uint16List indices;
