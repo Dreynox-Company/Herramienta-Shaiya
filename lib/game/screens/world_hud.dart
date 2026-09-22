@@ -23,9 +23,10 @@ class WorldHud extends StatelessWidget {
   final List<PsInventoryItem> inventory,warehouse;
   final int gold;
   final NpcShopRule? shop;
-  final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,warehouseOpen;
-  final VoidCallback onCloseShop,onCloseWarehouse;
-  final ValueChanged<int> onBuyShopProduct;
+  final NpcGateRule? gate;
+  final bool inventoryOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,gateOpen,warehouseOpen;
+  final VoidCallback onCloseShop,onCloseGate,onCloseWarehouse;
+  final ValueChanged<int> onBuyShopProduct,onUseGate;
   final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory,onToggleStatus,onToggleSkills,onToggleQuestLog;
   final ValueChanged<int> onAddStat;
@@ -64,15 +65,19 @@ class WorldHud extends StatelessWidget {
     required this.warehouse,
     required this.gold,
     required this.shop,
+    required this.gate,
     required this.inventoryOpen,
     required this.statusOpen,
     required this.skillsOpen,
     required this.questLogOpen,
     required this.shopOpen,
+    required this.gateOpen,
     required this.warehouseOpen,
     required this.onCloseShop,
+    required this.onCloseGate,
     required this.onCloseWarehouse,
     required this.onBuyShopProduct,
+    required this.onUseGate,
     required this.onSellInventory,
     required this.onStoreWarehouse,
     required this.onWithdrawWarehouse,
@@ -122,6 +127,11 @@ class WorldHud extends StatelessWidget {
             Positioned(
               right:198,top:250,width:292,height:390,
               child:_shopWindow(),
+            ),
+          if(gateOpen&&gate!=null)
+            Positioned(
+              right:198,top:250,width:300,height:300,
+              child:_gateWindow(),
             ),
           if(warehouseOpen)
             Positioned(
@@ -871,6 +881,77 @@ class WorldHud extends StatelessWidget {
       ]),
     );
   }
+  Widget _gateWindow(){
+    final g=gate!;
+    final localized=catalog.questText(locale)?.npc(g.type,g.typeId);
+    final names=localized?.destinations??const <String>[];
+    final targets=g.targets.where((x)=>x.mapId>0).toList();
+    return _panelShell(
+      locale=='spn'?'Gatekeeper':'Gatekeeper',
+      ListView.separated(
+        padding:const EdgeInsets.all(10),
+        itemCount:targets.length,
+        separatorBuilder:(_,__)=>const SizedBox(height:7),
+        itemBuilder:(context,index){
+          final target=targets[index];
+          final name=index<names.length&&names[index].trim().isNotEmpty
+            ?names[index].trim()
+            :(locale=='spn'?'Mapa ${target.mapId}':'Map ${target.mapId}');
+          final affordable=gold>=target.cost;
+          return Tooltip(
+            waitDuration:const Duration(milliseconds:250),
+            message:name+
+              '\n'+(locale=='spn'?'Mapa: ':'Map: ')+target.mapId.toString()+
+              '\n'+(locale=='spn'?'Coordenadas: ':'Coordinates: ')+
+                '${target.x.toStringAsFixed(1)}, ${target.y.toStringAsFixed(1)}, ${target.z.toStringAsFixed(1)}'+
+              '\n'+(locale=='spn'?'Coste: ':'Cost: ')+target.cost.toString(),
+            child:GestureDetector(
+              onDoubleTap:affordable?()=>onUseGate(target.index):null,
+              child:Container(
+                padding:const EdgeInsets.all(8),
+                decoration:BoxDecoration(
+                  color:const Color(0xff17120e),
+                  border:Border.all(color:affordable?const Color(0xff8c7047):const Color(0xff5b3732)),
+                ),
+                child:Row(children:[
+                  const Icon(Icons.portal,size:27,color:Color(0xff9fd8ff)),
+                  const SizedBox(width:8),
+                  Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text(
+                      name,
+                      maxLines:1,overflow:TextOverflow.ellipsis,
+                      style:TextStyle(
+                        fontSize:10.5,fontWeight:FontWeight.w600,
+                        color:affordable?const Color(0xffffe0a1):const Color(0xffa97670),
+                      ),
+                    ),
+                    Text(
+                      'Mapa ${target.mapId} · ${target.cost} oro',
+                      style:const TextStyle(fontSize:8,color:Colors.white54),
+                    ),
+                  ])),
+                ]),
+              ),
+            ),
+          );
+        },
+      ),
+      footer:Container(
+        height:34,
+        padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          Expanded(child:Text(
+            locale=='spn'?'Doble clic para viajar.':'Double click to travel.',
+            style:const TextStyle(fontSize:8,color:Colors.white54),
+          )),
+          Text('Oro: $gold',style:const TextStyle(fontSize:10,color:Color(0xffffd26a))),
+          const SizedBox(width:8),
+          GestureDetector(onTap:onCloseGate,child:const Icon(Icons.close,size:17,color:Colors.white70)),
+        ]),
+      ),
+    );
+  }
+
   Widget _shopWindow(){
     final s=shop!;
     return Container(
