@@ -107,6 +107,13 @@ jobs:
         run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
       - name: Build Windows release
         run: flutter build windows --release
+      - name: Native SPK writer round-trip - simple, fragments, index and sidecars
+        run: |
+          $release = Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release'
+          $zstd = Join-Path $release 'zstandard_windows.dll'
+          if (!(Test-Path $zstd)) { throw 'zstandard_windows.dll missing from release build.' }
+          $env:PATH = "$release;$env:PATH"
+          flutter test test/spk_writer_test.dart --reporter expanded
       - name: Start and check real release window
         run: ./tool/smoke_windows.ps1
       - name: Build self-contained SPK ResourceProbe
