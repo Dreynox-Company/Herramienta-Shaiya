@@ -818,9 +818,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (error is SpkFailure) {
       final output = error.report['output']?.toString();
       final consoleLog = error.report['consoleLog']?.toString();
+      final diagnosisFile = error.report['diagnosisFile']?.toString();
       final failure = error.report['failure']?.toString();
       final details = <String>[
         if (failure != null && failure.isNotEmpty) failure,
+        if (diagnosisFile != null && diagnosisFile.isNotEmpty)
+          'Diagnóstico: $diagnosisFile',
         if (consoleLog != null && consoleLog.isNotEmpty)
           'Log: $consoleLog'
         else if (output != null && output.isNotEmpty)
@@ -1177,6 +1180,107 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (mounted) Navigator.of(context).pop();
   });
 
+  Future<Map<String, Object?>> _diagnoseProbeFailure(
+    Directory output,
+    Map<String, dynamic> profile,
+  ) async {
+    final observations = File(
+      p.join(output.path, 'resource-observations.json'),
+    );
+    List<dynamic> rows = const [];
+    List<dynamic> events = const [];
+    if (await observations.exists()) {
+      try {
+        final raw = await readSpkJsonFile(observations);
+        if (raw is Map) {
+          rows = (raw['rows'] as List?) ?? const [];
+          events = (raw['events'] as List?) ?? const [];
+        }
+      } catch (_) {}
+    }
+
+    final eventCodes = <String>{
+      for (final event in events.whereType<Map>())
+        if (event['code'] != null) event['code'].toString(),
+    };
+    var withKey = 0;
+    var withAuth = 0;
+    var offlineValid = 0;
+    var simpleHits = 0;
+    var chunkHits = 0;
+    for (final raw in rows.whereType<Map>()) {
+      final row = Map<String, dynamic>.from(raw);
+      final key = row['key'];
+      if (key is Map && key['secretHex']?.toString().isNotEmpty == true) {
+        withKey++;
+      }
+      final auth = row['auth'];
+      if (auth is Map &&
+          auth['nonceHex']?.toString().isNotEmpty == true &&
+          auth['tagHex']?.toString().isNotEmpty == true) {
+        withAuth++;
+      }
+      if (row['offlineValid'] == true) offlineValid++;
+      final target = row['target'];
+      if (target is Map && target['kind'] == 'simple') simpleHits++;
+      if (target is Map && target['kind'] == 'chunk') chunkHits++;
+    }
+
+    String reason;
+    if (!eventCodes.contains('HOOK_READY')) {
+      reason =
+          'ResourceProbe no confirmó el hook de BCrypt dentro de game.exe.';
+    } else if (rows.isEmpty) {
+      reason =
+          'El cliente no descifró ninguno de los 55.457 ciphertexts objetivo '
+          'durante la ventana de captura.';
+    } else if (withKey == 0) {
+      reason =
+          'Se observaron payloads del SPK, pero no se pudo recuperar la clave '
+          'AES del handle criptográfico usado por el cliente.';
+    } else if (withAuth == 0) {
+      reason =
+          'Se observaron payloads y claves, pero la llamada no expuso un '
+          'nonce/tag GCM completo reproducible.';
+    } else if (offlineValid == 0) {
+      reason =
+          'Se capturaron clave y parámetros GCM, pero no autentican offline '
+          'el ciphertext exacto del DATA.SPK.';
+    } else if ((profile['simpleValidated'] as num?)?.toInt() case final n?
+        when n < 2) {
+      reason =
+          'Hay evidencia AES-GCM válida, pero faltan al menos dos recursos '
+          'simples consistentes para cerrar el perfil.';
+    } else {
+      reason =
+          'La evidencia es parcial o usa más de una clave/AAD; el perfil se '
+          'mantiene bloqueado para evitar falsos positivos.';
+    }
+
+    final diagnosis = <String, Object?>{
+      'schema': 1,
+      'reason': reason,
+      'rows': rows.length,
+      'simpleHits': simpleHits,
+      'chunkHits': chunkHits,
+      'rowsWithKey': withKey,
+      'rowsWithAuth': withAuth,
+      'offlineValid': offlineValid,
+      'events': eventCodes.toList()..sort(),
+      'profileReadyForSimple': profile['readyForSimple'] == true,
+      'profileResourceKeys': profile['resourceKeys'],
+      'profileModes': profile['modes'],
+      'profileAadRule': profile['aadRule'],
+    };
+    await File(
+      p.join(output.path, 'probe-diagnosis.json'),
+    ).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(diagnosis),
+      flush: true,
+    );
+    return diagnosis;
+  }
+
   Future<void> captureResourceProfile() => runAction(() async {
     if (!Platform.isWindows) {
       throw const SpkFailure(
@@ -1383,13 +1487,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     final data = Map<String, dynamic>.from(raw);
     if (data['readyForSimple'] != true) {
+      final diagnosis = await _diagnoseProbeFailure(output, data);
       throw SpkFailure(
         'SPK_PROBE_NO_VALID_KEY',
-        'ResourceProbe terminó, pero todavía no obtuvo una clave AES-GCM '
-            'que autentique recursos simples reales.',
+        diagnosis['reason']?.toString() ??
+            'ResourceProbe no obtuvo un perfil de recursos válido.',
         {
           'output': output.path,
           if (data['failure'] != null) 'failure': data['failure'],
+          'diagnosis': diagnosis,
+          'diagnosisFile': p.join(output.path, 'probe-diagnosis.json'),
           'logTail': recent,
           'consoleLog': p.join(output.path, 'probe-console.log'),
         },
