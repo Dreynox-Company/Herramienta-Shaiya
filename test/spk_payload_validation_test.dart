@@ -206,11 +206,12 @@ void main() {
         expect(validation['decodedSamples'], 3);
         expect(source.canReadSimpleResources, isTrue);
 
-        final result = await source.readEntry(
-          source.index.simpleResources.first,
-        );
+        final record = source.index.simpleResources.first;
+        final result = await source.readEntry(record);
         expect(result.format, 'DDS');
         expect(result.bytes.length, 4096);
+        expect(source.validatedFormat(record.entryId), 'DDS');
+        expect(source.technicalPath(record), endsWith('.dds'));
         expect(
           source.diagnostics()['resourceProfileValidation'],
           isA<Map<String, Object?>>(),
