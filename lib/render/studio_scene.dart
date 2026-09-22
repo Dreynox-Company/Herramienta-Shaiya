@@ -124,10 +124,10 @@ class StudioScene extends ChangeNotifier {
   final Map<String,({double height,double forward})> _seats={};
   String lastImpact='';t.Sprite? hitSprite;t.Texture? effectTexture;double hitLife=0;
   final Combat combat=Combat();AudioPlayer? _audio;AudioPlayer get audio=>_audio??=AudioPlayer();
-  AudioPlayer? _worldMusicAudio,_worldAmbientAudio;
+  AudioPlayer? _worldMusicAudio,_worldAmbientAudio,_footstepAudio;
   final Map<String,String> _audioFiles=<String,String>{};
-  bool _worldAudioBusy=false;
-  double _worldAudioAccumulator=0;
+  bool _worldAudioBusy=false,_footstepBusy=false;
+  double _worldAudioAccumulator=0,_footstepAccumulator=0;
   String? worldMusicPath,worldAmbientPath;
   bool sound=false,wireframe=false,ready=false,disposed=false,busy=false;
   int _appearanceRevision=0,_creatureRevision=0,_mountRevision=0,_wingRevision=0,_worldRevision=0,_weaponRevision=0,_clipRevision=0,_effectRevision=0,_skyRevision=0;
@@ -813,6 +813,33 @@ class StudioScene extends ChangeNotifier {
     try{await audio.play(DeviceFileSource(await _materializeAudio(path)));}catch(e){report('Audio: $e');}
   }
 
+  Future<void> _playTerrainFootstep() async {
+    if(_footstepBusy||!sound||catalog==null||world==null||character==null||mount!=null)return;
+    _footstepBusy=true;
+    try{
+      final w=world!,a=character!;
+      final x=originX+a.root.position.x,z=originZ-a.root.position.z;
+      final index=w.layerIndexAt(x,z);
+      if(index<0||index>=w.layers.length)return;
+      final raw=w.layers[index].sound.trim();
+      if(raw.isEmpty)return;
+      final path=catalog!.library.resolve(
+        raw,
+        ['sound','sound/footstep','sound/step','sound/effect'],
+        uniqueFallback:true,
+      );
+      if(path==null)return;
+      _footstepAudio??=AudioPlayer();
+      await _footstepAudio!.stop();
+      await _footstepAudio!.setReleaseMode(ReleaseMode.release);
+      await _footstepAudio!.play(DeviceFileSource(await _materializeAudio(path)));
+    }catch(e){
+      report('Paso de terreno: $e');
+    }finally{
+      _footstepBusy=false;
+    }
+  }
+
   Future<void> _stopWorldAudio() async {
     worldMusicPath=null;worldAmbientPath=null;
     try{await _worldMusicAudio?.stop();}catch(_){}
@@ -940,6 +967,11 @@ class StudioScene extends ChangeNotifier {
       }
       character!.root.rotation.y=math.atan2(direction.x,direction.z);
     }
+    if(sound&&moving&&!sceneCombatLocked&&mount==null&&world!=null){
+      _footstepAccumulator+=delta;
+      final cadence=running?.32:.48;
+      if(_footstepAccumulator>=cadence){_footstepAccumulator=0;unawaited(_playTerrainFootstep());}
+    }else{_footstepAccumulator=0;}
     updateAttachments();combat.step(delta,enemyDistance);if(hitLife>0){hitLife-=delta;if(hitSprite!=null){hitSprite!.scale.setValues(1.5-hitLife,1.5-hitLife,1);hitSprite!.visible=hitLife>0;}}updateCamera();if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
   }
   void orbit(double dx,double dy){yaw-=dx*.006;pitch=(pitch+dy*.006).clamp(-1.2,1.2);updateCamera();}
@@ -1146,7 +1178,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original · ${worldCollision?.triangles.length??0} triángulos de colisión SMOD.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;animatedWorldParts.clear();_vaniCache.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;animatedWorldParts.clear();_vaniCache.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
