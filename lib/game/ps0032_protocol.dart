@@ -77,7 +77,9 @@ class PsPacketType {
   static const mobMove=0x0603;
   static const mobAttack=0x0605;
   static const mobDeath=0x0606;
+  static const mobSkillKeep=0x0607;
   static const mobSkillUse=0x060B;
+  static const mobRangeSkillUse=0x060D;
   static const chatNormal=0x1101;
   static const chatWhisper=0x1102;
   static const chatWorld=0x1103;
