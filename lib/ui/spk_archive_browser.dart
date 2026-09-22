@@ -2159,6 +2159,68 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   }
 
+  Future<void> openCoreTableEditor(
+    String path,
+    String label,
+  ) => runAction(() async {
+    if (!source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_CORE_EDITOR_PROFILE',
+        'Primero deben estar autenticados los recursos simples y fragmentados.',
+      );
+    }
+    if (!source.fullyValidatedResources) {
+      operation = 'Auditando DATA.SPK antes de abrir $label…';
+      if (mounted) setState(() {});
+      await _auditAllResources(source);
+    }
+
+    final canonical = canon(path);
+    final alreadyConfirmed = source.names.paths.values.any(
+      (value) => canon(value) == canonical,
+    );
+    if (!alreadyConfirmed) {
+      operation = 'Identificando $label por estructura…';
+      if (mounted) setState(() {});
+      await _discoverCoreTables(source);
+    }
+    final confirmed = source.names.paths.values.any(
+      (value) => canon(value) == canonical,
+    );
+    if (!confirmed) {
+      throw SpkFailure(
+        'SPK_CORE_TABLE_NOT_CONFIRMED',
+        'No se pudo confirmar $label de forma inequívoca en este DATA.SPK.',
+        {'path': path},
+      );
+    }
+
+    final library = await Library.fromSpk(
+      source,
+      progress: (message) {
+        if (mounted) setState(() => operation = message);
+      },
+    );
+    try {
+      if (!library.files.containsKey(canonical)) {
+        throw FormatException(
+          'La tabla confirmada no quedó montada en Studio: $path',
+        );
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => DataEditorPage(
+            library: library,
+            initialPath: canonical,
+          ),
+        ),
+      );
+    } finally {
+      library.dispose();
+    }
+  });
+
   Future<void> openRecordInEditor(SpkRecord record) => runAction(() async {
     if (!source.canExtractAll) {
       throw const SpkFailure(
@@ -2730,6 +2792,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'profile') loadResourceProfile();
+              if (value == 'coreItem') {
+                openCoreTableEditor('Item/Item.SData', 'Objetos / trade');
+              }
+              if (value == 'coreMonster') {
+                openCoreTableEditor('Monster/Monster.SData', 'Mobs / drops');
+              }
+              if (value == 'coreSkill') {
+                openCoreTableEditor('Skill/Skill.SData', 'Skills');
+              }
               if (value == 'discover') discoverCoreTables();
               if (value == 'audit') auditAllResources();
               if (value == 'resolve') resolveNamesFromReferenceData();
@@ -2747,7 +2818,29 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   title: Text('Perfil de recursos'),
                 ),
               ),
-              if (source.canExtractAll)
+              if (source.canExtractAll) ...[
+                const PopupMenuItem(
+                  value: 'coreItem',
+                  child: ListTile(
+                    leading: Icon(Icons.inventory_2_outlined),
+                    title: Text('Editar Objetos / trade'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'coreMonster',
+                  child: ListTile(
+                    leading: Icon(Icons.pest_control_outlined),
+                    title: Text('Editar Mobs / drops'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'coreSkill',
+                  child: ListTile(
+                    leading: Icon(Icons.auto_fix_high_outlined),
+                    title: Text('Editar Skills'),
+                  ),
+                ),
+                const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: 'discover',
                   child: ListTile(
@@ -2755,6 +2848,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     title: Text('Descubrir tablas'),
                   ),
                 ),
+              ],
               if (source.canExtractAll && !source.fullyValidatedResources)
                 const PopupMenuItem(
                   value: 'audit',
@@ -2817,6 +2911,74 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       ),
       body: Column(
         children: [
+          if (source.canExtractAll)
+            Container(
+              minHeight: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xff12251d),
+                border: Border(
+                  bottom: BorderSide(color: Color(0xff285c46)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.verified_outlined,
+                    size: 18,
+                    color: Color(0xff83c69d),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'DATOS SPK',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: busy
+                        ? null
+                        : () => openCoreTableEditor(
+                              'Item/Item.SData',
+                              'Objetos / trade',
+                            ),
+                    icon: const Icon(Icons.inventory_2_outlined, size: 16),
+                    label: const Text('Objetos / trade'),
+                  ),
+                  const SizedBox(width: 7),
+                  FilledButton.tonalIcon(
+                    onPressed: busy
+                        ? null
+                        : () => openCoreTableEditor(
+                              'Monster/Monster.SData',
+                              'Mobs / drops',
+                            ),
+                    icon: const Icon(Icons.pest_control_outlined, size: 16),
+                    label: const Text('Mobs / drops'),
+                  ),
+                  const SizedBox(width: 7),
+                  FilledButton.tonalIcon(
+                    onPressed: busy
+                        ? null
+                        : () => openCoreTableEditor(
+                              'Skill/Skill.SData',
+                              'Skills',
+                            ),
+                    icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
+                    label: const Text('Skills'),
+                  ),
+                  const Spacer(),
+                  if (widget.onMount != null)
+                    TextButton.icon(
+                      onPressed: busy ? null : mountInStudio,
+                      icon: const Icon(Icons.view_in_ar_outlined, size: 16),
+                      label: const Text('Abrir Studio 3D'),
+                    ),
+                ],
+              ),
+            ),
           if (!source.canReadSimpleResources)
             Container(
               constraints: const BoxConstraints(minHeight: 42),
