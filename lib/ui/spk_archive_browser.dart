@@ -13,9 +13,11 @@ import 'package:path_provider/path_provider.dart';
 import '../core/formats.dart';
 import '../core/spk_archive.dart';
 import '../core/textures.dart';
+import '../data/library.dart';
 import '../data/spk_source.dart';
 import '../data/spk_table_discovery.dart';
 import '../editor/schema_reader.dart';
+import 'data_editor.dart';
 import '../render/native_view.dart';
 
 String _spkNormalizePath(String value, String separator) {
@@ -1986,6 +1988,65 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return preview;
   }
 
+  String _editableLibraryPath(SpkRecord record) {
+    if (source.names.isConfirmed(record.entryId)) {
+      return canon(source.names[record.entryId]!);
+    }
+    if (!source.fullyValidatedResources) {
+      throw const SpkFailure(
+        'SPK_EDIT_AUDIT_REQUIRED',
+        'Para editar un recurso sin nombre confirmado primero debe completarse '
+            'la auditoría integral del SPK.',
+      );
+    }
+    final format = source.validatedFormat(record.entryId) ?? 'BIN';
+    return canon(
+      '_SPK_SinNombre/${record.idHex}'
+      '${SpkArchiveSource.extensionFor(format)}',
+    );
+  }
+
+  Future<void> openRecordInEditor(SpkRecord record) => runAction(() async {
+    if (!source.canExtractAll) {
+      throw const SpkFailure(
+        'SPK_EDITOR_PROFILE',
+        'El editor requiere recursos simples y fragmentados autenticados.',
+      );
+    }
+    if (!source.fullyValidatedResources) {
+      operation = 'Auditando DATA.SPK antes de habilitar edición…';
+      if (mounted) setState(() {});
+      await _auditAllResources(source);
+    }
+    final path = _editableLibraryPath(record);
+    final library = await Library.fromSpk(
+      source,
+      progress: (message) {
+        if (mounted) {
+          setState(() => operation = message);
+        }
+      },
+    );
+    try {
+      if (!library.files.containsKey(path)) {
+        throw FormatException(
+          'El recurso no quedó montado en la biblioteca editable: $path',
+        );
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => DataEditorPage(
+            library: library,
+            initialPath: path,
+          ),
+        ),
+      );
+    } finally {
+      library.dispose();
+    }
+  });
+
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
     if (!source.canReadRecord(record)) {
       throw const SpkFailure(
@@ -2021,6 +2082,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ),
         ),
         actions: [
+          if (result.format == 'SDATA')
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(c);
+                openRecordInEditor(record);
+              },
+              icon: const Icon(Icons.edit_note_outlined),
+              label: const Text('Editar tabla'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(c),
             child: const Text('Cerrar'),
@@ -2356,6 +2426,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ),
         ),
         const SizedBox(height: 7),
+        if (source.canReadRecord(record) &&
+            source.validatedFormat(record.entryId) == 'SDATA') ...[
+          const SizedBox(height: 7),
+          FilledButton.icon(
+            onPressed: busy ? null : () => openRecordInEditor(record),
+            icon: const Icon(Icons.edit_note_outlined, size: 17),
+            label: const Text('Editar tabla'),
+          ),
+        ],
         OutlinedButton.icon(
           onPressed: busy || !source.canReadRecord(record)
               ? null
