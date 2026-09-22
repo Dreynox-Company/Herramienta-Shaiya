@@ -64,6 +64,8 @@ class _GameClientPageState extends State<GameClientPage> {
   bool loading=true;
   bool characterCreated=false;
   bool questOpen=true;
+  bool rewardSelection=false;
+  int rewardNpcId=0;
   bool inventoryOpen=false;
   String faction='light';
   String progress='Inicializando cliente Flutter…';
@@ -800,6 +802,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
     if(selectedQuest!=null){
       questId=selectedQuest;
+      rewardSelection=false;rewardNpcId=0;
       questOpen=true;
       messages.insert(0,'[NPC] '+npcName+' · misión '+selectedQuest.toString()+'.');
     }else{
@@ -808,24 +811,85 @@ class _GameClientPageState extends State<GameClientPage> {
     }
     if(mounted)setState((){});
   }
+  void _markQuestFinished(int id){
+    final current=liveSnapshot;
+    if(current==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:current.self,npcs:current.npcs,mobs:current.mobs,
+      quests:current.quests.where((q)=>q.questId!=id).toList(),
+      finishedQuests:[
+        ...current.finishedQuests.where((q)=>q.questId!=id),
+        PsFinishedQuest(id,true),
+      ],
+    );
+  }
+
+  Future<void> _chooseQuestReward(int index) async {
+    final session=liveWorld;
+    if(session==null||!rewardSelection)return;
+    try{
+      await session.chooseQuestReward(rewardNpcId,questId,index);
+      _markQuestFinished(questId);
+      final rule=metadata?.quests[questId];
+      final reward=index>=0&&rule!=null&&index<rule.rewards.length?rule.rewards[index]:null;
+      final name=reward==null?null:catalog?.itemName(reward.type,reward.id,uiLocale);
+      messages.insert(0,'[Misión] Recompensa elegida'+(name==null?'':': '+name)+'.');
+      rewardSelection=false;rewardNpcId=0;questOpen=false;
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Misión] QUEST_END_SELECT: '+e.toString());if(mounted)setState((){});}
+  }
+
   Future<void> _acceptCurrentQuest() async {
     final text=catalog?.questText(uiLocale)?.quest(questId);
     final session=liveWorld;
     final rule=metadata?.quests[questId];
     final snapshot=liveSnapshot;
     if(session==null||rule==null||snapshot==null){
-      messages.insert(0,'[Misión] '+(text?.name??'Misión aceptada')+' · modo visual.');
+      messages.insert(0,'[Misión] '+(text?.name??'Misión')+' · modo visual.');
       if(mounted)setState(()=>questOpen=false);
       return;
     }
-    final npc=snapshot.npcs.where((n)=>n.type==rule.startNpcType&&n.typeId==rule.startNpcId).firstOrNull;
-    if(npc==null){
+
+    final active=snapshot.quests.any((q)=>q.questId==questId);
+    if(active){
+      var npcId=0;
+      if(rule.endNpcType>0&&rule.endNpcId>0){
+        final nearestId=scene.nearestNetworkNpcId();
+        final nearest=nearestId==null?null:snapshot.npcs.where((n)=>n.globalId==nearestId).firstOrNull;
+        if(nearest==null||nearest.type!=rule.endNpcType||nearest.typeId!=rule.endNpcId){
+          messages.insert(0,'[Misión] Debes hablar con el NPC '+rule.endNpcType.toString()+':'+rule.endNpcId.toString()+' para entregar '+questId.toString()+'.');
+          if(mounted)setState((){});
+          return;
+        }
+        npcId=nearest.globalId;
+      }
+      try{
+        final result=await session.finishQuest(npcId,questId);
+        if(result.requiresChoice){
+          rewardSelection=true;rewardNpcId=npcId;questOpen=true;
+          messages.insert(0,'[Misión] Elige una recompensa para '+(text?.name??questId.toString())+'.');
+        }else if(result.success){
+          _markQuestFinished(questId);
+          rewardSelection=false;rewardNpcId=0;questOpen=false;
+          messages.insert(0,'[Misión] '+(text?.name??('Misión '+questId.toString()))+' completada · XP '+result.xp.toString()+' · oro '+result.gold.toString()+'.');
+        }else{
+          messages.insert(0,'[Misión] Aún no se cumplen los requisitos de '+(text?.name??questId.toString())+'.');
+        }
+        if(mounted)setState((){});
+      }catch(e){messages.insert(0,'[Misión] QUEST_END '+questId.toString()+': '+e.toString());if(mounted)setState((){});}
+      return;
+    }
+
+    final npc=rule.startNpcType==0||rule.startNpcId==0
+      ?null
+      :snapshot.npcs.where((n)=>n.type==rule.startNpcType&&n.typeId==rule.startNpcId).firstOrNull;
+    if(rule.startNpcType>0&&rule.startNpcId>0&&npc==null){
       messages.insert(0,'[Misión] No está presente el NPC '+rule.startNpcType.toString()+':'+rule.startNpcId.toString()+' requerido por '+questId.toString()+'.');
       if(mounted)setState((){});
       return;
     }
     try{
-      await session.startQuest(npc.globalId,questId);
+      await session.startQuest(npc?.globalId??0,questId);
       final current=liveSnapshot!;
       if(!current.quests.any((q)=>q.questId==questId)){
         liveSnapshot=PsWorldSnapshot(
@@ -834,6 +898,7 @@ class _GameClientPageState extends State<GameClientPage> {
           finishedQuests:current.finishedQuests,
         );
       }
+      rewardSelection=false;rewardNpcId=0;
       messages.insert(0,'[Misión] '+(text?.name??('Misión '+questId.toString()))+' aceptada por World.');
       if(mounted)setState(()=>questOpen=false);
     }catch(e){
@@ -1094,6 +1159,9 @@ class _GameClientPageState extends State<GameClientPage> {
             inventoryOpen:inventoryOpen,
             onToggleInventory:()=>setState(()=>inventoryOpen=!inventoryOpen),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
+            questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
+            rewardSelection:rewardSelection,
+            onSelectReward:(index)=>unawaited(_chooseQuestReward(index)),
             locale:uiLocale,
             ui:ui!,
             messages:messages,
