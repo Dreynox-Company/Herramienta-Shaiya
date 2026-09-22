@@ -29,6 +29,7 @@ class PsPacketType {
   static const characterMapTeleport=0x020B;
   static const characterTeleportViaNpc=0x020C;
   static const targetMobHpUpdate=0x0305;
+  static const mapWeather=0x0451;
   static const inventoryMoveItem=0x0204;
   static const updateStats=0x0208;
   static const learnNewSkill=0x0209;
@@ -387,6 +388,20 @@ class PsUsualHit {
     );
   }
 }
+class PsMapWeather {
+  final bool setType;
+  final int state,power;
+  const PsMapWeather(this.setType,this.state,this.power);
+  bool get rain=>state==1;
+  bool get snow=>state==2;
+  static PsMapWeather parse(PsPacket p){
+    if(p.type!=PsPacketType.mapWeather||p.body.length<3){
+      throw FormatException('MAP_WEATHER truncado: ${p.body.length}');
+    }
+    return PsMapWeather(p.body[0]!=0,p.body[1],p.body[2]);
+  }
+}
+
 
 class PsTargetMobHp {
   final int targetId,currentHp,attackSpeed,moveSpeed;
