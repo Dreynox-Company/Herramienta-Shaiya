@@ -111,6 +111,28 @@ void main() {
     expect(sorted, hasLength(3));
     expect(sorted, isNot(contains('dbitemtext_spn.sdata')));
   });
+  test('exact DB text table is a fallback but localized Spanish wins', () {
+    final files = [
+      'binarysdata/dbmonstertext.sdata',
+      'binarysdata/dbmonstertext_usa.sdata',
+      'binarysdata/dbmonstertext_spn.sdata',
+    ];
+    final localized = ClientLocale.tableCandidates(
+      files,
+      'dbmonstertext',
+      beside: 'binarysdata/dbmonsterdata.sdata',
+    );
+    expect(localized.first, 'binarysdata/dbmonstertext_spn.sdata');
+    expect(localized.last, 'binarysdata/dbmonstertext.sdata');
+
+    final exactOnly = ClientLocale.tableCandidates(
+      const ['binarysdata/dbmonstertext.sdata'],
+      'dbmonstertext',
+      beside: 'binarysdata/dbmonsterdata.sdata',
+    );
+    expect(exactOnly, ['binarysdata/dbmonstertext.sdata']);
+  });
+
   test(
     'english and alternate fallback are deterministic not enumeration order',
     () {
