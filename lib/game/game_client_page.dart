@@ -42,6 +42,7 @@ class _GameClientPageState extends State<GameClientPage> {
   PsCharacterDetails? liveDetails;
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
+  Map<int,PsActiveBuff> liveBuffs=<int,PsActiveBuff>{};
   int? targetMobGlobalId,targetMobTypeId,targetMobHp,targetMobMaxHp;
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
@@ -505,6 +506,7 @@ class _GameClientPageState extends State<GameClientPage> {
         liveGold=selected.details.gold;
         final hpPacket=selected.packets.where((p)=>p.type==PsPacketType.characterCurrentHitpoints).firstOrNull;
         final statsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterAdditionalStats).firstOrNull;
+        final buffsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterActiveBuffs).firstOrNull;
         final skillsPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkills).firstOrNull;
         final barPacket=selected.packets.where((p)=>p.type==PsPacketType.characterSkillBar).firstOrNull;
         liveInventory=selected.packets
@@ -523,6 +525,10 @@ class _GameClientPageState extends State<GameClientPage> {
           ..sort((a,b)=>a.slot.compareTo(b.slot));
         if(hpPacket!=null)liveHitpoints=PsHitpoints.parse(hpPacket);
         if(statsPacket!=null)liveAdditionalStats=PsAdditionalStats.parse(statsPacket);
+        liveBuffs={
+          for(final buff in buffsPacket==null?const <PsActiveBuff>[]:parseActiveBuffs(buffsPacket))
+            buff.id:buff,
+        };
         if(skillsPacket!=null)liveSkills=PsSkillBook.parse(skillsPacket);
         if(barPacket!=null)liveSkillBar=PsSkillBar.parse(barPacket);
         final entered=await session.enterMap(collect:const Duration(seconds:5));
@@ -738,6 +744,29 @@ class _GameClientPageState extends State<GameClientPage> {
     }else if(packet.type==PsPacketType.mobSkillUse&&packet.body.length>=19){
       final hit=PsMobSkillHit.parse(packet);
       if(hit.success){unawaited(scene.networkPlayerHit(hit.hpDamage));messages.insert(0,'[Combate] Mob '+hit.mobId.toString()+' usa skill '+hit.skillId.toString()+' · daño '+hit.hpDamage.toString()+'.');}
+    }else if(packet.type==PsPacketType.buffAdd&&packet.body.length>=11){
+      try{
+        final buff=parseBuffAdd(packet);liveBuffs[buff.id]=buff;
+        final name=catalog?.skillName(buff.skillId,buff.skillLevel,uiLocale)??('Buff '+buff.skillId.toString());
+        messages.insert(0,'[Buff] '+name+' activado.');
+      }catch(e){messages.insert(0,'[Buff] '+e.toString());}
+    }else if(packet.type==PsPacketType.buffRemove&&packet.body.length>=4){
+      try{
+        final id=parseBuffRemove(packet),old=liveBuffs.remove(id);
+        if(old!=null){
+          final name=catalog?.skillName(old.skillId,old.skillLevel,uiLocale)??('Buff '+old.skillId.toString());
+          messages.insert(0,'[Buff] '+name+' finalizado.');
+        }
+      }catch(e){messages.insert(0,'[Buff] '+e.toString());}
+    }else if(packet.type==PsPacketType.usedSpMp&&packet.body.length>=8){
+      try{
+        final used=PsUsedSpMp.parse(packet),hp=liveHitpoints;
+        if(hp!=null){
+          liveHitpoints=PsHitpoints(
+            hp.hp,math.max(0,hp.mp-used.mp),math.max(0,hp.sp-used.sp),
+          );
+        }
+      }catch(e){messages.insert(0,'[Recurso] '+e.toString());}
     }else if(packet.type==PsPacketType.characterCurrentHitpoints&&packet.body.length>=12){
       liveHitpoints=PsHitpoints.parse(packet);
     }else if(packet.type==PsPacketType.characterAdditionalStats&&packet.body.length>=48){
@@ -1449,6 +1478,7 @@ class _GameClientPageState extends State<GameClientPage> {
             details:liveDetails,
             additionalStats:liveAdditionalStats,
             hitpoints:liveHitpoints,
+            buffs:liveBuffs.values.toList(),
             targetMobGlobalId:targetMobGlobalId,
             targetMobId:targetMobTypeId,
             targetHp:targetMobHp,
