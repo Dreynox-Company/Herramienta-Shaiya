@@ -1,4 +1,4 @@
-SHAIYA SPK RESOURCE PROBE V9 - integrado en Shaiya Studio 0.6.11
+SHAIYA SPK RESOURCE PROBE V10 - integrado en Shaiya Studio 0.6.16
 
 Este auxiliar existe para cerrar la capa criptografica de payloads del DATA.SPK
 sin tratar ciphertext como si fuera un recurso valido.
@@ -19,7 +19,7 @@ USO RECOMENDADO
 EVIDENCIA
   derived-resource-profile.json contiene solamente evidencia que el helper pudo
   reproducir offline contra ciphertexts del SPK validado. La mera presencia de
-  una clave no habilita lectura en 0.6.11: Studio exige una segunda validacion
+  una clave no habilita lectura en 0.6.16: Studio exige una segunda validacion
   contra recursos simples reales. "Extraer todo" solo se habilita despues de
   reconstruir y validar tambien recursos fragmentados completos.
 
@@ -29,7 +29,7 @@ SEGURIDAD
   indice observado; otro SPK se rechaza.
 
 
-V9 endurece la captura de claves:
+V10 endurece la captura de claves:
 - observa BCryptGenerateSymmetricKey, BCryptImportKey y BCryptDuplicateKey;
 - si la creación de la clave ocurrió antes de instalar los hooks, intenta
   exportar de forma no destructiva el BCRYPT_KEY_DATA_BLOB desde el handle
@@ -37,3 +37,12 @@ V9 endurece la captura de claves:
 - la clave solo se acepta si luego reproduce offline AES-GCM contra
   ciphertexts exactos del DATA.SPK y sus tags reales;
 - game.exe y data.spk permanecen sin modificaciones.
+
+
+V10 agrega compatibilidad real con clientes Shaiya x86 y x64:
+- detecta la arquitectura PE de game.exe antes de lanzar la captura;
+- interpreta BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO con layout correcto para
+  32 y 64 bits;
+- fuerza UTF-8 para la consola y todos los JSON de evidencia;
+- conserva probe-console.log para diagnosticar una captura que no logre
+  autenticar todavía la clave de recursos.
