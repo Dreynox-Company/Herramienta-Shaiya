@@ -67,11 +67,13 @@ class WorldHud extends StatelessWidget {
   final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
-  final ValueChanged<String> onRequestFriend;
+  final ValueChanged<String> onRequestFriend,onJoinRaid;
   final ValueChanged<bool> onRespondFriend,onRespondParty,onRespondRaid;
   final ValueChanged<PsFriend> onDeleteFriend,onInviteParty;
   final ValueChanged<int> onInviteRaid,onChangeRaidLoot;
   final ValueChanged<PsPartyMember> onKickParty,onPromoteParty;
+  final ValueChanged<PsRaidMember> onKickRaid,onChangeRaidLeader,onChangeRaidSubLeader;
+  final void Function(PsRaidMember,int) onMoveRaidGroup;
   final ValueChanged<PsGuildSummary> onRequestGuildJoin;
   final void Function(PsGuildJoinApplicant,bool) onRespondGuildApplicant;
   final ValueChanged<PsGuildMember> onKickGuild,onPromoteGuild,onDemoteGuild;
@@ -218,6 +220,7 @@ class WorldHud extends StatelessWidget {
     required this.onHotbar,
     required this.onOpenQuest,
     required this.onRequestFriend,
+    required this.onJoinRaid,
     required this.onRespondFriend,
     required this.onRespondParty,
     required this.onRespondRaid,
@@ -232,6 +235,10 @@ class WorldHud extends StatelessWidget {
     required this.onToggleRaidAutoJoin,
     required this.onKickParty,
     required this.onPromoteParty,
+    required this.onKickRaid,
+    required this.onChangeRaidLeader,
+    required this.onChangeRaidSubLeader,
+    required this.onMoveRaidGroup,
     required this.onRequestGuildJoin,
     required this.onRespondGuildApplicant,
     required this.onLeaveGuild,
