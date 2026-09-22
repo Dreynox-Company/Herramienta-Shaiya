@@ -395,6 +395,42 @@ void main() {
 
 
 
+  group('WLD terrain normals',(){
+    test('flat height field points straight up',(){
+      final w=WorldData(
+        4,
+        Uint16List.fromList(List<int>.filled(9,100)),
+        Uint8List(9),
+        const <WorldLayer>[],
+        const <WorldInstance>[],
+        '',
+      );
+      final n=w.normalAt(2,2,scale:.01,offset:0);
+      expect(n.x,closeTo(0,1e-6));
+      expect(n.y,closeTo(1,1e-6));
+      expect(n.z,closeTo(0,1e-6));
+    });
+    test('x slope produces normalized native-space surface normal',(){
+      final w=WorldData(
+        4,
+        Uint16List.fromList(<int>[
+          0,100,200,
+          0,100,200,
+          0,100,200,
+        ]),
+        Uint8List(9),
+        const <WorldLayer>[],
+        const <WorldInstance>[],
+        '',
+      );
+      final n=w.normalAt(2,2,scale:.01,offset:0,step:1);
+      expect(n.length,closeTo(1,1e-6));
+      expect(n.x,lessThan(0));
+      expect(n.y,greaterThan(0));
+      expect(n.z,closeTo(0,1e-6));
+    });
+  });
+
   group('VAni',(){
     test('decodifica frames, UV y triángulos de animación de vértices',(){
       final vani=VaniData.parse(vaniFixture(),'grass.vani');
