@@ -917,7 +917,7 @@ class WorldHud extends StatelessWidget {
                   border:Border.all(color:affordable?const Color(0xff8c7047):const Color(0xff5b3732)),
                 ),
                 child:Row(children:[
-                  const Icon(Icons.portal,size:27,color:Color(0xff9fd8ff)),
+                  const Icon(Icons.public,size:27,color:Color(0xff9fd8ff)),
                   const SizedBox(width:8),
                   Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                     Text(
