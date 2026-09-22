@@ -699,11 +699,13 @@ class PsSkillCasting {
 }
 
 class PsSkillKeep {
-  final int characterId,skillId,skillLevel,hpDamage,spDamage,mpDamage;
-  const PsSkillKeep(this.characterId,this.skillId,this.skillLevel,this.hpDamage,this.spDamage,this.mpDamage);
+  final int senderId,skillId,skillLevel,hpDamage,spDamage,mpDamage;
+  const PsSkillKeep(this.senderId,this.skillId,this.skillLevel,this.hpDamage,this.spDamage,this.mpDamage);
+  int get characterId=>senderId;
+  bool get fromMobPacket=>false;
   static PsSkillKeep parse(PsPacket p){
-    if(p.type!=PsPacketType.characterSkillKeep||p.body.length<13){
-      throw FormatException('CHARACTER_SKILL_KEEP truncado: ${p.body.length}.');
+    if(!const <int>{PsPacketType.characterSkillKeep,PsPacketType.mobSkillKeep}.contains(p.type)||p.body.length<13){
+      throw FormatException('SKILL_KEEP truncado/tipo inválido: 0x${p.type.toRadixString(16)} · ${p.body.length}.');
     }
     final d=ByteData.sublistView(p.body);
     return PsSkillKeep(
@@ -912,6 +914,29 @@ class PsMobSkillHit {
       result:p.body[0],mobId:d.getUint32(1,Endian.little),targetId:d.getUint32(5,Endian.little),
       attackType:p.body[9],skillId:d.getUint16(10,Endian.little),skillLevel:p.body[12],
       hpDamage:d.getUint16(13,Endian.little),spDamage:d.getUint16(15,Endian.little),mpDamage:d.getUint16(17,Endian.little),
+    );
+  }
+}
+
+class PsMobRangeSkillHit {
+  final int result,mobId,targetId,skillId,skillLevel,hpDamage,spDamage,mpDamage;
+  final bool keepActivated;
+  const PsMobRangeSkillHit({
+    required this.result,required this.mobId,required this.targetId,
+    required this.skillId,required this.skillLevel,required this.hpDamage,
+    required this.spDamage,required this.mpDamage,required this.keepActivated,
+  });
+  bool get success=>result==0||result==1||result==4;
+  static PsMobRangeSkillHit parse(PsPacket p){
+    if(p.type!=PsPacketType.mobRangeSkillUse||p.body.length<19){
+      throw FormatException('MOB_RANGE_SKILL_USE truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsMobRangeSkillHit(
+      result:p.body[0],mobId:d.getUint32(1,Endian.little),targetId:d.getUint32(5,Endian.little),
+      skillId:d.getUint16(9,Endian.little),skillLevel:p.body[11],
+      hpDamage:d.getUint16(12,Endian.little),spDamage:d.getUint16(14,Endian.little),
+      mpDamage:d.getUint16(16,Endian.little),keepActivated:p.body[18]!=0,
     );
   }
 }
