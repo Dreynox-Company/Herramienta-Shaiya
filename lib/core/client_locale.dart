@@ -66,7 +66,7 @@ class ClientLocale {
       final p = canonicalPath(original), name = stem(p);
       return directory(p) == dir &&
           p.endsWith('.sdata') &&
-          name.startsWith('${f}_') &&
+          (name == f || name.startsWith('${f}_')) &&
           !RegExp(r'_(generated|backup|bak|old)(_|$)').hasMatch(name);
     }).toList();
     int rank(String p) {
