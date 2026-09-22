@@ -18,13 +18,13 @@ class WorldHud extends StatelessWidget {
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
-  final List<PsInventoryItem> inventory;
+  final List<PsInventoryItem> inventory,warehouse;
   final int gold;
   final NpcShopRule? shop;
-  final bool inventoryOpen,shopOpen;
-  final VoidCallback onCloseShop;
+  final bool inventoryOpen,shopOpen,warehouseOpen;
+  final VoidCallback onCloseShop,onCloseWarehouse;
   final ValueChanged<int> onBuyShopProduct;
-  final ValueChanged<PsInventoryItem> onSellInventory;
+  final ValueChanged<PsInventoryItem> onSellInventory,onStoreWarehouse,onWithdrawWarehouse;
   final VoidCallback onToggleInventory;
   final ValueChanged<int> onHotbar;
   final UiAssetCache ui;
@@ -52,13 +52,18 @@ class WorldHud extends StatelessWidget {
     required this.skillBook,
     required this.skillBar,
     required this.inventory,
+    required this.warehouse,
     required this.gold,
     required this.shop,
     required this.inventoryOpen,
     required this.shopOpen,
+    required this.warehouseOpen,
     required this.onCloseShop,
+    required this.onCloseWarehouse,
     required this.onBuyShopProduct,
     required this.onSellInventory,
+    required this.onStoreWarehouse,
+    required this.onWithdrawWarehouse,
     required this.onToggleInventory,
     required this.onHotbar,
     required this.locale,
@@ -88,6 +93,11 @@ class WorldHud extends StatelessWidget {
             Positioned(
               right:198,top:250,width:292,height:390,
               child:_shopWindow(),
+            ),
+          if(warehouseOpen)
+            Positioned(
+              right:198,top:250,width:292,height:390,
+              child:_warehouseWindow(),
             ),
           if(inventoryOpen)
             Positioned(
@@ -658,6 +668,88 @@ class WorldHud extends StatelessWidget {
     );
   }
 
+  Widget _warehouseWindow()=>Container(
+    decoration:BoxDecoration(
+      color:const Color(0xe6201811),
+      border:Border.all(color:const Color(0xff8e7856),width:2),
+      boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:12)],
+    ),
+    child:Column(children:[
+      Container(
+        height:34,padding:const EdgeInsets.symmetric(horizontal:10),
+        decoration:const BoxDecoration(
+          gradient:LinearGradient(colors:[Color(0xff4b3a27),Color(0xff21170f)]),
+        ),
+        child:Row(children:[
+          Expanded(child:Text(
+            locale=='spn'?'Almacén':'Warehouse',
+            style:const TextStyle(color:Color(0xffffdc72),fontSize:12,fontWeight:FontWeight.bold),
+          )),
+          Text(warehouse.length.toString()+'/120',style:const TextStyle(fontSize:9,color:Colors.white60)),
+          const SizedBox(width:6),
+          GestureDetector(onTap:onCloseWarehouse,child:const Icon(Icons.close,size:17,color:Colors.white70)),
+        ]),
+      ),
+      Expanded(
+        child:warehouse.isEmpty
+          ?Center(child:Text(locale=='spn'?'Almacén vacío':'Warehouse empty',style:const TextStyle(color:Colors.white54,fontSize:11)))
+          :GridView.builder(
+              padding:const EdgeInsets.all(9),
+              gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount:5,crossAxisSpacing:5,mainAxisSpacing:5,childAspectRatio:1,
+              ),
+              itemCount:warehouse.length,
+              itemBuilder:(context,index){
+                final item=warehouse[index],rule=metadata?.item(item.type,item.typeId);
+                final icon=rule?.iconPath,name=catalog.itemName(item.type,item.typeId,locale);
+                final gems=item.gems.where((g)=>g>0).length;
+                final card=Container(
+                  decoration:BoxDecoration(
+                    color:const Color(0xff17120e),
+                    border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
+                  ),
+                  child:Stack(children:[
+                    Center(child:icon==null
+                      ?const Icon(Icons.inventory_2,size:26,color:Color(0xffc0b49d))
+                      :DataImage(cache:ui,path:icon,fit:BoxFit.contain,fallback:const Icon(Icons.inventory_2,size:26,color:Color(0xffc0b49d)))),
+                    Positioned(left:2,top:1,child:Text(
+                      item.slot.toString(),
+                      style:const TextStyle(fontSize:7,color:Colors.white54),
+                    )),
+                    if(item.count>1)Positioned(right:2,bottom:1,child:Text(
+                      'x${item.count}',style:const TextStyle(fontSize:8,color:Colors.white),
+                    )),
+                    if(gems>0)Positioned(left:2,bottom:1,child:Text(
+                      '◆$gems',style:const TextStyle(fontSize:8,color:Color(0xff7fd9ff)),
+                    )),
+                  ]),
+                );
+                return Tooltip(
+                  waitDuration:const Duration(milliseconds:250),
+                  message:name+
+                    '\n${item.type}:${item.typeId} · slot ${item.slot}'+
+                    '\n'+(locale=='spn'?'Doble clic para retirar. Comisión de retiro: 5%.':'Double click to withdraw. Withdrawal fee: 5%.'),
+                  child:GestureDetector(onDoubleTap:()=>onWithdrawWarehouse(item),child:card),
+                );
+              },
+            ),
+      ),
+      Container(
+        height:35,padding:const EdgeInsets.symmetric(horizontal:8),
+        decoration:const BoxDecoration(color:Color(0xff18120d)),
+        child:Row(children:[
+          Expanded(child:Text(
+            locale=='spn'
+              ?'Doble clic en inventario: guardar · aquí: retirar'
+              :'Double click inventory: store · here: withdraw',
+            style:const TextStyle(fontSize:7.5,color:Colors.white54),
+          )),
+          Text('Oro: $gold',style:const TextStyle(fontSize:10,color:Color(0xffffdb70))),
+        ]),
+      ),
+    ]),
+  );
+
   Widget _inventoryWindow()=>Container(
     decoration:BoxDecoration(
       color:const Color(0xe6241a12),
@@ -738,12 +830,17 @@ class WorldHud extends StatelessWidget {
                     ]),
                   ),
                 );
-                return shopOpen
+                return warehouseOpen
                   ?GestureDetector(
-                      onDoubleTap:()=>onSellInventory(item),
+                      onDoubleTap:()=>onStoreWarehouse(item),
                       child:cell,
                     )
-                  :cell;
+                  :shopOpen
+                    ?GestureDetector(
+                        onDoubleTap:()=>onSellInventory(item),
+                        child:cell,
+                      )
+                    :cell;
               },
             ),
       ),
