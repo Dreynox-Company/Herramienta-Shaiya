@@ -39,6 +39,10 @@ class _GameClientPageState extends State<GameClientPage> {
   LoginSession? liveLogin;
   PsWorldSession? liveWorld;
   PsWorldSnapshot? liveSnapshot;
+  int liveMapId=0;
+  SvmapData? liveSvmap;
+  bool mapSwitching=false;
+  final List<PsPacket> pendingMapActorPackets=<PsPacket>[];
   PsCharacterDetails? liveDetails;
   PsHitpoints? liveHitpoints;
   PsAdditionalStats? liveAdditionalStats;
@@ -556,6 +560,7 @@ class _GameClientPageState extends State<GameClientPage> {
     final create=metadata?.createRule(country,classIndex);
     if(mapId==0)mapId=create?.mapId??(faction=='light'?1:2);
     svmap=await _loadSvmap(mapId);
+    liveMapId=mapId;liveSvmap=svmap;
     var world=c.worlds.where((p)=>baseName(p).toLowerCase()==mapId.toString()+'.wld').firstOrNull;
     world??=c.worlds.firstOrNull;
 
@@ -627,6 +632,59 @@ class _GameClientPageState extends State<GameClientPage> {
     await _signalQaReady();
   }
 
+  bool _isMapActorPacket(int type)=>{
+    PsPacketType.mobEnter,PsPacketType.mobMove,PsPacketType.mobLeave,
+    PsPacketType.mapNpcEnter,PsPacketType.mapNpcMove,PsPacketType.mapNpcLeave,
+  }.contains(type);
+
+  Future<void> _applyMapTeleport(PsMapTeleport teleport) async {
+    if(liveCharacter!=null&&teleport.characterId!=liveCharacter!.id)return;
+    if(mapSwitching)return;
+    mapSwitching=true;
+    _closeWorldPanels();
+    scene.clearMovement();
+    targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+    final previous=liveSnapshot;
+    liveMapId=teleport.mapId;
+    try{
+      final c=catalog!;
+      final map=await _loadSvmap(teleport.mapId);
+      liveSvmap=map;
+      var world=c.worlds.where((p)=>baseName(p).toLowerCase()==teleport.mapId.toString()+'.wld').firstOrNull;
+      if(world==null){
+        messages.insert(0,'[Mapa] No existe world/${teleport.mapId}.wld en DATA.');
+      }else{
+        await scene.setWorld(world,x:teleport.x,z:teleport.z);
+      }
+      await scene.spawnGameActorsFromNetwork(
+        npcs:const <RuntimeNpcSpawn>[],mobs:const <RuntimeMobSpawn>[],
+        npcModels:metadata?.npcModels,mobModels:metadata?.mobModels,
+        questNpcKeys:metadata?.npcs.entries.where((e)=>e.value.outQuests.isNotEmpty).map((e)=>e.key).toSet(),
+        locale:uiLocale,
+      );
+      final oldSelf=previous?.self;
+      liveSnapshot=PsWorldSnapshot(
+        self:PsEnteredMap(
+          teleport.characterId,oldSelf?.isAdmin??0,oldSelf?.angle??0,
+          teleport.x,teleport.y,teleport.z,oldSelf?.guildId??0,oldSelf?.vehicleId??0,
+        ),
+        npcs:const <PsNpcEnter>[],mobs:const <PsMobEnter>[],
+        quests:previous?.quests??const <PsQuestProgress>[],
+        finishedQuests:previous?.finishedQuests??const <PsFinishedQuest>[],
+      );
+      scene.yaw=0;scene.pitch=.12;scene.distance=5.9;scene.targetY=1.18;
+      if(scene.character!=null)scene.character!.root.rotation.y=math.pi;
+      scene.updateCamera();
+      messages.insert(0,'[Mapa] Teleport → ${teleport.mapId} · ${teleport.x.toStringAsFixed(1)}, ${teleport.z.toStringAsFixed(1)}.');
+    }catch(e){
+      messages.insert(0,'[Mapa] Teleport ${teleport.mapId}: '+e.toString());
+    }finally{
+      mapSwitching=false;
+      final queued=List<PsPacket>.from(pendingMapActorPackets);pendingMapActorPackets.clear();
+      for(final packet in queued){_handleLivePacket(packet);}
+      if(mounted)setState((){});
+    }
+  }
   void _startWorldRealtime(){
     movementTimer?.cancel();
     unawaited(livePacketSubscription?.cancel());
@@ -714,6 +772,12 @@ class _GameClientPageState extends State<GameClientPage> {
   }
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
+    if(mapSwitching&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
+    if(packet.type==PsPacketType.characterMapTeleport&&packet.body.length>=18){
+      try{unawaited(_applyMapTeleport(PsMapTeleport.parse(packet)));}
+      catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
+      return;
+    }
     if([
       PsPacketType.chatNormal,PsPacketType.chatWhisper,PsPacketType.chatWorld,
       PsPacketType.chatGuild,PsPacketType.chatParty,PsPacketType.chatMap,
