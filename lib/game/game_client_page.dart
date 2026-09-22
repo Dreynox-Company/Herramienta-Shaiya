@@ -3479,6 +3479,9 @@ class _GameClientPageState extends State<GameClientPage> {
     try{
       final session=liveWorld;
       if(session!=null){
+        final requestedName=nameController.text.trim();
+        final available=await session.checkCharacterName(requestedName);
+        if(!available)throw StateError('El nombre "'+requestedName+'" no está disponible.');
         final free=liveCharacters.where((s)=>!s.exists).firstOrNull?.slot??0;
         final slots=await session.createCharacter(
           slot:free,
