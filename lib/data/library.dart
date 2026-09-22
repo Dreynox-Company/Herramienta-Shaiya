@@ -297,6 +297,7 @@ class Library {
     SpkArchiveSource source, {
     void Function(String)? progress,
     bool requireComplete = true,
+    bool requireCharacter = true,
     String? overlayRoot,
   }) async {
     if (!source.canReadSimpleResources) {
@@ -432,6 +433,7 @@ class Library {
       spk: source,
       spkOverlayRoot: root,
       spkMountReport: report,
+      requireCharacter: requireCharacter,
     );
   }
 
@@ -481,13 +483,14 @@ class Library {
     SpkArchiveSource? spk,
     String? spkOverlayRoot,
     Map<String, Object?> spkMountReport = const {},
+    bool requireCharacter = true,
   }) {
     final map = <String, String>{};
     for (final entry in source.entries) {
       if (supportedPath(entry.key)) map[canon(entry.key)] = entry.value;
     }
     final hasCharacter = map.keys.any((p) => p.startsWith('character/'));
-    if (!hasCharacter) {
+    if (!hasCharacter && requireCharacter) {
       final nested = map.keys.where((p) => p.contains('/character/')).toList();
       if (nested.isEmpty) {
         throw const FormatException(
