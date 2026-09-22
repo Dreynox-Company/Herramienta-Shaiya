@@ -1444,7 +1444,7 @@ class _WeatherPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas,Size size){
-    final power=weather.power.clamp(1,3);
+    final power=weather.power.clamp(1,3).toInt();
     final count=weather.rain?(35+power*28):(weather.snow?25+power*20:0);
     if(count==0)return;
     final tick=DateTime.now().millisecondsSinceEpoch~/50;
