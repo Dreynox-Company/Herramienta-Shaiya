@@ -53,6 +53,8 @@ class _GameClientPageState extends State<GameClientPage> {
   PsSkillBar? liveSkillBar;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
   List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
+  List<PsInventoryItem> liveGuildWarehouse=<PsInventoryItem>[];
+  bool guildWarehouseAvailable=false;
   List<PsFriend> liveFriends=<PsFriend>[];
   List<PsPartyMember> livePartyMembers=<PsPartyMember>[];
   PsRaidState? liveRaid;
@@ -105,6 +107,7 @@ class _GameClientPageState extends State<GameClientPage> {
   bool tradeOpen=false;
   bool socialOpen=false;
   bool guildOpen=false;
+  bool guildWarehouseOpen=false;
   bool statusOpen=false;
   bool skillsOpen=false;
   bool questLogOpen=false;
@@ -593,6 +596,16 @@ class _GameClientPageState extends State<GameClientPage> {
         final entered=await session.enterMap(collect:const Duration(seconds:5));
         final weatherPacket=entered.where((p)=>p.type==PsPacketType.mapWeather).lastOrNull;
         if(weatherPacket!=null)liveWeather=PsMapWeather.parse(weatherPacket);
+        final guildWarehousePackets=entered.where((p)=>p.type==PsPacketType.guildWarehouseItemList).toList();
+        guildWarehouseAvailable=guildWarehousePackets.isNotEmpty;
+        liveGuildWarehouse=[];
+        for(final packet in guildWarehousePackets){
+          for(final item in parseGuildWarehouseItems(packet)){
+            liveGuildWarehouse.removeWhere((x)=>x.slot==item.slot);
+            liveGuildWarehouse.add(item);
+          }
+        }
+        liveGuildWarehouse.sort((a,b)=>a.slot.compareTo(b.slot));
         networkSnapshot=PsWorldSnapshot.fromPackets(<PsPacket>[...selected.packets,...entered]);
         liveSnapshot=networkSnapshot;
         liveGuildId=networkSnapshot.self?.guildId??0;
@@ -705,6 +718,7 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mapSwitching)return;
     mapSwitching=true;
     activePortalTrigger=null;
+    guildWarehouseAvailable=false;liveGuildWarehouse=[];guildWarehouseOpen=false;
     _closeWorldPanels();
     scene.clearMovement();
     targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
@@ -855,11 +869,18 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   void _upsertInventoryItem(PsInventoryItem item){
-    final target=item.bag==100?liveWarehouse:liveInventory;
+    if(item.bag==254)return; // backend compatibility quirk for withdrawals from guild bag 255
+    final target=item.bag==100
+      ?liveWarehouse
+      :item.bag==255
+        ?liveGuildWarehouse
+        :liveInventory;
     target.removeWhere((x)=>x.bag==item.bag&&x.slot==item.slot);
     if(item.type!=0&&item.typeId!=0&&item.count>0)target.add(item);
     if(item.bag==100){
       liveWarehouse.sort((a,b)=>a.slot.compareTo(b.slot));
+    }else if(item.bag==255){
+      liveGuildWarehouse.sort((a,b)=>a.slot.compareTo(b.slot));
     }else{
       _sortInventory();
     }
@@ -1415,6 +1436,30 @@ class _GameClientPageState extends State<GameClientPage> {
         liveGold=move.gold;
         messages.insert(0,'[Inventario/Almacén] Movimiento confirmado por World.');
       }catch(e){messages.insert(0,'[Inventario] MOVE_ITEM: '+e.toString());}
+    }else if(packet.type==PsPacketType.guildWarehouseItemList){
+      try{
+        if(!guildWarehouseAvailable){liveGuildWarehouse=[];}
+        guildWarehouseAvailable=true;
+        for(final item in parseGuildWarehouseItems(packet)){
+          liveGuildWarehouse.removeWhere((x)=>x.slot==item.slot);
+          liveGuildWarehouse.add(item);
+        }
+        liveGuildWarehouse.sort((a,b)=>a.slot.compareTo(b.slot));
+      }catch(e){messages.insert(0,'[Guild Warehouse] '+e.toString());}
+    }else if(packet.type==PsPacketType.guildWarehouseItemAdd&&packet.body.length>=104){
+      try{
+        final change=PsGuildWarehouseMutation.parse(packet);
+        _upsertInventoryItem(change.item);
+        final actor=change.characterId==liveCharacter?.id?nameController.text:'#'+change.characterId.toString();
+        messages.insert(0,'[Guild Warehouse] '+actor+' guardó '+catalog!.itemName(change.item.type,change.item.typeId,uiLocale)+'.');
+      }catch(e){messages.insert(0,'[Guild Warehouse] '+e.toString());}
+    }else if(packet.type==PsPacketType.guildWarehouseItemRemove&&packet.body.length>=104){
+      try{
+        final change=PsGuildWarehouseMutation.parse(packet);
+        liveGuildWarehouse.removeWhere((x)=>x.slot==change.item.slot);
+        final actor=change.characterId==liveCharacter?.id?nameController.text:'#'+change.characterId.toString();
+        messages.insert(0,'[Guild Warehouse] '+actor+' retiró '+catalog!.itemName(change.item.type,change.item.typeId,uiLocale)+'.');
+      }catch(e){messages.insert(0,'[Guild Warehouse] '+e.toString());}
     }else if(packet.type==PsPacketType.questStart&&packet.body.length>=6){
       final d=ByteData.sublistView(packet.body);
       final id=d.getInt16(4,Endian.little);
@@ -2201,6 +2246,7 @@ class _GameClientPageState extends State<GameClientPage> {
     inventoryOpen=false;
     socialOpen=false;
     guildOpen=false;
+    guildWarehouseOpen=false;
     statusOpen=false;
     skillsOpen=false;
     questLogOpen=false;
@@ -2397,6 +2443,63 @@ class _GameClientPageState extends State<GameClientPage> {
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Objeto/Equipo] '+e.toString());if(mounted)setState((){});}
   }
+  int? _firstFreeGuildWarehouseSlot(){
+    final occupied={for(final i in liveGuildWarehouse)i.slot};
+    for(var slot=0;slot<40;slot++){if(!occupied.contains(slot))return slot;}
+    return null;
+  }
+
+  Future<void> _storeInGuildWarehouse(PsInventoryItem item) async {
+    final session=liveWorld,slot=_firstFreeGuildWarehouseSlot();
+    if(session==null||!guildWarehouseOpen||!guildWarehouseAvailable)return;
+    if(liveGuildRank<=0||liveGuildRank>8){
+      messages.insert(0,'[Guild Warehouse] Tu rango no puede depositar objetos.');
+      if(mounted)setState((){});return;
+    }
+    if(item.bag==0){
+      messages.insert(0,'[Guild Warehouse] Debes desequipar el objeto primero.');
+      if(mounted)setState((){});return;
+    }
+    if(slot==null){
+      messages.insert(0,'[Guild Warehouse] Primera pestaña llena. No se asume nivel de pestañas superiores.');
+      if(mounted)setState((){});return;
+    }
+    try{
+      final move=await session.moveItem(item.bag,item.slot,255,slot);
+      _upsertInventoryItem(move.source);_upsertInventoryItem(move.destination);liveGold=move.gold;
+      messages.insert(0,'[Guild Warehouse] Objeto guardado en slot '+slot.toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Guild Warehouse] '+e.toString());if(mounted)setState((){});}
+  }
+
+  Future<void> _withdrawGuildWarehouse(PsInventoryItem item) async {
+    final session=liveWorld,dest=_firstFreeInventorySlot();
+    if(session==null||!guildWarehouseOpen||!guildWarehouseAvailable)return;
+    if(liveGuildRank<=0||liveGuildRank>2){
+      messages.insert(0,'[Guild Warehouse] Solo rangos 1–2 pueden retirar.');
+      if(mounted)setState((){});return;
+    }
+    if(dest==null){messages.insert(0,'[Guild Warehouse] Inventario lleno.');if(mounted)setState((){});return;}
+    try{
+      final move=await session.moveItem(255,item.slot,dest.bag,dest.slot);
+      liveGuildWarehouse.removeWhere((x)=>x.slot==item.slot);
+      _upsertInventoryItem(move.destination);liveGold=move.gold;
+      messages.insert(0,'[Guild Warehouse] Objeto retirado a bag '+dest.bag.toString()+', slot '+dest.slot.toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Guild Warehouse] '+e.toString());if(mounted)setState((){});}
+  }
+
+  void _toggleGuildWarehouse(){
+    if(!guildWarehouseAvailable){
+      messages.insert(0,'[Guild Warehouse] Solo está disponible dentro del Guild House.');
+      if(mounted)setState((){});return;
+    }
+    final open=!guildWarehouseOpen;
+    _closeWorldPanels();
+    guildOpen=true;guildWarehouseOpen=open;
+    if(mounted)setState((){});
+  }
+
   Future<void> _storeInWarehouse(PsInventoryItem item) async {
     final session=liveWorld,slot=_firstFreeWarehouseSlot();
     if(session==null||!warehouseOpen)return;
@@ -2985,6 +3088,9 @@ class _GameClientPageState extends State<GameClientPage> {
             skillBar:liveSkillBar,
             inventory:liveInventory,
             warehouse:liveWarehouse,
+            guildWarehouse:liveGuildWarehouse,
+            guildWarehouseAvailable:guildWarehouseAvailable,
+            guildWarehouseOpen:guildWarehouseOpen,
             friends:liveFriends,
             partyMembers:livePartyMembers,
             raid:liveRaid,
@@ -3068,6 +3174,9 @@ class _GameClientPageState extends State<GameClientPage> {
             onActivateInventory:(item)=>unawaited(_activateInventoryItem(item)),
             onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
+            onToggleGuildWarehouse:_toggleGuildWarehouse,
+            onStoreGuildWarehouse:(item)=>unawaited(_storeInGuildWarehouse(item)),
+            onWithdrawGuildWarehouse:(item)=>unawaited(_withdrawGuildWarehouse(item)),
             onToggleInventory:()=>_toggleWorldPanel('inventory'),
             onToggleSocial:()=>_toggleWorldPanel('social'),
             onToggleGuild:()=>_toggleWorldPanel('guild'),
