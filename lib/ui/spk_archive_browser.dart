@@ -737,6 +737,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   String operation = '';
   int operationDone = 0;
   int operationTotal = 0;
+  String studioBuildLabel = '';
 
   SpkArchiveSource get source => widget.source;
 
@@ -751,6 +752,37 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           p == 'monster/monster.sdata' ||
           p == 'skill/skill.sdata',
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStudioBuildLabel();
+  }
+
+  Future<void> _loadStudioBuildLabel() async {
+    try {
+      final executable = File(Platform.resolvedExecutable);
+      final provenance = File(
+        p.join(executable.parent.path, 'build-provenance.json'),
+      );
+      if (!await provenance.exists()) return;
+      final raw = await readSpkJsonFile(provenance);
+      if (raw is! Map) return;
+      final version = raw['version']?.toString() ?? '';
+      final commit = raw['commit']?.toString() ?? '';
+      if (version.isEmpty && commit.isEmpty) return;
+      final shortCommit = commit.length > 12 ? commit.substring(0, 12) : commit;
+      if (!mounted) return;
+      setState(() {
+        studioBuildLabel = [
+          if (version.isNotEmpty) 'v$version',
+          if (shortCommit.isNotEmpty) shortCommit,
+        ].join(' · ');
+      });
+    } catch (_) {
+      // Debug builds do not need packaged provenance.
+    }
   }
 
   @override
@@ -3343,6 +3375,17 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         ),
                       ),
                       const Spacer(),
+                      if (studioBuildLabel.isNotEmpty) ...[
+                        Text(
+                          studioBuildLabel,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Color(0xff728198),
+                            fontFamily: 'Consolas',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       if (source.fullyValidatedResources)
                         Text(
                           '${source.index.resources.length}/'
