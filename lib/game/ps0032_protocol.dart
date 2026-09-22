@@ -23,7 +23,12 @@ class PsPacketType {
   static const characterSkills=0x0108;
   static const characterActiveBuffs=0x010A;
   static const characterSkillBar=0x010B;
+  static const logout=0x0107;
   static const accountFaction=0x0109;
+  static const quitGame=0x010D;
+  static const renameCharacter=0x010E;
+  static const restoreCharacter=0x010F;
+  static const checkCharacterAvailableName=0x0119;
   static const characterEnteredMap=0x0201;
   static const characterLeftMap=0x0202;
   static const runMode=0x0210;
@@ -32,6 +37,7 @@ class PsPacketType {
   static const useVehicle2=0x021C;
   static const vehicleRequest=0x021D;
   static const vehicleResponse=0x021E;
+  static const inventorySort=0x021F;
   static const characterEnteredPortal=0x020A;
   static const characterMapTeleport=0x020B;
   static const characterTeleportViaNpc=0x020C;
@@ -201,6 +207,11 @@ class PsPacketType {
   static const mapNpcEnter=0x0E01;
   static const mapNpcLeave=0x0E02;
   static const mapNpcMove=0x0E03;
+}
+
+class PsInventorySortMove {
+  final int destinationBag,destinationSlot,sourceBag,sourceSlot;
+  const PsInventorySortMove(this.destinationBag,this.destinationSlot,this.sourceBag,this.sourceSlot);
 }
 
 class PsPacket {
@@ -2175,6 +2186,65 @@ class PsWorldSession {
     }
     final returned=ByteData.sublistView(result.body).getUint32(1,Endian.little);
     if(returned!=characterId)throw StateError('DELETE_CHARACTER devolvió id inesperado: $returned');
+  }
+
+  Future<bool> checkCharacterName(String name) async {
+    final value=name.trim(),raw=utf8.encode(value);
+    if(value.isEmpty||raw.length>20)return false;
+    final response=connection.waitStream((p)=>p.type==PsPacketType.checkCharacterAvailableName);
+    await connection.send(PsPacketType.checkCharacterAvailableName,raw);
+    final packet=await response;
+    if(packet.body.isEmpty)throw const FormatException('CHECK_CHARACTER_AVAILABLE_NAME response truncado.');
+    return packet.body[0]!=0;
+  }
+
+  Future<bool> renameSelectedCharacter(int characterId,String newName) async {
+    final value=newName.trim(),raw=utf8.encode(value);
+    if(value.isEmpty||raw.length>20)throw ArgumentError('Nombre de personaje inválido.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.renameCharacter);
+    await connection.send(PsPacketType.renameCharacter,[..._u32Bytes(characterId),..._fixedStringBytes(value,21)]);
+    final packet=await response;
+    if(packet.body.length<5)throw FormatException('RENAME_CHARACTER response truncado: ${packet.body.length}.');
+    final returned=ByteData.sublistView(packet.body).getUint32(1,Endian.little);
+    if(returned!=characterId)throw StateError('RENAME_CHARACTER devolvió id inesperado: $returned.');
+    return packet.body[0]!=0;
+  }
+
+  Future<bool> restoreCharacter(int characterId) async {
+    final response=connection.waitStream((p)=>p.type==PsPacketType.restoreCharacter);
+    await connection.send(PsPacketType.restoreCharacter,_u32Bytes(characterId));
+    final packet=await response;
+    if(packet.body.length<5)throw FormatException('RESTORE_CHARACTER response truncado: ${packet.body.length}.');
+    final returned=ByteData.sublistView(packet.body).getUint32(1,Endian.little);
+    if(returned!=characterId)throw StateError('RESTORE_CHARACTER devolvió id inesperado: $returned.');
+    return packet.body[0]==0;
+  }
+
+  Future<void> requestInventorySort(List<PsInventorySortMove> moves) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de ordenar inventario.');
+    if(moves.length>255)throw RangeError('INVENTORY_SORT admite como máximo 255 movimientos.');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.inventorySort,timeout:const Duration(seconds:8));
+    final body=<int>[moves.length];
+    for(final move in moves){
+      for(final value in [move.destinationBag,move.destinationSlot,move.sourceBag,move.sourceSlot]){
+        if(value<0||value>255)throw RangeError('INVENTORY_SORT contiene bag/slot fuera de byte.');
+      }
+      body.addAll([move.destinationBag,move.destinationSlot,move.sourceBag,move.sourceSlot]);
+    }
+    await connection.send(PsPacketType.inventorySort,body);
+    await response;
+  }
+
+  Future<void> logoutToSelection() async {
+    if(!_expanded)return;
+    final response=connection.waitStream((p)=>p.type==PsPacketType.logout,timeout:const Duration(seconds:8));
+    await connection.send(PsPacketType.logout);
+    await response;
+    _expanded=false;
+  }
+
+  Future<void> quitGame() async {
+    await connection.send(PsPacketType.quitGame);
   }
 
   Future<List<PsCharacterSlot>> createCharacter({
