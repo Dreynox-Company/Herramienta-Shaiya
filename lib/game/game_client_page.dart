@@ -879,7 +879,7 @@ class _GameClientPageState extends State<GameClientPage> {
 
     if(selectedQuest!=null){
       questId=selectedQuest;
-      rewardSelection=false;rewardNpcId=0;shopOpen=false;activeShop=null;activeShopNpcGlobalId=null;
+      rewardSelection=false;rewardNpcId=0;shopOpen=false;warehouseOpen=false;activeShop=null;activeShopNpcGlobalId=null;
       questOpen=true;
       messages.insert(0,'[NPC] '+npcName+' · misión '+selectedQuest.toString()+'.');
     }else{
@@ -1332,7 +1332,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onSellInventory:(item)=>unawaited(_sellInventoryItem(item)),
             onStoreWarehouse:(item)=>unawaited(_storeInWarehouse(item)),
             onWithdrawWarehouse:(item)=>unawaited(_withdrawWarehouse(item)),
-            onToggleInventory:()=>setState(()=>inventoryOpen=!inventoryOpen),
+            onToggleInventory:()=>setState((){inventoryOpen=!inventoryOpen;if(inventoryOpen){shopOpen=false;warehouseOpen=false;questOpen=false;}}),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
             rewardSelection:rewardSelection,
