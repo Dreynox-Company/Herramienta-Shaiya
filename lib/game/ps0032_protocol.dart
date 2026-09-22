@@ -41,6 +41,10 @@ class PsPacketType {
   static const usedSpMp=0x050C;
   static const buffAdd=0x050D;
   static const buffRemove=0x050E;
+  static const characterDeath=0x0504;
+  static const deadRebirth=0x0551;
+  static const rebirthNearestTown=0x0553;
+  static const characterLeaveDead=0x0406;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
   static const mobEnter=0x0601;
@@ -372,6 +376,36 @@ class PsEnteredMap {
     );
   }
 }
+class PsCharacterDeath {
+  final int characterId,killerType,killerId;
+  const PsCharacterDeath(this.characterId,this.killerType,this.killerId);
+  static PsCharacterDeath parse(PsPacket p){
+    if(p.type!=PsPacketType.characterDeath||p.body.length<9){
+      throw FormatException('CHARACTER_DEATH truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterDeath(
+      d.getUint32(0,Endian.little),p.body[4],d.getUint32(5,Endian.little),
+    );
+  }
+}
+
+class PsDeadRebirth {
+  final int characterId,rebirthType,expLoss;
+  final double x,y,z;
+  const PsDeadRebirth(this.characterId,this.rebirthType,this.expLoss,this.x,this.y,this.z);
+  static PsDeadRebirth parse(PsPacket p){
+    if(p.type!=PsPacketType.deadRebirth||p.body.length<21){
+      throw FormatException('DEAD_REBIRTH truncado: ${p.body.length}');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsDeadRebirth(
+      d.getUint32(0,Endian.little),p.body[4],d.getUint32(5,Endian.little),
+      d.getFloat32(9,Endian.little),d.getFloat32(13,Endian.little),d.getFloat32(17,Endian.little),
+    );
+  }
+}
+
 
 class PsUsualHit {
   final int result,attackerId,targetId,hpDamage,spDamage,mpDamage;
@@ -1253,6 +1287,11 @@ class PsWorldSession {
   Future<void> quitQuest(int questId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de abandonar una misión.');
     await connection.send(PsPacketType.questQuit,_i16Bytes(questId));
+  }
+
+  Future<void> rebirth({bool useRune=false}) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de renacer.');
+    await connection.send(PsPacketType.rebirthNearestTown,[useRune?4:2]);
   }
 
   Future<void> sendNormalChat(String message) async {
