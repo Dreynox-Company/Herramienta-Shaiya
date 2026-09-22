@@ -164,13 +164,39 @@ class SpkWriter {
     return packed;
   }
 
-  static List<Uint8List> _splitPacked(Uint8List packed, int blockBytes) {
-    if (packed.isEmpty) return <Uint8List>[Uint8List(0)];
+  static List<Uint8List> _splitPackedLikeOriginal(
+    Uint8List packed,
+    int chunks,
+    int blockBytes,
+  ) {
+    if (chunks < 1 || packed.length < chunks) {
+      throw const SpkFailure(
+        'SPK_WRITER_FRAGMENT_TOO_SMALL',
+        'El recurso editado no permite conservar la cadena de fragmentos.',
+      );
+    }
     final block = blockBytes > 0 ? blockBytes : 262144;
+    if (packed.length > block * chunks) {
+      throw SpkFailure(
+        'SPK_WRITER_FRAGMENT_CAPACITY',
+        'El recurso editado excede la capacidad de la cadena fragmentada '
+            'original.',
+        {
+          'packedBytes': packed.length,
+          'chunks': chunks,
+          'blockBytes': block,
+          'capacity': block * chunks,
+        },
+      );
+    }
+    final base = packed.length ~/ chunks;
+    final extra = packed.length % chunks;
     final out = <Uint8List>[];
-    for (var at = 0; at < packed.length; at += block) {
-      final end = (at + block < packed.length) ? at + block : packed.length;
-      out.add(Uint8List.fromList(packed.sublist(at, end)));
+    var at = 0;
+    for (var i = 0; i < chunks; i++) {
+      final size = base + (i < extra ? 1 : 0);
+      out.add(Uint8List.fromList(packed.sublist(at, at + size)));
+      at += size;
     }
     return out;
   }
@@ -351,7 +377,10 @@ class SpkWriter {
       await output.writeFrom(headerTemplate);
       var dataOffset = spkHeaderBytes;
       final rewritten = <int, SpkRecord>{};
-      final auxiliary = <SpkAuxRecord>[];
+      final auxiliary = List<SpkAuxRecord?>.filled(
+        source.index.auxiliary.length,
+        null,
+      );
       final resources = source.index.resources.toList()
         ..sort((a, b) => a.dataOffset.compareTo(b.dataOffset));
 
@@ -427,19 +456,26 @@ class SpkWriter {
               replacement,
               originalPacked.takeBytes(),
             );
-            clearParts = _splitPacked(
+            clearParts = _splitPackedLikeOriginal(
               packed,
+              row.chunkCount,
               source.index.header.blockBytes,
             );
             decodedBytes = replacement.length;
           }
 
-          final auxiliaryStart = auxiliary.length;
+          if (clearParts.length != row.chunkCount) {
+            throw const SpkFailure(
+              'SPK_WRITER_FRAGMENT_COUNT',
+              'La reconstrucción cambió inesperadamente la cadena de chunks.',
+            );
+          }
+          final auxiliaryStart = row.auxiliaryStart;
           final resourceOffset = dataOffset;
           var totalStored = 0;
           for (var local = 0; local < clearParts.length; local++) {
             final clear = clearParts[local];
-            final partOrdinal = auxiliary.length;
+            final partOrdinal = row.auxiliaryStart + local;
             final placeholderRecord = SpkRecord(
               ordinal: row.ordinal,
               entryId: row.entryId,
@@ -473,13 +509,11 @@ class SpkWriter {
             );
             final cipher = Uint8List.fromList(box.cipherText);
             await output.writeFrom(cipher);
-            auxiliary.add(
-              SpkAuxRecord(
-                ordinal: partOrdinal,
-                dataOffset: dataOffset,
-                storedBytes: cipher.length,
-                metadata: Uint8List.fromList(box.mac.bytes),
-              ),
+            auxiliary[partOrdinal] = SpkAuxRecord(
+              ordinal: partOrdinal,
+              dataOffset: dataOffset,
+              storedBytes: cipher.length,
+              metadata: Uint8List.fromList(box.mac.bytes),
             );
             dataOffset += cipher.length;
             totalStored += cipher.length;
@@ -492,8 +526,8 @@ class SpkWriter {
             decodedBytes: decodedBytes,
             recordType: row.recordType,
             auxiliaryStart: auxiliaryStart,
-            chunkCount: clearParts.length,
-            metadata: _fragmentMetadata(row, clearParts.length),
+            chunkCount: row.chunkCount,
+            metadata: _fragmentMetadata(row, row.chunkCount),
           );
         }
 
@@ -504,8 +538,15 @@ class SpkWriter {
         );
       }
 
+      if (auxiliary.any((row) => row == null)) {
+        throw const SpkFailure(
+          'SPK_WRITER_AUX_INCOMPLETE',
+          'No se reconstruyó toda la tabla auxiliar del SPK.',
+        );
+      }
+      final finalAuxiliary = auxiliary.cast<SpkAuxRecord>();
       final auxiliaryOffset = dataOffset;
-      final auxiliaryBytes = _serializeAux(auxiliary);
+      final auxiliaryBytes = _serializeAux(finalAuxiliary);
       await output.writeFrom(auxiliaryBytes);
       final indexOffset = auxiliaryOffset + auxiliaryBytes.length;
 
@@ -521,11 +562,11 @@ class SpkWriter {
         recordCount: records.length,
         blockBytes: source.index.header.blockBytes,
         auxiliaryOffset: auxiliaryOffset,
-        auxiliaryCount: auxiliary.length,
+        auxiliaryCount: finalAuxiliary.length,
         indexNonce: Uint8List(12),
         indexTag: Uint8List(16),
       );
-      SpkIndex.validateRelationships(records, auxiliary, provisionalHeader);
+      SpkIndex.validateRelationships(records, finalAuxiliary, provisionalHeader);
 
       final decodedIndex = _serializeRecords(records);
       final packedIndex = await Zstandard().compress(decodedIndex, 3);
@@ -557,7 +598,7 @@ class SpkWriter {
         recordCount: records.length,
         blockBytes: source.index.header.blockBytes,
         auxiliaryOffset: auxiliaryOffset,
-        auxiliaryCount: auxiliary.length,
+        auxiliaryCount: finalAuxiliary.length,
         indexNonce: indexNonce,
         indexTag: Uint8List.fromList(indexBox.mac.bytes),
       );
