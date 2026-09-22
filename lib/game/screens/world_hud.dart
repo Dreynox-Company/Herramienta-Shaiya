@@ -32,6 +32,8 @@ class WorldHud extends StatelessWidget {
   final List<PsInventoryItem> inventory,warehouse,guildWarehouse;
   final List<PsFriend> friends;
   final List<PsPartyMember> partyMembers;
+  final List<PsPartySearchMember> partySearchers;
+  final bool partySearchRegistered;
   final PsRaidState? raid;
   final List<PsGuildSummary> guildDirectory;
   final List<PsGuildMember> guildMembers;
@@ -84,6 +86,8 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<String> onRequestFriend,onJoinRaid;
   final ValueChanged<bool> onRespondFriend,onRespondParty,onRespondRaid,onRespondVehicle;
   final ValueChanged<PsFriend> onDeleteFriend,onInviteParty;
+  final ValueChanged<PsPartySearchMember> onInvitePartySearcher;
+  final VoidCallback onRegisterPartySearch;
   final ValueChanged<int> onInviteRaid,onChangeRaidLoot;
   final ValueChanged<PsPartyMember> onKickParty,onPromoteParty;
   final ValueChanged<PsRaidMember> onKickRaid,onChangeRaidLeader,onChangeRaidSubLeader;
@@ -146,6 +150,8 @@ class WorldHud extends StatelessWidget {
     required this.guildWarehouse,
     required this.friends,
     required this.partyMembers,
+    required this.partySearchers,
+    required this.partySearchRegistered,
     required this.raid,
     required this.guildDirectory,
     required this.guildMembers,
@@ -276,6 +282,8 @@ class WorldHud extends StatelessWidget {
     required this.onRespondVehicle,
     required this.onDeleteFriend,
     required this.onInviteParty,
+    required this.onRegisterPartySearch,
+    required this.onInvitePartySearcher,
     required this.onInviteRaid,
     required this.onChangeRaidLoot,
     required this.onLeaveParty,
@@ -1417,6 +1425,66 @@ class WorldHud extends StatelessWidget {
         Padding(
           padding:const EdgeInsets.fromLTRB(8,5,8,7),
           child:_SocialNameInput(locale:locale,onSubmit:onRequestFriend),
+        ),
+        Padding(
+          padding:const EdgeInsets.fromLTRB(8,0,8,6),
+          child:Column(children:[
+            Row(children:[
+              const Icon(Icons.travel_explore,size:14,color:Color(0xff9ad8ff)),
+              const SizedBox(width:5),
+              Expanded(child:Text(
+                locale=='spn'?'Buscar grupo':'Party Search',
+                style:const TextStyle(fontSize:9.5,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
+              )),
+              SizedBox(
+                width:88,height:25,
+                child:shaiyaRedButton(
+                  partySearchRegistered
+                    ?(locale=='spn'?'Registrado':'Registered')
+                    :(locale=='spn'?'Buscar':'Search'),
+                  partySearchRegistered||raid!=null||partyMembers.isNotEmpty?null:onRegisterPartySearch,
+                  width:88,height:25,fontSize:7.7,
+                ),
+              ),
+            ]),
+            if(partySearchRegistered||partySearchers.isNotEmpty)...[
+              const SizedBox(height:5),
+              SizedBox(
+                height:math.min(72.0,partySearchers.length*24.0+4),
+                child:partySearchers.isEmpty
+                  ?Align(
+                      alignment:Alignment.centerLeft,
+                      child:Text(
+                        locale=='spn'?'Esperando jugadores disponibles…':'Waiting for available players…',
+                        style:const TextStyle(fontSize:7.5,color:Colors.white38),
+                      ),
+                    )
+                  :ListView.builder(
+                      itemCount:math.min(6,partySearchers.length),
+                      itemBuilder:(context,index){
+                        final player=partySearchers[index];
+                        return SizedBox(
+                          height:24,
+                          child:Row(children:[
+                            Expanded(child:Text(
+                              player.name+' · Lv.'+player.level.toString()+' · '+_professionName(player.profession),
+                              maxLines:1,overflow:TextOverflow.ellipsis,
+                              style:const TextStyle(fontSize:7.7,color:Colors.white70),
+                            )),
+                            IconButton(
+                              tooltip:locale=='spn'?'Invitar al grupo':'Invite to party',
+                              onPressed:()=>onInvitePartySearcher(player),
+                              padding:EdgeInsets.zero,
+                              constraints:const BoxConstraints.tightFor(width:25,height:22),
+                              icon:const Icon(Icons.group_add,size:14,color:Color(0xff86c8ff)),
+                            ),
+                          ]),
+                        );
+                      },
+                    ),
+              ),
+            ],
+          ]),
         ),
         const Divider(height:1,color:Color(0xff5a4934)),
         Padding(
