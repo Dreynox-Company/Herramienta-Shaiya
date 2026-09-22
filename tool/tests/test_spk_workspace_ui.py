@@ -37,7 +37,9 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("decoded-sha256-one-to-one-reference", source)
         self.assertIn("ambiguousRecords", source)
         self.assertIn("names.removeAmbiguousHints()", source)
+        self.assertIn("decoded-sha256-one-to-one-reference", source)
         self.assertIn("confirmedPaths.contains(key)", archive)
+        self.assertIn("External/legacy maps may contain", source)
 
     def test_spk_editor_exposes_verified_repack(self):
         editor = (ROOT / 'lib' / 'ui' / 'data_editor.dart').read_text(
