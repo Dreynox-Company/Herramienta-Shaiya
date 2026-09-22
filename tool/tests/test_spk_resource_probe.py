@@ -20,6 +20,21 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn("BCryptDuplicateKey", text)
         self.assertIn("KEY_EXPORTED_FROM_LIVE_HANDLE", text)
 
+    def test_windows_probe_and_studio_force_utf8_safe_evidence(self):
+        probe_text = MODULE.read_text(encoding='utf-8')
+        self.assertNotRegex(
+            probe_text,
+            r"write_text\([^\n]+\)(?![^\n]*encoding=['\"]utf-8['\"])",
+        )
+        browser = (
+            ROOT / 'lib' / 'ui' / 'spk_archive_browser.dart'
+        ).read_text(encoding='utf-8')
+        self.assertIn("'PYTHONUTF8': '1'", browser)
+        self.assertIn("'PYTHONIOENCODING': 'utf-8'", browser)
+        self.assertIn('Utf8Decoder(allowMalformed: true)', browser)
+        self.assertIn('!source.canReadRecord(record)', browser)
+        self.assertIn('CONTENIDO CIFRADO:', browser)
+
     def test_simple_and_chunks_same_key_make_ready_for_all(self):
         key = '11' * 32
         base = {
