@@ -69,6 +69,27 @@ class PsPacketType {
   static const npcBuyItem=0x0702;
   static const warehouseItemList=0x0711;
   static const npcSellItem=0x0703;
+  static const partyList=0x0B01;
+  static const partyRequest=0x0B02;
+  static const partyResponse=0x0B03;
+  static const partyEnter=0x0B04;
+  static const partyLeave=0x0B05;
+  static const partyKick=0x0B06;
+  static const partyChangeLeader=0x0B07;
+  static const partyMemberGetItem=0x0B08;
+  static const partyCharacterSpMp=0x0C01;
+  static const partySetMax=0x0C02;
+  static const partyMemberHpSpMp=0x0C03;
+  static const partyAddedBuff=0x0C04;
+  static const partyRemovedBuff=0x0C05;
+  static const partyMemberMaxHpSpMp=0x0C08;
+  static const partyMemberLevel=0x0C09;
+  static const friendList=0x2201;
+  static const friendRequest=0x2202;
+  static const friendResponse=0x2203;
+  static const friendAdd=0x2204;
+  static const friendDelete=0x2205;
+  static const friendOnline=0x2207;
   static const questList=0x0901;
   static const questStart=0x0902;
   static const questEnd=0x0903;
@@ -102,6 +123,12 @@ Uint8List _i32Bytes(int value){
 Uint8List _u32Bytes(int value){
   final b=ByteData(4)..setUint32(0,value,Endian.little);
   return b.buffer.asUint8List();
+}
+Uint8List _fixedStringBytes(String value,int length){
+  final out=Uint8List(length),raw=utf8.encode(value);
+  final n=math.min(length,raw.length);
+  out.setRange(0,n,raw);
+  return out;
 }
 Uint8List _i16Bytes(int value){
   final b=ByteData(2)..setInt16(0,value,Endian.little);
@@ -593,6 +620,119 @@ class PsChatMessage {
     }
     throw FormatException('Tipo de chat no soportado: 0x${p.type.toRadixString(16)}');
   }
+}
+
+class PsFriend {
+  final int id,job;
+  final bool online;
+  final String name;
+  final Uint8List memo;
+  const PsFriend(this.id,this.job,this.online,this.name,this.memo);
+  PsFriend copyWith({bool? online})=>PsFriend(id,job,online??this.online,name,memo);
+}
+
+String _fixedString(Uint8List b,int offset,int length){
+  if(offset<0||offset+length>b.length)throw FormatException('Cadena fija truncada en $offset/$length.');
+  final raw=b.sublist(offset,offset+length),zero=raw.indexOf(0);
+  return utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+}
+
+List<PsFriend> parseFriendList(PsPacket p){
+  if(p.type!=PsPacketType.friendList||p.body.isEmpty)return const [];
+  final count=p.body[0],need=1+count*79;
+  if(p.body.length<need)throw FormatException('FRIEND_LIST truncado: count=$count bytes=${p.body.length}.');
+  final d=ByteData.sublistView(p.body),out=<PsFriend>[];
+  var o=1;
+  for(var i=0;i<count;i++,o+=79){
+    out.add(PsFriend(
+      d.getUint32(o,Endian.little),p.body[o+4],p.body[o+5]!=0,
+      _fixedString(p.body,o+6,21),Uint8List.fromList(p.body.sublist(o+28,o+79)),
+    ));
+  }
+  return List.unmodifiable(out);
+}
+
+PsFriend parseFriendAdd(PsPacket p){
+  if(p.type!=PsPacketType.friendAdd||p.body.length<26)throw FormatException('FRIEND_ADD truncado: ${p.body.length}.');
+  final d=ByteData.sublistView(p.body);
+  return PsFriend(d.getUint32(0,Endian.little),p.body[4],true,_fixedString(p.body,5,21),Uint8List(0));
+}
+
+String parseFriendRequestName(PsPacket p){
+  if(p.type!=PsPacketType.friendRequest||p.body.length<21)throw FormatException('FRIEND_REQUEST truncado: ${p.body.length}.');
+  return _fixedString(p.body,0,21);
+}
+
+class PsPartyBuff {
+  final int skillId,skillLevel,countdownSeconds;
+  const PsPartyBuff(this.skillId,this.skillLevel,this.countdownSeconds);
+}
+
+class PsPartyMember {
+  final int id,level,profession,maxHp,hp,maxSp,sp,maxMp,mp,mapId;
+  final String name;
+  final double x,y,z;
+  final List<PsPartyBuff> buffs;
+  const PsPartyMember({
+    required this.id,required this.name,required this.level,required this.profession,
+    required this.maxHp,required this.hp,required this.maxSp,required this.sp,
+    required this.maxMp,required this.mp,required this.mapId,
+    required this.x,required this.y,required this.z,required this.buffs,
+  });
+  PsPartyMember copyWith({
+    int? level,int? maxHp,int? hp,int? maxSp,int? sp,int? maxMp,int? mp,
+    List<PsPartyBuff>? buffs,double? x,double? y,double? z,int? mapId,
+  })=>PsPartyMember(
+    id:id,name:name,level:level??this.level,profession:profession,
+    maxHp:maxHp??this.maxHp,hp:hp??this.hp,maxSp:maxSp??this.maxSp,sp:sp??this.sp,
+    maxMp:maxMp??this.maxMp,mp:mp??this.mp,mapId:mapId??this.mapId,
+    x:x??this.x,y:y??this.y,z:z??this.z,buffs:buffs??this.buffs,
+  );
+}
+
+({PsPartyMember member,int next}) _parsePartyMember(Uint8List b,int offset){
+  if(offset<0||offset+67>b.length)throw FormatException('PartyMember truncado en $offset/${b.length}.');
+  final d=ByteData.sublistView(b);
+  final count=b[offset+66],need=67+count*7;
+  if(offset+need>b.length)throw FormatException('PartyMember buffs truncados: $count.');
+  final buffs=<PsPartyBuff>[];
+  var bo=offset+67;
+  for(var i=0;i<count;i++,bo+=7){
+    buffs.add(PsPartyBuff(
+      d.getUint16(bo,Endian.little),b[bo+2],d.getInt32(bo+3,Endian.little),
+    ));
+  }
+  return (
+    member:PsPartyMember(
+      id:d.getUint32(offset,Endian.little),name:_fixedString(b,offset+4,21),
+      level:d.getUint16(offset+25,Endian.little),profession:b[offset+27],
+      maxHp:d.getInt32(offset+28,Endian.little),hp:d.getInt32(offset+32,Endian.little),
+      maxSp:d.getInt32(offset+36,Endian.little),sp:d.getInt32(offset+40,Endian.little),
+      maxMp:d.getInt32(offset+44,Endian.little),mp:d.getInt32(offset+48,Endian.little),
+      mapId:d.getUint16(offset+52,Endian.little),
+      x:d.getFloat32(offset+54,Endian.little),y:d.getFloat32(offset+58,Endian.little),z:d.getFloat32(offset+62,Endian.little),
+      buffs:List.unmodifiable(buffs),
+    ),
+    next:offset+need,
+  );
+}
+
+class PsPartyList {
+  final int leaderIndex;
+  final List<PsPartyMember> members;
+  const PsPartyList(this.leaderIndex,this.members);
+  static PsPartyList parse(PsPacket p){
+    if(p.type!=PsPacketType.partyList||p.body.length<2)throw FormatException('PARTY_LIST truncado: ${p.body.length}.');
+    final leader=p.body[0],count=p.body[1],members=<PsPartyMember>[];
+    var o=2;
+    for(var i=0;i<count;i++){final row=_parsePartyMember(p.body,o);members.add(row.member);o=row.next;}
+    return PsPartyList(leader,List.unmodifiable(members));
+  }
+}
+
+PsPartyMember parsePartyEnter(PsPacket p){
+  if(p.type!=PsPacketType.partyEnter)throw FormatException('No es PARTY_ENTER.');
+  return _parsePartyMember(p.body,0).member;
 }
 
 class PsQuestProgress {
@@ -1290,6 +1430,39 @@ class PsWorldSession {
     final response=connection.waitStream((p)=>p.type==PsPacketType.characterTeleportViaNpc);
     await connection.send(PsPacketType.characterTeleportViaNpc,[..._u32Bytes(npcGlobalId),gateId]);
     return PsNpcTeleportResult.parse(await response);
+  }
+  Future<void> requestFriend(String name) async {
+    final value=name.trim();
+    if(value.isEmpty)throw ArgumentError('Nombre de amigo vacío.');
+    await connection.send(PsPacketType.friendRequest,_fixedStringBytes(value,21));
+  }
+
+  Future<void> respondFriend(bool accepted) async {
+    await connection.send(PsPacketType.friendResponse,[accepted?1:0]);
+  }
+
+  Future<void> deleteFriend(int characterId) async {
+    await connection.send(PsPacketType.friendDelete,_u32Bytes(characterId));
+  }
+
+  Future<void> requestParty(int characterId) async {
+    await connection.send(PsPacketType.partyRequest,_u32Bytes(characterId));
+  }
+
+  Future<void> respondParty(int requesterId,{required bool declined}) async {
+    await connection.send(PsPacketType.partyResponse,[declined?1:0,..._u32Bytes(requesterId)]);
+  }
+
+  Future<void> leaveParty() async {
+    await connection.send(PsPacketType.partyLeave);
+  }
+
+  Future<void> kickPartyMember(int characterId) async {
+    await connection.send(PsPacketType.partyKick,_u32Bytes(characterId));
+  }
+
+  Future<void> changePartyLeader(int characterId) async {
+    await connection.send(PsPacketType.partyChangeLeader,_u32Bytes(characterId));
   }
   Future<void> moveCharacter({
     required double x,
