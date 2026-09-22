@@ -287,6 +287,35 @@ void main() {
       );
       expect(lib.resolve('t.dds', ['b']), 'b/t.dds');
     });
+    test('indexa formatos nativos de mundo antes omitidos',(){
+      for(final path in <String>[
+        'entity/vani/test.vani',
+        'entity/mani/test.mani',
+        'entity/water/world.wtr',
+        'effect/waterfall.3de',
+        'effect/sample.seff',
+      ]){
+        expect(supportedPath(path),isTrue,reason:path);
+      }
+    });
+    test('resuelve referencias TGA BMP JPG contra DDS distribuido',(){
+      final lib=Library('',false,{
+        'sky/sky_a1_renew.dds':'1',
+        'sky/a1_cloud01.dds':'2',
+        'entity/water/caust00.dds':'3',
+      });
+      expect(lib.resolve('Sky_A1_renew.bmp',['sky'],uniqueFallback:true),'sky/sky_a1_renew.dds');
+      expect(lib.resolve('A1_cloud01.tga',['sky'],uniqueFallback:true),'sky/a1_cloud01.dds');
+      expect(lib.resolve('caust00.jpg',['entity/water'],uniqueFallback:true),'entity/water/caust00.dds');
+    });
+    test('fallback por alias respeta directorio preferido',(){
+      final lib=Library('',false,{
+        'sky/clouds01.dds':'1',
+        'entity/texture/clouds01.dds':'2',
+      });
+      expect(lib.resolve('clouds01.tga',['sky'],uniqueFallback:true),'sky/clouds01.dds');
+      expect(lib.resolve('clouds01.tga',['entity/texture'],uniqueFallback:true),'entity/texture/clouds01.dds');
+    });
   });
   group('DDS', () {
     test('DXT1 decodifica rojo real y opaco', () {
