@@ -15,6 +15,7 @@ import '../core/spk_archive.dart';
 import '../core/textures.dart';
 import '../data/spk_source.dart';
 import '../data/spk_table_discovery.dart';
+import '../editor/schema_reader.dart';
 import '../render/native_view.dart';
 
 String _spkNormalizePath(String value, String separator) {
@@ -1783,11 +1784,169 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           );
           break;
         case 'SDATA':
-          preview = const SelectableText(
-            'Tabla SData autenticada.\n\n'
-            'Usa “Preparar Studio” para abrirla en el editor estructurado '
-            'con columnas, relaciones y guardado por overlay.',
-            style: TextStyle(fontSize: 12),
+          final document = EditorReader.open(result.bytes, path);
+          if (!document.complete || document.rows.isEmpty) {
+            preview = SelectableText(
+              'SData autenticada, pero todavía no hay un esquema completo '
+              'para esta tabla.\n\n'
+              'Perfil detectado: ${document.profile}\n'
+              'Filas parciales: ${document.rows.length}\n'
+              'Advertencias: ${document.warnings.join(' · ')}\n\n'
+              'El payload permanece disponible sin modificaciones en el '
+              'workspace SPK.',
+              style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+            );
+            break;
+          }
+
+          final visibleRows = math.min(document.rows.length, 100);
+          final firstFields = document.fields(0);
+          final visibleColumns = math.min(firstFields.length, 32);
+          preview = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'SData · perfil ${document.profile} · '
+                '${document.rows.length} filas · '
+                '${firstFields.length} columnas'
+                '${document.rows.length > visibleRows ? ' · mostrando 100' : ''}',
+                style: const TextStyle(fontSize: 11),
+              ),
+              if (document.warnings.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  document.warnings.take(3).join(' · '),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xffd7ad63),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: Scrollbar(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: math.max(760, visibleColumns * 150.0),
+                      child: ListView.builder(
+                        itemCount: visibleRows + 1,
+                        itemBuilder: (_, index) {
+                          if (index == 0) {
+                            return Container(
+                              height: 34,
+                              color: const Color(0xff1d2938),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 55,
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 9,
+                                      ),
+                                      child: Text(
+                                        '#',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  for (var col = 0;
+                                      col < visibleColumns;
+                                      col++)
+                                    SizedBox(
+                                      width: 150,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 9,
+                                        ),
+                                        child: Text(
+                                          firstFields[col].spec.name,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          }
+                          final rowIndex = index - 1;
+                          final fields = document.fields(rowIndex);
+                          return Container(
+                            height: 31,
+                            decoration: BoxDecoration(
+                              color: rowIndex.isEven
+                                  ? const Color(0xff111923)
+                                  : const Color(0xff151f2c),
+                              border: const Border(
+                                bottom: BorderSide(
+                                  color: Color(0xff263344),
+                                  width: .5,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 55,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    child: Text(
+                                      rowIndex.toString(),
+                                      style: const TextStyle(
+                                        fontFamily: 'Consolas',
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                for (var col = 0;
+                                    col < visibleColumns;
+                                    col++)
+                                  SizedBox(
+                                    width: 150,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      child: SelectableText(
+                                        col < fields.length
+                                            ? document.read(fields[col])
+                                            : '',
+                                        maxLines: 1,
+                                        style: const TextStyle(
+                                          fontFamily: 'Consolas',
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Vista de inspección. Para editar campos y relaciones usa '
+                'Preparar Studio; los cambios se guardan en el overlay.',
+                style: TextStyle(fontSize: 10, color: Color(0xff8e9bb0)),
+              ),
+            ],
           );
           break;
         default:
