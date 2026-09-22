@@ -15,7 +15,7 @@ SPEC.loader.exec_module(probe)
 
 
 class ResourceProbeContractTest(unittest.TestCase):
-    def test_v11_agent_can_recover_keys_from_live_bcrypt_handles(self):
+    def test_v12_agent_recovers_and_authenticates_crypto_candidates(self):
         text = AGENT.read_text(encoding='utf-8')
         self.assertIn("BCryptExportKey", text)
         self.assertIn("KeyDataBlob", text)
@@ -26,6 +26,13 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn("pointerSize: Process.pointerSize", text)
         self.assertIn("RESOURCE_MATCH_INCOMPLETE_CRYPTO", text)
         self.assertIn("No se marca como visto", text)
+        self.assertIn("candidate-key", text)
+        self.assertIn("BCryptKeyDerivation", text)
+        self.assertIn("BCryptDeriveKeyPBKDF2", text)
+        self.assertIn("BCryptFinishHash", text)
+        self.assertIn("AES_set_decrypt_key", text)
+        self.assertIn("EVP_DecryptInit_ex", text)
+        self.assertIn("CANDIDATE_HOOK_READY", text)
         probe_text = MODULE.read_text(encoding='utf-8')
         self.assertIn("print('EVENT'", probe_text)
         self.assertIn("'RESUMEN capturas='", probe_text)
