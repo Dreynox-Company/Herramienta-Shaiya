@@ -772,6 +772,24 @@ class _GameClientPageState extends State<GameClientPage> {
     return selected;
   }
 
+  Future<void> _selectMobAt(Offset position) async {
+    if(stage!=GameStage.world)return;
+    focus.requestFocus();
+    final id=scene.pickNetworkMob(position.dx,position.dy,1024,742);
+    if(id==null)return;
+    final logical=liveSnapshot?.mobs.where((m)=>m.globalId==id).firstOrNull;
+    targetMobGlobalId=id;
+    if(logical!=null){
+      targetMobTypeId=logical.mobId;
+      targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+    }
+    try{
+      final hp=await liveWorld?.selectMobTarget(id);
+      if(hp!=null){targetMobHp=hp.currentHp;targetMobGlobalId=hp.targetId;}
+      messages.insert(0,'[Target] '+(logical==null?'Mob '+id.toString():catalog!.monsterName(logical.mobId,uiLocale)));
+    }catch(e){messages.insert(0,'[Target] '+e.toString());}
+    if(mounted)setState((){});
+  }
   Future<void> _useHotbarSlot(int index) async {
     if(stage!=GameStage.world)return;
     final slots=_primaryQuickSlots;
@@ -780,8 +798,9 @@ class _GameClientPageState extends State<GameClientPage> {
     if(!slot.isSkill){messages.insert(0,'[Skillbar] Slot ${index+1} contiene bag ${slot.bag}, item ${slot.number}.');if(mounted)setState((){});return;}
     final learned=liveSkills?.bySkillId(slot.number);
     if(learned==null){messages.insert(0,'[Skillbar] SkillId ${slot.number} no está aprendida.');if(mounted)setState((){});return;}
-    final target=scene.nearestNetworkMobId(maxDistance:18);
-    if(target==null){messages.insert(0,'[Combate] No hay criatura viva a menos de 18 m.');if(mounted)setState((){});return;}
+    final selected=targetMobGlobalId;
+    final target=selected!=null&&scene.networkMobActors.containsKey(selected)?selected:scene.nearestNetworkMobId(maxDistance:18);
+    if(target==null){messages.insert(0,'[Combate] No hay criatura viva seleccionada/cercana.');if(mounted)setState((){});return;}
     final logical=liveSnapshot?.mobs.where((m)=>m.globalId==target).firstOrNull;
     targetMobGlobalId=target;
     if(logical!=null){
@@ -1062,7 +1081,7 @@ class _GameClientPageState extends State<GameClientPage> {
       },
       child:GestureDetector(
         behavior:HitTestBehavior.opaque,
-        onTap:focus.requestFocus,
+        onTapDown:(d){if(stage==GameStage.world)unawaited(_selectMobAt(d.localPosition));else focus.requestFocus();},
         onScaleStart:(_){gestureScale=1;focus.requestFocus();},
         onScaleUpdate:(d){
           if(stage==GameStage.faction)return;
