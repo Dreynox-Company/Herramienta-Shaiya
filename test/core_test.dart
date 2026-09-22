@@ -143,6 +143,23 @@ Uint8List vaniFixture(){
   return bytes.takeBytes();
 }
 
+
+Uint8List maniFixture(){
+  final bytes=BytesBuilder();
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void i16(int x){final b=ByteData(2)..setInt16(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void vec(double x,double y,double z){f32(x);f32(y);f32(z);}
+  i32(0x21);i32(0);vec(1,0,0);
+  f32(0);f32(0);f32(0);
+  i32(0);i32(0);vec(0,0,1);
+  f32(0);f32(0);
+  i32(1);vec(0,1,0);f32(.25);
+  i16(0);i16(0);vec(0,0,0);
+  f32(0);f32(0);i32(0);
+  return bytes.takeBytes();
+}
+
 Uint8List worldAudioFixture(){
   final bytes=BytesBuilder();
   void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
@@ -161,9 +178,11 @@ Uint8List worldAudioFixture(){
   bytes.add(List<int>.filled(4,0));
   u32(0); // terrain layers
   str256(''); // water/layout
-  for(var i=0;i<7;i++)emptyCategory();
-  u32(0); // MAni names
-  u32(0); // MAni instances
+  u32(1);str256('windmill.smod');u32(1);
+  i32(0);vec(10,0,20);vec(0,0,1);vec(0,1,0); // Building.
+  for(var i=0;i<6;i++)emptyCategory();
+  u32(1);str256('windmill.mani');
+  u32(1);i32(0);i32(0);vec(10,0,20);vec(0,0,1);vec(0,1,0);
   str256(''); // EFT
   u32(0); // effect instances
   i32(0);i32(0);i32(0);
@@ -392,9 +411,33 @@ void main() {
     });
   });
 
+  group('MAni',(){
+    test('decodifica parámetros de rotación del archivo MANI exacto',(){
+      final mani=ManiData.parse(maniFixture(),'windmill.mani');
+      expect(mani.version,0x21);
+      expect(mani.enableRotation,1);
+      expect(mani.rotation.x,closeTo(0,1e-6));
+      expect(mani.rotation.y,closeTo(1,1e-6));
+      expect(mani.rotation.z,closeTo(0,1e-6));
+      expect(mani.animationSpeed,closeTo(.25,1e-6));
+      expect(maniFixture().length,108);
+    });
+    test('rechaza versión MAni desconocida',(){
+      final bytes=maniFixture();
+      ByteData.sublistView(bytes).setInt32(0,0x20,Endian.little);
+      expect(()=>ManiData.parse(bytes,'bad.mani'),throwsFormatException);
+    });
+  });
+
   group('WLD audio zones',(){
     test('decodifica música y efectos ambientales nativos',(){
       final w=WorldData.parse(worldAudioFixture(),'audio.wld');
+      expect(w.objects.length,1);
+      expect(w.objects.single.asset,'windmill.smod');
+      expect(w.maniInstances.length,1);
+      expect(w.maniInstances.single.buildingAsset,'windmill.smod');
+      expect(w.maniInstances.single.maniAsset,'windmill.mani');
+      expect(w.maniInstances.single.position.x,closeTo(10,1e-6));
       expect(w.musicAssets,['field_theme.wav']);
       expect(w.musicZones.length,1);
       expect(w.musicZones.single.assetId,0);
