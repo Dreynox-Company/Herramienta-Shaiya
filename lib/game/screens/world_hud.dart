@@ -24,6 +24,7 @@ class WorldHud extends StatelessWidget {
   final PsMapWeather? weather;
   final int? targetMobGlobalId,targetMobId,targetHp,targetMaxHp;
   final String? targetPlayerName;
+  final List<PsTargetBuff> targetBuffs;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
   final String? castingSkill;
@@ -124,6 +125,7 @@ class WorldHud extends StatelessWidget {
     required this.targetPlayerName,
     required this.targetHp,
     required this.targetMaxHp,
+    required this.targetBuffs,
     required this.skillBook,
     required this.skillBar,
     required this.castingSkill,
@@ -308,7 +310,7 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 215, top: 5, width: 520, height: 48, child: _topHotbar()),
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
           if(targetMobId!=null||targetPlayerName!=null)
-            Positioned(left:390,top:60,width:245,height:48,child:_targetHud()),
+            Positioned(left:390,top:60,width:245,height:targetBuffs.isEmpty?48:64,child:_targetHud()),
           if(castingSkill!=null)
             Positioned(left:374,top:112,width:276,height:28,child:_castBar()),
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
@@ -812,6 +814,40 @@ class WorldHud extends StatelessWidget {
             hp.toString()+' / '+max.toString(),
             style:const TextStyle(fontSize:7.5,color:Colors.white70),
           ),
+          if(targetBuffs.isNotEmpty)...[
+            const SizedBox(height:2),
+            SizedBox(
+              height:14,
+              child:ListView(
+                scrollDirection:Axis.horizontal,
+                padding:EdgeInsets.zero,
+                children:targetBuffs.take(12).map((buff){
+                  final skill=metadata?.skill(buff.skillId,buff.skillLevel);
+                  final icon=skill?.iconPath;
+                  return Padding(
+                    padding:const EdgeInsets.only(right:2),
+                    child:Tooltip(
+                      message:(catalog.skillName(buff.skillId,buff.skillLevel,locale))+
+                        (buff.countdownSeconds>=0?' · '+buff.countdownSeconds.toString()+'s':''),
+                      child:Container(
+                        width:14,height:14,
+                        decoration:BoxDecoration(
+                          color:const Color(0xff1b1510),
+                          border:Border.all(color:const Color(0xff6e5d43)),
+                        ),
+                        child:icon==null
+                          ?const Icon(Icons.auto_awesome,size:10,color:Color(0xffffd575))
+                          :DataImage(
+                            cache:ui,path:icon,fit:BoxFit.cover,
+                            fallback:const Icon(Icons.auto_awesome,size:10,color:Color(0xffffd575)),
+                          ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
         ])),
       ]),
     );
