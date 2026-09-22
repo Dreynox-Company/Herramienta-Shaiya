@@ -835,6 +835,30 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Target] '+e.toString());}
     if(mounted)setState((){});
   }
+  Future<void> _assignSkillToHotbar(PsLearnedSkill skill) async {
+    final session=liveWorld;
+    if(session==null||stage!=GameStage.world)return;
+    final all=[...(liveSkillBar?.slots??const <PsQuickSlot>[])];
+    final bar=all.isEmpty?0:all.map((s)=>s.bar).reduce(math.min);
+    final occupied={for(final s in all.where((s)=>s.bar==bar))s.slot};
+    int? slot;
+    for(var i=0;i<10;i++){if(!occupied.contains(i)){slot=i;break;}}
+    if(slot==null){
+      messages.insert(0,'[Skillbar] No hay slots libres en la barra principal.');
+      if(mounted)setState((){});
+      return;
+    }
+    final next=PsQuickSlot(bar,slot,100,skill.skillId,skill.cooldownSeconds);
+    all.add(next);
+    all.sort((a,b){final byBar=a.bar.compareTo(b.bar);return byBar!=0?byBar:a.slot.compareTo(b.slot);});
+    try{
+      await session.saveSkillBar(all);
+      liveSkillBar=PsSkillBar(List.unmodifiable(all));
+      final name=catalog?.skillName(skill.skillId,skill.level,uiLocale)??('Skill '+skill.skillId.toString());
+      messages.insert(0,'[Skillbar] '+name+' → slot '+(slot+1).toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Skillbar] '+e.toString());if(mounted)setState((){});}
+  }
   Future<void> _useHotbarSlot(int index) async {
     if(stage!=GameStage.world)return;
     final slots=_primaryQuickSlots;
@@ -1397,6 +1421,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onToggleSkills:()=>_toggleWorldPanel('skills'),
             onToggleQuestLog:()=>_toggleWorldPanel('quests'),
             onOpenQuest:_openQuestFromLog,
+            onAssignSkill:(skill)=>unawaited(_assignSkillToHotbar(skill)),
             onHotbar:(index)=>unawaited(_useHotbarSlot(index)),
             onSendChat:(text)=>unawaited(_sendChat(text)),
             questActive:liveSnapshot?.quests.any((q)=>q.questId==questId)??false,
