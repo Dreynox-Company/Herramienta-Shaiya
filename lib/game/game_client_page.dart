@@ -703,6 +703,24 @@ class _GameClientPageState extends State<GameClientPage> {
         targetMobTypeId=logical.mobId;
         targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
       }
+    }else if(packet.type==PsPacketType.characterMobAutoAttack&&packet.body.length>=15){
+      final hit=PsUsualHit.parse(packet);
+      if(hit.targetId!=0){
+        targetMobGlobalId=hit.targetId;
+        final logical=liveSnapshot?.mobs.where((m)=>m.globalId==hit.targetId).firstOrNull;
+        if(logical!=null){
+          targetMobTypeId=logical.mobId;
+          targetMobMaxHp=metadata?.mobs[logical.mobId]?.hp??targetMobMaxHp;
+        }
+      }
+      if(hit.success&&hit.targetId!=0){
+        if(targetMobHp!=null)targetMobHp=math.max(0,targetMobHp!-hit.hpDamage);
+        unawaited(scene.networkPlayerAttack(hit.targetId));
+        if(hit.hpDamage>0)unawaited(scene.networkMobHit(hit.targetId,hit.hpDamage));
+        messages.insert(0,'[Combate] Ataque normal · daño '+hit.hpDamage.toString()+'.');
+      }else if(hit.result!=12){
+        messages.insert(0,'[Combate] Ataque normal rechazado ('+hit.result.toString()+').');
+      }
     }else if(packet.type==PsPacketType.useMobTargetSkill&&packet.body.length>=19){
       final hit=PsSkillHit.parse(packet);
       targetMobGlobalId=hit.targetId;
@@ -882,6 +900,20 @@ class _GameClientPageState extends State<GameClientPage> {
       messages.insert(0,'[Skillbar] '+name+' → slot '+(slot+1).toString()+'.');
       if(mounted)setState((){});
     }catch(e){messages.insert(0,'[Skillbar] '+e.toString());if(mounted)setState((){});}
+  }
+  Future<void> _autoAttackAt(Offset position) async {
+    if(stage!=GameStage.world)return;
+    final id=scene.pickNetworkMob(position.dx,position.dy,1024,742);
+    if(id==null)return;
+    await _selectMobAt(position);
+    final target=targetMobGlobalId;
+    if(target==null)return;
+    try{
+      unawaited(scene.networkPlayerAttack(target));
+      await liveWorld?.startMobAutoAttack(target);
+      messages.insert(0,'[Combate] Autoataque iniciado → '+target.toString()+'.');
+      if(mounted)setState((){});
+    }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
   }
   Future<void> _useHotbarSlot(int index) async {
     if(stage!=GameStage.world)return;
@@ -1291,6 +1323,7 @@ class _GameClientPageState extends State<GameClientPage> {
       child:GestureDetector(
         behavior:HitTestBehavior.opaque,
         onTapDown:(d){if(stage==GameStage.world)unawaited(_selectMobAt(d.localPosition));else focus.requestFocus();},
+        onDoubleTapDown:(d){if(stage==GameStage.world)unawaited(_autoAttackAt(d.localPosition));},
         onScaleStart:(_){gestureScale=1;focus.requestFocus();},
         onScaleUpdate:(d){
           if(stage==GameStage.faction)return;
