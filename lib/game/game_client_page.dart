@@ -72,6 +72,8 @@ class _GameClientPageState extends State<GameClientPage> {
   bool guildWarehouseAvailable=false;
   List<PsFriend> liveFriends=<PsFriend>[];
   List<PsPartyMember> livePartyMembers=<PsPartyMember>[];
+  List<PsPartySearchMember> livePartySearchers=<PsPartySearchMember>[];
+  bool partySearchRegistered=false;
   PsRaidState? liveRaid;
   List<PsGuildSummary> guildDirectory=<PsGuildSummary>[];
   List<PsGuildMember> liveGuildMembers=<PsGuildMember>[];
@@ -1285,6 +1287,14 @@ class _GameClientPageState extends State<GameClientPage> {
     try{
       if(packet.type==PsPacketType.blessInit||packet.type==PsPacketType.blessUpdate){
         liveBless=PsBlessState.parse(packet,previous:liveBless);
+        return true;
+      }
+      if(packet.type==PsPacketType.partySearchRegistration){
+        partySearchRegistered=PsPartySearchRegistration.parse(packet).success;
+        return true;
+      }
+      if(packet.type==PsPacketType.partySearchList){
+        livePartySearchers=parsePartySearchList(packet).toList();
         return true;
       }
       if(packet.type==PsPacketType.bankItemList){
@@ -2865,6 +2875,29 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<void> _registerPartySearch() async {
+    final session=liveWorld;
+    if(session==null||liveRaid!=null||livePartyMembers.isNotEmpty)return;
+    try{
+      final result=await session.registerPartySearch();
+      partySearchRegistered=result.success;
+      if(!result.success)livePartySearchers=[];
+      messages.insert(0,result.success
+        ?'[Party] Registrado en búsqueda de grupo.'
+        :'[Party] World rechazó la búsqueda de grupo.');
+    }catch(e){messages.insert(0,'[Party Search] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _invitePartySearcher(PsPartySearchMember player) async {
+    final session=liveWorld;if(session==null||player.name.isEmpty)return;
+    try{
+      await session.invitePartySearcher(player.name);
+      messages.insert(0,'[Party Search] Invitación enviada a '+player.name+'.');
+    }catch(e){messages.insert(0,'[Party Search] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
   Future<void> _inviteFriendToParty(PsFriend friend) async {
     final session=liveWorld;if(session==null||!friend.online)return;
     try{
@@ -4285,6 +4318,8 @@ class _GameClientPageState extends State<GameClientPage> {
             guildWarehouseOpen:guildWarehouseOpen,
             friends:liveFriends,
             partyMembers:livePartyMembers,
+            partySearchers:livePartySearchers,
+            partySearchRegistered:partySearchRegistered,
             raid:liveRaid,
             pendingRaidRequesterId:pendingRaidRequesterId,
             pendingVehicleRequesterId:pendingVehicleRequesterId,
@@ -4430,6 +4465,8 @@ class _GameClientPageState extends State<GameClientPage> {
             onRespondFriend:(accepted)=>unawaited(_respondFriend(accepted)),
             onDeleteFriend:(friend)=>unawaited(_deleteFriend(friend)),
             onInviteParty:(friend)=>unawaited(_inviteFriendToParty(friend)),
+            onRegisterPartySearch:()=>unawaited(_registerPartySearch()),
+            onInvitePartySearcher:(player)=>unawaited(_invitePartySearcher(player)),
             onRespondParty:(accepted)=>unawaited(_respondParty(accepted)),
             onCreateRaid:()=>unawaited(_createRaid()),
             onRespondRaid:(accepted)=>unawaited(_respondRaid(accepted)),
