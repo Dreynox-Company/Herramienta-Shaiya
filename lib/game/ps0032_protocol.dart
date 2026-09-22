@@ -39,6 +39,7 @@ class PsPacketType {
   static const mobDeath=0x0606;
   static const mobSkillUse=0x060B;
   static const npcBuyItem=0x0702;
+  static const warehouseItemList=0x0711;
   static const npcSellItem=0x0703;
   static const questList=0x0901;
   static const questStart=0x0902;
@@ -706,6 +707,36 @@ class PsNpcTradeResult {
       d.getUint32(6,Endian.little),
     );
   }
+}
+
+class PsWarehouseItem {
+  final int slot,type,typeId,quality,count;
+  final List<int> gems;
+  final String craftName;
+  final bool dyed;
+  const PsWarehouseItem({
+    required this.slot,required this.type,required this.typeId,required this.quality,
+    required this.count,required this.gems,required this.craftName,required this.dyed,
+  });
+  String get key=>'$type:$typeId';
+}
+
+List<PsWarehouseItem> parseWarehouseItems(PsPacket p){
+  if(p.type!=PsPacketType.warehouseItemList||p.body.isEmpty)return const [];
+  final b=p.body,d=ByteData.sublistView(b),count=b[0],out=<PsWarehouseItem>[];
+  const size=107;
+  if(b.length<1+count*size)throw FormatException('WAREHOUSE_ITEM_LIST truncado: count=$count bytes=${b.length}.');
+  var o=1;
+  for(var i=0;i<count;i++,o+=size){
+    final gems=List<int>.generate(6,(j)=>d.getInt32(o+5+j*4,Endian.little));
+    final rawName=b.sublist(o+87,o+107),zero=rawName.indexOf(0);
+    final craft=utf8.decode(zero<0?rawName:rawName.sublist(0,zero),allowMalformed:true);
+    out.add(PsWarehouseItem(
+      slot:b[o],type:b[o+1],typeId:b[o+2],quality:d.getUint16(o+3,Endian.little),
+      gems:List.unmodifiable(gems),count:b[o+29],dyed:b[o+60]!=0,craftName:craft,
+    ));
+  }
+  return List.unmodifiable(out);
 }
 
 class PsLearnedSkill {
