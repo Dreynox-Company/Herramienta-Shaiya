@@ -30,6 +30,8 @@ Future<void> main() async {
       character=slots.where((s)=>s.exists).firstOrNull;
     }
     if(character==null)throw StateError('No character exists after CREATE_CHARACTER.');
+    final existingNameAvailable=await world.checkCharacterName(character.name);
+    stdout.writeln('CHECK_CHARACTER_AVAILABLE_NAME existing="'+character.name+'" available='+existingNameAvailable.toString());
 
     stdout.writeln('Selecting char id=${character.id} map=${character.mapId}');
     final selected=await world.selectCharacter(character.id);
@@ -53,6 +55,8 @@ Future<void> main() async {
     );
 
     final entered=await world.enterMap(collect:const Duration(seconds:8));
+    await world.requestInventorySort(const <PsInventorySortMove>[]);
+    stdout.writeln('INVENTORY_SORT empty authoritative round-trip confirmed.');
     final all=<PsPacket>[...selected.packets,...entered];
     final snapshot=PsWorldSnapshot.fromPackets(all);
     int count(int type)=>all.where((p)=>p.type==type).length;
@@ -94,6 +98,11 @@ Future<void> main() async {
       'characterMap':character.mapId,
       'characterLevel':character.level,
       'characterMode':character.mode,
+      'nameAvailability':{
+        'existingName':character.name,
+        'existingNameAvailable':existingNameAvailable,
+      },
+      'inventorySort':{'emptyRoundTripConfirmed':true},
       'details':{
         'x':selected.details.x,'y':selected.details.y,'z':selected.details.z,'angle':selected.details.angle,
         'maxHp':selected.details.maxHp,'maxMp':selected.details.maxMp,'maxSp':selected.details.maxSp,
@@ -158,6 +167,7 @@ Future<void> main() async {
     if(skillBook==null)throw StateError('CHARACTER_SKILLS missing.');
     if(quickbar==null)throw StateError('CHARACTER_SKILL_BAR missing.');
     if(inventoryPackets.isEmpty)throw StateError('CHARACTER_ITEMS missing.');
+    if(existingNameAvailable)throw StateError('CHECK_CHARACTER_AVAILABLE_NAME incorrectly accepted an existing character name.');
     if(snapshot.self!.characterId!=character.id)throw StateError('Entered-map character id mismatch.');
     if(snapshot.npcs.isEmpty)throw StateError('No parsed MAP_NPC_ENTER actors.');
     if(snapshot.mobs.isEmpty)throw StateError('No parsed MOB_ENTER actors.');
