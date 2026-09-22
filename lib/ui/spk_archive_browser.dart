@@ -2013,6 +2013,25 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return preview;
   }
 
+  bool _recordHasStructuredEditor(SpkRecord record) {
+    final format = source.validatedFormat(record.entryId);
+    return const {
+      'SDATA',
+      'MLT',
+      'ITM',
+      'MON',
+      'XML',
+      'TXT',
+      'INI',
+    }.contains(format);
+  }
+
+  String _editorActionLabel(SpkRecord record) {
+    return source.validatedFormat(record.entryId) == 'SDATA'
+        ? 'Editar tabla'
+        : 'Editar recurso';
+  }
+
   String _editableLibraryPath(SpkRecord record) {
     if (source.names.isConfirmed(record.entryId)) {
       return canon(source.names[record.entryId]!);
@@ -2164,14 +2183,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           ),
         ),
         actions: [
-          if (result.format == 'SDATA')
+          if (_recordHasStructuredEditor(record))
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(c);
                 openRecordInEditor(record);
               },
               icon: const Icon(Icons.edit_note_outlined),
-              label: const Text('Editar tabla'),
+              label: Text(_editorActionLabel(record)),
             ),
           TextButton(
             onPressed: () => Navigator.pop(c),
@@ -2509,12 +2528,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         ),
         const SizedBox(height: 7),
         if (source.canReadRecord(record) &&
-            source.validatedFormat(record.entryId) == 'SDATA') ...[
+            _recordHasStructuredEditor(record)) ...[
           const SizedBox(height: 7),
           FilledButton.icon(
             onPressed: busy ? null : () => openRecordInEditor(record),
             icon: const Icon(Icons.edit_note_outlined, size: 17),
-            label: const Text('Editar tabla'),
+            label: Text(_editorActionLabel(record)),
           ),
         ],
         OutlinedButton.icon(
