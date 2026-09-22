@@ -1769,6 +1769,15 @@ class PsCharacterSlot {
     required this.name,required this.isDelete,required this.isRename,
   });
   bool get exists=>id!=0;
+  PsCharacterSlot copyWith({
+    int? slot,int? id,int? mapId,int? level,int? race,int? mode,int? hair,int? face,int? height,
+    int? profession,int? gender,String? name,bool? isDelete,bool? isRename,
+  })=>PsCharacterSlot(
+    slot:slot??this.slot,id:id??this.id,mapId:mapId??this.mapId,level:level??this.level,
+    race:race??this.race,mode:mode??this.mode,hair:hair??this.hair,face:face??this.face,
+    height:height??this.height,profession:profession??this.profession,gender:gender??this.gender,
+    name:name??this.name,isDelete:isDelete??this.isDelete,isRename:isRename??this.isRename,
+  );
 
   static PsCharacterSlot parse(PsPacket packet){
     if(packet.type!=PsPacketType.characterList||packet.body.length<5){
