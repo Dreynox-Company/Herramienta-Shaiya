@@ -1541,6 +1541,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       : 'Decl. decod.',
                 ),
               ),
+              const SizedBox(width: 78, child: Text('Estado')),
               const SizedBox(width: 145, child: Text('ID')),
             ],
           ),
@@ -1647,6 +1648,29 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         child: Text(
                           bytesLabel(record.decodedBytes),
                           style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 78,
+                        child: Row(
+                          children: [
+                            Icon(
+                              source.canReadRecord(record)
+                                  ? Icons.lock_open_outlined
+                                  : Icons.lock_outline,
+                              size: 13,
+                              color: source.canReadRecord(record)
+                                  ? const Color(0xff83c69d)
+                                  : const Color(0xffd3ac76),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              source.canReadRecord(record)
+                                  ? 'Legible'
+                                  : 'Cifrado',
+                              style: const TextStyle(fontSize: 9),
+                            ),
+                          ],
                         ),
                       ),
                       SizedBox(
