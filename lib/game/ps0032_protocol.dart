@@ -21,6 +21,7 @@ class PsPacketType {
   static const characterDetails=0x0105;
   static const characterItems=0x0106;
   static const characterSkills=0x0108;
+  static const characterActiveBuffs=0x010A;
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
@@ -33,6 +34,9 @@ class PsPacketType {
   static const characterMove=0x0501;
   static const characterMobAutoAttack=0x0503;
   static const useMobTargetSkill=0x0517;
+  static const usedSpMp=0x050C;
+  static const buffAdd=0x050D;
+  static const buffRemove=0x050E;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
   static const mobEnter=0x0601;
@@ -640,6 +644,48 @@ class PsCharacterDetails {
       defeats:d.getUint32(70,Endian.little),
       guildName:guild,
     );
+  }
+}
+
+class PsActiveBuff {
+  final int id,skillId,skillLevel,countdownSeconds;
+  const PsActiveBuff(this.id,this.skillId,this.skillLevel,this.countdownSeconds);
+  static PsActiveBuff parseRecord(Uint8List b,int offset){
+    if(offset<0||offset+11>b.length)throw FormatException('Buff truncado en $offset/${b.length}.');
+    final d=ByteData.sublistView(b);
+    return PsActiveBuff(
+      d.getUint32(offset,Endian.little),
+      d.getUint16(offset+4,Endian.little),
+      b[offset+6],
+      d.getInt32(offset+7,Endian.little),
+    );
+  }
+}
+
+List<PsActiveBuff> parseActiveBuffs(PsPacket p){
+  if(p.type!=PsPacketType.characterActiveBuffs||p.body.isEmpty)return const [];
+  final count=p.body[0];
+  if(p.body.length<1+count*11)throw FormatException('CHARACTER_ACTIVE_BUFFS truncado: count=$count bytes=${p.body.length}.');
+  return List<PsActiveBuff>.generate(count,(i)=>PsActiveBuff.parseRecord(p.body,1+i*11),growable:false);
+}
+
+PsActiveBuff parseBuffAdd(PsPacket p){
+  if(p.type!=PsPacketType.buffAdd||p.body.length<11)throw FormatException('BUFF_ADD truncado: ${p.body.length}.');
+  return PsActiveBuff.parseRecord(p.body,0);
+}
+
+int parseBuffRemove(PsPacket p){
+  if(p.type!=PsPacketType.buffRemove||p.body.length<4)throw FormatException('BUFF_REMOVE truncado: ${p.body.length}.');
+  return ByteData.sublistView(p.body).getUint32(0,Endian.little);
+}
+
+class PsUsedSpMp {
+  final int sp,mp;
+  const PsUsedSpMp(this.sp,this.mp);
+  static PsUsedSpMp parse(PsPacket p){
+    if(p.type!=PsPacketType.usedSpMp||p.body.length<8)throw FormatException('USED_SP_MP truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsUsedSpMp(d.getUint32(0,Endian.little),d.getUint32(4,Endian.little));
   }
 }
 
