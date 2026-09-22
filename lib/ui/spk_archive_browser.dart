@@ -1376,7 +1376,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'para revisar esta inconsistencia.';
     } else if (rows.isEmpty && candidateKeysTested > 0) {
       reason =
-          'Se observaron ${candidateKeysTested} claves candidatas de CNG/OpenSSL, '
+          'Se observaron $candidateKeysTested claves candidatas de CNG/OpenSSL, '
           'pero ninguna autenticó los payloads AES-GCM reales del DATA.SPK.';
     } else if (rows.isEmpty) {
       reason =
