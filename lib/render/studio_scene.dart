@@ -75,7 +75,7 @@ class StudioScene extends ChangeNotifier {
   t.ThreeJS? view;Catalog? catalog;
   t.LineSegments? grid;
   bool gridVisible=true;
-  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> networkNpcActors={},networkMobActors={},networkPlayerActors={};Appearance? appearance;
+  Actor? character,enemy,mount,wing;final List<Actor> gameActors=[];final List<GameActorLabel> gameLabels=[];final Map<int,Actor> networkNpcActors={},networkMobActors={},networkPlayerActors={};final Map<int,List<String>> networkPlayerAnimations={};Appearance? appearance;
   CreatureRecord? enemyRecord,mountRecord,wingRecord;
   RenderPart? weapon,secondWeapon,sky;t.Texture? backdropTexture;WeaponRecord? weaponRecord;Attachment? weaponAttachment,secondAttachment;
   List<ClipData> attackClips=[];int attackCounter=0;
@@ -327,7 +327,7 @@ class StudioScene extends ChangeNotifier {
       final a=await loadAppearanceActor(appearance);
       a.root.position.setValues(lx,y,lz);
       a.root.rotation.y=-angle*(math.pi*2/65536.0);
-      gameActors.add(a);networkPlayerActors[characterId]=a;view!.scene.add(a.root);
+      gameActors.add(a);networkPlayerActors[characterId]=a;networkPlayerAnimations[characterId]=appearance.archetype.animations;view!.scene.add(a.root);
       gameLabels.add(GameActorLabel(a,name,player:true,globalId:characterId));
       notifyListeners();
     }catch(e){report('LIVE player $characterId: $e');}
@@ -348,7 +348,7 @@ class StudioScene extends ChangeNotifier {
   }
 
   void removeNetworkPlayer(int characterId){
-    final a=networkPlayerActors.remove(characterId);if(a==null)return;
+    final a=networkPlayerActors.remove(characterId);networkPlayerAnimations.remove(characterId);if(a==null)return;
     gameActors.remove(a);gameLabels.removeWhere((x)=>identical(x.actor,a));a.dispose();
     notifyListeners();
   }
@@ -388,10 +388,36 @@ class StudioScene extends ChangeNotifier {
 
   Future<void> networkRemotePlayerHit(int characterId,int damage) async {
     final a=networkPlayerActors[characterId];if(a==null)return;
+    final paths=networkPlayerAnimations[characterId]??const <String>[];
+    final damageIndices=<int>{
+      for(final family in const [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15])
+        if(damageMotion(family)!=null)damageMotion(family)!,
+    };
+    final candidates=paths.where((p)=>damageIndices.contains(motionIndex(p))||p.toLowerCase().contains('damage')).toList();
+    final clip=await firstCompatible(a,candidates);
+    if(clip!=null&&networkPlayerActors[characterId]==a)a.play(clip,repeat:false);
     lastImpact='PvP −'+damage.toString();hitLife=.65;
     if(hitSprite!=null){
       hitSprite!.visible=true;hitSprite!.position.setValues(a.root.position.x,a.root.position.y+1,-.1+a.root.position.z);
     }
+    notifyListeners();
+  }
+
+  Future<void> networkRemotePlayerDeath(int characterId) async {
+    final a=networkPlayerActors[characterId];if(a==null)return;
+    final paths=networkPlayerAnimations[characterId]??const <String>[];
+    final clip=await firstCompatible(a,paths.where((p)=>motionIndex(p)==9||p.toLowerCase().contains('death')||p.toLowerCase().contains('dead')).toList());
+    a.idle=null;
+    if(clip!=null&&networkPlayerActors[characterId]==a)a.play(clip,repeat:false);else a.playing=false;
+    notifyListeners();
+  }
+
+  Future<void> networkRemotePlayerRebirth(int characterId,double worldX,double worldY,double worldZ,int angle) async {
+    final a=networkPlayerActors[characterId];if(a==null)return;
+    a.root.position.setValues(worldX-originX,worldY,-(worldZ-originZ));
+    a.root.rotation.y=-angle*(math.pi*2/65536.0);
+    final idle=a.normal??a.idle;
+    if(idle!=null){a.idle=idle;a.play(idle);}else{a.playing=true;}
     notifyListeners();
   }
   int? pickNetworkMob(double screenX,double screenY,double width,double height,{double radius=34}){
