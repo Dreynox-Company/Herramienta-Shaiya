@@ -681,6 +681,14 @@ class WorldBootstrap {
 }
 
 
+class PsQuestFinishResult {
+  final int npcId,questId,resultType,xp,gold;
+  final bool success,requiresChoice;
+  const PsQuestFinishResult({
+    required this.npcId,required this.questId,required this.resultType,
+    required this.xp,required this.gold,required this.success,required this.requiresChoice,
+  });
+}
 class PsWorldSession {
   final PsConnection connection;
   final int faction,maxMode;
@@ -811,13 +819,39 @@ class PsWorldSession {
     if(npc!=npcGlobalId||quest!=questId)throw StateError('QUEST_START devolvió NPC/misión inesperados.');
   }
 
-  Future<PsPacket> finishQuest(int npcGlobalId,int questId) async {
+  Future<PsQuestFinishResult> finishQuest(int npcGlobalId,int questId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de finalizar una misión.');
     await connection.send(PsPacketType.questEnd,[
       ..._u32Bytes(npcGlobalId),
       ..._i16Bytes(questId),
     ]);
-    return connection.nextType(PsPacketType.questEnd);
+    final deadline=DateTime.now().add(const Duration(seconds:8));
+    while(DateTime.now().isBefore(deadline)){
+      final p=await connection.next(timeout:deadline.difference(DateTime.now()));
+      if(p.type==PsPacketType.questEndSelect){
+        if(p.body.length<6)throw FormatException('QUEST_END_SELECT truncado: '+p.body.length.toString()+'.');
+        final d=ByteData.sublistView(p.body);
+        final returnedQuest=d.getInt16(0,Endian.little);
+        if(returnedQuest!=questId)continue;
+        return PsQuestFinishResult(
+          npcId:npcGlobalId,questId:questId,resultType:0,xp:0,gold:0,
+          success:true,requiresChoice:true,
+        );
+      }
+      if(p.type!=PsPacketType.questEnd)continue;
+      if(p.body.length<20)throw FormatException('QUEST_END truncado: '+p.body.length.toString()+'.');
+      final d=ByteData.sublistView(p.body);
+      final returnedNpc=d.getUint32(0,Endian.little);
+      final returnedQuest=d.getInt16(4,Endian.little);
+      if(returnedQuest!=questId)continue;
+      return PsQuestFinishResult(
+        npcId:returnedNpc,questId:returnedQuest,
+        success:p.body[6]!=0,resultType:p.body[7],
+        xp:d.getUint32(8,Endian.little),gold:d.getUint32(12,Endian.little),
+        requiresChoice:false,
+      );
+    }
+    throw TimeoutException('World no respondió QUEST_END '+questId.toString()+'.');
   }
 
   Future<void> chooseQuestReward(int npcGlobalId,int questId,int index) async {
