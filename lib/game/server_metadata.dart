@@ -139,6 +139,34 @@ class NpcShopRule {
   );
 }
 
+class GateTargetRule {
+  final int index,mapId,cost;
+  final double x,y,z;
+  const GateTargetRule(this.index,this.mapId,this.x,this.y,this.z,this.cost);
+  factory GateTargetRule.fromJson(Map<String,dynamic> j)=>GateTargetRule(
+    (j['index'] as num).toInt(),
+    (j['mapId'] as num).toInt(),
+    (j['x'] as num).toDouble(),
+    (j['y'] as num).toDouble(),
+    (j['z'] as num).toDouble(),
+    (j['cost'] as num).toInt(),
+  );
+}
+
+class NpcGateRule {
+  final int type,typeId;
+  final List<GateTargetRule> targets;
+  const NpcGateRule(this.type,this.typeId,this.targets);
+  String get key=>'$type:$typeId';
+  factory NpcGateRule.fromJson(Map<String,dynamic> j)=>NpcGateRule(
+    (j['type'] as num).toInt(),
+    (j['typeId'] as num).toInt(),
+    List.unmodifiable((j['targets'] as List? ?? const [])
+      .cast<Map>()
+      .map((x)=>GateTargetRule.fromJson(Map<String,dynamic>.from(x)))),
+  );
+}
+
 class CharacterCreateRule {
   final int country,job,mapId;
   final double x,y,z;
@@ -237,8 +265,9 @@ class ServerMetadata {
   final Map<String,ItemRule> items;
   final Map<String,SkillRule> skills;
   final Map<String,NpcShopRule> shops;
+  final Map<String,NpcGateRule> gates;
   final Map<String,CharacterCreateRule> createRules;
-  const ServerMetadata(this.npcs,this.quests,this.mobs,this.items,this.skills,this.shops,this.createRules);
+  const ServerMetadata(this.npcs,this.quests,this.mobs,this.items,this.skills,this.shops,this.gates,this.createRules);
 
   Map<String,int> get npcModels=>{for(final e in npcs.entries)e.key:e.value.model};
   Map<int,int> get mobModels=>{for(final e in mobs.entries)e.key:e.value.image};
@@ -246,6 +275,7 @@ class ServerMetadata {
   ItemRule? item(int type,int id)=>items['$type:$id'];
   SkillRule? skill(int id,int level)=>skills['$id:$level']??skills['$id:1'];
   NpcShopRule? shop(int type,int typeId)=>shops['$type:$typeId'];
+  NpcGateRule? gatekeeper(int type,int typeId)=>gates['$type:$typeId'];
 
   static Future<ServerMetadata?> load() async {
     final exe=File(Platform.resolvedExecutable).parent.path;
@@ -281,6 +311,10 @@ class ServerMetadata {
         .cast<Map>()
         .map((x)=>NpcShopRule.fromJson(Map<String,dynamic>.from(x)))
         .toList();
+      final gateList=(raw['gates'] as List? ?? const [])
+        .cast<Map>()
+        .map((x)=>NpcGateRule.fromJson(Map<String,dynamic>.from(x)))
+        .toList();
       final root=File(Platform.resolvedExecutable).parent.path;
       final configCandidates=<String>[
         root+'/server/metadata/character.json',
@@ -306,6 +340,7 @@ class ServerMetadata {
         {for(final i in itemList)i.key:i},
         {for(final s in skillList)s.key:s},
         {for(final s in shopList)s.key:s},
+        {for(final g in gateList)g.key:g},
         createRules,
       );
     }
