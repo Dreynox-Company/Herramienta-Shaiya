@@ -712,6 +712,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
   String currentFolder = '';
   String search = '';
+  String formatFilter = '';
   bool recursiveSearch = false;
   SpkRecord? selected;
   bool busy = false;
@@ -765,11 +766,29 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return out.toList()..sort();
   }
 
-  List<SpkRecord> visibleEntries() => source.entriesInFolder(
-    currentFolder,
-    search: search,
-    recursive: recursiveSearch || search.isNotEmpty,
-  );
+  List<SpkRecord> visibleEntries() {
+    final rows = source.entriesInFolder(
+      currentFolder,
+      search: search,
+      recursive: recursiveSearch || search.isNotEmpty,
+    );
+    if (formatFilter.isEmpty) return rows;
+    return rows
+        .where((record) => source.displayType(record) == formatFilter)
+        .toList(growable: false);
+  }
+
+  List<String> availableFormatFilters() {
+    final values = <String>{};
+    for (final record in source.entriesInFolder(
+      currentFolder,
+      recursive: recursiveSearch || search.isNotEmpty,
+    )) {
+      values.add(source.displayType(record));
+    }
+    final sorted = values.toList()..sort();
+    return sorted;
+  }
 
   String fileName(SpkRecord record) {
     final path = source.technicalPath(record).replaceAll('\\', '/');
@@ -2070,6 +2089,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           onTap: () => setState(() {
             currentFolder = '';
             selected = null;
+            formatFilter = '';
           }),
           child: Container(
             height: 35,
@@ -2145,6 +2165,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   onTap: () => setState(() {
                     currentFolder = path;
                     selected = null;
+                    formatFilter = '';
                   }),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -2597,6 +2618,35 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       prefixIcon: Icon(Icons.search, size: 18),
                     ),
                     onChanged: (value) => setState(() => search = value),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 145,
+                  child: DropdownButtonFormField<String>(
+                    value: formatFilter.isEmpty ? null : formatFilter,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.filter_alt_outlined, size: 17),
+                      hintText: 'Formato',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('Todos'),
+                      ),
+                      for (final value in availableFormatFilters())
+                        DropdownMenuItem(
+                          value: value,
+                          child: Text(
+                            value,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => formatFilter = value ?? ''),
                   ),
                 ),
                 const SizedBox(width: 8),
