@@ -633,7 +633,8 @@ class _GameClientPageState extends State<GameClientPage> {
         messages.insert(
           0,
           '[ps0032] Mundo real: ${networkSnapshot.npcs.length} NPC · '
-          '${networkSnapshot.mobs.length} mobs · ${networkSnapshot.quests.length} quests abiertas.',
+          '${networkSnapshot.mobs.length} mobs · ${networkSnapshot.mapItems.length} drops · '
+          '${networkSnapshot.quests.length} quests abiertas.',
         );
       }catch(e){
         messages.insert(0,'[ps0032] Entrada real falló; se conserva fallback SVMAP: '+e.toString());
@@ -733,6 +734,7 @@ class _GameClientPageState extends State<GameClientPage> {
     PsPacketType.mapNpcEnter,PsPacketType.mapNpcMove,PsPacketType.mapNpcLeave,
     PsPacketType.characterEnteredMap,PsPacketType.characterLeftMap,
     PsPacketType.characterMove,PsPacketType.characterShape,
+    PsPacketType.mapAddItem,PsPacketType.mapRemoveItem,
   }.contains(type);
 
   Future<void> _applyMapTeleport(PsMapTeleport teleport) async {
@@ -1091,6 +1093,33 @@ class _GameClientPageState extends State<GameClientPage> {
       quests:s.quests,finishedQuests:s.finishedQuests,
     );
   }
+  void _snapshotAddMapItem(PsMapItem item){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,players:s.players,npcs:s.npcs,mobs:s.mobs,
+      mapItems:[...s.mapItems.where((x)=>x.id!=item.id),item],worldDay:s.worldDay,
+      quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
+  void _snapshotRemoveMapItem(int id){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,players:s.players,npcs:s.npcs,mobs:s.mobs,
+      mapItems:s.mapItems.where((x)=>x.id!=id).toList(),worldDay:s.worldDay,
+      quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
+  void _snapshotWorldDay(PsWorldDay day){
+    final s=liveSnapshot;if(s==null)return;
+    liveSnapshot=PsWorldSnapshot(
+      self:s.self,players:s.players,npcs:s.npcs,mobs:s.mobs,
+      mapItems:s.mapItems,worldDay:day,
+      quests:s.quests,finishedQuests:s.finishedQuests,
+    );
+  }
+
   void _snapshotUpsertPlayer(PsEnteredMap player){
     final s=liveSnapshot;if(s==null)return;
     liveSnapshot=PsWorldSnapshot(
@@ -1111,6 +1140,24 @@ class _GameClientPageState extends State<GameClientPage> {
   void _handleLivePacket(PsPacket packet){
     if(stage!=GameStage.world)return;
     if((mapSwitching||sectorStreaming)&&_isMapActorPacket(packet.type)){pendingMapActorPackets.add(packet);return;}
+    if(packet.type==PsPacketType.mapAddItem&&packet.body.length>=24){
+      try{
+        final item=PsMapItem.parse(packet);_snapshotAddMapItem(item);
+        messages.insert(0,'[Drop] '+(catalog?.itemName(item.type,item.typeId,uiLocale)??('${item.type}:${item.typeId}'))+' apareció.');
+      }catch(e){messages.insert(0,'[Drop] MAP_ADD_ITEM: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.mapRemoveItem&&packet.body.length>=4){
+      try{_snapshotRemoveMapItem(parseMapItemRemove(packet));}
+      catch(e){messages.insert(0,'[Drop] MAP_REMOVE_ITEM: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }else if(packet.type==PsPacketType.worldDay&&packet.body.length>=4){
+      try{_snapshotWorldDay(PsWorldDay.parse(packet));}
+      catch(e){messages.insert(0,'[Mundo] WORLD_DAY: '+e.toString());}
+      if(mounted)setState((){});
+      return;
+    }
     if(packet.type==PsPacketType.characterMapTeleport&&packet.body.length>=18){
       try{unawaited(_applyMapTeleport(PsMapTeleport.parse(packet)));}
       catch(e){messages.insert(0,'[Mapa] CHARACTER_MAP_TELEPORT: '+e.toString());}
@@ -2706,6 +2753,25 @@ class _GameClientPageState extends State<GameClientPage> {
     if(mounted)setState((){});
   }
 
+  Future<void> _pickMapItem(PsMapItem item) async {
+    final session=liveWorld;if(session==null||stage!=GameStage.world||dead||rebirthPending)return;
+    final a=scene.character;
+    if(a!=null){
+      final worldX=scene.originX+a.root.position.x,worldZ=scene.originZ-a.root.position.z;
+      final dx=worldX-item.x,dz=worldZ-item.z;
+      if(dx*dx+dz*dz>49){
+        messages.insert(0,'[Drop] Acércate al objeto antes de recogerlo.');
+        if(mounted)setState((){});
+        return;
+      }
+    }
+    try{
+      await session.pickUpMapItem(item.id);
+      messages.insert(0,'[Drop] Recogiendo '+(catalog?.itemName(item.type,item.typeId,uiLocale)??item.id.toString())+'…');
+    }catch(e){messages.insert(0,'[Drop] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
   Future<void> _sendChat(String value) async {
     final session=liveWorld;if(session==null||stage!=GameStage.world)return;
     try{await session.sendNormalChat(value);}
@@ -3710,6 +3776,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onRebirth:()=>unawaited(_rebirthTown()),
             buffs:liveBuffs.values.toList(),
             weather:liveWeather,
+            mapItems:liveSnapshot?.mapItems??const <PsMapItem>[],
             targetMobGlobalId:targetMobGlobalId,
             targetMobId:targetMobTypeId,
             targetPlayerName:targetPlayerName,
@@ -3817,6 +3884,7 @@ class _GameClientPageState extends State<GameClientPage> {
             onToggleGuildWarehouse:_toggleGuildWarehouse,
             onStoreGuildWarehouse:(item)=>unawaited(_storeInGuildWarehouse(item)),
             onWithdrawGuildWarehouse:(item)=>unawaited(_withdrawGuildWarehouse(item)),
+            onPickMapItem:(item)=>unawaited(_pickMapItem(item)),
             onToggleInventory:()=>_toggleWorldPanel('inventory'),
             onToggleSocial:()=>_toggleWorldPanel('social'),
             onToggleGuild:()=>_toggleWorldPanel('guild'),
