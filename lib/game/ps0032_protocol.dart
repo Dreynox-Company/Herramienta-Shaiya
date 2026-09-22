@@ -69,6 +69,26 @@ class PsPacketType {
   static const npcBuyItem=0x0702;
   static const warehouseItemList=0x0711;
   static const npcSellItem=0x0703;
+  static const guildDismantle=0x0D03;
+  static const guildJoinRequest=0x0D07;
+  static const guildJoinResultUser=0x0D08;
+  static const guildLeave=0x0D09;
+  static const guildKick=0x0D0A;
+  static const guildUserState=0x0D0C;
+  static const guildListLoadingStart=0x0D0D;
+  static const guildListLoadingEnd=0x0D0E;
+  static const guildListRemove=0x0D11;
+  static const guildUserListOnline=0x0D12;
+  static const guildUserListNotOnline=0x0D13;
+  static const guildUserListAdd=0x0D14;
+  static const guildJoinList=0x0D16;
+  static const guildJoinListAdd=0x0D17;
+  static const guildJoinListRemove=0x0D18;
+  static const guildCreate=0x0D21;
+  static const guildCreateAgree=0x0D22;
+  static const guildList=0x0D2F;
+  static const guildListAdd=0x0D30;
+  static const guildRankUpdate=0x0D37;
   static const partyList=0x0B01;
   static const partyRequest=0x0B02;
   static const partyResponse=0x0B03;
@@ -619,6 +639,126 @@ class PsChatMessage {
       return PsChatMessage(p.type,null,name,_utf16LeDecode(b,22,len));
     }
     throw FormatException('Tipo de chat no soportado: 0x${p.type.toRadixString(16)}');
+  }
+}
+
+String _fixedUtf16Le(Uint8List b,int offset,int byteLength){
+  if(offset<0||offset+byteLength>b.length)throw FormatException('UTF16 fijo truncado en $offset/$byteLength.');
+  final codes=<int>[];
+  for(var i=0;i+1<byteLength;i+=2){
+    final code=b[offset+i]|(b[offset+i+1]<<8);
+    if(code==0)break;
+    codes.add(code);
+  }
+  return String.fromCharCodes(codes);
+}
+
+Uint8List _fixedUtf16LeBytes(String value,int chars){
+  final out=Uint8List(chars*2),codes=value.runes.take(chars).toList();
+  final d=ByteData.sublistView(out);
+  for(var i=0;i<codes.length;i++)d.setUint16(i*2,codes[i],Endian.little);
+  return out;
+}
+
+class PsGuildSummary {
+  final int id,rank,points;
+  final String name,masterName,message;
+  const PsGuildSummary(this.id,this.name,this.masterName,this.message,this.rank,this.points);
+  static PsGuildSummary parseUnit(Uint8List b,int offset){
+    if(offset<0||offset+185>b.length)throw FormatException('GuildUnit truncado en $offset/${b.length}.');
+    final d=ByteData.sublistView(b);
+    return PsGuildSummary(
+      d.getUint32(offset,Endian.little),
+      _fixedString(b,offset+4,25),_fixedString(b,offset+29,21),
+      _fixedUtf16Le(b,offset+50,130),b[offset+180],d.getInt32(offset+181,Endian.little),
+    );
+  }
+}
+
+List<PsGuildSummary> parseGuildList(PsPacket p){
+  if(p.type!=PsPacketType.guildList||p.body.isEmpty)return const [];
+  final count=p.body[0],need=1+count*185;
+  if(p.body.length<need)throw FormatException('GUILD_LIST truncado: count=$count bytes=${p.body.length}.');
+  return List<PsGuildSummary>.generate(count,(i)=>PsGuildSummary.parseUnit(p.body,1+i*185),growable:false);
+}
+
+class PsGuildMember {
+  final int id,rank,level,job;
+  final String name;
+  final bool online;
+  const PsGuildMember(this.id,this.rank,this.level,this.job,this.name,this.online);
+  PsGuildMember copyWith({int? rank,bool? online})=>PsGuildMember(id,rank??this.rank,level,job,name,online??this.online);
+  static PsGuildMember parseUnit(Uint8List b,int offset,{required bool online}){
+    if(offset<0||offset+29>b.length)throw FormatException('GuildUserUnit truncado en $offset/${b.length}.');
+    final d=ByteData.sublistView(b);
+    return PsGuildMember(
+      d.getUint32(offset,Endian.little),b[offset+4],d.getUint16(offset+5,Endian.little),
+      b[offset+7],_fixedString(b,offset+8,21),online,
+    );
+  }
+}
+
+List<PsGuildMember> parseGuildMembers(PsPacket p,{required bool online}){
+  if((p.type!=PsPacketType.guildUserListOnline&&p.type!=PsPacketType.guildUserListNotOnline)||p.body.isEmpty)return const [];
+  final count=p.body[0],need=1+count*29;
+  if(p.body.length<need)throw FormatException('GUILD_USER_LIST truncado: count=$count bytes=${p.body.length}.');
+  return List<PsGuildMember>.generate(count,(i)=>PsGuildMember.parseUnit(p.body,1+i*29,online:online),growable:false);
+}
+
+PsGuildMember parseGuildMemberAdd(PsPacket p){
+  if(p.type!=PsPacketType.guildUserListAdd||p.body.length<30)throw FormatException('GUILD_USER_LIST_ADD truncado: ${p.body.length}.');
+  return PsGuildMember.parseUnit(p.body,1,online:p.body[0]!=0);
+}
+
+class PsGuildJoinApplicant {
+  final int id,level,job;
+  final String name;
+  const PsGuildJoinApplicant(this.id,this.level,this.job,this.name);
+  static PsGuildJoinApplicant parseUnit(Uint8List b,int offset){
+    if(offset<0||offset+28>b.length)throw FormatException('GuildJoinUserUnit truncado en $offset/${b.length}.');
+    final d=ByteData.sublistView(b);
+    return PsGuildJoinApplicant(
+      d.getUint32(offset,Endian.little),d.getUint16(offset+4,Endian.little),
+      b[offset+6],_fixedString(b,offset+7,21),
+    );
+  }
+}
+
+class PsGuildJoinResult {
+  final bool ok;
+  final int guildId,rank;
+  final String name;
+  const PsGuildJoinResult(this.ok,this.guildId,this.rank,this.name);
+  static PsGuildJoinResult parse(PsPacket p){
+    if(p.type!=PsPacketType.guildJoinResultUser||p.body.length<31)throw FormatException('GUILD_JOIN_RESULT_USER truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsGuildJoinResult(p.body[0]!=0,d.getUint32(1,Endian.little),p.body[5],_fixedString(p.body,6,25));
+  }
+}
+
+class PsGuildCreateResult {
+  final int reason,guildId,rank;
+  final String name,message;
+  const PsGuildCreateResult(this.reason,this.guildId,this.rank,this.name,this.message);
+  bool get success=>reason==0;
+  static PsGuildCreateResult parse(PsPacket p){
+    if(p.type!=PsPacketType.guildCreate||p.body.isEmpty)throw FormatException('GUILD_CREATE vacío.');
+    final reason=p.body[0];
+    if(reason!=0)return PsGuildCreateResult(reason,0,0,'','');
+    if(p.body.length<96)throw FormatException('GUILD_CREATE success truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsGuildCreateResult(reason,d.getUint32(1,Endian.little),p.body[5],_fixedString(p.body,6,25),_fixedString(p.body,31,65));
+  }
+}
+
+class PsGuildCreateInvite {
+  final int creatorId;
+  final String name,message;
+  const PsGuildCreateInvite(this.creatorId,this.name,this.message);
+  static PsGuildCreateInvite parse(PsPacket p){
+    if(p.type!=PsPacketType.guildCreateAgree||p.body.length<94)throw FormatException('GUILD_CREATE_AGREE truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsGuildCreateInvite(d.getUint32(0,Endian.little),_fixedString(p.body,4,25),_fixedString(p.body,29,65));
   }
 }
 
@@ -1468,6 +1608,39 @@ class PsWorldSession {
     final response=connection.waitStream((p)=>p.type==PsPacketType.characterTeleportViaNpc);
     await connection.send(PsPacketType.characterTeleportViaNpc,[..._u32Bytes(npcGlobalId),gateId]);
     return PsNpcTeleportResult.parse(await response);
+  }
+  Future<void> requestGuildJoin(int guildId) async {
+    await connection.send(PsPacketType.guildJoinRequest,_u32Bytes(guildId));
+  }
+
+  Future<void> respondGuildJoin(int characterId,{required bool accepted}) async {
+    await connection.send(PsPacketType.guildJoinResultUser,[accepted?1:0,..._u32Bytes(characterId)]);
+  }
+
+  Future<void> leaveGuild() async {
+    await connection.send(PsPacketType.guildLeave);
+  }
+
+  Future<void> kickGuildMember(int characterId) async {
+    await connection.send(PsPacketType.guildKick,_u32Bytes(characterId));
+  }
+
+  Future<void> changeGuildRank(int characterId,{required bool demote}) async {
+    await connection.send(PsPacketType.guildUserState,[demote?1:0,..._u32Bytes(characterId)]);
+  }
+
+  Future<void> createGuild(String name,String message) async {
+    final guild=name.trim(),msg=message.trim();
+    if(guild.isEmpty)throw ArgumentError('Nombre de guild vacío.');
+    await connection.send(PsPacketType.guildCreate,[..._fixedStringBytes(guild,25),..._fixedUtf16LeBytes(msg,25)]);
+  }
+
+  Future<void> respondGuildCreate(bool accepted) async {
+    await connection.send(PsPacketType.guildCreateAgree,[accepted?1:0]);
+  }
+
+  Future<void> dismantleGuild() async {
+    await connection.send(PsPacketType.guildDismantle);
   }
   Future<void> requestFriend(String name) async {
     final value=name.trim();
