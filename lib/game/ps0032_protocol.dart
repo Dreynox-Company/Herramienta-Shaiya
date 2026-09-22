@@ -972,6 +972,18 @@ class PsWorldSession {
     return hp;
   }
 
+  Future<void> saveSkillBar(List<PsQuickSlot> slots) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de guardar la barra rápida.');
+    if(slots.length>254)throw RangeError('Demasiados elementos en la barra rápida.');
+    final body=<int>[slots.length+1,..._i32Bytes(0)];
+    for(final slot in slots){
+      body.addAll([
+        slot.bar&0xff,slot.slot&0xff,slot.bag&0xff,
+        ..._u16Bytes(slot.number),..._i32Bytes(slot.cooldown),
+      ]);
+    }
+    await connection.send(PsPacketType.characterSkillBar,body);
+  }
   Future<void> moveCharacter({
     required double x,
     required double y,
