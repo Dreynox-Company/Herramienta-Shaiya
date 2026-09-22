@@ -2584,13 +2584,24 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     final expectedFormat = source.validatedFormat(record.entryId) ?? 'BIN';
     final replacementFormat = SpkArchiveSource.detectFormat(replacementBytes);
-    if (expectedFormat != 'BIN' && replacementFormat != expectedFormat) {
+    final expectedExtension = p.extension(path).toLowerCase();
+    final replacementExtension = p.extension(picked.path).toLowerCase();
+    final binaryExtensionMismatch =
+        expectedFormat == 'BIN' &&
+        expectedExtension.isNotEmpty &&
+        expectedExtension != '.bin' &&
+        replacementExtension != expectedExtension;
+    if ((expectedFormat != 'BIN' && replacementFormat != expectedFormat) ||
+        binaryExtensionMismatch) {
       throw SpkFailure(
         'SPK_REPLACEMENT_FORMAT',
-        'El archivo elegido no conserva el formato autenticado del recurso.',
+        'El archivo elegido no conserva el formato autenticado o la extensión '
+            'técnica del recurso.',
         {
           'expectedFormat': expectedFormat,
           'replacementFormat': replacementFormat,
+          'expectedExtension': expectedExtension,
+          'replacementExtension': replacementExtension,
           'path': path,
         },
       );
