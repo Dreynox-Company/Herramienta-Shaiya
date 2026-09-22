@@ -731,12 +731,24 @@ class SpkNameMap {
   }
 
   int removeAmbiguousHints() {
+    String canonical(String value) =>
+        value.replaceAll('\\', '/').toLowerCase();
+    final confirmedPaths = <String>{
+      for (final value in paths.values) canonical(value),
+    };
     final byPath = <String, List<int>>{};
+    final remove = <int>{};
     for (final entry in hints.entries) {
-      final key = entry.value.path.replaceAll('\\', '/').toLowerCase();
+      final key = canonical(entry.value.path);
+      if (confirmedPaths.contains(key)) {
+        // A confirmed path is already authoritative for another Entry ID.
+        // An inferred alias to it is ambiguous and must never appear as a
+        // second editable file.
+        remove.add(entry.key);
+        continue;
+      }
       byPath.putIfAbsent(key, () => <int>[]).add(entry.key);
     }
-    final remove = <int>{};
     for (final ids in byPath.values) {
       if (ids.length > 1) remove.addAll(ids);
     }
