@@ -2095,6 +2095,19 @@ class _DataEditorPageState extends State<DataEditorPage> {
                         onPressed: () => _scaffold.currentState?.openDrawer(),
                         icon: const Icon(Icons.folder_open),
                       ),
+                    if (widget.library.isSpkWorkspace &&
+                        !Platform.isAndroid)
+                      narrow
+                          ? IconButton(
+                              tooltip: 'Construir nuevo DATA.SPK verificado',
+                              onPressed: busy ? null : _rebuildSpkWorkspace,
+                              icon: const Icon(Icons.archive_outlined),
+                            )
+                          : TextButton.icon(
+                              onPressed: busy ? null : _rebuildSpkWorkspace,
+                              icon: const Icon(Icons.archive_outlined, size: 17),
+                              label: const Text('Construir SPK'),
+                            ),
                     PopupMenuButton<String>(
                       tooltip: 'Exportar / herramientas',
                       onSelected: (action) {
