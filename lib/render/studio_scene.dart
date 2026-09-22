@@ -731,7 +731,7 @@ class StudioScene extends ChangeNotifier {
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
       final x=character!.root.position.x+direction.x*delta*speed;
       final z=character!.root.position.z+direction.z*delta*speed;
-      if(world==null||(x.abs()<55&&z.abs()<55)){
+      if(world==null||(x.abs()<72&&z.abs()<72)){
         character!.root.position.x=x;
         character!.root.position.z=z;
         if(world!=null)groundY=world!.heightAt(originX+x,originZ-z,scale:.02,offset:-200);
