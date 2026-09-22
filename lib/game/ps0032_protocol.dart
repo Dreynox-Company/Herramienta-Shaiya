@@ -8,6 +8,7 @@ import 'package:crypto/crypto.dart' as hash;
 import 'package:pointycastle/export.dart';
 
 class PsPacketType {
+  static const heartbeat=0x0003;
   static const loginHandshake=0xA101;
   static const loginRequest=0xA102;
   static const oauthLoginRequest=0xA110;
@@ -2230,8 +2231,17 @@ class PsWorldSession {
   final Uint8List xorKey;
   final List<PsPacket> initialPackets;
   bool _expanded=false;
+  Timer? _heartbeat;
 
-  PsWorldSession(this.connection,this.faction,this.maxMode,this.xorKey,this.initialPackets);
+  PsWorldSession(this.connection,this.faction,this.maxMode,this.xorKey,this.initialPackets){
+    // The native client emits 0x0003 roughly every 120 seconds.
+    _heartbeat=Timer.periodic(const Duration(seconds:120),(_)=>unawaited(_sendHeartbeat()));
+  }
+
+  Future<void> _sendHeartbeat() async {
+    try{await connection.send(PsPacketType.heartbeat);}
+    catch(_){}
+  }
 
   List<PsCharacterSlot> get characters=>initialPackets
     .where((p)=>p.type==PsPacketType.characterList)
@@ -2894,7 +2904,10 @@ class PsWorldSession {
     ]);
   }
 
-  Future<void> close()=>connection.close();
+  Future<void> close() async {
+    _heartbeat?.cancel();_heartbeat=null;
+    await connection.close();
+  }
 }
 
 class Ps0032Client {
