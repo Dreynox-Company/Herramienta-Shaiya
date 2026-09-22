@@ -72,6 +72,9 @@ class _GameClientPageState extends State<GameClientPage> {
   GameStage stage=GameStage.faction;
   bool loading=true;
   bool characterCreated=false;
+  bool dead=false;
+  bool rebirthPending=false;
+  PsDeadRebirth? lastRebirth;
   bool questOpen=true;
   bool rewardSelection=false;
   int rewardNpcId=0;
@@ -801,6 +804,35 @@ class _GameClientPageState extends State<GameClientPage> {
           packet.type==PsPacketType.chatMap?'Map':'Normal';
         messages.insert(0,'['+channel+'] '+sender+': '+chat.message);
       }catch(e){messages.insert(0,'[Chat] '+e.toString());}
+    }else if(packet.type==PsPacketType.characterDeath&&packet.body.length>=9){
+      try{
+        final death=PsCharacterDeath.parse(packet);
+        if(death.characterId==liveCharacter?.id){
+          dead=true;rebirthPending=false;lastRebirth=null;
+          scene.clearMovement();
+          targetMobGlobalId=targetMobTypeId=targetMobHp=targetMobMaxHp=null;
+          _closeWorldPanels();questOpen=false;
+          final hp=liveHitpoints;
+          if(hp!=null)liveHitpoints=PsHitpoints(0,hp.mp,hp.sp);
+          unawaited(scene.networkPlayerDeath());
+          messages.insert(0,'[Muerte] Has muerto · killer '+death.killerId.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[Muerte] '+e.toString());}
+    }else if(packet.type==PsPacketType.characterLeaveDead&&packet.body.length>=4){
+      final id=ByteData.sublistView(packet.body).getUint32(0,Endian.little);
+      if(id==liveCharacter?.id){
+        rebirthPending=true;
+        messages.insert(0,'[Renacer] World confirmó salida del estado muerto.');
+      }
+    }else if(packet.type==PsPacketType.deadRebirth&&packet.body.length>=21){
+      try{
+        final info=PsDeadRebirth.parse(packet);
+        if(info.characterId==liveCharacter?.id){
+          lastRebirth=info;dead=false;rebirthPending=false;
+          unawaited(scene.networkPlayerRebirth(info.x,info.y,info.z));
+          messages.insert(0,'[Renacer] Posición '+info.x.toStringAsFixed(1)+', '+info.z.toStringAsFixed(1)+' · penalización '+info.expLoss.toString()+'.');
+        }
+      }catch(e){messages.insert(0,'[Renacer] '+e.toString());}
     }else if(packet.type==PsPacketType.targetMobHpUpdate&&packet.body.length>=10){
       final hp=PsTargetMobHp.parse(packet);
       targetMobGlobalId=hp.targetId;targetMobHp=hp.currentHp;
@@ -974,7 +1006,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Portal] '+e.toString());if(mounted)setState((){});}
   }
   Future<void> _syncMovement() async {
-    if(movementSending||stage!=GameStage.world)return;
+    if(movementSending||stage!=GameStage.world||dead||rebirthPending)return;
     final session=liveWorld,a=scene.character;
     if(session==null||a==null)return;
     final moving=scene.walkX!=0||scene.walkZ!=0;
@@ -1006,13 +1038,29 @@ class _GameClientPageState extends State<GameClientPage> {
     return selected;
   }
 
+  Future<void> _rebirthTown() async {
+    final session=liveWorld;
+    if(session==null||!dead||rebirthPending)return;
+    rebirthPending=true;
+    scene.clearMovement();
+    try{
+      await session.rebirth();
+      messages.insert(0,'[Renacer] Solicitud enviada a World.');
+      if(mounted)setState((){});
+    }catch(e){
+      rebirthPending=false;
+      messages.insert(0,'[Renacer] '+e.toString());
+      if(mounted)setState((){});
+    }
+  }
+
   Future<void> _sendChat(String value) async {
     final session=liveWorld;if(session==null||stage!=GameStage.world)return;
     try{await session.sendNormalChat(value);}
     catch(e){messages.insert(0,'[Chat] '+e.toString());if(mounted)setState((){});}
   }
   Future<void> _selectMobAt(Offset position) async {
-    if(stage!=GameStage.world)return;
+    if(stage!=GameStage.world||dead||rebirthPending)return;
     focus.requestFocus();
     final id=scene.pickNetworkMob(position.dx,position.dy,1024,742);
     if(id==null)return;
@@ -1078,7 +1126,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Skillbar] '+e.toString());if(mounted)setState((){});}
   }
   Future<void> _autoAttackAt(Offset position) async {
-    if(stage!=GameStage.world)return;
+    if(stage!=GameStage.world||dead||rebirthPending)return;
     final id=scene.pickNetworkMob(position.dx,position.dy,1024,742);
     if(id==null)return;
     await _selectMobAt(position);
@@ -1092,7 +1140,7 @@ class _GameClientPageState extends State<GameClientPage> {
     }catch(e){messages.insert(0,'[Combate] '+e.toString());if(mounted)setState((){});}
   }
   Future<void> _useHotbarSlot(int index) async {
-    if(stage!=GameStage.world)return;
+    if(stage!=GameStage.world||dead||rebirthPending)return;
     final slots=_primaryQuickSlots;
     final slot=slots.where((s)=>s.slot==index).firstOrNull??(index<slots.length?slots[index]:null);
     if(slot==null){messages.insert(0,'[Skillbar] Slot ${index+1} vacío.');if(mounted)setState((){});return;}
@@ -1153,7 +1201,7 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   Future<void> _interactNearestNpc() async {
-    if(stage!=GameStage.world)return;
+    if(stage!=GameStage.world||dead||rebirthPending)return;
     final globalId=scene.nearestNetworkNpcId();
     if(globalId==null){
       messages.insert(0,uiLocale=='spn'?'[NPC] No hay ningún NPC suficientemente cerca.':'[NPC] No NPC is close enough.');
@@ -1505,10 +1553,11 @@ class _GameClientPageState extends State<GameClientPage> {
   Widget _viewport()=>Positioned.fill(child:ViewportMovementInput(
     focusNode:focus,
     onChanged:(x,z,run){
-      if(stage==GameStage.world)scene.setMovement(x,z,run:run);
+      if(stage==GameStage.world&&!dead&&!rebirthPending)scene.setMovement(x,z,run:run);
+      else if(dead||rebirthPending)scene.clearMovement();
     },
     onAction:(key){
-      if(stage!=GameStage.world)return;
+      if(stage!=GameStage.world||dead||rebirthPending)return;
       if(key==LogicalKeyboardKey.keyR){scene.resetCombat();return;}
       if(key==LogicalKeyboardKey.keyE){unawaited(_interactNearestNpc());return;}
       final keys=<LogicalKeyboardKey>[
@@ -1526,8 +1575,8 @@ class _GameClientPageState extends State<GameClientPage> {
       },
       child:GestureDetector(
         behavior:HitTestBehavior.opaque,
-        onTapDown:(d){if(stage==GameStage.world)unawaited(_selectMobAt(d.localPosition));else focus.requestFocus();},
-        onDoubleTapDown:(d){if(stage==GameStage.world)unawaited(_autoAttackAt(d.localPosition));},
+        onTapDown:(d){if(stage==GameStage.world&&!dead&&!rebirthPending)unawaited(_selectMobAt(d.localPosition));else focus.requestFocus();},
+        onDoubleTapDown:(d){if(stage==GameStage.world&&!dead&&!rebirthPending)unawaited(_autoAttackAt(d.localPosition));},
         onScaleStart:(_){gestureScale=1;focus.requestFocus();},
         onScaleUpdate:(d){
           if(stage==GameStage.faction)return;
@@ -1654,6 +1703,9 @@ class _GameClientPageState extends State<GameClientPage> {
             details:liveDetails,
             additionalStats:liveAdditionalStats,
             hitpoints:liveHitpoints,
+            dead:dead,
+            rebirthPending:rebirthPending,
+            onRebirth:()=>unawaited(_rebirthTown()),
             buffs:liveBuffs.values.toList(),
             weather:liveWeather,
             targetMobGlobalId:targetMobGlobalId,
