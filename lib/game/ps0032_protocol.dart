@@ -120,6 +120,19 @@ class PsPacketType {
   static const friendAdd=0x2204;
   static const friendDelete=0x2205;
   static const friendOnline=0x2207;
+  static const duelRequest=0x2401;
+  static const duelResponse=0x2402;
+  static const duelReady=0x2403;
+  static const duelStart=0x2404;
+  static const duelWinLose=0x2405;
+  static const duelCancel=0x2406;
+  static const duelTrade=0x2407;
+  static const duelCloseTrade=0x2408;
+  static const duelTradeOk=0x2409;
+  static const duelTradeAddItem=0x240A;
+  static const duelTradeRemoveItem=0x240B;
+  static const duelTradeAddMoney=0x240C;
+  static const duelTradeOpponentAddItem=0x240D;
   static const questList=0x0901;
   static const questStart=0x0902;
   static const questEnd=0x0903;
@@ -735,6 +748,121 @@ class PsTradeConfirmation {
   }
 }
 
+class PsDuelRequest {
+  final int starterId,opponentId;
+  const PsDuelRequest(this.starterId,this.opponentId);
+  static PsDuelRequest parse(PsPacket p){
+    if(p.type!=PsPacketType.duelRequest||p.body.length<8)throw FormatException('DUEL_REQUEST truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsDuelRequest(d.getUint32(0,Endian.little),d.getUint32(4,Endian.little));
+  }
+}
+
+class PsDuelResponse {
+  final int response,characterId;
+  const PsDuelResponse(this.response,this.characterId);
+  bool get accepted=>response==1;
+  static PsDuelResponse parse(PsPacket p){
+    if(p.type!=PsPacketType.duelResponse||p.body.length<5)throw FormatException('DUEL_RESPONSE truncado: ${p.body.length}.');
+    return PsDuelResponse(p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little));
+  }
+}
+
+class PsDuelTradeOpen {
+  final int characterId,unknown;
+  const PsDuelTradeOpen(this.characterId,this.unknown);
+  static PsDuelTradeOpen parse(PsPacket p){
+    if(p.type!=PsPacketType.duelTrade||p.body.length<5)throw FormatException('DUEL_TRADE truncado: ${p.body.length}.');
+    return PsDuelTradeOpen(ByteData.sublistView(p.body).getUint32(0,Endian.little),p.body[4]);
+  }
+}
+
+class PsDuelTradeItem {
+  final int tradeSlot,type,typeId,count,quality;
+  final List<int> gems;
+  final String craftName;
+  final bool dyed;
+  const PsDuelTradeItem({required this.tradeSlot,required this.type,required this.typeId,required this.count,required this.quality,required this.gems,required this.craftName,required this.dyed});
+  String get key=>'$type:$typeId';
+  static PsDuelTradeItem parse(PsPacket p){
+    if(p.type!=PsPacketType.duelTradeOpponentAddItem||p.body.length<108)throw FormatException('DUEL_TRADE_OPPONENT_ADD_ITEM truncado: ${p.body.length}.');
+    final b=p.body,d=ByteData.sublistView(b);
+    final gems=List<int>.generate(6,(i)=>d.getInt32(63+i*4,Endian.little));
+    final raw=b.sublist(87,107),zero=raw.indexOf(0);
+    final craft=utf8.decode(zero<0?raw:raw.sublist(0,zero),allowMalformed:true);
+    return PsDuelTradeItem(
+      tradeSlot:b[0],type:b[1],typeId:b[2],count:b[3],quality:d.getUint16(4,Endian.little),
+      gems:List.unmodifiable(gems),craftName:craft,dyed:b[36]!=0,
+    );
+  }
+}
+
+class PsDuelTradeItemAck {
+  final int bag,slot,count,tradeSlot;
+  const PsDuelTradeItemAck(this.bag,this.slot,this.count,this.tradeSlot);
+  static PsDuelTradeItemAck parse(PsPacket p){
+    if(p.type!=PsPacketType.duelTradeAddItem||p.body.length<4)throw FormatException('DUEL_TRADE_ADD_ITEM truncado: ${p.body.length}.');
+    return PsDuelTradeItemAck(p.body[0],p.body[1],p.body[2],p.body[3]);
+  }
+}
+
+class PsDuelTradeRemove {
+  final int senderType,tradeSlot;
+  const PsDuelTradeRemove(this.senderType,this.tradeSlot);
+  static PsDuelTradeRemove parse(PsPacket p){
+    if(p.type!=PsPacketType.duelTradeRemoveItem||p.body.length<2)throw FormatException('DUEL_TRADE_REMOVE_ITEM truncado: ${p.body.length}.');
+    return PsDuelTradeRemove(p.body[0],p.body[1]);
+  }
+}
+
+class PsDuelTradeMoney {
+  final int senderType,money;
+  const PsDuelTradeMoney(this.senderType,this.money);
+  static PsDuelTradeMoney parse(PsPacket p){
+    if(p.type!=PsPacketType.duelTradeAddMoney||p.body.length<5)throw FormatException('DUEL_TRADE_ADD_MONEY truncado: ${p.body.length}.');
+    return PsDuelTradeMoney(p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little));
+  }
+}
+
+class PsDuelTradeApproval {
+  final int senderType,result;
+  const PsDuelTradeApproval(this.senderType,this.result);
+  bool get approved=>result==0;
+  static PsDuelTradeApproval parse(PsPacket p){
+    if(p.type!=PsPacketType.duelTradeOk||p.body.length<2)throw FormatException('DUEL_TRADE_OK truncado: ${p.body.length}.');
+    return PsDuelTradeApproval(p.body[0],p.body[1]);
+  }
+}
+
+class PsDuelReady {
+  final double x,z;
+  const PsDuelReady(this.x,this.z);
+  static PsDuelReady parse(PsPacket p){
+    if(p.type!=PsPacketType.duelReady||p.body.length<8)throw FormatException('DUEL_READY truncado: ${p.body.length}.');
+    final d=ByteData.sublistView(p.body);
+    return PsDuelReady(d.getFloat32(0,Endian.little),d.getFloat32(4,Endian.little));
+  }
+}
+
+class PsDuelCancel {
+  final int reason,playerId;
+  const PsDuelCancel(this.reason,this.playerId);
+  static PsDuelCancel parse(PsPacket p){
+    if(p.type!=PsPacketType.duelCancel||p.body.length<5)throw FormatException('DUEL_CANCEL truncado: ${p.body.length}.');
+    return PsDuelCancel(p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little));
+  }
+}
+
+class PsDuelResult {
+  final int result;
+  const PsDuelResult(this.result);
+  bool get won=>result==1;
+  bool get lost=>result==2;
+  static PsDuelResult parse(PsPacket p){
+    if(p.type!=PsPacketType.duelWinLose||p.body.isEmpty)throw FormatException('DUEL_WIN_LOSE truncado: ${p.body.length}.');
+    return PsDuelResult(p.body[0]);
+  }
+}
 class PsGuildSummary {
   final int id,rank,points;
   final String name,masterName,message;
@@ -1714,6 +1842,37 @@ class PsWorldSession {
   Future<void> finishTrade(int result) async {
     if(result<0||result>2)throw RangeError('Resultado de trade inválido: $result');
     await connection.send(PsPacketType.tradeFinish,[result]);
+  }
+  Future<void> requestDuel(int characterId) async {
+    await connection.send(PsPacketType.duelRequest,_u32Bytes(characterId));
+  }
+
+  Future<void> respondDuel(bool accepted) async {
+    await connection.send(PsPacketType.duelResponse,[accepted?1:0]);
+  }
+
+  Future<void> addDuelItem(int bag,int slot,int count,int tradeSlot) async {
+    for(final v in [bag,slot,count,tradeSlot]){if(v<0||v>255)throw RangeError('Duel trade byte fuera de rango: $v');}
+    await connection.send(PsPacketType.duelTradeAddItem,[bag,slot,count,tradeSlot]);
+  }
+
+  Future<void> removeDuelItem(int tradeSlot) async {
+    if(tradeSlot<0||tradeSlot>255)throw RangeError('Duel trade slot fuera de rango: $tradeSlot');
+    await connection.send(PsPacketType.duelTradeRemoveItem,[tradeSlot]);
+  }
+
+  Future<void> addDuelMoney(int money) async {
+    if(money<0||money>0xffffffff)throw RangeError('Oro de duelo fuera de uint32.');
+    await connection.send(PsPacketType.duelTradeAddMoney,_u32Bytes(money));
+  }
+
+  Future<void> decideDuelTrade(int result) async {
+    if(result<0||result>2)throw RangeError('Resultado de ventana de duelo inválido: $result');
+    await connection.send(PsPacketType.duelTradeOk,[result]);
+  }
+
+  Future<void> admitDuelDefeat() async {
+    await connection.send(PsPacketType.duelCancel);
   }
   Future<void> requestGuildJoin(int guildId) async {
     await connection.send(PsPacketType.guildJoinRequest,_u32Bytes(guildId));
