@@ -107,6 +107,26 @@ void main(){
     expect(parsed.keepActivated,isTrue);
   });
 
+  test('parses and applies character appearance deltas',(){
+    final b=Uint8List(8),d=ByteData.sublistView(b);
+    d.setUint32(0,4242,Endian.little);
+    b[4]=2;b[5]=3;b[6]=4;b[7]=1;
+    final change=PsAppearanceChange.parse(
+      PsPacket(PsPacketType.changeAppearance,b),
+    );
+    expect((change.characterId,change.hair,change.face,change.height,change.gender),(4242,2,3,4,1));
+
+    final shapeBytes=Uint8List(685),sd=ByteData.sublistView(shapeBytes),s=4;
+    sd.setUint32(0,4242,Endian.little);
+    _putFixed(shapeBytes,s+606,'Hero');
+    final shape=PsPlayerShape.parse(PsPacket(PsPacketType.characterShape,shapeBytes));
+    final changed=shape.copyWith(
+      hair:change.hair,face:change.face,height:change.height,gender:change.gender,
+    );
+    expect((changed.hair,changed.face,changed.height,changed.gender),(2,3,4,1));
+    expect(changed.name,'Hero');
+  });
+
   test('world snapshot keeps the requested local player identity',(){
     final snapshot=PsWorldSnapshot.fromPackets(
       [_entered(200,100),_entered(100,200)],
