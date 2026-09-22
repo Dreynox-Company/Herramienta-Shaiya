@@ -28,6 +28,7 @@ class WorldHud extends StatelessWidget {
   final List<PsInventoryItem> inventory,warehouse;
   final List<PsFriend> friends;
   final List<PsPartyMember> partyMembers;
+  final PsRaidState? raid;
   final List<PsGuildSummary> guildDirectory;
   final List<PsGuildMember> guildMembers;
   final List<PsGuildJoinApplicant> guildApplicants;
@@ -37,7 +38,7 @@ class WorldHud extends StatelessWidget {
   final PsGuildCreateInvite? pendingGuildCreateInvite;
   final int? partyLeaderId,selfCharacterId;
   final String? pendingFriendRequestName;
-  final int? pendingPartyRequesterId;
+  final int? pendingPartyRequesterId,pendingRaidRequesterId;
   final int gold;
   final bool tradeOpen;
   final int? tradePartnerId,pendingTradeRequesterId;
@@ -63,12 +64,13 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse;
-  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onLeaveGuild,onDismantleGuild;
+  final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleStatus,onToggleSkills,onToggleQuestLog,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<String> onRequestFriend;
-  final ValueChanged<bool> onRespondFriend,onRespondParty;
+  final ValueChanged<bool> onRespondFriend,onRespondParty,onRespondRaid;
   final ValueChanged<PsFriend> onDeleteFriend,onInviteParty;
+  final ValueChanged<int> onInviteRaid,onChangeRaidLoot;
   final ValueChanged<PsPartyMember> onKickParty,onPromoteParty;
   final ValueChanged<PsGuildSummary> onRequestGuildJoin;
   final void Function(PsGuildJoinApplicant,bool) onRespondGuildApplicant;
@@ -121,6 +123,7 @@ class WorldHud extends StatelessWidget {
     required this.warehouse,
     required this.friends,
     required this.partyMembers,
+    required this.raid,
     required this.guildDirectory,
     required this.guildMembers,
     required this.guildApplicants,
@@ -133,6 +136,7 @@ class WorldHud extends StatelessWidget {
     required this.selfCharacterId,
     required this.pendingFriendRequestName,
     required this.pendingPartyRequesterId,
+    required this.pendingRaidRequesterId,
     required this.gold,
     required this.tradeOpen,
     required this.tradePartnerId,
@@ -210,9 +214,16 @@ class WorldHud extends StatelessWidget {
     required this.onRequestFriend,
     required this.onRespondFriend,
     required this.onRespondParty,
+    required this.onRespondRaid,
     required this.onDeleteFriend,
     required this.onInviteParty,
+    required this.onInviteRaid,
+    required this.onChangeRaidLoot,
     required this.onLeaveParty,
+    required this.onCreateRaid,
+    required this.onLeaveRaid,
+    required this.onDismantleRaid,
+    required this.onToggleRaidAutoJoin,
     required this.onKickParty,
     required this.onPromoteParty,
     required this.onRequestGuildJoin,
@@ -261,7 +272,9 @@ class WorldHud extends StatelessWidget {
           Positioned(left: 8, top: 3, width: 216, height: 79, child: _playerHud()),
           if(buffs.isNotEmpty)
             Positioned(left:8,top:84,width:300,height:38,child:_buffBar()),
-          if(partyMembers.isNotEmpty)
+          if(raid!=null)
+            Positioned(left:8,top:124,width:278,height:252,child:_raidHud()),
+          if(raid==null&&partyMembers.isNotEmpty)
             Positioned(
               left:8,top:124,width:218,
               height:math.min(228.0,30+partyMembers.length*33.0),
