@@ -1061,6 +1061,11 @@ class PsWorldSession {
     return (details:details,packets:packets);
   }
 
+  Future<void> confirmMapLoaded() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de confirmar el mapa.');
+    await connection.send(PsPacketType.characterEnteredMap);
+  }
+
   Future<List<PsPacket>> enterMap({Duration collect=const Duration(seconds:6)}) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de entrar al mapa.');
     // Client -> server remains AES-CTR. The server only changes outgoing crypto.
