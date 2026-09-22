@@ -25,10 +25,12 @@ class PsPacketType {
   static const characterSkillBar=0x010B;
   static const accountFaction=0x0109;
   static const characterEnteredMap=0x0201;
+  static const characterLeftMap=0x0202;
   static const characterEnteredPortal=0x020A;
   static const characterMapTeleport=0x020B;
   static const characterTeleportViaNpc=0x020C;
   static const targetCharacterHpUpdate=0x0301;
+  static const targetCharacterMaxHp=0x0302;
   static const characterShape=0x0303;
   static const targetMobHpUpdate=0x0305;
   static const mapWeather=0x0451;
@@ -512,6 +514,52 @@ class PsTargetCharacterHp {
     return PsTargetCharacterHp(
       d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),d.getInt32(8,Endian.little),p.body[12],p.body[13],
     );
+  }
+}
+
+class PsTargetCharacterSelection {
+  final int targetId,maxHp,currentHp;
+  const PsTargetCharacterSelection(this.targetId,this.maxHp,this.currentHp);
+  static PsTargetCharacterSelection parse(PsPacket p){
+    if(p.type!=PsPacketType.targetCharacterMaxHp||p.body.length<12){
+      throw FormatException('TARGET_CHARACTER_MAX_HP truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsTargetCharacterSelection(
+      d.getUint32(0,Endian.little),d.getInt32(4,Endian.little),d.getInt32(8,Endian.little),
+    );
+  }
+}
+
+class PsCharacterMove {
+  final int characterId,angle,motion;
+  final double x,y,z;
+  const PsCharacterMove(this.characterId,this.angle,this.motion,this.x,this.y,this.z);
+  bool get moving=>motion!=0;
+  static PsCharacterMove parse(PsPacket p){
+    if(p.type!=PsPacketType.characterMove||p.body.length<19){
+      throw FormatException('CHARACTER_MOVE remoto truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsCharacterMove(
+      d.getUint32(0,Endian.little),
+      d.getUint16(4,Endian.little),
+      p.body[6],
+      d.getFloat32(7,Endian.little),
+      d.getFloat32(11,Endian.little),
+      d.getFloat32(15,Endian.little),
+    );
+  }
+}
+
+class PsCharacterLeftMap {
+  final int characterId;
+  const PsCharacterLeftMap(this.characterId);
+  static PsCharacterLeftMap parse(PsPacket p){
+    if(p.type!=PsPacketType.characterLeftMap||p.body.length<4){
+      throw FormatException('CHARACTER_LEFT_MAP truncado: ${p.body.length}.');
+    }
+    return PsCharacterLeftMap(ByteData.sublistView(p.body).getUint32(0,Endian.little));
   }
 }
 
@@ -1988,8 +2036,30 @@ class PsWorldSession {
 
   Stream<PsPacket> get packets=>connection.packets;
 
-  Future<PsTargetCharacterHp> selectCharacterTarget(int characterId) async {
+  Future<PsPlayerShape> requestCharacterShape(int characterId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de solicitar CHARACTER_SHAPE.');
+    final response=connection.waitStream((p)=>
+      p.type==PsPacketType.characterShape&&p.body.length>=4&&
+      ByteData.sublistView(p.body).getUint32(0,Endian.little)==characterId
+    );
+    await connection.send(PsPacketType.characterShape,_u32Bytes(characterId));
+    return PsPlayerShape.parse(await response);
+  }
+
+  Future<PsTargetCharacterSelection> selectCharacterTarget(int characterId) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de seleccionar objetivo PvP.');
+    final response=connection.waitStream((p)=>
+      p.type==PsPacketType.targetCharacterMaxHp&&p.body.length>=4&&
+      ByteData.sublistView(p.body).getUint32(0,Endian.little)==characterId
+    );
+    // 0x0302 is the authoritative target-selection request in ps0032.
+    // 0x0301 only refreshes current HP/speed and does not set AttackManager.Target.
+    await connection.send(PsPacketType.targetCharacterMaxHp,_u32Bytes(characterId));
+    return PsTargetCharacterSelection.parse(await response);
+  }
+
+  Future<PsTargetCharacterHp> refreshCharacterTargetHp(int characterId) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de consultar HP PvP.');
     final response=connection.waitStream((p)=>
       p.type==PsPacketType.targetCharacterHpUpdate&&p.body.length>=4&&
       ByteData.sublistView(p.body).getUint32(0,Endian.little)==characterId
