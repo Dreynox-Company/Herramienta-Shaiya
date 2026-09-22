@@ -26,6 +26,8 @@ class WorldHud extends StatelessWidget {
   final String? targetPlayerName;
   final PsSkillBook? skillBook;
   final PsSkillBar? skillBar;
+  final String? castingSkill;
+  final double castingProgress;
   final List<PsInventoryItem> inventory,warehouse,guildWarehouse;
   final List<PsFriend> friends;
   final List<PsPartyMember> partyMembers;
@@ -124,6 +126,8 @@ class WorldHud extends StatelessWidget {
     required this.targetMaxHp,
     required this.skillBook,
     required this.skillBar,
+    required this.castingSkill,
+    required this.castingProgress,
     required this.inventory,
     required this.warehouse,
     required this.guildWarehouse,
@@ -305,6 +309,8 @@ class WorldHud extends StatelessWidget {
           Positioned(right: 8, top: 8, width: 188, height: 232, child: _minimap()),
           if(targetMobId!=null||targetPlayerName!=null)
             Positioned(left:390,top:60,width:245,height:48,child:_targetHud()),
+          if(castingSkill!=null)
+            Positioned(left:374,top:112,width:276,height:28,child:_castBar()),
           Positioned(left: 4, top: 363, width: 360, height: 290, child: _chat()),
           Positioned(left: 0, right: 0, bottom: 0, height: 58, child: _bottomHud()),
           if(weather!=null&&weather!.state!=0)
@@ -716,6 +722,38 @@ class WorldHud extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _castBar(){
+    final value=castingProgress.clamp(0.0,1.0);
+    return Container(
+      padding:const EdgeInsets.fromLTRB(7,4,7,4),
+      decoration:BoxDecoration(
+        color:const Color(0xd818130e),
+        border:Border.all(color:const Color(0xff9b7d4c)),
+        boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:4)],
+      ),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Text(
+          castingSkill??'',
+          maxLines:1,overflow:TextOverflow.ellipsis,textAlign:TextAlign.center,
+          style:const TextStyle(fontSize:8.5,color:Color(0xffffe2a1),shadows:[Shadow(color:Colors.black,blurRadius:2)]),
+        ),
+        const SizedBox(height:2),
+        Container(
+          height:5,
+          decoration:BoxDecoration(
+            color:const Color(0xff19120d),
+            border:Border.all(color:const Color(0xff69543a)),
+          ),
+          child:FractionallySizedBox(
+            alignment:Alignment.centerLeft,
+            widthFactor:value,
+            child:Container(color:const Color(0xffd4a447)),
+          ),
+        ),
+      ]),
     );
   }
 
