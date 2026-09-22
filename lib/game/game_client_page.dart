@@ -1534,6 +1534,37 @@ class _GameClientPageState extends State<GameClientPage> {
         if(motion.characterId!=liveCharacter?.id)unawaited(scene.applyNetworkPlayerMotion(motion.characterId,motion.motion));
       }catch(e){messages.insert(0,'[Movimiento] MOTION: '+e.toString());}
       return;
+    }else if(packet.type==PsPacketType.changeAppearance&&packet.body.length>=8){
+      try{
+        final update=PsAppearanceChange.parse(packet);
+        if(update.characterId==liveCharacter?.id){
+          final current=liveCharacter!;
+          final next=PsCharacterSlot(
+            slot:current.slot,id:current.id,mapId:current.mapId,level:current.level,
+            race:current.race,mode:current.mode,hair:update.hair,face:update.face,
+            height:update.height,profession:current.profession,gender:update.gender,
+            name:current.name,isDelete:current.isDelete,isRename:current.isRename,
+          );
+          liveCharacters=[
+            for(final row in liveCharacters) if(row.id==next.id)next else row,
+          ];
+          liveCharacter=next;
+          _syncUiFromLiveCharacter(next);
+          unawaited(_applyDefaultAppearance());
+        }else{
+          final old=remotePlayerShapes[update.characterId];
+          final entered=remotePlayerEntries[update.characterId];
+          if(old!=null){
+            final next=old.copyWith(
+              hair:update.hair,face:update.face,height:update.height,gender:update.gender,
+            );
+            remotePlayerShapes[update.characterId]=next;
+            if(entered!=null)unawaited(_renderRemotePlayer(entered,next));
+          }
+        }
+      }catch(e){messages.insert(0,'[Apariencia] '+e.toString());}
+      if(mounted)setState((){});
+      return;
     }else if(packet.type==PsPacketType.characterShapeUpdate&&packet.body.length>=13){
       try{
         final update=PsShapeUpdate.parse(packet),self=liveCharacter?.id;
