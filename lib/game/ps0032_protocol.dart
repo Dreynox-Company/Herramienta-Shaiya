@@ -1262,12 +1262,18 @@ class PsWorldSnapshot {
     required this.quests,required this.finishedQuests,
   });
 
-  factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets){
+  factory PsWorldSnapshot.fromPackets(Iterable<PsPacket> packets,{int? selfCharacterId}){
     PsEnteredMap? self;
     final npcs=<PsNpcEnter>[],mobs=<PsMobEnter>[],quests=<PsQuestProgress>[],finished=<PsFinishedQuest>[];
     for(final p in packets){
-      if(p.type==PsPacketType.characterEnteredMap)self=PsEnteredMap.parse(p);
-      else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
+      if(p.type==PsPacketType.characterEnteredMap){
+        final entered=PsEnteredMap.parse(p);
+        if(selfCharacterId==null){
+          self??=entered;
+        }else if(entered.characterId==selfCharacterId){
+          self=entered;
+        }
+      }else if(p.type==PsPacketType.mapNpcEnter)npcs.add(PsNpcEnter.parse(p));
       else if(p.type==PsPacketType.mobEnter)mobs.add(PsMobEnter.parse(p));
       else if(p.type==PsPacketType.questList)quests.addAll(parseQuestList(p));
       else if(p.type==PsPacketType.questFinishedList)finished.addAll(parseFinishedQuests(p));
