@@ -24,6 +24,9 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn("pointerSize: Process.pointerSize", text)
         self.assertIn("RESOURCE_MATCH_INCOMPLETE_CRYPTO", text)
         self.assertIn("No se marca como visto", text)
+        probe_text = MODULE.read_text(encoding='utf-8')
+        self.assertIn("print('EVENT'", probe_text)
+        self.assertIn("'RESUMEN capturas='", probe_text)
 
     def test_windows_probe_and_studio_force_utf8_safe_evidence(self):
         probe_text = MODULE.read_text(encoding='utf-8')
