@@ -931,6 +931,31 @@ class PsInventoryMove {
   }
 }
 
+class PsGemRemoveResult {
+  final bool success;
+  final int itemBag,itemSlot,gemPosition,gold;
+  final List<int> savedBags,savedSlots,savedTypeIds,savedCounts;
+  const PsGemRemoveResult({
+    required this.success,required this.itemBag,required this.itemSlot,required this.gemPosition,
+    required this.savedBags,required this.savedSlots,required this.savedTypeIds,required this.savedCounts,required this.gold,
+  });
+  static PsGemRemoveResult parse(PsPacket p){
+    if(p.type!=PsPacketType.gemRemove||p.body.length<50){
+      throw FormatException('GEM_REMOVE truncado: ${p.body.length}.');
+    }
+    final b=p.body,d=ByteData.sublistView(b);
+    final bags=List<int>.generate(6,(i)=>b[4+i]);
+    final slots=List<int>.generate(6,(i)=>b[10+i]);
+    final ids=List<int>.generate(6,(i)=>d.getInt32(16+i*4,Endian.little));
+    final counts=List<int>.generate(6,(i)=>b[40+i]);
+    return PsGemRemoveResult(
+      success:b[0]!=0,itemBag:b[1],itemSlot:b[2],gemPosition:b[3],
+      savedBags:List.unmodifiable(bags),savedSlots:List.unmodifiable(slots),
+      savedTypeIds:List.unmodifiable(ids),savedCounts:List.unmodifiable(counts),
+      gold:d.getUint32(46,Endian.little),
+    );
+  }
+}
 class PsGemAddResult {
   final bool success;
   final int gemBag,gemSlot,gemCount,itemBag,itemSlot,linkSlot,gemTypeId,gold,hammerBag,hammerSlot;
@@ -1384,6 +1409,15 @@ class PsWorldSession {
     await connection.send(PsPacketType.inventoryMoveItem,[currentBag,currentSlot,destinationBag,destinationSlot]);
     final response=await responseFuture;
     return PsInventoryMove.parse(response);
+  }
+  Future<PsGemRemoveResult> removeGem({
+    required int itemBag,required int itemSlot,required int gemPosition,
+    int hammerBag=0,int hammerSlot=0,
+  }) async {
+    if(gemPosition<0||gemPosition>5)throw RangeError('GemPosition inválida: $gemPosition');
+    final response=connection.waitStream((p)=>p.type==PsPacketType.gemRemove);
+    await connection.send(PsPacketType.gemRemove,[itemBag,itemSlot,1,gemPosition,hammerBag,hammerSlot]);
+    return PsGemRemoveResult.parse(await response);
   }
   Future<PsGemAddResult> addGem({
     required int gemBag,required int gemSlot,required int itemBag,required int itemSlot,
