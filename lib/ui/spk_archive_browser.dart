@@ -540,8 +540,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   String _friendlyError(Object error) {
     if (error is SpkFailure) return '${error.code}: ${error.message}';
     if (error is FormatException) {
-      final message = error.message;
-      return message is String ? message : message.toString();
+      return error.message;
     }
     return error.toString();
   }
@@ -1856,7 +1855,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         children: [
           if (!source.canReadSimpleResources)
             Container(
-              minHeight: 42,
+              constraints: const BoxConstraints(minHeight: 42),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: const BoxDecoration(
                 color: Color(0xff2a2115),
