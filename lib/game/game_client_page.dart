@@ -2525,6 +2525,7 @@ class _GameClientPageState extends State<GameClientPage> {
             pendingPartyRequesterId:pendingPartyRequesterId,
             inventoryOpen:inventoryOpen,
             socialOpen:socialOpen,
+            guildOpen:guildOpen,
             statusOpen:statusOpen,
             skillsOpen:skillsOpen,
             questLogOpen:questLogOpen,
