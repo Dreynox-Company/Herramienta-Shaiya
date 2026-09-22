@@ -2875,7 +2875,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 openCoreTableEditor('Item/Item.SData', 'Objetos / trade');
               }
               if (value == 'coreMonster') {
-                openCoreTableEditor('Monster/Monster.SData', 'Mobs / drops');
+                openCoreTableEditor('BinarySData/DBMonsterData.SData', 'Mobs / drops');
               }
               if (value == 'coreSkill') {
                 openCoreTableEditor('Skill/Skill.SData', 'Skills');
@@ -3031,7 +3031,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'Monster/Monster.SData',
+                              'BinarySData/DBMonsterData.SData',
                               'Mobs / drops',
                             ),
                     icon: const Icon(Icons.pest_control_outlined, size: 16),
