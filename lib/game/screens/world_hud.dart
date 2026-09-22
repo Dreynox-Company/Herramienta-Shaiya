@@ -207,7 +207,10 @@ class WorldHud extends StatelessWidget {
     final skillName=learned==null?null:catalog.skillName(learned.skillId,learned.level,locale);
     final skillText=learned==null?null:catalog.skillText(learned.skillId,learned.level,locale);
     final skillRule=learned==null?null:metadata?.skill(learned.skillId,learned.level);
-    final itemRule=slot!=null&&!slot.isSkill?metadata?.item(slot.bag,slot.number):null;
+    final quickItem=slot!=null&&!slot.isSkill
+      ?inventory.where((i)=>i.bag==slot.bag&&i.slot==slot.number).firstOrNull
+      :null;
+    final itemRule=quickItem==null?null:metadata?.item(quickItem.type,quickItem.typeId);
     final iconPath=slot==null?null:(slot.isSkill?skillRule?.iconPath:itemRule?.iconPath);
     final label=slot==null
       ?''
@@ -220,7 +223,10 @@ class WorldHud extends StatelessWidget {
         ?(skillName??(locale=='spn'?'Habilidad ${slot.number}':'Skill ${slot.number}'))+
           (skillText?.text.trim().isNotEmpty==true?'\n\n${skillText!.text.trim()}':'')+
           (learned==null?'':'\nLv. ${learned.level} · #${learned.number}')
-        :(locale=='spn'?'Objeto rápido ${slot.number}':'Quick item ${slot.number}');
+        :quickItem==null
+          ?(locale=='spn'?'Objeto rápido · bolsa ${slot.bag} slot ${slot.number}':'Quick item · bag ${slot.bag} slot ${slot.number}')
+          :catalog.itemName(quickItem.type,quickItem.typeId,locale)+
+            '\n${quickItem.type}:${quickItem.typeId} · Bag ${quickItem.bag} · Slot ${quickItem.slot}';
     final cell=SizedBox(
       width:39,height:39,
       child:Stack(children:[
