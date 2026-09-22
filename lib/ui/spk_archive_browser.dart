@@ -537,6 +537,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return path.split('/').last;
   }
 
+  String _friendlyError(Object error) {
+    if (error is SpkFailure) return '${error.code}: ${error.message}';
+    if (error is FormatException) {
+      final message = error.message;
+      return message is String ? message : message.toString();
+    }
+    return error.toString();
+  }
+
   Future<void> runAction(Future<void> Function() action) async {
     if (busy) return;
     setState(() => busy = true);
@@ -546,8 +555,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString()),
-            duration: const Duration(seconds: 7),
+            content: Text(_friendlyError(error)),
+            duration: const Duration(seconds: 9),
           ),
         );
       }
@@ -591,9 +600,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       confirmButtonText: 'Extraer carpeta aquí',
     );
     if (folder == null) return;
-    final list = source.entriesInFolder(currentFolder, recursive: true);
+    final list = source
+        .entriesInFolder(currentFolder, recursive: true)
+        .where(source.canReadRecord)
+        .toList();
     if (list.isEmpty) {
-      throw const FormatException('La carpeta no contiene recursos.');
+      throw const SpkFailure(
+        'SPK_FOLDER_LOCKED',
+        'La carpeta no contiene recursos legibles todavía. Ejecuta AutoPerfil '
+            'SPK antes de extraer contenido.',
+      );
     }
     final result = await source.extract(
       Directory(folder),
@@ -996,6 +1012,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       ],
       workingDirectory: game.parent.path,
       runInShell: false,
+      environment: {
+        ...Platform.environment,
+        'PYTHONUTF8': '1',
+        'PYTHONIOENCODING': 'utf-8',
+      },
     );
     final recent = <String>[];
     void reportLine(String line) {
@@ -1009,11 +1030,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
 
     final stdoutDone = process.stdout
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
         .forEach(reportLine);
     final stderrDone = process.stderr
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
         .forEach(reportLine);
     final exitCode = await process.exitCode;
@@ -1320,6 +1341,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   });
 
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
+    if (!source.canReadRecord(record)) {
+      throw const SpkFailure(
+        'SPK_CONTENT_LOCKED',
+        'El recurso sigue cifrado. Ejecuta AutoPerfil SPK y espera a que '
+            'la clave de payloads quede autenticada antes de inspeccionarlo.',
+      );
+    }
     final result = await source.readEntry(record);
     if (!mounted) return;
     await showDialog<void>(
@@ -1434,13 +1462,27 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           height: 34,
           color: const Color(0xff182231),
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: const Row(
+          child: Row(
             children: [
-              Expanded(flex: 5, child: Text('Nombre')),
-              SizedBox(width: 95, child: Text('Tipo')),
-              SizedBox(width: 105, child: Text('Almacenado')),
-              SizedBox(width: 105, child: Text('Decodificado')),
-              SizedBox(width: 145, child: Text('ID')),
+              const Expanded(flex: 5, child: Text('Nombre / ruta')),
+              SizedBox(
+                width: 95,
+                child: Text(
+                  source.canReadSimpleResources
+                      ? 'Formato'
+                      : 'Tipo estimado',
+                ),
+              ),
+              const SizedBox(width: 105, child: Text('Almacenado')),
+              SizedBox(
+                width: 105,
+                child: Text(
+                  source.canReadSimpleResources
+                      ? 'Decodificado'
+                      : 'Decl. decod.',
+                ),
+              ),
+              const SizedBox(width: 145, child: Text('ID')),
             ],
           ),
         ),
@@ -1481,7 +1523,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               final active = identical(selected, record);
               return InkWell(
                 onTap: () => setState(() => selected = record),
-                onDoubleTap: () => inspectResource(record),
+                onDoubleTap: source.canReadRecord(record)
+                    ? () => inspectResource(record)
+                    : null,
                 child: Container(
                   color: active ? const Color(0xff29384f) : null,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1588,13 +1632,26 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         property('Evidencia', source.nameEvidence(record)),
         const Divider(height: 26),
         FilledButton.tonalIcon(
-          onPressed: busy ? null : () => inspectResource(record),
-          icon: const Icon(Icons.manage_search, size: 17),
-          label: const Text('Leer / inspeccionar'),
+          onPressed: busy || !source.canReadRecord(record)
+              ? null
+              : () => inspectResource(record),
+          icon: Icon(
+            source.canReadRecord(record)
+                ? Icons.manage_search
+                : Icons.lock_outline,
+            size: 17,
+          ),
+          label: Text(
+            source.canReadRecord(record)
+                ? 'Leer / inspeccionar'
+                : 'Contenido cifrado',
+          ),
         ),
         const SizedBox(height: 7),
         OutlinedButton.icon(
-          onPressed: busy ? null : extractSelected,
+          onPressed: busy || !source.canReadRecord(record)
+              ? null
+              : extractSelected,
           icon: const Icon(Icons.file_download_outlined, size: 17),
           label: const Text('Extraer recurso'),
         ),
@@ -1642,9 +1699,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Explorador DATA.SPK', style: TextStyle(fontSize: 14)),
+            Text('DATA.SPK', style: TextStyle(fontSize: 14)),
             Text(
-              'Archivo montado en solo lectura',
+              'Explorador · solo lectura',
               style: TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
             ),
           ],
@@ -1732,12 +1789,19 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             label: const Text('Inventario'),
           ),
           TextButton.icon(
-            onPressed: busy || selected == null ? null : extractSelected,
+            onPressed: busy ||
+                    selected == null ||
+                    !source.canReadRecord(selected!)
+                ? null
+                : extractSelected,
             icon: const Icon(Icons.file_download_outlined, size: 17),
             label: const Text('Extraer'),
           ),
           TextButton.icon(
-            onPressed: busy || currentFolder.isEmpty
+            onPressed: busy ||
+                    currentFolder.isEmpty ||
+                    (!source.canReadSimpleResources &&
+                        !source.canReadFragmentedResources)
                 ? null
                 : extractCurrentFolder,
             icon: const Icon(Icons.drive_folder_upload_outlined, size: 17),
@@ -1761,6 +1825,41 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       ),
       body: Column(
         children: [
+          if (!source.canReadSimpleResources)
+            Container(
+              minHeight: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: const BoxDecoration(
+                color: Color(0xff2a2115),
+                border: Border(
+                  bottom: BorderSide(color: Color(0xff6f542c)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.lock_outline,
+                    size: 18,
+                    color: Color(0xffe1b86e),
+                  ),
+                  const SizedBox(width: 9),
+                  const Expanded(
+                    child: Text(
+                      'CONTENIDO CIFRADO: las rutas, nombres y formatos visibles '
+                      'son inferencias del índice; todavía no son recursos '
+                      'abiertos ni editables.',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: busy ? null : captureResourceProfile,
+                    icon: const Icon(Icons.security_outlined, size: 16),
+                    label: const Text('Desbloquear con AutoPerfil'),
+                  ),
+                ],
+              ),
+            ),
           Container(
             height: 54,
             padding: const EdgeInsets.symmetric(horizontal: 10),
