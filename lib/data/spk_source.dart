@@ -288,7 +288,7 @@ class SpkArchiveSource {
     final path = technicalPath(record);
     final ext = p.extension(path).replaceFirst('.', '').toUpperCase();
     if (ext.isNotEmpty && ext != 'BIN') return ext;
-    if (verified == 'BIN') return verified!;
+    if (verified == 'BIN') return 'BIN';
     return record.simple ? 'Simple' : 'Fragmentado';
   }
 
