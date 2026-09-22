@@ -67,11 +67,15 @@ class WorldHud extends StatelessWidget {
   final PsEnchantRate? blacksmithEnchantRate;
   final PsInventoryItem? blacksmithComposeItem,blacksmithRune,blacksmithVial;
   final bool blacksmithBusy;
-  final bool inventoryOpen,socialOpen,guildOpen,guildWarehouseAvailable,guildWarehouseOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,gateOpen,warehouseOpen;
-  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem,onEnchantItem,onComposeItem,onSynthesizeRune;
+  final PsInventoryItem? dyeItem,dyeTarget;
+  final PsDyePalette? dyePalette;
+  final PsDyeConfirmResult? dyeResult;
+  final bool dyeBusy;
+  final bool inventoryOpen,socialOpen,guildOpen,guildWarehouseAvailable,guildWarehouseOpen,statusOpen,skillsOpen,questLogOpen,shopOpen,blacksmithOpen,dyeingOpen,gateOpen,warehouseOpen;
+  final VoidCallback onCloseShop,onCloseBlacksmith,onCloseDyeing,onCloseGate,onCloseWarehouse,onLinkGem,onExtractGem,onEnchantItem,onComposeItem,onSynthesizeRune,onRerollDye,onConfirmDye;
   final ValueChanged<int> onBuyShopProduct,onUseGate,onBlacksmithMode,onSelectExtractPosition;
   final ValueChanged<PsInventoryItem?> onSelectBlacksmithItem,onSelectBlacksmithGem,onSelectBlacksmithHammer,onSelectExtractItem,onSelectExtractHammer,
-    onSelectEnchantItem,onSelectLapisia,onSelectComposeItem,onSelectComposeRune,onSelectComposeVial;
+    onSelectEnchantItem,onSelectLapisia,onSelectComposeItem,onSelectComposeRune,onSelectComposeVial,onSelectDyeTarget;
   final ValueChanged<PsInventoryItem> onSellInventory,onActivateInventory,onStoreWarehouse,onWithdrawWarehouse,onStoreGuildWarehouse,onWithdrawGuildWarehouse;
   final ValueChanged<PsMapItem> onPickMapItem;
   final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onToggleVehicle,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
@@ -201,6 +205,11 @@ class WorldHud extends StatelessWidget {
     required this.blacksmithRune,
     required this.blacksmithVial,
     required this.blacksmithBusy,
+    required this.dyeItem,
+    required this.dyeTarget,
+    required this.dyePalette,
+    required this.dyeResult,
+    required this.dyeBusy,
     required this.inventoryOpen,
     required this.socialOpen,
     required this.guildOpen,
@@ -211,10 +220,12 @@ class WorldHud extends StatelessWidget {
     required this.questLogOpen,
     required this.shopOpen,
     required this.blacksmithOpen,
+    required this.dyeingOpen,
     required this.gateOpen,
     required this.warehouseOpen,
     required this.onCloseShop,
     required this.onCloseBlacksmith,
+    required this.onCloseDyeing,
     required this.onCloseGate,
     required this.onCloseWarehouse,
     required this.onLinkGem,
@@ -222,6 +233,8 @@ class WorldHud extends StatelessWidget {
     required this.onEnchantItem,
     required this.onComposeItem,
     required this.onSynthesizeRune,
+    required this.onRerollDye,
+    required this.onConfirmDye,
     required this.onBlacksmithMode,
     required this.onSelectBlacksmithItem,
     required this.onSelectBlacksmithGem,
@@ -234,6 +247,7 @@ class WorldHud extends StatelessWidget {
     required this.onSelectComposeItem,
     required this.onSelectComposeRune,
     required this.onSelectComposeVial,
+    required this.onSelectDyeTarget,
     required this.onBuyShopProduct,
     required this.onUseGate,
     required this.onSellInventory,
@@ -374,6 +388,11 @@ class WorldHud extends StatelessWidget {
             Positioned(
               right:150,top:175,width:420,height:465,
               child:_blacksmithWindow(),
+            ),
+          if(dyeingOpen)
+            Positioned(
+              right:150,top:175,width:420,height:465,
+              child:_dyeingWindow(),
             ),
           if(gateOpen&&gate!=null)
             Positioned(
@@ -2899,6 +2918,155 @@ class WorldHud extends StatelessWidget {
       ]),
     ),
   );
+  Widget _dyeingWindow(){
+    final source=dyeItem,sourceRule=source==null?null:metadata?.item(source.type,source.typeId);
+    final compatible=sourceRule==null
+      ?const <PsInventoryItem>[]
+      :inventory.where((item){
+          final rule=metadata?.item(item.type,item.typeId);
+          return rule!=null&&rule.canBeDyedBy(sourceRule);
+        }).toList();
+    final colors=dyePalette?.colors.where((x)=>x.enabled).toList()??const <PsDyeColor>[];
+    final sourceName=source==null?'—':catalog.itemName(source.type,source.typeId,locale);
+    final targetName=dyeTarget==null?'—':catalog.itemName(dyeTarget!.type,dyeTarget!.typeId,locale);
+    return _panelShell(
+      locale=='spn'?'Sistema de tintes':'Dye System',
+      Padding(
+        padding:const EdgeInsets.all(10),
+        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Container(
+            width:double.infinity,padding:const EdgeInsets.all(8),
+            decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text((locale=='spn'?'Tinte: ':'Dye: ')+sourceName,style:const TextStyle(fontSize:9,color:Color(0xffffdc72))),
+              const SizedBox(height:3),
+              Text(
+                locale=='spn'
+                  ?'El tipo de tinte determina qué clase de objeto puede colorearse.'
+                  :'The dye type determines which item category can be colored.',
+                style:const TextStyle(fontSize:7.8,color:Colors.white54),
+              ),
+            ]),
+          ),
+          const SizedBox(height:8),
+          _blacksmithPick(
+            title:locale=='spn'?'Objeto compatible':'Compatible target',
+            items:compatible,
+            selected:dyeTarget,
+            onSelect:onSelectDyeTarget,
+          ),
+          const SizedBox(height:8),
+          Row(children:[
+            Expanded(child:Text(
+              (locale=='spn'?'Objetivo: ':'Target: ')+targetName,
+              maxLines:1,overflow:TextOverflow.ellipsis,
+              style:const TextStyle(fontSize:8.5,color:Colors.white70),
+            )),
+            SizedBox(
+              width:92,height:28,
+              child:shaiyaRedButton(
+                dyeBusy?(locale=='spn'?'Cargando…':'Loading…'):(locale=='spn'?'Cambiar':'Reroll'),
+                !dyeBusy&&dyeTarget!=null?onRerollDye:null,
+                width:92,height:28,fontSize:8.7,
+              ),
+            ),
+          ]),
+          const SizedBox(height:8),
+          Text(
+            locale=='spn'?'Colores disponibles de World':'Colors offered by World',
+            style:const TextStyle(fontSize:9.5,color:Color(0xffffdc72),fontWeight:FontWeight.w600),
+          ),
+          const SizedBox(height:5),
+          SizedBox(
+            height:54,
+            child:colors.isEmpty
+              ?Container(
+                  alignment:Alignment.center,
+                  decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff514231))),
+                  child:Text(
+                    dyeTarget==null
+                      ?(locale=='spn'?'Selecciona un objeto.':'Select a target item.')
+                      :(locale=='spn'?'Sin paleta disponible.':'No palette available.'),
+                    style:const TextStyle(fontSize:8.5,color:Colors.white38),
+                  ),
+                )
+              :ListView.separated(
+                  scrollDirection:Axis.horizontal,
+                  itemCount:colors.length,
+                  separatorBuilder:(_,__)=>const SizedBox(width:8),
+                  itemBuilder:(context,index){
+                    final color=colors[index];
+                    return Tooltip(
+                      message:'A ${color.alpha} · S ${color.saturation} · RGB ${color.r},${color.g},${color.b}',
+                      child:Container(
+                        width:54,
+                        decoration:BoxDecoration(
+                          color:Color(color.argb),
+                          border:Border.all(color:const Color(0xffd4b56c),width:2),
+                          boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:4)],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+          ),
+          const SizedBox(height:8),
+          if(dyeResult!=null)
+            Container(
+              width:double.infinity,padding:const EdgeInsets.all(7),
+              decoration:BoxDecoration(
+                color:const Color(0xff17120e),
+                border:Border.all(color:dyeResult!.success?const Color(0xff6d9b58):const Color(0xff8f493e)),
+              ),
+              child:Row(children:[
+                Container(
+                  width:28,height:28,
+                  decoration:BoxDecoration(
+                    color:Color(dyeResult!.color.argb),
+                    border:Border.all(color:Colors.white38),
+                  ),
+                ),
+                const SizedBox(width:8),
+                Expanded(child:Text(
+                  dyeResult!.success
+                    ?(locale=='spn'?'Color aplicado y confirmado por World.':'Color applied and confirmed by World.')
+                    :(locale=='spn'?'World rechazó el tinte.':'World rejected the dye.'),
+                  style:const TextStyle(fontSize:8.5,color:Colors.white70),
+                )),
+              ]),
+            ),
+          const Spacer(),
+          Text(
+            locale=='spn'
+              ?'La confirmación usa la lógica autoritativa del servidor; no se inventa el color localmente.'
+              :'Confirmation uses authoritative server logic; the client does not invent the color locally.',
+            style:const TextStyle(fontSize:7.5,color:Colors.white38),
+          ),
+          const SizedBox(height:6),
+          Row(children:[
+            const Spacer(),
+            SizedBox(
+              width:110,height:30,
+              child:shaiyaRedButton(
+                dyeBusy?(locale=='spn'?'Procesando…':'Working…'):(locale=='spn'?'Confirmar':'Confirm'),
+                !dyeBusy&&dyeTarget!=null&&colors.isNotEmpty?onConfirmDye:null,
+                width:110,height:30,fontSize:9,
+              ),
+            ),
+          ]),
+        ]),
+      ),
+      footer:Container(
+        height:30,padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          Text(locale=='spn'?'Tinte autoritativo':'Authoritative dyeing',style:const TextStyle(fontSize:8,color:Colors.white38)),
+          const Spacer(),
+          GestureDetector(onTap:onCloseDyeing,child:const Icon(Icons.close,size:18,color:Colors.white70)),
+        ]),
+      ),
+    );
+  }
+
   Widget _gateWindow(){
     final g=gate!;
     final localized=catalog.questText(locale)?.npc(g.type,g.typeId);
