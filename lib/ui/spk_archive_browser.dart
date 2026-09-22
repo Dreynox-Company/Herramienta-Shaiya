@@ -1761,116 +1761,111 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             TextButton.icon(
               onPressed: busy ? null : captureResourceProfile,
               icon: const Icon(Icons.security_outlined, size: 17),
-              label: const Text('AutoPerfil SPK'),
+              label: const Text('Desbloquear SPK'),
             ),
-          TextButton.icon(
-            onPressed: busy ? null : loadResourceProfile,
-            icon: const Icon(Icons.key_outlined, size: 17),
-            label: const Text('Perfil de recursos'),
-          ),
-          if (source.canExtractAll)
+          if (widget.onMount != null && source.canExtractAll)
             TextButton.icon(
-              onPressed: busy ? null : discoverCoreTables,
-              icon: const Icon(Icons.table_view_outlined, size: 17),
-              label: const Text('Descubrir tablas'),
-            ),
-          if (source.canExtractAll)
-            TextButton.icon(
-              onPressed: busy || source.fullyValidatedResources
-                  ? null
-                  : auditAllResources,
-              icon: Icon(
-                source.fullyValidatedResources
-                    ? Icons.verified_outlined
-                    : Icons.fact_check_outlined,
-                size: 17,
-              ),
-              label: Text(
-                source.fullyValidatedResources
-                    ? 'SPK auditado'
-                    : 'Auditar todo',
-              ),
-            ),
-          if (widget.onMount != null)
-            TextButton.icon(
-              onPressed: busy || !source.canExtractAll ? null : mountInStudio,
+              onPressed: busy ? null : mountInStudio,
               icon: const Icon(Icons.view_in_ar_outlined, size: 17),
               label: Text(
                 hasConfirmedCoreTables ? 'Usar en Studio' : 'Preparar Studio',
               ),
             ),
+          if (source.canExtractAll)
+            FilledButton.icon(
+              onPressed: busy ? null : extractAll,
+              icon: const Icon(Icons.folder_copy_outlined, size: 17),
+              label: const Text('Extraer todo'),
+            ),
           PopupMenuButton<String>(
             enabled: !busy,
-            tooltip: 'Nombres y rutas',
-            icon: const Icon(Icons.drive_file_rename_outline, size: 18),
+            tooltip: 'Más acciones SPK',
+            icon: const Icon(Icons.more_vert),
             onSelected: (value) {
+              if (value == 'profile') loadResourceProfile();
+              if (value == 'discover') discoverCoreTables();
+              if (value == 'audit') auditAllResources();
               if (value == 'resolve') resolveNamesFromReferenceData();
               if (value == 'import') importNameMap();
-              if (value == 'export') exportNameMap();
+              if (value == 'exportNames') exportNameMap();
+              if (value == 'inventory') exportInventory();
+              if (value == 'extractFolder') extractCurrentFolder();
+              if (value == 'extractReadable') extractReadable();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.key_outlined),
+                  title: Text('Perfil de recursos'),
+                ),
+              ),
+              if (source.canExtractAll)
+                const PopupMenuItem(
+                  value: 'discover',
+                  child: ListTile(
+                    leading: Icon(Icons.table_view_outlined),
+                    title: Text('Descubrir tablas'),
+                  ),
+                ),
+              if (source.canExtractAll && !source.fullyValidatedResources)
+                const PopupMenuItem(
+                  value: 'audit',
+                  child: ListTile(
+                    leading: Icon(Icons.fact_check_outlined),
+                    title: Text('Auditar todos los payloads'),
+                  ),
+                ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
                 value: 'resolve',
                 child: ListTile(
                   leading: Icon(Icons.auto_awesome_outlined),
-                  title: Text('Resolver con DATA de referencia'),
-                  subtitle: Text('Tamaño + Zstandard nivel 3'),
+                  title: Text('Resolver nombres con DATA de referencia'),
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'import',
                 child: ListTile(
                   leading: Icon(Icons.file_open_outlined),
                   title: Text('Importar mapa de nombres'),
                 ),
               ),
-              PopupMenuItem(
-                value: 'export',
+              const PopupMenuItem(
+                value: 'exportNames',
                 child: ListTile(
                   leading: Icon(Icons.save_alt_outlined),
-                  title: Text('Exportar mapa actual'),
+                  title: Text('Exportar mapa de nombres'),
                 ),
               ),
+              const PopupMenuItem(
+                value: 'inventory',
+                child: ListTile(
+                  leading: Icon(Icons.receipt_long_outlined),
+                  title: Text('Exportar inventario / diagnóstico'),
+                ),
+              ),
+              if (currentFolder.isNotEmpty &&
+                  (source.canReadSimpleResources ||
+                      source.canReadFragmentedResources))
+                const PopupMenuItem(
+                  value: 'extractFolder',
+                  child: ListTile(
+                    leading: Icon(Icons.drive_folder_upload_outlined),
+                    title: Text('Extraer carpeta actual'),
+                  ),
+                ),
+              if (!source.canExtractAll && source.canReadSimpleResources)
+                const PopupMenuItem(
+                  value: 'extractReadable',
+                  child: ListTile(
+                    leading: Icon(Icons.rule_folder_outlined),
+                    title: Text('Extraer recursos legibles'),
+                  ),
+                ),
             ],
           ),
-          TextButton.icon(
-            onPressed: busy ? null : exportInventory,
-            icon: const Icon(Icons.receipt_long_outlined, size: 17),
-            label: const Text('Inventario'),
-          ),
-          TextButton.icon(
-            onPressed: busy ||
-                    selected == null ||
-                    !source.canReadRecord(selected!)
-                ? null
-                : extractSelected,
-            icon: const Icon(Icons.file_download_outlined, size: 17),
-            label: const Text('Extraer'),
-          ),
-          TextButton.icon(
-            onPressed: busy ||
-                    currentFolder.isEmpty ||
-                    (!source.canReadSimpleResources &&
-                        !source.canReadFragmentedResources)
-                ? null
-                : extractCurrentFolder,
-            icon: const Icon(Icons.drive_folder_upload_outlined, size: 17),
-            label: const Text('Extraer carpeta'),
-          ),
-          if (!source.canExtractAll)
-            TextButton.icon(
-              onPressed: busy || !source.canReadSimpleResources
-                  ? null
-                  : extractReadable,
-              icon: const Icon(Icons.rule_folder_outlined, size: 17),
-              label: const Text('Extraer legibles'),
-            ),
-          FilledButton.icon(
-            onPressed: busy || !source.canExtractAll ? null : extractAll,
-            icon: const Icon(Icons.folder_copy_outlined, size: 17),
-            label: const Text('Extraer todo'),
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 6),
         ],
       ),
       body: Column(
