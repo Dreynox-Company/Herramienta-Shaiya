@@ -62,6 +62,10 @@ class _GameClientPageState extends State<GameClientPage> {
   String liveGuildName='';
   bool guildListLoading=false;
   PsGuildCreateInvite? pendingGuildCreateInvite;
+  final Map<int,PsTradeItem> localTradeItems=<int,PsTradeItem>{},remoteTradeItems=<int,PsTradeItem>{};
+  int localTradeMoney=0,remoteTradeMoney=0;
+  bool localTradeDecided=false,remoteTradeDecided=false,localTradeConfirmed=false,remoteTradeConfirmed=false;
+  int? tradePartnerId,pendingTradeRequesterId,outgoingTradeTargetId;
   int? partyLeaderId,pendingPartyRequesterId,outgoingPartyInviteId;
   String? pendingFriendRequestName;
   StreamSubscription<PsPacket>? livePacketSubscription;
@@ -90,6 +94,7 @@ class _GameClientPageState extends State<GameClientPage> {
   bool rewardSelection=false;
   int rewardNpcId=0;
   bool inventoryOpen=false;
+  bool tradeOpen=false;
   bool socialOpen=false;
   bool guildOpen=false;
   bool statusOpen=false;
@@ -1326,6 +1331,97 @@ class _GameClientPageState extends State<GameClientPage> {
     _upsertPartyMember(update(current));
   }
 
+  String _knownCharacterName(int id){
+    if(id==liveCharacter?.id)return nameController.text;
+    final friend=liveFriends.where((f)=>f.id==id).firstOrNull;if(friend!=null)return friend.name;
+    final party=livePartyMembers.where((m)=>m.id==id).firstOrNull;if(party!=null)return party.name;
+    final guild=liveGuildMembers.where((m)=>m.id==id).firstOrNull;if(guild!=null)return guild.name;
+    return '#'+id.toString();
+  }
+
+  void _resetTrade({bool close=true}){
+    localTradeItems.clear();remoteTradeItems.clear();
+    localTradeMoney=remoteTradeMoney=0;
+    localTradeDecided=remoteTradeDecided=localTradeConfirmed=remoteTradeConfirmed=false;
+    tradePartnerId=null;outgoingTradeTargetId=null;
+    if(close){tradeOpen=false;pendingTradeRequesterId=null;}
+  }
+
+  PsTradeItem _tradeItemFromInventory(PsInventoryItem item,int tradeSlot,int count)=>PsTradeItem(
+    tradeSlot:tradeSlot,type:item.type,typeId:item.typeId,count:count,quality:item.quality,
+    gems:item.gems,craftName:item.craftName,dyed:item.dyed,
+  );
+
+  Future<void> _requestTrade(int characterId) async {
+    final session=liveWorld;
+    if(session==null||characterId==liveCharacter?.id||tradeOpen)return;
+    try{
+      outgoingTradeTargetId=characterId;
+      await session.requestTrade(characterId);
+      messages.insert(0,'[Trade] Solicitud enviada a '+_knownCharacterName(characterId)+'.');
+    }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _respondTrade(bool accepted) async {
+    final session=liveWorld,id=pendingTradeRequesterId;
+    if(session==null||id==null)return;
+    try{
+      await session.respondTrade(declined:!accepted);
+      if(accepted){
+        tradePartnerId=id;tradeOpen=true;inventoryOpen=true;
+        messages.insert(0,'[Trade] Aceptaste intercambio con '+_knownCharacterName(id)+'.');
+      }else{
+        tradeOpen=false;
+        messages.insert(0,'[Trade] Intercambio rechazado.');
+      }
+      pendingTradeRequesterId=null;
+    }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _addInventoryToTrade(PsInventoryItem item) async {
+    final session=liveWorld;
+    if(session==null||!tradeOpen||tradePartnerId==null||item.bag==0)return;
+    final occupied=localTradeItems.keys.toSet();
+    int? tradeSlot;for(var i=0;i<8;i++){if(!occupied.contains(i)){tradeSlot=i;break;}}
+    if(tradeSlot==null){messages.insert(0,'[Trade] No hay slots libres.');if(mounted)setState((){});return;}
+    try{
+      await session.addTradeItem(item.bag,item.slot,item.count,tradeSlot);
+      messages.insert(0,'[Trade] Ofertando '+(catalog?.itemName(item.type,item.typeId,uiLocale)??item.key)+'…');
+    }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _removeTradeItem(int tradeSlot) async {
+    final session=liveWorld;if(session==null||!tradeOpen)return;
+    try{
+      await session.removeTradeItem(tradeSlot);
+      localTradeItems.remove(tradeSlot);
+      localTradeDecided=remoteTradeDecided=localTradeConfirmed=remoteTradeConfirmed=false;
+    }catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _setTradeMoney(int value) async {
+    final session=liveWorld;if(session==null||!tradeOpen)return;
+    final amount=value.clamp(0,liveGold??0).toInt();
+    try{await session.addTradeMoney(amount);}
+    catch(e){messages.insert(0,'[Trade] '+e.toString());}
+    if(mounted)setState((){});
+  }
+
+  Future<void> _decideTrade(bool decided) async {
+    final session=liveWorld;if(session==null||!tradeOpen)return;
+    try{await session.decideTrade(decided);}
+    catch(e){messages.insert(0,'[Trade] '+e.toString());}
+  }
+
+  Future<void> _finishTrade(int result) async {
+    final session=liveWorld;if(session==null||!tradeOpen)return;
+    try{await session.finishTrade(result);}
+    catch(e){messages.insert(0,'[Trade] '+e.toString());}
+  }
   void _upsertGuildSummary(PsGuildSummary guild){
     guildDirectory=[
       ...guildDirectory.where((g)=>g.id!=guild.id),
@@ -2520,6 +2616,17 @@ class _GameClientPageState extends State<GameClientPage> {
             guildName:liveGuildName,
             guildListLoading:guildListLoading,
             pendingGuildCreateInvite:pendingGuildCreateInvite,
+            tradeOpen:tradeOpen,
+            tradePartnerId:tradePartnerId,
+            pendingTradeRequesterId:pendingTradeRequesterId,
+            localTradeItems:localTradeItems,
+            remoteTradeItems:remoteTradeItems,
+            localTradeMoney:localTradeMoney,
+            remoteTradeMoney:remoteTradeMoney,
+            localTradeDecided:localTradeDecided,
+            remoteTradeDecided:remoteTradeDecided,
+            localTradeConfirmed:localTradeConfirmed,
+            remoteTradeConfirmed:remoteTradeConfirmed,
             selfCharacterId:liveCharacter?.id,
             pendingFriendRequestName:pendingFriendRequestName,
             pendingPartyRequesterId:pendingPartyRequesterId,
@@ -2579,6 +2686,13 @@ class _GameClientPageState extends State<GameClientPage> {
             onCreateGuild:(name,message)=>unawaited(_createGuild(name,message)),
             onRespondGuildCreate:(accepted)=>unawaited(_respondGuildCreate(accepted)),
             onDismantleGuild:()=>unawaited(_dismantleGuild()),
+            onRequestTrade:(id)=>unawaited(_requestTrade(id)),
+            onRespondTrade:(accepted)=>unawaited(_respondTrade(accepted)),
+            onTradeInventoryItem:(item)=>unawaited(_addInventoryToTrade(item)),
+            onRemoveTradeItem:(slot)=>unawaited(_removeTradeItem(slot)),
+            onSetTradeMoney:(money)=>unawaited(_setTradeMoney(money)),
+            onDecideTrade:(ready)=>unawaited(_decideTrade(ready)),
+            onFinishTrade:(result)=>unawaited(_finishTrade(result)),
             onRequestFriend:(name)=>unawaited(_requestFriend(name)),
             onRespondFriend:(accepted)=>unawaited(_respondFriend(accepted)),
             onDeleteFriend:(friend)=>unawaited(_deleteFriend(friend)),
