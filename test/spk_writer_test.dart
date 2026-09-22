@@ -350,6 +350,9 @@ void main() {
       expect(result.resources, 5);
       expect(result.validation['status'], 'validated');
       expect(await target.exists(), isTrue);
+      expect(await File(result.profileFile).exists(), isTrue);
+      expect(await File(result.namesFile).exists(), isTrue);
+      expect(await File(result.auditFile).exists(), isTrue);
       expect(
         sha256.convert(await fixture.file.readAsBytes()).toString(),
         originalHash,
@@ -374,6 +377,7 @@ void main() {
       final fragmented = rebuilt.index.resources.singleWhere(
         (row) => row.entryId == 0x2200,
       );
+      expect(fragmented.chunkCount, greaterThan(2));
       expect(
         (await rebuilt.readEntry(simple)).bytes,
         orderedEquals(simpleReplacement),
@@ -382,6 +386,15 @@ void main() {
         (await rebuilt.readEntry(fragmented)).bytes,
         orderedEquals(fragmentedReplacement),
       );
+
+      final auditJson = jsonDecode(
+        await File(result.auditFile).readAsString(),
+      ) as Map<String, dynamic>;
+      final restored = await SpkArchiveSource.open(target.path, profile);
+      await restored.validateSimpleResourceProfile();
+      await restored.validateFragmentedResourceProfile();
+      expect(restored.restoreFullResourceValidation(auditJson), isTrue);
+      expect(restored.fullyValidatedResources, isTrue);
 
       final special = rebuilt.index.specialRecords.single;
       expect(special.entryId, 0x3300);
