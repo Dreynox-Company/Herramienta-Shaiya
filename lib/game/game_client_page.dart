@@ -56,6 +56,8 @@ class _GameClientPageState extends State<GameClientPage> {
   String? targetPlayerName;
   PsSkillBook? liveSkills;
   PsSkillBar? liveSkillBar;
+  PsSkillCasting? liveSkillCasting;
+  DateTime? liveSkillCastStartedAt,liveSkillCastEndsAt;
   List<PsInventoryItem> liveInventory=<PsInventoryItem>[];
   List<PsInventoryItem> liveWarehouse=<PsInventoryItem>[];
   List<PsInventoryItem> liveGuildWarehouse=<PsInventoryItem>[];
