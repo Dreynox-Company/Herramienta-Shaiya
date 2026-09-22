@@ -23,6 +23,9 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("RUTA INFERIDA", browser)
         self.assertIn("Ruta inferida", browser)
         self.assertIn(": captureResourceProfile", browser)
+        self.assertIn("build-provenance.json", browser)
+        self.assertIn("'studioBuild': studioBuild", browser)
+        self.assertIn("'schema': 3", browser)
 
     def test_spk_editor_exposes_verified_repack(self):
         editor = (ROOT / 'lib' / 'ui' / 'data_editor.dart').read_text(
