@@ -170,39 +170,21 @@ class SpkWriter {
     return packed;
   }
 
-  static List<Uint8List> _splitPackedLikeOriginal(
+  static List<Uint8List> _splitPacked(
     Uint8List packed,
-    int chunks,
     int blockBytes,
   ) {
-    if (chunks < 1 || packed.length < chunks) {
+    if (packed.isEmpty) {
       throw const SpkFailure(
-        'SPK_WRITER_FRAGMENT_TOO_SMALL',
-        'El recurso editado no permite conservar la cadena de fragmentos.',
+        'SPK_WRITER_FRAGMENT_EMPTY',
+        'Un recurso fragmentado no puede reconstruirse con payload vacío.',
       );
     }
     final block = blockBytes > 0 ? blockBytes : 262144;
-    if (packed.length > block * chunks) {
-      throw SpkFailure(
-        'SPK_WRITER_FRAGMENT_CAPACITY',
-        'El recurso editado excede la capacidad de la cadena fragmentada '
-            'original.',
-        {
-          'packedBytes': packed.length,
-          'chunks': chunks,
-          'blockBytes': block,
-          'capacity': block * chunks,
-        },
-      );
-    }
-    final base = packed.length ~/ chunks;
-    final extra = packed.length % chunks;
     final out = <Uint8List>[];
-    var at = 0;
-    for (var i = 0; i < chunks; i++) {
-      final size = base + (i < extra ? 1 : 0);
-      out.add(Uint8List.fromList(packed.sublist(at, at + size)));
-      at += size;
+    for (var at = 0; at < packed.length; at += block) {
+      final end = at + block < packed.length ? at + block : packed.length;
+      out.add(Uint8List.fromList(packed.sublist(at, end)));
     }
     return out;
   }
@@ -386,12 +368,40 @@ class SpkWriter {
       await output.writeFrom(headerTemplate);
       var dataOffset = spkHeaderBytes;
       final rewritten = <int, SpkRecord>{};
-      final auxiliary = List<SpkAuxRecord?>.filled(
-        source.index.auxiliary.length,
-        null,
-      );
       final resources = source.index.resources.toList()
         ..sort((a, b) => a.dataOffset.compareTo(b.dataOffset));
+
+      final fragmentPlans = <int, List<Uint8List>>{};
+      for (final row in source.index.records.where((row) => row.fragmented)) {
+        final replacement = replacements[row.entryId];
+        if (replacement == null) continue;
+        control.check();
+        final originalParts = await _fragmentPackedParts(source, row);
+        final originalPacked = BytesBuilder(copy: false);
+        for (final part in originalParts) {
+          originalPacked.add(part);
+        }
+        final packed = await _packReplacement(
+          replacement,
+          originalPacked.takeBytes(),
+        );
+        fragmentPlans[row.ordinal] = _splitPacked(
+          packed,
+          source.index.header.blockBytes,
+        );
+      }
+
+      final fragmentStarts = <int, int>{};
+      var auxiliaryCount = 0;
+      for (final row in source.index.records.where((row) => row.fragmented)) {
+        fragmentStarts[row.ordinal] = auxiliaryCount;
+        auxiliaryCount +=
+            fragmentPlans[row.ordinal]?.length ?? row.chunkCount;
+      }
+      final auxiliary = List<SpkAuxRecord?>.filled(
+        auxiliaryCount,
+        null,
+      );
 
       for (var i = 0; i < resources.length; i++) {
         control.check();
@@ -451,40 +461,23 @@ class SpkWriter {
           );
           dataOffset += cipher.length;
         } else if (row.fragmented) {
-          final originalParts = await _fragmentPackedParts(source, row);
-          List<Uint8List> clearParts;
-          var decodedBytes = row.decodedBytes;
-          if (replacement == null) {
-            clearParts = originalParts;
-          } else {
-            final originalPacked = BytesBuilder(copy: false);
-            for (final part in originalParts) {
-              originalPacked.add(part);
-            }
-            final packed = await _packReplacement(
-              replacement,
-              originalPacked.takeBytes(),
-            );
-            clearParts = _splitPackedLikeOriginal(
-              packed,
-              row.chunkCount,
-              source.index.header.blockBytes,
-            );
-            decodedBytes = replacement.length;
-          }
-
-          if (clearParts.length != row.chunkCount) {
+          final planned = fragmentPlans[row.ordinal];
+          final clearParts =
+              planned ?? await _fragmentPackedParts(source, row);
+          final decodedBytes =
+              replacement == null ? row.decodedBytes : replacement.length;
+          final auxiliaryStart = fragmentStarts[row.ordinal];
+          if (auxiliaryStart == null) {
             throw const SpkFailure(
-              'SPK_WRITER_FRAGMENT_COUNT',
-              'La reconstrucción cambió inesperadamente la cadena de chunks.',
+              'SPK_WRITER_FRAGMENT_PLAN',
+              'No se planificó la cadena auxiliar del recurso.',
             );
           }
-          final auxiliaryStart = row.auxiliaryStart;
           final resourceOffset = dataOffset;
           var totalStored = 0;
           for (var local = 0; local < clearParts.length; local++) {
             final clear = clearParts[local];
-            final partOrdinal = row.auxiliaryStart + local;
+            final partOrdinal = auxiliaryStart + local;
             final placeholderRecord = SpkRecord(
               ordinal: row.ordinal,
               entryId: row.entryId,
@@ -535,8 +528,8 @@ class SpkWriter {
             decodedBytes: decodedBytes,
             recordType: row.recordType,
             auxiliaryStart: auxiliaryStart,
-            chunkCount: row.chunkCount,
-            metadata: _fragmentMetadata(row, row.chunkCount),
+            chunkCount: clearParts.length,
+            metadata: _fragmentMetadata(row, clearParts.length),
           );
         }
 
