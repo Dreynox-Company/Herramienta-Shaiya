@@ -1408,7 +1408,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         DateTime.now().millisecondsSinceEpoch.toString(),
       ),
     );
-    operation = 'Preparando ResourceProbe V10…';
+    operation = 'Preparando ResourceProbe V11…';
     if (mounted) setState(() {});
 
     final process = await Process.start(
@@ -1459,7 +1459,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     await File(p.join(output.path, 'probe-console.log')).writeAsString(
       [
-        'Shaiya Studio ResourceProbe V10',
+        'Shaiya Studio ResourceProbe V11',
         'exitCode=$exitCode',
         'game=${game.path}',
         'data=${source.file.path}',
