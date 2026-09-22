@@ -60,6 +60,29 @@ class AnimatedWorldPart {
   }
 }
 
+class AnimatedWorldTransform {
+  final t.Group group;
+  final v.Matrix4 base;
+  final ManiData animation;
+  double time=0;
+  AnimatedWorldTransform(this.group,v.Matrix4 matrix,this.animation)
+      :base=v.Matrix4.fromList(matrix.storage);
+
+  void tick(double dt){
+    if(!animation.rotationEnabled||animation.animationSpeed.abs()<1e-7)return;
+    time+=dt;
+    final angle=time*animation.animationSpeed;
+    final axis=animation.rotationAxis;
+    final rotation=v.Matrix4.identity();
+    if(axis.x.abs()>1e-6)rotation.rotateX(angle*axis.x);
+    if(axis.y.abs()>1e-6)rotation.rotateY(angle*axis.y);
+    if(axis.z.abs()>1e-6)rotation.rotateZ(angle*axis.z);
+    final next=base*rotation;
+    group.matrix.copyFromArray(next.storage);
+    group.matrixWorldNeedsUpdate=true;
+  }
+}
+
 class Actor {
   final t.Group root=t.Group();final List<RenderPart> parts=[];
   ClipData? clip,idle,normal,walk,run,riderIdle,riderMoving;
@@ -117,7 +140,9 @@ class StudioScene extends ChangeNotifier {
   final movementTransitions=LocomotionTransitions();final Set<String> _missingMovementWarnings={};
   t.Group environment=t.Group();final List<RenderPart> environmentParts=[];
   final List<AnimatedWorldPart> animatedWorldParts=[];
+  final List<AnimatedWorldTransform> animatedWorldTransforms=[];
   final Map<String,VaniData> _vaniCache=<String,VaniData>{};
+  final Map<String,ManiData> _maniCache=<String,ManiData>{};
   WorldData? world;WorldCollisionField? worldCollision;String? worldPath,effectPath,skyPath;
   final List<String> loadedWorldAssets=[];
   final List<String> missingWorldAssets=[];
@@ -928,6 +953,7 @@ class StudioScene extends ChangeNotifier {
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
     for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}
     for(final p in animatedWorldParts){p.tick(delta);}
+    for(final p in animatedWorldTransforms){p.tick(delta);}
     if(character!=null&&moving&&!sceneCombatLocked&&desired!=null&&character!.clip==desired&&character!.playing){
       final direction=cameraRelativeMovement(walkX,walkZ,yaw);
       final speed=mount!=null?(running?7.0:3.5):(running?4.0:2.0);
@@ -1017,7 +1043,7 @@ class StudioScene extends ChangeNotifier {
   }
   Future<void> setWorld(String? path,{double? x,double? z}) async {
     final rev=++_worldRevision;
-    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();animatedWorldParts.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldCollision=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;unawaited(_stopWorldAudio());updateCamera();notifyListeners();return;}
+    if(path==null){loadedWorldAssets.clear();missingWorldAssets.clear();animatedWorldParts.clear();animatedWorldTransforms.clear();for(final p in environmentParts){p.dispose();}environmentParts.clear();environment.removeFromParent();environment=t.Group();view!.scene.add(environment);world=null;worldCollision=null;worldPath=null;groundY=0;originX=originZ=0;enemy?.root.position.y=0;unawaited(_stopWorldAudio());updateCamera();notifyListeners();return;}
     loadedWorldAssets.clear();missingWorldAssets.clear();
     final lib=catalog!.library,w=WorldData.parse(await lib.read(path),path);
 
@@ -1064,7 +1090,7 @@ class StudioScene extends ChangeNotifier {
         stage.scale.z=-1;
         stage.position.setValues(-ox,0,oz);
 
-        animatedWorldParts.clear();
+        animatedWorldParts.clear();animatedWorldTransforms.clear();
         for(final p in environmentParts){p.dispose();}
         environmentParts..clear()..addAll(parts);
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
@@ -1083,7 +1109,7 @@ class StudioScene extends ChangeNotifier {
     }
 
     if(w.size<128)throw const FormatException('Este mapa es menor que el tamaño de sector configurado.');
-    final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[],animated=<AnimatedWorldPart>[];
+    final ox=(x??w.size/2).clamp(64.0,w.size-64.0),oz=(z??w.size/2).clamp(64.0,w.size-64.0),stage=t.Group(),parts=<RenderPart>[],animated=<AnimatedWorldPart>[],animatedTransforms=<AnimatedWorldTransform>[];
     try{
       final grouped=<int,List<double>>{},uv=<int,List<double>>{};final width=w.size~/2+1;
       for(var dz=-64;dz<64;dz+=2){for(var dx=-64;dx<64;dx+=2){final xx=ox+dx,zz=oz+dz;final type=w.types[(zz~/2)*width+xx~/2],layer=type<w.layers.length?type:0;final verts=grouped.putIfAbsent(layer,()=>[]),tex=uv.putIfAbsent(layer,()=>[]),tiling=w.layers.isEmpty?4.0:math.max(.1,w.layers[layer].tile.abs());for(final point in [[0,0],[2,0],[0,2],[2,0],[2,2],[0,2]]){final px=xx+point[0],pz=zz+point[1];verts.addAll([px-ox,w.heightAt(px,pz,scale:.02,offset:-200),-(pz-oz)]);tex.addAll([px/tiling,pz/tiling]);}}}
@@ -1092,11 +1118,12 @@ class StudioScene extends ChangeNotifier {
       final collisionTriangles=<WorldCollisionTriangle>[];
       final nearby=w.objects.where((o)=>(o.position.x-ox).abs()<82&&(o.position.z-oz).abs()<82).toList()..sort((a,b)=>((a.position.x-ox).abs()+(a.position.z-oz).abs()).compareTo((b.position.x-ox).abs()+(b.position.z-oz).abs()));
       for(final obj in nearby){
-        final roots=switch(obj.category){
-          'dungeon'=><String>['world/dungeon'],
-          'VAni'=><String>['entity/VAni'],
-          _=><String>['entity/${obj.category}'],
-        };
+        final roots=obj.category.startsWith('VAni')
+          ?<String>['entity/VAni']
+          :switch(obj.category){
+            'dungeon'=><String>['world/dungeon'],
+            _=><String>['entity/${obj.category}'],
+          };
         final model=lib.resolve(obj.asset,roots);
         if(model==null){
           missingWorldAssets.add('${obj.category}:${obj.asset}');
@@ -1163,11 +1190,29 @@ class StudioScene extends ChangeNotifier {
           group.matrix.copyFromArray(instanceMatrix.storage);
           group.matrixWorldNeedsUpdate=true;
           stage.add(group);loaded++;loadedWorldAssets.add('${obj.category}:${obj.asset}');
+          if(obj.category=='Building'){
+            for(final binding in w.maniBindings.where((m)=>m.buildingIndex==obj.sourceIndex)){
+              final maniPath=lib.resolve(binding.asset,['entity/MAni'],uniqueFallback:true);
+              if(maniPath==null){
+                missingWorldAssets.add('MAni:${binding.asset}');
+                continue;
+              }
+              try{
+                final mani=_maniCache[maniPath]??=readMani(await lib.read(maniPath),maniPath);
+                if(mani.rotationEnabled){
+                  animatedTransforms.add(AnimatedWorldTransform(group,instanceMatrix,mani));
+                  loadedWorldAssets.add('MAni:${binding.asset}');
+                }
+              }catch(e){
+                missingWorldAssets.add('MAni:${binding.asset}:$e');
+              }
+            }
+          }
         }catch(e){missingWorldAssets.add('error:${obj.asset}:$e');report('Objeto $model: $e');}
         if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
       }
       if(disposed||rev!=_worldRevision){for(final p in parts){p.dispose();}return;}
-      animatedWorldParts..clear()..addAll(animated);for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldCollision=WorldCollisionField(collisionTriangles);worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
+      animatedWorldParts..clear()..addAll(animated);animatedWorldTransforms..clear()..addAll(animatedTransforms);for(final p in environmentParts){p.dispose();}environmentParts..clear()..addAll(parts);environment.removeFromParent();environment=stage;view!.scene.add(stage);world=w;worldCollision=WorldCollisionField(collisionTriangles);worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
       if(sky==null&&catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
@@ -1178,7 +1223,7 @@ class StudioScene extends ChangeNotifier {
       say('Sector de 128 × 128 m · $loaded objetos · altura original · ${worldCollision?.triangles.length??0} triángulos de colisión SMOD.');
     }catch(_){for(final p in parts){p.dispose();}rethrow;}
   }
-  @override void dispose(){disposed=true;animatedWorldParts.clear();_vaniCache.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
+  @override void dispose(){disposed=true;animatedWorldParts.clear();animatedWorldTransforms.clear();_vaniCache.clear();_maniCache.clear();backdropTexture?.dispose();++_appearanceRevision;++_creatureRevision;++_mountRevision;++_wingRevision;++_worldRevision;++_weaponRevision;++_effectRevision;++_skyRevision;sky?.dispose();for(final a in [character,enemy,mount,wing,...gameActors]){a?.dispose();}gameActors.clear();gameLabels.clear();networkPlayerActors.clear();networkPlayerMountActors.clear();networkPlayerAnimations.clear();networkPlayerGroundY.clear();networkPlayerRiderHeight.clear();weapon?.dispose();secondWeapon?.dispose();for(final p in environmentParts){p.dispose();}effectTexture?.dispose();_audio?.dispose();_worldMusicAudio?.dispose();_worldAmbientAudio?.dispose();_footstepAudio?.dispose();super.dispose();}
 }
 int _averageTextureColor(Map<String,Object> args){
   final p=Pixels.decode(args['bytes'] as Uint8List,args['path'] as String);
