@@ -119,6 +119,30 @@ Uint8List dgFixture() {
 }
 
 
+
+Uint8List vaniFixture(){
+  final bytes=BytesBuilder();
+  void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void i32(int x){final b=ByteData(4)..setInt32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void u16(int x){final b=ByteData(2)..setUint16(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void f32(double x){final b=ByteData(4)..setFloat32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
+  void vec(double x,double y,double z){f32(x);f32(y);f32(z);}
+  void str(String value){final raw=Uint8List.fromList(value.codeUnits);u32(raw.length);bytes.add(raw);}
+  vec(0,1,0);f32(3);vec(-1,0,-1);vec(1,2,1);
+  u32(1);u32(2);i32(33);
+  str('grass.dds');
+  u32(1);u16(0);u16(1);u16(2);
+  u32(3);
+  for(var frame=0;frame<2;frame++){
+    for(final p in <List<double>>[[0,0,0],[1,0,0],[0,0,1]]){
+      vec(p[0],p[1]+frame*.5,p[2]);
+      vec(0,1,0);i32(-1);f32(p[0]);f32(p[2]);
+    }
+  }
+  vec(-1,0,-1);vec(1,2,1);i32(0);
+  return bytes.takeBytes();
+}
+
 Uint8List worldAudioFixture(){
   final bytes=BytesBuilder();
   void u32(int x){final b=ByteData(4)..setUint32(0,x,Endian.little);bytes.add(b.buffer.asUint8List());}
@@ -350,6 +374,23 @@ void main() {
     });
   });
 
+
+
+  group('VAni',(){
+    test('decodifica frames, UV y triángulos de animación de vértices',(){
+      final vani=VaniData.parse(vaniFixture(),'grass.vani');
+      expect(vani.frameCount,2);
+      expect(vani.meshes.length,1);
+      expect(vani.meshes.single.texture,'grass.dds');
+      expect(vani.meshes.single.indices,[0,1,2]);
+      final first=vani.meshes.single.frame(0),second=vani.meshes.single.frame(1);
+      expect(first.vertices,3);
+      expect(first.triangles,1);
+      expect(first.positions[1],closeTo(0,1e-6));
+      expect(second.positions[1],closeTo(.5,1e-6));
+      expect(second.uv,[0,0,1,0,0,1]);
+    });
+  });
 
   group('WLD audio zones',(){
     test('decodifica música y efectos ambientales nativos',(){
