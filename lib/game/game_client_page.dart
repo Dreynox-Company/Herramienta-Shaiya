@@ -947,7 +947,7 @@ class _GameClientPageState extends State<GameClientPage> {
   }
 
   ({int bag,int slot})? _firstFreeInventorySlot(){
-    final occupied={<int>{for(final i in liveInventory.where((i)=>i.bag>=1&&i.bag<=5))i.bag*100+i.slot};
+    final occupied=<int>{for(final i in liveInventory.where((i)=>i.bag>=1&&i.bag<=5))i.bag*100+i.slot};
     for(var bag=1;bag<=5;bag++){for(var slot=0;slot<24;slot++){if(!occupied.contains(bag*100+slot))return (bag:bag,slot:slot);}}
     return null;
   }
