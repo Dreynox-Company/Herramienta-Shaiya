@@ -2574,13 +2574,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (picked == null) return;
 
     final replacementFile = File(picked.path);
-    final replacementBytes = await replacementFile.readAsBytes();
     const maxReplacementBytes = 128 * 1024 * 1024;
-    if (replacementBytes.length > maxReplacementBytes) {
+    final replacementLength = await replacementFile.length();
+    if (replacementLength > maxReplacementBytes) {
       throw const FormatException(
         'El reemplazo supera el límite de 128 MiB del workspace SPK.',
       );
     }
+    final replacementBytes = await replacementFile.readAsBytes();
 
     final expectedFormat = source.validatedFormat(record.entryId) ?? 'BIN';
     final replacementFormat = SpkArchiveSource.detectFormat(replacementBytes);
