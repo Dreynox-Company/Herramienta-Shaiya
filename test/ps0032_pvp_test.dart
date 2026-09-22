@@ -133,7 +133,8 @@ void main(){
     md.setFloat32(15,202.75,Endian.little);
     final move=PsCharacterMove.parse(PsPacket(PsPacketType.characterMove,moving));
     expect((move.characterId,move.angle,move.motion),(50,32768,2));
-    expect(move.moving,isTrue);
+    expect(move.running,isFalse);
+    expect(move.walking,isFalse);
     expect(move.x,closeTo(101.25,1e-6));
     expect(move.y,closeTo(5.5,1e-6));
     expect(move.z,closeTo(202.75,1e-6));
