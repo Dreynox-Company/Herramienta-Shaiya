@@ -1,5 +1,6 @@
 import importlib.util
 import pathlib
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -39,6 +40,18 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn('Utf8Decoder(allowMalformed: true)', browser)
         self.assertIn('!source.canReadRecord(record)', browser)
         self.assertIn('CONTENIDO CIFRADO:', browser)
+
+    def test_pe_arch_detects_x86_and_x64_clients(self):
+        for machine, expected in ((0x014c, 'x86'), (0x8664, 'x64')):
+            blob = bytearray(128)
+            blob[:2] = b'MZ'
+            blob[0x3c:0x40] = (64).to_bytes(4, 'little')
+            blob[64:68] = b'PE\0\0'
+            blob[68:70] = machine.to_bytes(2, 'little')
+            with tempfile.TemporaryDirectory() as td:
+                path = pathlib.Path(td) / 'game.exe'
+                path.write_bytes(blob)
+                self.assertEqual(probe.pe_arch(path), expected)
 
     def test_simple_and_chunks_same_key_make_ready_for_all(self):
         key = '11' * 32
