@@ -282,19 +282,22 @@ class _StudioState extends State<StudioPage> {
       await loadBundledExtras();
       final next = Catalog(candidate);
       await next.load(report);
-      if (next.archetypes.isEmpty) {
-        throw const FormatException(
-          'El mapa de rutas SPK aún no permite reconstruir Character de forma '
-          'suficiente para la herramienta 3D.',
-        );
-      }
       if (!mounted) return;
 
       scene.catalog = next;
-      final first =
-          next.archetypes.where((a) => a.id == 'humf').firstOrNull ??
-          next.archetypes.first;
-      await scene.setAppearance(Appearance.initial(first));
+      if (next.archetypes.isNotEmpty) {
+        final first =
+            next.archetypes.where((a) => a.id == 'humf').firstOrNull ??
+            next.archetypes.first;
+        await scene.setAppearance(Appearance.initial(first));
+      } else {
+        scene.clearAppearance();
+        diagnostics.insert(
+          0,
+          'SPK montado sin arquetipo Character completo todavía. '
+          'El editor de datos y los recursos técnicos siguen disponibles.',
+        );
+      }
       catalog = next;
       _memories.clear();
       diagnostics.addAll(next.warnings);
@@ -304,9 +307,12 @@ class _StudioState extends State<StudioPage> {
       await scene.selectCreature(null, 'wing');
       await scene.setWorld(null);
       await scene.setSky(null);
-      progress =
-          '${candidate.files.length} recursos SPK montados · editor + 3D · '
-          'overlay editable: ${candidate.spkOverlayRoot}';
+      progress = next.archetypes.isEmpty
+          ? '${candidate.files.length} recursos SPK montados · editor listo · '
+                '3D pendiente de más rutas Character · overlay editable: '
+                '${candidate.spkOverlayRoot}'
+          : '${candidate.files.length} recursos SPK montados · editor + 3D · '
+                'overlay editable: ${candidate.spkOverlayRoot}';
       if (old?.library != candidate) old?.library.dispose();
     } catch (_) {
       if (catalog != scene.catalog) scene.catalog = old;
