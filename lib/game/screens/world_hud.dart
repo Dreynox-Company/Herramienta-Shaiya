@@ -1129,6 +1129,173 @@ class WorldHud extends StatelessWidget {
       ),
     );
   }
+  String _tradeCharacterName(int? id){
+    if(id==null)return locale=='spn'?'Jugador':'Player';
+    if(id==selfCharacterId)return characterName;
+    final f=friends.where((x)=>x.id==id).firstOrNull;if(f!=null)return f.name;
+    final p=partyMembers.where((x)=>x.id==id).firstOrNull;if(p!=null)return p.name;
+    final g=guildMembers.where((x)=>x.id==id).firstOrNull;if(g!=null)return g.name;
+    return '#'+id.toString();
+  }
+
+  Widget _tradeItemCell(PsTradeItem? item,int slot,{required bool local}){
+    final rule=item==null?null:metadata?.item(item.type,item.typeId);
+    final icon=rule?.iconPath;
+    final name=item==null?'':catalog.itemName(item.type,item.typeId,locale);
+    final gems=item?.gems.where((g)=>g>0).length??0;
+    final cell=Container(
+      decoration:BoxDecoration(
+        color:const Color(0xff17120e),
+        border:Border.all(color:item==null?const Color(0xff42382d):const Color(0xff8d7047)),
+      ),
+      child:item==null
+        ?Center(child:Text((slot+1).toString(),style:const TextStyle(fontSize:7,color:Colors.white24)))
+        :Stack(children:[
+            Positioned.fill(child:Padding(
+              padding:const EdgeInsets.all(3),
+              child:icon==null
+                ?const Icon(Icons.inventory_2,size:25,color:Color(0xffd7bd88))
+                :DataImage(cache:ui,path:icon,fit:BoxFit.contain,fallback:const Icon(Icons.inventory_2,size:25,color:Color(0xffd7bd88))),
+            )),
+            Positioned(left:2,top:1,child:Text(
+              item.type.toString()+':'+item.typeId.toString(),
+              style:const TextStyle(fontSize:6,color:Colors.white54),
+            )),
+            if(item.count>1)Positioned(right:2,bottom:1,child:Text(
+              'x'+item.count.toString(),style:const TextStyle(fontSize:8,color:Colors.white),
+            )),
+            if(gems>0)Positioned(left:2,bottom:1,child:Text(
+              '◆'+gems.toString(),style:const TextStyle(fontSize:8,color:Color(0xff7fd9ff)),
+            )),
+          ]),
+    );
+    if(item==null)return cell;
+    return Tooltip(
+      waitDuration:const Duration(milliseconds:250),
+      message:name+'\n'+item.type.toString()+':'+item.typeId.toString()+
+        ' · x'+item.count.toString()+
+        (local?'\n\n'+(locale=='spn'?'Doble clic para retirar de la oferta.':'Double click to remove from offer.'):'') ,
+      child:local?GestureDetector(onDoubleTap:()=>onRemoveTradeItem(slot),child:cell):cell,
+    );
+  }
+
+  Widget _tradeOfferGrid(Map<int,PsTradeItem> items,{required bool local})=>GridView.builder(
+    padding:const EdgeInsets.all(6),
+    physics:const NeverScrollableScrollPhysics(),
+    gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount:4,crossAxisSpacing:5,mainAxisSpacing:5,childAspectRatio:1,
+    ),
+    itemCount:8,
+    itemBuilder:(context,index)=>_tradeItemCell(items[index],index,local:local),
+  );
+
+  Widget _tradeStateBadge(String label,bool active,Color color)=>Container(
+    padding:const EdgeInsets.symmetric(horizontal:6,vertical:3),
+    decoration:BoxDecoration(
+      color:active?color.withValues(alpha:.22):const Color(0xff1a1511),
+      border:Border.all(color:active?color:const Color(0xff514538)),
+      borderRadius:BorderRadius.circular(2),
+    ),
+    child:Text(label,style:TextStyle(fontSize:7.5,color:active?color:Colors.white38)),
+  );
+
+  Widget _tradeWindow(){
+    final pending=pendingTradeRequesterId!=null&&tradePartnerId==null;
+    final partner=_tradeCharacterName(tradePartnerId??pendingTradeRequesterId);
+    if(pending){
+      return _panelShell(
+        locale=='spn'?'Solicitud de intercambio':'Trade request',
+        Center(child:Padding(
+          padding:const EdgeInsets.all(16),
+          child:_requestCard(
+            title:partner,
+            subtitle:locale=='spn'?'Quiere comerciar contigo.':'Wants to trade with you.',
+            accept:()=>onRespondTrade(true),
+            reject:()=>onRespondTrade(false),
+          ),
+        )),
+      );
+    }
+    final bothReady=localTradeDecided&&remoteTradeDecided;
+    return _panelShell(
+      (locale=='spn'?'Intercambio con ':'Trade with ')+partner,
+      Column(children:[
+        Padding(
+          padding:const EdgeInsets.fromLTRB(8,7,8,3),
+          child:Row(children:[
+            Expanded(child:Text(characterName,textAlign:TextAlign.center,style:const TextStyle(fontSize:9.5,color:Color(0xffffdf9a),fontWeight:FontWeight.w600))),
+            const SizedBox(width:8),
+            Expanded(child:Text(partner,textAlign:TextAlign.center,style:const TextStyle(fontSize:9.5,color:Color(0xff9fd9ff),fontWeight:FontWeight.w600))),
+          ]),
+        ),
+        Expanded(child:Row(children:[
+          Expanded(child:_tradeOfferGrid(localTradeItems,local:true)),
+          Container(width:1,color:const Color(0xff5b4933)),
+          Expanded(child:_tradeOfferGrid(remoteTradeItems,local:false)),
+        ])),
+        Padding(
+          padding:const EdgeInsets.fromLTRB(8,4,8,4),
+          child:Row(children:[
+            Expanded(child:_TradeMoneyInput(
+              locale:locale,maxMoney:gold,current:localTradeMoney,onSubmit:onSetTradeMoney,
+            )),
+            const SizedBox(width:12),
+            Expanded(child:Container(
+              height:30,alignment:Alignment.center,
+              decoration:BoxDecoration(color:const Color(0xff16120e),border:Border.all(color:const Color(0xff594832))),
+              child:Text(
+                (locale=='spn'?'Oro remoto: ':'Remote gold: ')+remoteTradeMoney.toString(),
+                style:const TextStyle(fontSize:8.5,color:Color(0xffffd36c)),
+              ),
+            )),
+          ]),
+        ),
+        Padding(
+          padding:const EdgeInsets.symmetric(horizontal:8,vertical:3),
+          child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[
+            _tradeStateBadge(locale=='spn'?'Tú listo':'You ready',localTradeDecided,const Color(0xff75d77b)),
+            const SizedBox(width:5),
+            _tradeStateBadge(locale=='spn'?'Otro listo':'Partner ready',remoteTradeDecided,const Color(0xff6ab9ff)),
+            const SizedBox(width:5),
+            _tradeStateBadge(locale=='spn'?'Tú confirmaste':'You confirmed',localTradeConfirmed,const Color(0xffffd25f)),
+            const SizedBox(width:5),
+            _tradeStateBadge(locale=='spn'?'Otro confirmó':'Partner confirmed',remoteTradeConfirmed,const Color(0xffff9d5e)),
+          ]),
+        ),
+      ]),
+      footer:Container(
+        height:42,padding:const EdgeInsets.symmetric(horizontal:8),
+        child:Row(children:[
+          TextButton(
+            onPressed:()=>onDecideTrade(!localTradeDecided),
+            style:TextButton.styleFrom(
+              backgroundColor:localTradeDecided?const Color(0xff4d3323):const Color(0xff27452a),
+              foregroundColor:const Color(0xffffe5b0),visualDensity:VisualDensity.compact,
+            ),
+            child:Text(
+              localTradeDecided?(locale=='spn'?'No listo':'Not ready'):(locale=='spn'?'Listo':'Ready'),
+              style:const TextStyle(fontSize:8.5),
+            ),
+          ),
+          const SizedBox(width:6),
+          if(bothReady)
+            TextButton(
+              onPressed:localTradeConfirmed?null:()=>onFinishTrade(0),
+              style:TextButton.styleFrom(
+                backgroundColor:const Color(0xff59471f),foregroundColor:const Color(0xffffe98e),visualDensity:VisualDensity.compact,
+              ),
+              child:Text(locale=='spn'?'Confirmar':'Confirm',style:const TextStyle(fontSize:8.5)),
+            ),
+          const Spacer(),
+          TextButton(
+            onPressed:()=>onFinishTrade(2),
+            style:TextButton.styleFrom(foregroundColor:const Color(0xffe07b6d),visualDensity:VisualDensity.compact),
+            child:Text(locale=='spn'?'Cancelar':'Cancel',style:const TextStyle(fontSize:8.5)),
+          ),
+        ]),
+      ),
+    );
+  }
   Widget _guildApplicantCard(PsGuildJoinApplicant a){
     return Container(
       height:42,
