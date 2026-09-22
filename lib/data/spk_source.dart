@@ -299,12 +299,16 @@ class SpkArchiveSource {
       for (final record in resources) record.decodedBytes,
     };
     final wantedPairs = <String, List<SpkRecord>>{};
+    final wantedByDecodedSize = <int, List<SpkRecord>>{};
     for (final record in resources) {
       wantedPairs
           .putIfAbsent(
             '${record.decodedBytes}:${record.storedBytes}',
             () => <SpkRecord>[],
           )
+          .add(record);
+      wantedByDecodedSize
+          .putIfAbsent(record.decodedBytes, () => <SpkRecord>[])
           .add(record);
     }
 
@@ -355,12 +359,20 @@ class SpkArchiveSource {
     for (final record in resources) {
       final pair = '${record.decodedBytes}:${record.storedBytes}';
       final exact = pathsByPair[pair];
-      if (exact != null && exact.length == 1) {
+      final spkPair = wantedPairs[pair];
+      if (exact != null &&
+          exact.length == 1 &&
+          spkPair != null &&
+          spkPair.length == 1) {
         strong[record.entryId] = exact.single;
         continue;
       }
       final sameSize = pathsBySize[record.decodedBytes];
-      if (sameSize != null && sameSize.length == 1) {
+      final spkSameSize = wantedByDecodedSize[record.decodedBytes];
+      if (sameSize != null &&
+          sameSize.length == 1 &&
+          spkSameSize != null &&
+          spkSameSize.length == 1) {
         fallback[record.entryId] = sameSize.single;
       }
     }
@@ -374,6 +386,7 @@ class SpkArchiveSource {
       confidence: 'strong-inferred',
       evidence: 'decoded-size+zstd3-size',
     );
+    final ambiguousRemoved = names.removeAmbiguousHints();
     progress(
       'Rutas inferidas: ${strong.length} fuertes + '
       '${fallback.length} por tamaño.',
@@ -387,9 +400,11 @@ class SpkArchiveSource {
       'strongInferred': strong.length,
       'sizeOnlyInferred': fallback.length,
       'inferredTotal': names.hints.length,
+      'ambiguousRemoved': ambiguousRemoved,
       'confirmed': names.paths.length,
       'unresolved': resources.length - names.paths.length - names.hints.length,
-      'method': 'decoded-size+zstd3-size, fallback unique-decoded-size',
+      'method':
+          'one-to-one decoded-size+zstd3-size, fallback one-to-one decoded-size',
     };
   }
 
