@@ -7,6 +7,7 @@ import '../../render/studio_scene.dart';
 import '../ps0032_protocol.dart';
 import '../server_metadata.dart';
 import '../shaiya_widgets.dart';
+import '../dreynox_game_theme.dart';
 import '../ui_asset.dart';
 
 class WorldHud extends StatelessWidget {
@@ -1088,23 +1089,29 @@ class WorldHud extends StatelessWidget {
   ]);
 
   Widget _panelShell(String title,Widget body,{Widget? footer})=>Container(
-    decoration:BoxDecoration(
-      color:const Color(0xee211810),
-      border:Border.all(color:const Color(0xff8b7350),width:2),
-      boxShadow:const [BoxShadow(color:Colors.black87,blurRadius:12)],
-    ),
+    clipBehavior:Clip.antiAlias,
+    decoration:DreynoxGameStyle.panelDecoration(opacity:.94),
     child:Column(children:[
       Container(
-        height:34,
-        padding:const EdgeInsets.symmetric(horizontal:10),
-        decoration:const BoxDecoration(
-          gradient:LinearGradient(colors:[Color(0xff5d3b24),Color(0xff25160e)]),
-        ),
+        height:36,
+        padding:const EdgeInsets.symmetric(horizontal:12),
+        decoration:DreynoxGameStyle.headerDecoration(),
         child:Row(children:[
-          Expanded(child:Text(title,style:const TextStyle(color:Color(0xffffdc72),fontSize:12,fontWeight:FontWeight.bold))),
+          Expanded(child:Text(
+            title,
+            style:const TextStyle(
+              color:DreynoxGameStyle.text,
+              fontSize:12,
+              fontWeight:FontWeight.w700,
+              letterSpacing:.15,
+            ),
+          )),
         ]),
       ),
-      Expanded(child:body),
+      Expanded(child:ColoredBox(
+        color:const Color(0x3315263c),
+        child:body,
+      )),
       if(footer!=null)footer,
     ]),
   );
@@ -1342,7 +1349,7 @@ class WorldHud extends StatelessWidget {
                     height:38,
                     margin:const EdgeInsets.only(bottom:3),
                     padding:const EdgeInsets.symmetric(horizontal:7),
-                    decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff493c2c))),
+                    decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:const Color(0xff493c2c))),
                     child:Row(children:[
                       Container(
                         width:7,height:7,
@@ -1459,7 +1466,7 @@ class WorldHud extends StatelessWidget {
                     margin:const EdgeInsets.only(bottom:3),
                     padding:const EdgeInsets.only(left:7),
                     decoration:BoxDecoration(
-                      color:leader?const Color(0xff302510):sub?const Color(0xff1c2930):const Color(0xff17120e),
+                      color:leader?const Color(0xff302510):sub?const Color(0xff1c2930):DreynoxGameStyle.panelStrong,
                       border:Border.all(color:leader?const Color(0xffffcc5c):sub?const Color(0xff74bde1):const Color(0xff493c2c)),
                     ),
                     child:Row(children:[
@@ -1525,7 +1532,7 @@ class WorldHud extends StatelessWidget {
                     height:42,
                     margin:const EdgeInsets.only(bottom:3),
                     padding:const EdgeInsets.symmetric(horizontal:7),
-                    decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:leader?const Color(0xff856c34):const Color(0xff493c2c))),
+                    decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:leader?const Color(0xff856c34):const Color(0xff493c2c))),
                     child:Row(children:[
                       if(leader)const Icon(Icons.workspace_premium,size:15,color:Color(0xffffd45f)),
                       if(leader)const SizedBox(width:4),
@@ -1593,7 +1600,7 @@ class WorldHud extends StatelessWidget {
     final gems=item?.gems.where((g)=>g>0).length??0;
     final cell=Container(
       decoration:BoxDecoration(
-        color:const Color(0xff17120e),
+        color:DreynoxGameStyle.panelStrong,
         border:Border.all(color:item==null?const Color(0xff42382d):const Color(0xff8d7047)),
       ),
       child:item==null
@@ -1678,7 +1685,7 @@ class WorldHud extends StatelessWidget {
         ),
         Expanded(child:Row(children:[
           Expanded(child:_tradeOfferGrid(localTradeItems,local:true)),
-          Container(width:1,color:const Color(0xff5b4933)),
+          Container(width:1,color:DreynoxGameStyle.border),
           Expanded(child:_tradeOfferGrid(remoteTradeItems,local:false)),
         ])),
         Padding(
@@ -1751,7 +1758,7 @@ class WorldHud extends StatelessWidget {
     final gems=item?.gems.where((g)=>g>0).length??0;
     final cell=Container(
       decoration:BoxDecoration(
-        color:const Color(0xff17120e),
+        color:DreynoxGameStyle.panelStrong,
         border:Border.all(color:item==null?const Color(0xff42382d):const Color(0xff925246)),
       ),
       child:item==null
@@ -1825,7 +1832,7 @@ class WorldHud extends StatelessWidget {
         ),
         Expanded(child:Row(children:[
           Expanded(child:_duelOfferGrid(localDuelItems,local:true)),
-          Container(width:1,color:const Color(0xff70463d)),
+          Container(width:1,color:DreynoxGameStyle.border),
           Expanded(child:_duelOfferGrid(remoteDuelItems,local:false)),
         ])),
         Padding(
@@ -1988,7 +1995,7 @@ class WorldHud extends StatelessWidget {
           constraints:const BoxConstraints(minHeight:54),
           margin:const EdgeInsets.only(bottom:4),
           padding:const EdgeInsets.all(7),
-          decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff51432f))),
+          decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:const Color(0xff51432f))),
           child:Row(children:[
             Container(
               width:34,height:34,alignment:Alignment.center,
@@ -2037,7 +2044,7 @@ class WorldHud extends StatelessWidget {
           margin:const EdgeInsets.only(bottom:3),
           padding:const EdgeInsets.symmetric(horizontal:7),
           decoration:BoxDecoration(
-            color:const Color(0xff17120e),
+            color:DreynoxGameStyle.panelStrong,
             border:Border.all(color:self?const Color(0xff816a3a):const Color(0xff493c2c)),
           ),
           child:Row(children:[
@@ -2145,7 +2152,7 @@ class WorldHud extends StatelessWidget {
               final gems=item.gems.where((g)=>g>0).length;
               final cell=Container(
                 decoration:BoxDecoration(
-                  color:const Color(0xff17120e),
+                  color:DreynoxGameStyle.panelStrong,
                   border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
                 ),
                 child:Stack(children:[
@@ -2377,7 +2384,7 @@ class WorldHud extends StatelessWidget {
                   '\nMP ${rule?.mp??0} · SP ${rule?.sp??0} · CD ${rule?.cooldown??s.cooldownSeconds}',
                 child:Container(
                   padding:const EdgeInsets.all(6),
-                  decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff55452f))),
+                  decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:const Color(0xff55452f))),
                   child:Row(children:[
                     SizedBox(
                       width:38,height:38,
@@ -2450,7 +2457,7 @@ class WorldHud extends StatelessWidget {
                     onDoubleTap:()=>onOpenQuest(q.questId),
                     child:Container(
                       padding:const EdgeInsets.all(8),
-                      decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5d4c34))),
+                      decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:const Color(0xff5d4c34))),
                       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
                         Row(children:[
                           Expanded(child:Text(name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:10,color:Color(0xffffdc72),fontWeight:FontWeight.w600))),
@@ -2487,7 +2494,7 @@ class WorldHud extends StatelessWidget {
           ?Container(
               alignment:Alignment.centerLeft,
               padding:const EdgeInsets.symmetric(horizontal:8),
-              decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff514231))),
+              decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:const Color(0xff514231))),
               child:Text(locale=='spn'?'No hay objetos compatibles.':'No compatible items.',style:const TextStyle(fontSize:8.5,color:Colors.white38)),
             )
           :ListView.separated(
@@ -2506,7 +2513,7 @@ class WorldHud extends StatelessWidget {
                     child:Container(
                       width:58,padding:const EdgeInsets.all(4),
                       decoration:BoxDecoration(
-                        color:const Color(0xff17120e),
+                        color:DreynoxGameStyle.panelStrong,
                         border:Border.all(color:chosen?const Color(0xffffd15b):const Color(0xff5c4a35),width:chosen?2:1),
                       ),
                       child:Column(children:[
@@ -2576,7 +2583,7 @@ class WorldHud extends StatelessWidget {
       const Spacer(),
       Container(
         width:double.infinity,padding:const EdgeInsets.all(9),
-        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:DreynoxGameStyle.border)),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(
             p==null
@@ -2640,7 +2647,7 @@ class WorldHud extends StatelessWidget {
                 onTap:id>0?()=>onSelectExtractPosition(index):null,
                 child:Container(
                   decoration:BoxDecoration(
-                    color:const Color(0xff17120e),
+                    color:DreynoxGameStyle.panelStrong,
                     border:Border.all(color:selected?const Color(0xffffd15b):const Color(0xff5c4a35),width:selected?2:1),
                   ),
                   child:Center(child:id<=0
@@ -2664,7 +2671,7 @@ class WorldHud extends StatelessWidget {
       const Spacer(),
       Container(
         width:double.infinity,padding:const EdgeInsets.all(9),
-        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:DreynoxGameStyle.border)),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(
             p==null
@@ -2727,7 +2734,7 @@ class WorldHud extends StatelessWidget {
       const SizedBox(height:10),
       Container(
         width:double.infinity,padding:const EdgeInsets.all(9),
-        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:DreynoxGameStyle.border)),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(
             quote==null
@@ -2784,7 +2791,7 @@ class WorldHud extends StatelessWidget {
       const SizedBox(height:10),
       Container(
         width:double.infinity,padding:const EdgeInsets.all(9),
-        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:DreynoxGameStyle.border)),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(
             runeRule?.absoluteRecreationRune==true
@@ -2833,7 +2840,7 @@ class WorldHud extends StatelessWidget {
       const SizedBox(height:10),
       Container(
         width:double.infinity,padding:const EdgeInsets.all(9),
-        decoration:BoxDecoration(color:const Color(0xff17120e),border:Border.all(color:const Color(0xff5e4932))),
+        decoration:BoxDecoration(color:DreynoxGameStyle.panelStrong,border:Border.all(color:DreynoxGameStyle.border)),
         child:Text(
           locale=='spn'
             ?'World consume 2 runas y 1 vial y genera la runa perfecta correspondiente al atributo.'
@@ -2928,7 +2935,7 @@ class WorldHud extends StatelessWidget {
               child:Container(
                 padding:const EdgeInsets.all(8),
                 decoration:BoxDecoration(
-                  color:const Color(0xff17120e),
+                  color:DreynoxGameStyle.panelStrong,
                   border:Border.all(color:affordable?const Color(0xff8c7047):const Color(0xff5b3732)),
                 ),
                 child:Row(children:[
@@ -3014,7 +3021,7 @@ class WorldHud extends StatelessWidget {
               final card=Container(
                 padding:const EdgeInsets.all(3),
                 decoration:BoxDecoration(
-                  color:const Color(0xff17120e),
+                  color:DreynoxGameStyle.panelStrong,
                   border:Border.all(color:const Color(0xff6f5a3b)),
                 ),
                 child:Column(children:[
@@ -3109,7 +3116,7 @@ class WorldHud extends StatelessWidget {
                 final gems=item.gems.where((g)=>g>0).length;
                 final card=Container(
                   decoration:BoxDecoration(
-                    color:const Color(0xff17120e),
+                    color:DreynoxGameStyle.panelStrong,
                     border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
                   ),
                   child:Stack(children:[
@@ -3201,7 +3208,7 @@ class WorldHud extends StatelessWidget {
                     (item.dyed?'\nTeñido':''),
                   child:Container(
                     decoration:BoxDecoration(
-                      color:const Color(0xff17120e),
+                      color:DreynoxGameStyle.panelStrong,
                       border:Border.all(color:item.quality>0?const Color(0xffa88955):const Color(0xff52483c)),
                     ),
                     child:Stack(children:[
