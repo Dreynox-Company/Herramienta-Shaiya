@@ -606,6 +606,12 @@ class SpkArchiveSource {
       '.exe': {'PE'},
       '.eft': {'EFT'},
       '.wld': {'WLD'},
+      '.wtr': {'WTR'},
+      '.mani': {'MANI'},
+      '.vani': {'VANI'},
+      '.smod': {'SMOD'},
+      '.dg': {'DG'},
+      '.svmap': {'SVMAP'},
       '.3dc': {'3DC'},
       '.3do': {'3DO'},
       '.ani': {'ANI'},
@@ -1397,6 +1403,74 @@ class SpkArchiveSource {
         startsWith(bytes, [0x44, 0x55, 0x4e])) {
       return 'WLD';
     }
+
+    // These native Shaiya resources do not carry a reliable textual magic.
+    // Keep the probe bounded and then require the full parser to consume every
+    // byte before assigning a format.
+    if (bytes.length == 108) {
+      try {
+        ManiData.parse(bytes, 'SPK:MAni');
+        return 'MANI';
+      } catch (_) {}
+    }
+    if (bytes.length >= 20 && bytes.length <= 1024 * 1024) {
+      final data = ByteData.sublistView(bytes);
+      final textureCount = data.getUint32(12, Endian.little);
+      if (textureCount > 0 && textureCount <= 256) {
+        try {
+          WtrData.parse(bytes, 'SPK:WTR');
+          return 'WTR';
+        } catch (_) {}
+      }
+    }
+    if (bytes.length >= 8) {
+      final data = ByteData.sublistView(bytes);
+      final mapSize = data.getInt32(0, Endian.little);
+      if (mapSize > 0 && mapSize <= 16384) {
+        final mask = (mapSize * mapSize) ~/ 8;
+        if (4 + mask + 4 <= bytes.length) {
+          try {
+            SvmapData.parse(bytes, 'SPK:SVMAP');
+            return 'SVMAP';
+          } catch (_) {}
+        }
+      }
+    }
+    if (bytes.length >= 56) {
+      final data = ByteData.sublistView(bytes);
+      final meshCount = data.getUint32(40, Endian.little);
+      final frameCount = data.getUint32(44, Endian.little);
+      if (meshCount > 0 &&
+          meshCount <= 10000 &&
+          frameCount > 0 &&
+          frameCount <= 10000) {
+        try {
+          VaniData.parse(bytes, 'SPK:VAni');
+          return 'VANI';
+        } catch (_) {}
+      }
+    }
+    if (bytes.length >= 48) {
+      final data = ByteData.sublistView(bytes);
+      final textured = data.getUint32(40, Endian.little);
+      if (textured > 0 && textured <= 10000) {
+        try {
+          readSmodData(bytes, 'SPK:SMOD');
+          return 'SMOD';
+        } catch (_) {}
+      }
+    }
+    if (bytes.length >= 32) {
+      final data = ByteData.sublistView(bytes);
+      final textureCount = data.getUint32(24, Endian.little);
+      if (textureCount > 0 && textureCount <= 4096) {
+        try {
+          DgData.parse(bytes, 'SPK:DG');
+          return 'DG';
+        } catch (_) {}
+      }
+    }
+
     if (_looksLikeTga(bytes)) return 'TGA';
 
     if (SeedData.isEncoded(bytes)) {
@@ -1533,6 +1607,18 @@ class SpkArchiveSource {
         return '.eft';
       case 'WLD':
         return '.wld';
+      case 'WTR':
+        return '.wtr';
+      case 'MANI':
+        return '.mani';
+      case 'VANI':
+        return '.vani';
+      case 'SMOD':
+        return '.smod';
+      case 'DG':
+        return '.dg';
+      case 'SVMAP':
+        return '.svmap';
       case '3DC':
         return '.3dc';
       case '3DO':
