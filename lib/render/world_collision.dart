@@ -173,6 +173,123 @@ class WorldCollisionIndex {
     }
     return false;
   }
+
+  bool blocksSphere(
+    double x,
+    double y,
+    double z, {
+    double radius = .18,
+  }) {
+    if (_triangles.isEmpty) return false;
+    final radiusSquared = radius * radius;
+    for (final triangle in _triangles) {
+      if (x < triangle.minX - radius ||
+          x > triangle.maxX + radius ||
+          y < triangle.minY - radius ||
+          y > triangle.maxY + radius ||
+          z < triangle.minZ - radius ||
+          z > triangle.maxZ + radius) {
+        continue;
+      }
+      if (_pointTriangleDistanceSquared(
+            x,
+            y,
+            z,
+            triangle,
+          ) <=
+          radiusSquared) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Clips a third-person camera boom against native world collision.
+  ///
+  /// [target] and [desired] are local scene coordinates. Sampling from the
+  /// character toward the camera avoids the classic MMORPG bug where the
+  /// camera crosses a wall and renders the room/terrain from the other side.
+  v.Vector3 clipCameraSegment(
+    v.Vector3 target,
+    v.Vector3 desired, {
+    double radius = .18,
+    double minDistance = .65,
+    double sampleStep = .12,
+  }) {
+    if (_triangles.isEmpty) return desired.clone();
+    final delta = desired - target;
+    final length = delta.length;
+    if (length <= minDistance || length <= 1e-8) return desired.clone();
+    final direction = delta / length;
+    final steps = math.max(1, (length / math.max(.04, sampleStep)).ceil());
+    var safeDistance = math.min(minDistance, length);
+    for (var i = 1; i <= steps; i++) {
+      final distance = length * i / steps;
+      final point = target + direction * distance;
+      if (blocksSphere(point.x, point.y, point.z, radius: radius)) {
+        final backedOff = math.max(
+          minDistance,
+          distance - math.max(radius * 1.6, sampleStep * 1.5),
+        );
+        return target + direction * backedOff;
+      }
+      safeDistance = distance;
+    }
+    return target + direction * safeDistance;
+  }
+}
+
+double _pointTriangleDistanceSquared(
+  double px,
+  double py,
+  double pz,
+  WorldCollisionTriangle triangle,
+) {
+  final p = v.Vector3(px, py, pz);
+  final a = v.Vector3(triangle.ax, triangle.ay, triangle.az);
+  final b = v.Vector3(triangle.bx, triangle.by, triangle.bz);
+  final c = v.Vector3(triangle.cx, triangle.cy, triangle.cz);
+  final ab = b - a;
+  final ac = c - a;
+  final ap = p - a;
+  final d1 = ab.dot(ap);
+  final d2 = ac.dot(ap);
+  if (d1 <= 0 && d2 <= 0) return ap.length2;
+
+  final bp = p - b;
+  final d3 = ab.dot(bp);
+  final d4 = ac.dot(bp);
+  if (d3 >= 0 && d4 <= d3) return bp.length2;
+
+  final vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+    final t = d1 / (d1 - d3);
+    return (p - (a + ab * t)).length2;
+  }
+
+  final cp = p - c;
+  final d5 = ab.dot(cp);
+  final d6 = ac.dot(cp);
+  if (d6 >= 0 && d5 <= d6) return cp.length2;
+
+  final vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+    final t = d2 / (d2 - d6);
+    return (p - (a + ac * t)).length2;
+  }
+
+  final va = d3 * d6 - d5 * d4;
+  if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+    final edge = c - b;
+    final t = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    return (p - (b + edge * t)).length2;
+  }
+
+  final denom = 1.0 / (va + vb + vc);
+  final vCoord = vb * denom;
+  final wCoord = vc * denom;
+  final closest = a + ab * vCoord + ac * wCoord;
+  return (p - closest).length2;
 }
 
 bool _pointInsideProjectedTriangle(
