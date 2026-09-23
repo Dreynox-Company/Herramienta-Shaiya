@@ -9,6 +9,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  flutter_gpu:
+    sdk: flutter
   three_js: 0.3.0
   vector_math: '>=2.2.0 <3.0.0'
   image: '>=4.5.4 <5.0.0'
@@ -23,5 +25,9 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_gpu_shaders: ^0.5.2
+  hooks: ^2.2.0
 flutter:
   uses-material-design: true
+  assets:
+    - build/shaderbundles/shaiya_gpu.shaderbundle
