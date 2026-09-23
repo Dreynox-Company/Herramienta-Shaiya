@@ -12,20 +12,20 @@ class _Probe {
 }
 
 void main() {
-  Future<_Probe> load(WidgetTester t, {bool nestedEditor = false}) async {
-    final p = _Probe();
-    await t.pumpWidget(
+  Future<_Probe> load(WidgetTester tester, {bool nestedEditor = false}) async {
+    final probe = _Probe();
+    await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: ViewportMovementInput(
-            focusNode: p.focus,
+            focusNode: probe.focus,
             onChanged: (x, z, running) {
-              p.z = z;
-              p.running = running;
+              probe.z = z;
+              probe.running = running;
             },
-            onFlightToggle: () => p.toggles++,
+            onFlightToggle: () => probe.toggles++,
             onAction: (key) {
-              if (key == LogicalKeyboardKey.space) p.jumps++;
+              if (key == LogicalKeyboardKey.space) probe.jumps++;
             },
             child: nestedEditor
                 ? const TextField(key: ValueKey('nested-editor'))
@@ -34,59 +34,85 @@ void main() {
         ),
       ),
     );
-    p.focus.requestFocus();
-    await t.pump();
-    addTearDown(p.focus.dispose);
-    return p;
+    probe.focus.requestFocus();
+    await tester.pump();
+    addTearDown(probe.focus.dispose);
+    return probe;
   }
 
-  Future<void> press(WidgetTester t, LogicalKeyboardKey key) async {
-    await t.sendKeyDownEvent(
-      key,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-      platform: 'web',
-    );
-    await t.sendKeyUpEvent(
-      key,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-      platform: 'web',
-    );
+  Future<void> tapKey(
+    WidgetTester tester,
+    LogicalKeyboardKey key,
+  ) async {
+    await tester.sendKeyDownEvent(key, platform: 'web');
+    await tester.sendKeyUpEvent(key, platform: 'web');
   }
 
-  for (final logical in [
-    LogicalKeyboardKey.less,
-    LogicalKeyboardKey.greater,
-    LogicalKeyboardKey.bar,
-    LogicalKeyboardKey.backslash,
+  testWidgets('Space alone is terrestrial jump and never flight', (
+    tester,
+  ) async {
+    final probe = await load(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.space, platform: 'web');
+    for (var i = 0; i < 5; i++) {
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.space, platform: 'web');
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
+
+    expect(probe.jumps, 1);
+    expect(probe.toggles, 0);
+  });
+
+  for (final shift in [
+    LogicalKeyboardKey.shiftLeft,
+    LogicalKeyboardKey.shiftRight,
   ]) {
-    testWidgets(
-      'ISO position, independent of its logical character: $logical',
-      (t) async {
-        final p = await load(t);
-        await press(t, logical);
-        expect(p.toggles, 1);
-        expect(p.jumps, 0);
-        await t.pumpWidget(const SizedBox());
-      },
-    );
+    testWidgets('Shift+Space toggles flight once ($shift)', (tester) async {
+      final probe = await load(tester);
+
+      await tester.sendKeyDownEvent(shift, platform: 'web');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.space, platform: 'web');
+      for (var i = 0; i < 5; i++) {
+        await tester.sendKeyRepeatEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+      }
+      expect(probe.toggles, 1);
+      expect(probe.jumps, 0);
+
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.space, platform: 'web');
+      expect(probe.toggles, 2);
+      expect(probe.jumps, 0);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
+      await tester.sendKeyUpEvent(shift, platform: 'web');
+    });
   }
 
-  testWidgets('less-than from a comma key is not the key beside Z', (t) async {
-    final p = await load(t);
-    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft, platform: 'web');
-    await t.sendKeyDownEvent(
-      LogicalKeyboardKey.less,
-      physicalKey: PhysicalKeyboardKey.comma,
+  testWidgets('Shift+Space preserves held W sprint', (tester) async {
+    final probe = await load(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW, platform: 'web');
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.shiftLeft,
       platform: 'web',
     );
-    await t.sendKeyUpEvent(
-      LogicalKeyboardKey.less,
-      physicalKey: PhysicalKeyboardKey.comma,
+    expect(probe.z, -1);
+    expect(probe.running, true);
+
+    await tapKey(tester, LogicalKeyboardKey.space);
+
+    expect(probe.toggles, 1);
+    expect(probe.jumps, 0);
+    expect(probe.z, -1);
+    expect(probe.running, true);
+
+    await tester.sendKeyUpEvent(
+      LogicalKeyboardKey.shiftLeft,
       platform: 'web',
     );
-    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft, platform: 'web');
-    expect(p.toggles, 0);
-    await t.pumpWidget(const SizedBox());
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW, platform: 'web');
   });
 
   for (final modifier in [
@@ -97,88 +123,106 @@ void main() {
     LogicalKeyboardKey.metaLeft,
     LogicalKeyboardKey.metaRight,
   ]) {
-    testWidgets('editing/system shortcut is not flight: $modifier', (t) async {
-      final p = await load(t);
-      await t.sendKeyDownEvent(modifier, platform: 'web');
-      await press(t, LogicalKeyboardKey.less);
-      expect(p.toggles, 0);
-      await t.sendKeyUpEvent(modifier, platform: 'web');
-      await press(t, LogicalKeyboardKey.less);
-      expect(p.toggles, 1);
-      await t.pumpWidget(const SizedBox());
+    testWidgets('system modifier never turns Shift+Space into flight: $modifier', (
+      tester,
+    ) async {
+      final probe = await load(tester);
+      await tester.sendKeyDownEvent(modifier, platform: 'web');
+      await tester.sendKeyDownEvent(
+        LogicalKeyboardKey.shiftLeft,
+        platform: 'web',
+      );
+      await tapKey(tester, LogicalKeyboardKey.space);
+      expect(probe.toggles, 0);
+      expect(probe.jumps, 0);
+      await tester.sendKeyUpEvent(
+        LogicalKeyboardKey.shiftLeft,
+        platform: 'web',
+      );
+      await tester.sendKeyUpEvent(modifier, platform: 'web');
     });
   }
 
-  testWidgets('focused editor inside viewport does not intercept text', (
-    t,
+  testWidgets('focused editor does not intercept jump or flight shortcuts', (
+    tester,
   ) async {
-    final p = await load(t, nestedEditor: true);
-    await t.sendKeyDownEvent(LogicalKeyboardKey.keyW, platform: 'web');
-    expect(p.z, -1);
-    await t.tap(find.byKey(const ValueKey('nested-editor')));
-    await t.pump();
-    expect(p.focus.hasFocus, true);
-    expect(p.focus.hasPrimaryFocus, false);
-    expect(p.z, 0);
-    await t.sendKeyUpEvent(LogicalKeyboardKey.keyW, platform: 'web');
-    await press(t, LogicalKeyboardKey.less);
-    await t.sendKeyDownEvent(LogicalKeyboardKey.space, platform: 'web');
-    await t.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
-    await t.enterText(find.byType(TextField), 'distancia < 10');
-    expect(p.toggles, 0);
-    expect(p.jumps, 0);
-    expect(find.text('distancia < 10'), findsOneWidget);
-    await t.pumpWidget(const SizedBox());
+    final probe = await load(tester, nestedEditor: true);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW, platform: 'web');
+    expect(probe.z, -1);
+
+    await tester.tap(find.byKey(const ValueKey('nested-editor')));
+    await tester.pump();
+    expect(probe.focus.hasFocus, true);
+    expect(probe.focus.hasPrimaryFocus, false);
+    expect(probe.z, 0);
+
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.shiftLeft,
+      platform: 'web',
+    );
+    await tapKey(tester, LogicalKeyboardKey.space);
+    await tester.sendKeyUpEvent(
+      LogicalKeyboardKey.shiftLeft,
+      platform: 'web',
+    );
+    await tapKey(tester, LogicalKeyboardKey.space);
+    await tester.enterText(find.byType(TextField), 'Shift+Espacio');
+
+    expect(probe.toggles, 0);
+    expect(probe.jumps, 0);
+    expect(find.text('Shift+Espacio'), findsOneWidget);
   });
 
-  testWidgets('inactive, resumed and repeating key requires a fresh press', (
-    t,
+  testWidgets('inactive and synthesized Space never initiate flight', (
+    tester,
   ) async {
-    final p = await load(t);
-    t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    await t.pump();
-    await t.sendKeyDownEvent(
-      LogicalKeyboardKey.less,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-      platform: 'web',
-    );
-    expect(p.toggles, 0);
-    t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await t.pump();
-    await t.sendKeyRepeatEvent(
-      LogicalKeyboardKey.less,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-      platform: 'web',
-    );
-    expect(p.toggles, 0);
-    await t.sendKeyUpEvent(
-      LogicalKeyboardKey.less,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-      platform: 'web',
-    );
-    await press(t, LogicalKeyboardKey.less);
-    expect(p.toggles, 1);
-    await t.pumpWidget(const SizedBox());
-  });
+    final probe = await load(tester);
 
-  testWidgets('OS-synthesized key down never initiates flight', (t) async {
-    final p = await load(t);
-    final handler = t
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.shiftLeft,
+      platform: 'web',
+    );
+    await tapKey(tester, LogicalKeyboardKey.space);
+    expect(probe.toggles, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.sendKeyUpEvent(
+      LogicalKeyboardKey.shiftLeft,
+      platform: 'web',
+    );
+
+    final handler = tester
         .widget<Focus>(
-          find.byWidgetPredicate((w) => w is Focus && w.focusNode == p.focus),
+          find.byWidgetPredicate(
+            (widget) => widget is Focus && widget.focusNode == probe.focus,
+          ),
         )
         .onKeyEvent!;
     final result = handler(
-      p.focus,
+      probe.focus,
       const KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        logicalKey: LogicalKeyboardKey.less,
+        physicalKey: PhysicalKeyboardKey.space,
+        logicalKey: LogicalKeyboardKey.space,
         timeStamp: Duration.zero,
         synthesized: true,
       ),
     );
     expect(result, KeyEventResult.ignored);
-    expect(p.toggles, 0);
-    await t.pumpWidget(const SizedBox());
+    expect(probe.toggles, 0);
+
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.shiftLeft,
+      platform: 'web',
+    );
+    await tapKey(tester, LogicalKeyboardKey.space);
+    expect(probe.toggles, 1);
+    await tester.sendKeyUpEvent(
+      LogicalKeyboardKey.shiftLeft,
+      platform: 'web',
+    );
   });
 }
