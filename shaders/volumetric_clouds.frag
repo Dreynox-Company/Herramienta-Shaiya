@@ -1,20 +1,19 @@
+#version 460 core
+
 uniform CloudFrame {
-  mat4 inverse_view_projection;
-  vec4 camera_time;
-  vec4 resolution_scale;
-  vec4 sun_density;
+  mat4 uInverseViewProjection;
+  vec4 uCameraPosition;
+  vec4 uSize;
+  vec4 uTime;
+  vec4 uCloudColor;
+  vec4 uSkyColor;
+  vec4 uSunDirectionDensity;
 } cloud_frame;
 
 uniform sampler2D scene_depth;
 
 in vec2 v_uv;
 out vec4 frag_color;
-
-float hash31(vec3 p) {
-  p = fract(p * 0.1031);
-  p += dot(p, p.yzx + 33.33);
-  return fract((p.x + p.y) * p.z);
-}
 
 vec3 hash33(vec3 p) {
   p = fract(p * vec3(0.1031, 0.1030, 0.0973));
@@ -31,7 +30,7 @@ float perlin3(vec3 p) {
   vec3 f = fract(p);
   vec3 u = vec3(fade5(f.x), fade5(f.y), fade5(f.z));
 
-  float n000 = dot(hash33(i + vec3(0,0,0)) * 2.0 - 1.0, f - vec3(0,0,0));
+  float n000 = dot(hash33(i + vec3(0,0,0)) * 2.0 - 1.0, f);
   float n100 = dot(hash33(i + vec3(1,0,0)) * 2.0 - 1.0, f - vec3(1,0,0));
   float n010 = dot(hash33(i + vec3(0,1,0)) * 2.0 - 1.0, f - vec3(0,1,0));
   float n110 = dot(hash33(i + vec3(1,1,0)) * 2.0 - 1.0, f - vec3(1,1,0));
@@ -65,77 +64,86 @@ float worley3(vec3 p) {
 }
 
 float fbm(vec3 p) {
-  float value = 0.0;
-  float amplitude = 0.56;
+  float sum = 0.0;
+  float amplitude = 0.55;
   for (int octave = 0; octave < 4; ++octave) {
-    value += perlin3(p) * amplitude;
+    sum += perlin3(p) * amplitude;
     p = p * 2.03 + vec3(17.1, 9.2, 13.7);
     amplitude *= 0.48;
   }
-  return value;
+  return sum;
 }
 
-float densityAt(vec3 world) {
-  float altitude = smoothstep(220.0, 300.0, world.y) *
-                   (1.0 - smoothstep(570.0, 690.0, world.y));
-  vec3 drift = vec3(
-    cloud_frame.camera_time.w * 0.012,
-    0.0,
-    cloud_frame.camera_time.w * 0.007
-  );
-  vec3 p = world * 0.0017 + drift;
-  float shape = fbm(p);
+float cloudDensity(vec3 world) {
+  float bottom = smoothstep(220.0, 300.0, world.y);
+  float top = 1.0 - smoothstep(570.0, 690.0, world.y);
+  float altitude = bottom * top;
+
+  vec3 wind = vec3(cloud_frame.uTime.x * 0.012, 0.0,
+                   cloud_frame.uTime.x * 0.007);
+  vec3 p = world * 0.0017 + wind;
+
+  float baseShape = fbm(p);
   float cells = worley3(p * 2.1);
-  float hybrid = shape * 0.78 + cells * 0.22;
-  return max(0.0, hybrid - 0.51) * altitude * cloud_frame.sun_density.w * 2.25;
+  float erosion = mix(baseShape, cells, 0.22);
+  float coverage = cloud_frame.uCloudColor.a;
+
+  return max(0.0, erosion - mix(0.64, 0.43, coverage)) *
+         altitude * cloud_frame.uSunDirectionDensity.w * 2.15;
 }
 
-vec3 reconstructFarPoint(vec2 uv) {
+vec3 farWorldPoint(vec2 uv) {
   vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
-  vec4 world = cloud_frame.inverse_view_projection * clip;
+  vec4 world = cloud_frame.uInverseViewProjection * clip;
   return world.xyz / max(abs(world.w), 1e-5);
 }
 
 void main() {
-  // Half-res pass: resolution_scale.z is 0.5 on Windows/desktop and can be
-  // lowered on thermal-constrained Android devices.
-  vec2 full_uv = v_uv;
-  float scene_z = texture(scene_depth, full_uv).r;
-  if (scene_z < 0.9994) {
+  // The pass itself renders into a target sized uSize.zw (normally 0.5x
+  // uSize.xy), so raymarch cost is quarter resolution while the world stays
+  // at full native resolution.
+  float opaqueDepth = texture(scene_depth, v_uv).r;
+  if (opaqueDepth < 0.9994) {
     frag_color = vec4(0.0);
     return;
   }
 
-  vec3 camera = cloud_frame.camera_time.xyz;
-  vec3 far_point = reconstructFarPoint(full_uv);
-  vec3 ray = normalize(far_point - camera);
+  vec3 camera = cloud_frame.uCameraPosition.xyz;
+  vec3 ray = normalize(farWorldPoint(v_uv) - camera);
+  vec3 sunDir = normalize(cloud_frame.uSunDirectionDensity.xyz);
 
-  float t = 80.0;
+  float t = 70.0;
   float transmittance = 1.0;
-  vec3 radiance = vec3(0.0);
-  vec3 sun_dir = normalize(cloud_frame.sun_density.xyz);
+  vec3 premultiplied = vec3(0.0);
 
-  const int steps = 28;
-  const float step_length = 28.0;
-  for (int i = 0; i < steps; ++i) {
-    vec3 sample_pos = camera + ray * t;
-    float density = densityAt(sample_pos);
+  const int kSteps = 28;
+  const float kStepLength = 29.0;
+
+  for (int i = 0; i < kSteps; ++i) {
+    vec3 p = camera + ray * t;
+    float density = cloudDensity(p);
+
     if (density > 0.002) {
-      float shadow_probe = densityAt(sample_pos + sun_dir * 54.0);
-      float light = mix(1.0, 0.48, clamp(shadow_probe * 1.8, 0.0, 1.0));
-      float alpha = 1.0 - exp(-density * 0.82);
-      vec3 cloud_color = mix(
-        vec3(0.48, 0.56, 0.69),
-        vec3(1.0, 0.97, 0.91),
-        light
+      float lightProbe = cloudDensity(p + sunDir * 56.0);
+      float sunlight = mix(1.0, 0.46, clamp(lightProbe * 1.8, 0.0, 1.0));
+      float sampleAlpha = 1.0 - exp(-density * 0.82);
+
+      vec3 litCloud = mix(
+        cloud_frame.uSkyColor.rgb * 0.60,
+        cloud_frame.uCloudColor.rgb,
+        sunlight
       );
-      radiance += transmittance * alpha * cloud_color;
-      transmittance *= 1.0 - alpha;
-      if (transmittance < 0.035) break;
+
+      premultiplied += transmittance * sampleAlpha * litCloud;
+      transmittance *= 1.0 - sampleAlpha;
+
+      if (transmittance < 0.035) {
+        break;
+      }
     }
-    t += step_length;
+
+    t += kStepLength;
   }
 
-  float alpha = 1.0 - transmittance;
-  frag_color = vec4(radiance, alpha);
+  frag_color = vec4(premultiplied, 1.0 - transmittance);
 }
