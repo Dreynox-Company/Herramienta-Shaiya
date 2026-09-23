@@ -322,10 +322,7 @@ void main() {
         focus.requestFocus();
         await tester.pump();
 
-        await tester.sendKeyDownEvent(
-          LogicalKeyboardKey.keyW,
-          platform: 'web',
-        );
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW, platform: 'web');
         await tester.sendKeyDownEvent(shift, platform: 'web');
         await tester.sendKeyDownEvent(
           LogicalKeyboardKey.space,
@@ -342,10 +339,7 @@ void main() {
         expect(direction, -1);
         expect(running, true);
 
-        await tester.sendKeyUpEvent(
-          LogicalKeyboardKey.space,
-          platform: 'web',
-        );
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
         await tester.sendKeyUpEvent(shift, platform: 'web');
         expect(running, false);
 
@@ -360,15 +354,9 @@ void main() {
         );
         expect(jumps, 1);
         expect(flights, 1);
-        await tester.sendKeyUpEvent(
-          LogicalKeyboardKey.space,
-          platform: 'web',
-        );
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
 
-        await tester.sendKeyUpEvent(
-          LogicalKeyboardKey.keyW,
-          platform: 'web',
-        );
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW, platform: 'web');
         await tester.tap(find.byKey(const ValueKey('search')));
         await tester.pump();
         await tester.sendKeyDownEvent(shift, platform: 'web');
@@ -378,10 +366,7 @@ void main() {
         );
         expect(flights, 1);
         expect(jumps, 1);
-        await tester.sendKeyUpEvent(
-          LogicalKeyboardKey.space,
-          platform: 'web',
-        );
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
         await tester.sendKeyUpEvent(shift, platform: 'web');
 
         await tester.pumpWidget(const SizedBox());
@@ -389,5 +374,4 @@ void main() {
       },
     );
   }
-
 }

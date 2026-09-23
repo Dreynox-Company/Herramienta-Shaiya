@@ -40,10 +40,7 @@ void main() {
     return probe;
   }
 
-  Future<void> tapKey(
-    WidgetTester tester,
-    LogicalKeyboardKey key,
-  ) async {
+  Future<void> tapKey(WidgetTester tester, LogicalKeyboardKey key) async {
     await tester.sendKeyDownEvent(key, platform: 'web');
     await tester.sendKeyUpEvent(key, platform: 'web');
   }
@@ -55,7 +52,10 @@ void main() {
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.space, platform: 'web');
     for (var i = 0; i < 5; i++) {
-      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.space, platform: 'web');
+      await tester.sendKeyRepeatEvent(
+        LogicalKeyboardKey.space,
+        platform: 'web',
+      );
     }
     await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
 
@@ -108,10 +108,7 @@ void main() {
     expect(probe.z, -1);
     expect(probe.running, true);
 
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.shiftLeft,
-      platform: 'web',
-    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft, platform: 'web');
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW, platform: 'web');
   });
 
@@ -123,24 +120,25 @@ void main() {
     LogicalKeyboardKey.metaLeft,
     LogicalKeyboardKey.metaRight,
   ]) {
-    testWidgets('system modifier never turns Shift+Space into flight: $modifier', (
-      tester,
-    ) async {
-      final probe = await load(tester);
-      await tester.sendKeyDownEvent(modifier, platform: 'web');
-      await tester.sendKeyDownEvent(
-        LogicalKeyboardKey.shiftLeft,
-        platform: 'web',
-      );
-      await tapKey(tester, LogicalKeyboardKey.space);
-      expect(probe.toggles, 0);
-      expect(probe.jumps, 0);
-      await tester.sendKeyUpEvent(
-        LogicalKeyboardKey.shiftLeft,
-        platform: 'web',
-      );
-      await tester.sendKeyUpEvent(modifier, platform: 'web');
-    });
+    testWidgets(
+      'system modifier never turns Shift+Space into flight: $modifier',
+      (tester) async {
+        final probe = await load(tester);
+        await tester.sendKeyDownEvent(modifier, platform: 'web');
+        await tester.sendKeyDownEvent(
+          LogicalKeyboardKey.shiftLeft,
+          platform: 'web',
+        );
+        await tapKey(tester, LogicalKeyboardKey.space);
+        expect(probe.toggles, 0);
+        expect(probe.jumps, 0);
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.shiftLeft,
+          platform: 'web',
+        );
+        await tester.sendKeyUpEvent(modifier, platform: 'web');
+      },
+    );
   }
 
   testWidgets('focused editor does not intercept jump or flight shortcuts', (
@@ -162,10 +160,7 @@ void main() {
       platform: 'web',
     );
     await tapKey(tester, LogicalKeyboardKey.space);
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.shiftLeft,
-      platform: 'web',
-    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft, platform: 'web');
     await tapKey(tester, LogicalKeyboardKey.space);
     await tester.enterText(find.byType(TextField), 'Shift+Espacio');
 
@@ -190,10 +185,7 @@ void main() {
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.shiftLeft,
-      platform: 'web',
-    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft, platform: 'web');
 
     final handler = tester
         .widget<Focus>(
@@ -220,9 +212,6 @@ void main() {
     );
     await tapKey(tester, LogicalKeyboardKey.space);
     expect(probe.toggles, 1);
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.shiftLeft,
-      platform: 'web',
-    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft, platform: 'web');
   });
 }
