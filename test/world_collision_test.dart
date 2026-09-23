@@ -56,4 +56,35 @@ void main() {
 
     expect(index.blocksPosition(.1, 5, 1, radius: .25), isFalse);
   });
+
+  test('camera boom is clipped before a native wall', () {
+    final index = WorldCollisionIndex();
+    index.addMesh(wallMesh(), v.Matrix4.identity());
+
+    final target = v.Vector3(-1, 1, 1);
+    final desired = v.Vector3(2, 1, 1);
+    final clipped = index.clipCameraSegment(
+      target,
+      desired,
+      radius: .15,
+      minDistance: .35,
+      sampleStep: .05,
+    );
+
+    expect(clipped.x, lessThan(0));
+    expect(clipped.x, greaterThan(target.x));
+  });
+
+  test('camera boom stays unchanged without collision', () {
+    final index = WorldCollisionIndex();
+    index.addMesh(wallMesh(), v.Matrix4.identity());
+
+    final target = v.Vector3(-2, 4, -2);
+    final desired = v.Vector3(-4, 4, -2);
+    final clipped = index.clipCameraSegment(target, desired);
+
+    expect(clipped.x, closeTo(desired.x, 1e-6));
+    expect(clipped.y, closeTo(desired.y, 1e-6));
+    expect(clipped.z, closeTo(desired.z, 1e-6));
+  });
 }
