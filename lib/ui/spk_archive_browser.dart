@@ -2192,6 +2192,118 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           );
           break;
+        case 'WTR':
+          final water = WtrData.parse(result.bytes, path);
+          preview = SelectableText(
+            [
+              'Tabla de agua WTR',
+              '',
+              'Tile size: ${water.tileSize}',
+              'Texturas: ${water.textures.length}',
+              ...water.textures.take(200).map((texture) => '• $texture'),
+              if (water.textures.length > 200)
+                '… ${water.textures.length - 200} texturas más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'MANI':
+          final mani = ManiData.parse(result.bytes, path);
+          preview = SelectableText(
+            'MAni válida\n\n'
+            'Versión: 0x${mani.version.toRadixString(16)}\n'
+            'Rotación habilitada: ${mani.enableRotation}\n'
+            'Rotación: ${mani.rotation.x.toStringAsFixed(4)}, '
+            '${mani.rotation.y.toStringAsFixed(4)}, '
+            '${mani.rotation.z.toStringAsFixed(4)}\n'
+            'Velocidad: ${mani.animationSpeed.toStringAsFixed(4)}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'VANI':
+          final vani = VaniData.parse(result.bytes, path);
+          preview = SelectableText(
+            [
+              'VAni válida',
+              '',
+              'Frames: ${vani.frameCount}',
+              'Mallas: ${vani.meshes.length}',
+              'Radio: ${vani.radius.toStringAsFixed(3)}',
+              ...vani.meshes.take(100).map(
+                (mesh) =>
+                    '• ${mesh.texture} · ${mesh.vertices} vértices · '
+                    '${mesh.indices.length ~/ 3} triángulos · '
+                    '${mesh.frameCount} frames',
+              ),
+              if (vani.meshes.length > 100)
+                '… ${vani.meshes.length - 100} mallas más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'SMOD':
+          final smod = readSmodData(result.bytes, path);
+          final triangles = smod.collisions.fold<int>(
+            0,
+            (sum, collision) => sum + collision.triangles,
+          );
+          preview = SelectableText(
+            [
+              'SMOD válido',
+              '',
+              'Partes visuales: ${smod.parts.length}',
+              'Mallas de colisión: ${smod.collisions.length}',
+              'Triángulos de colisión: $triangles',
+              'Radio: ${smod.radius.toStringAsFixed(3)}',
+              ...smod.parts.take(100).map(
+                (part) =>
+                    '• ${part.texture} · ${part.mesh.vertices} vértices · '
+                    '${part.mesh.triangles} triángulos',
+              ),
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'DG':
+          final dg = DgData.parse(result.bytes, path);
+          final triangles = dg.collisions.fold<int>(
+            0,
+            (sum, collision) => sum + collision.triangles,
+          );
+          preview = SelectableText(
+            [
+              'Dungeon DG válido',
+              '',
+              'Partes visuales: ${dg.parts.length}',
+              'Lightmaps declarados: ${dg.lightmapCount}',
+              'Mallas de colisión: ${dg.collisions.length}',
+              'Triángulos de colisión: $triangles',
+              ...dg.parts.take(100).map(
+                (part) =>
+                    '• ${part.texture} · ${part.mesh.vertices} vértices · '
+                    '${part.mesh.triangles} triángulos',
+              ),
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'SVMAP':
+          final map = SvmapData.parse(result.bytes, path);
+          preview = SelectableText(
+            [
+              'SVMAP válido',
+              '',
+              'Tamaño de mapa: ${map.mapSize}',
+              'Tamaño de celda: ${map.cellSize}',
+              'NPC/rutas: ${map.npcs.length}',
+              'Áreas de mobs: ${map.mobAreas.length}',
+              'Portales: ${map.portals.length}',
+              'Spawns: ${map.spawns.length}',
+              'Áreas con nombre: ${map.namedAreas.length}',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
         case '3DC':
           final mesh = MeshData.skinned(result.bytes, path);
           preview = _SpkMeshPreview(
