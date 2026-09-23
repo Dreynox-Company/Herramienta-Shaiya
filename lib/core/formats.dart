@@ -939,6 +939,217 @@ class WorldData {
   }
 }
 
+class DgPart {
+  final String texture;
+  final MeshData mesh;
+  const DgPart(this.texture,this.mesh);
+}
+
+class DgData {
+  final v.Vector3 lower,upper;
+  final int lightmapCount;
+  final List<DgPart> parts;
+  final List<SmodCollisionMesh> collisions;
+  const DgData(this.lower,this.upper,this.lightmapCount,this.parts,this.collisions);
+
+  v.Vector3 get center=>(lower+upper)*.5;
+
+  v.Vector3 get presentationAnchor {
+    DgPart? best;
+    var bestScore=-double.infinity;
+    for(final part in parts){
+      final p=part.mesh.positions;
+      if(p.length<9)continue;
+      var minX=double.infinity,minY=double.infinity,minZ=double.infinity;
+      var maxX=-double.infinity,maxY=-double.infinity,maxZ=-double.infinity;
+      for(var i=0;i<p.length;i+=3){
+        minX=math.min(minX,p[i]);maxX=math.max(maxX,p[i]);
+        minY=math.min(minY,p[i+1]);maxY=math.max(maxY,p[i+1]);
+        minZ=math.min(minZ,p[i+2]);maxZ=math.max(maxZ,p[i+2]);
+      }
+      final sx=maxX-minX,sy=maxY-minY,sz=maxZ-minZ;
+      if(sy>1||sx<2||sz<2||sx>12||sz>12)continue;
+      final cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;
+      final dx=cx-center.x,dz=cz-center.z,dist=math.sqrt(dx*dx+dz*dz);
+      if(dist>20)continue;
+      final score=part.mesh.vertices-dist*2-sy*20;
+      if(score>bestScore){bestScore=score;best=part;}
+    }
+    if(best==null)return center;
+    final p=best.mesh.positions;
+    var minX=double.infinity,minZ=double.infinity,maxX=-double.infinity,maxZ=-double.infinity;
+    for(var i=0;i<p.length;i+=3){
+      minX=math.min(minX,p[i]);maxX=math.max(maxX,p[i]);
+      minZ=math.min(minZ,p[i+2]);maxZ=math.max(maxZ,p[i+2]);
+    }
+    return v.Vector3((minX+maxX)/2,floorAt((minX+maxX)/2,(minZ+maxZ)/2),(minZ+maxZ)/2);
+  }
+
+  double floorAt(double x,double z,{double radius=6}){
+    final ys=<double>[];
+    for(final part in parts){
+      final p=part.mesh.positions;
+      for(var i=0;i<p.length;i+=3){
+        if((p[i]-x).abs()<=radius&&(p[i+2]-z).abs()<=radius){
+          final y=p[i+1];
+          if(y.isFinite&&y<=lower.y+12)ys.add(y);
+        }
+      }
+    }
+    if(ys.isEmpty)return lower.y;
+    ys.sort();
+    // Dungeon floor vertices are repeated heavily; the median of the low
+    // band is stable and avoids isolated wall/bounding-box points.
+    return ys[ys.length~/2];
+  }
+
+  static DgData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final lower=r.vec(),upper=r.vec();
+    final textureCount=r.count(4096);
+    final textures=List.generate(textureCount,(_)=>r.str(256));
+    final lightmapCount=r.count(65536);
+    final hasRoot=r.i32();
+    final parts=<DgPart>[];
+    final collisions=<SmodCollisionMesh>[];
+
+    void readNode(){
+      r.skip(12+24+24); // center, view box, collision box.
+      final groupCount=r.count(100000);
+      for(var g=0;g<groupCount;g++){
+        final textureIndex=r.i32();
+        if(textureIndex<0||textureIndex>=textures.length){
+          r.fail('DG referencia textura inexistente: $textureIndex.');
+        }
+        final meshCount=r.count(100000);
+        for(var m=0;m<meshCount;m++){
+          r.i32(); // lightmap index; geometry is still valid without lightmap.
+          final mesh=MeshData.rigid(r,boneField:true,lightUv:true);
+          parts.add(DgPart(textures[textureIndex],mesh));
+        }
+      }
+      final collisionType=r.i32();
+      if(collisionType==1){
+        final vertexCount=r.count(2000000);
+        final vertices=<v.Vector3>[];
+        for(var i=0;i<vertexCount;i++)vertices.add(r.vec());
+        final faceCount=r.count(2000000);
+        r.need(faceCount*6);
+        final indices=Uint16List(faceCount*3);
+        for(var i=0;i<indices.length;i++){
+          final index=r.u16();
+          if(index>=vertexCount)r.fail('Triángulo de colisión DG fuera de la malla.');
+          indices[i]=index;
+        }
+        collisions.add(SmodCollisionMesh(List.unmodifiable(vertices),indices));
+      }else if(collisionType!=0){
+        r.fail('Tipo de colisión DG desconocido: $collisionType.');
+      }
+      for(var i=0;i<8;i++){
+        if(r.i32()>0)readNode();
+      }
+    }
+
+    if(hasRoot>0)readNode();
+    r.end();
+    return DgData(
+      lower,upper,lightmapCount,List.unmodifiable(parts),List.unmodifiable(collisions),
+    );
+  }
+}
+
+
+class SvmapNpcWaypoint {
+  final v.Vector3 position;
+  final double yaw;
+  const SvmapNpcWaypoint(this.position,this.yaw);
+}
+class SvmapNpcPlacement {
+  final int type,id;
+  final List<SvmapNpcWaypoint> route;
+  const SvmapNpcPlacement(this.type,this.id,this.route);
+  v.Vector3 get position=>route.first.position;
+  double get yaw=>route.first.yaw;
+}
+class SvmapMobSpawn {
+  final int id,count;
+  SvmapMobSpawn(this.id,this.count);
+}
+class SvmapMobArea {
+  final v.Vector3 lower,upper;
+  final List<SvmapMobSpawn> mobs;
+  SvmapMobArea(this.lower,this.upper,this.mobs);
+  v.Vector3 get center=>(lower+upper)*.5;
+}
+class SvmapPortal {
+  final v.Vector3 position,target;
+  final int factionOrId,minLevel,maxLevel,targetMap;
+  SvmapPortal(this.position,this.factionOrId,this.minLevel,this.maxLevel,this.targetMap,this.target);
+}
+class SvmapSpawnArea {
+  final int faction;
+  final v.Vector3 lower,upper;
+  SvmapSpawnArea(this.faction,this.lower,this.upper);
+  v.Vector3 get center=>(lower+upper)*.5;
+}
+class SvmapNamedArea {
+  final v.Vector3 lower,upper;
+  final int name1,name2;
+  SvmapNamedArea(this.lower,this.upper,this.name1,this.name2);
+}
+class SvmapData {
+  final int mapSize,cellSize;
+  final List<SvmapNpcPlacement> npcs;
+  final List<SvmapMobArea> mobAreas;
+  final List<SvmapPortal> portals;
+  final List<SvmapSpawnArea> spawns;
+  final List<SvmapNamedArea> namedAreas;
+  SvmapData(this.mapSize,this.cellSize,this.npcs,this.mobAreas,this.portals,this.spawns,this.namedAreas);
+  static SvmapData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final mapSize=r.i32();
+    if(mapSize<=0||mapSize>16384)r.fail('Tamaño SVMAP inválido: $mapSize.');
+    final mask=(mapSize*mapSize)~/8;r.skip(mask);
+    final cellSize=r.i32();
+    final ladders=r.count(100000);r.skip(ladders*12);
+    final areas=<SvmapMobArea>[];
+    final areaCount=r.count(100000);
+    for(var i=0;i<areaCount;i++){
+      final lower=r.vec(),upper=r.vec(),mobs=<SvmapMobSpawn>[];
+      final n=r.count(10000);
+      for(var j=0;j<n;j++){mobs.add(SvmapMobSpawn(r.u32(),r.u32()));}
+      areas.add(SvmapMobArea(lower,upper,mobs));
+    }
+    final npcs=<SvmapNpcPlacement>[];
+    final npcGroups=r.count(100000);
+    for(var i=0;i<npcGroups;i++){
+      final type=r.i32(),id=r.i32(),n=r.count(10000),route=<SvmapNpcWaypoint>[];
+      for(var j=0;j<n;j++){route.add(SvmapNpcWaypoint(r.vec(),r.f32()));}
+      if(route.isNotEmpty)npcs.add(SvmapNpcPlacement(type,id,List.unmodifiable(route)));
+    }
+    final portals=<SvmapPortal>[];
+    final portalCount=r.count(100000);
+    for(var i=0;i<portalCount;i++){
+      final position=r.vec(),factionOrId=r.i32(),minLevel=r.u16(),maxLevel=r.u16(),targetMap=r.u32(),target=r.vec();
+      portals.add(SvmapPortal(position,factionOrId,minLevel,maxLevel,targetMap,target));
+    }
+    final spawns=<SvmapSpawnArea>[];
+    final spawnCount=r.count(100000);
+    for(var i=0;i<spawnCount;i++){
+      r.i32();final faction=r.i32();r.i32();final lower=r.vec(),upper=r.vec();
+      spawns.add(SvmapSpawnArea(faction,lower,upper));
+    }
+    final named=<SvmapNamedArea>[];
+    final namedCount=r.count(100000);
+    for(var i=0;i<namedCount;i++){
+      final lower=r.vec(),upper=r.vec(),name1=r.i32(),name2=r.i32();
+      named.add(SvmapNamedArea(lower,upper,name1,name2));
+    }
+    if(r.offset>bytes.length)r.fail('SVMAP truncado.');
+    return SvmapData(mapSize,cellSize,npcs,areas,portals,spawns,named);
+  }
+}
+
 class StaticPart {
   final String texture;
   final MeshData mesh;
@@ -946,23 +1157,15 @@ class StaticPart {
 }
 
 class VaniMeshData {
-  final String texture, source;
+  final String texture,source;
   final Uint16List indices;
-  final List<Float32List> positions, normals, uv;
-  const VaniMeshData(
-    this.texture,
-    this.indices,
-    this.positions,
-    this.normals,
-    this.uv,
-    this.source,
-  );
-  int get frameCount => positions.length;
-  int get vertices => positions.isEmpty ? 0 : positions.first.length ~/ 3;
-
-  MeshData frame(int index) {
-    if (frameCount == 0) throw FormatException('$source · VAni sin frames.');
-    final i = index % frameCount;
+  final List<Float32List> positions,normals,uv;
+  const VaniMeshData(this.texture,this.indices,this.positions,this.normals,this.uv,this.source);
+  int get frameCount=>positions.length;
+  int get vertices=>positions.isEmpty?0:positions.first.length~/3;
+  MeshData frame(int index){
+    if(frameCount==0)throw FormatException('$source · VAni sin frames.');
+    final i=index%frameCount;
     return MeshData(
       Float32List.fromList(positions[i]),
       Float32List.fromList(normals[i]),
@@ -977,309 +1180,52 @@ class VaniMeshData {
 }
 
 class VaniData {
-  final v.Vector3 center, lower, upper, lower2, upper2;
+  final v.Vector3 center,lower,upper,lower2,upper2;
   final double radius;
-  final int frameCount, unknown1, unknown2;
+  final int frameCount,unknown1,unknown2;
   final List<VaniMeshData> meshes;
   const VaniData(
-    this.center,
-    this.radius,
-    this.lower,
-    this.upper,
-    this.frameCount,
-    this.unknown1,
-    this.meshes,
-    this.lower2,
-    this.upper2,
-    this.unknown2,
+    this.center,this.radius,this.lower,this.upper,this.frameCount,this.unknown1,
+    this.meshes,this.lower2,this.upper2,this.unknown2,
   );
-
-  static VaniData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source);
-    final center = r.vec(),
-        radius = r.f32(),
-        lower = r.vec(),
-        upper = r.vec();
-    final meshCount = r.count(10000),
-        frameCount = r.count(10000),
-        unknown1 = r.i32();
-    if (!radius.isFinite || radius < 0) r.fail('Radio VAni inválido.');
-    if (meshCount == 0 || frameCount == 0) r.fail('VAni sin mallas o frames.');
-    final meshes = <VaniMeshData>[];
-    for (var meshIndex = 0; meshIndex < meshCount; meshIndex++) {
-      final texture = r.str();
-      if (!RegExp(r'\.(dds|tga|bmp|png), caseSensitive: false)
-          .hasMatch(name),
-    )) {
-      r.fail('WTR sin referencias de textura reconocibles.');
-    }
-    r.end();
-    return WtrData(
-      tileSize,
-      unknown2,
-      unknown3,
-      List.unmodifiable(textures),
-    );
-  }
-}
-
-class ManiData {
-  final int version,
-      unknown1,
-      unknown5,
-      unknown6,
-      enableRotation,
-      unknownShort1,
-      unknownShort2,
-      unknown13;
-  final v.Vector3 unknownVec1, unknownVec2, rotation, unknownVec4;
-  final double unknown2,
-      unknown3,
-      unknown4,
-      unknown7,
-      unknown8,
-      animationSpeed,
-      unknown11,
-      unknown12;
-
-  const ManiData({
-    required this.version,
-    required this.unknown1,
-    required this.unknownVec1,
-    required this.unknown2,
-    required this.unknown3,
-    required this.unknown4,
-    required this.unknown5,
-    required this.unknown6,
-    required this.unknownVec2,
-    required this.unknown7,
-    required this.unknown8,
-    required this.enableRotation,
-    required this.rotation,
-    required this.animationSpeed,
-    required this.unknownShort1,
-    required this.unknownShort2,
-    required this.unknownVec4,
-    required this.unknown11,
-    required this.unknown12,
-    required this.unknown13,
-  });
-
-  static ManiData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source);
-    final out = ManiData(
-      version: r.i32(),
-      unknown1: r.i32(),
-      unknownVec1: r.vec(),
-      unknown2: r.f32(),
-      unknown3: r.f32(),
-      unknown4: r.f32(),
-      unknown5: r.i32(),
-      unknown6: r.i32(),
-      unknownVec2: r.vec(),
-      unknown7: r.f32(),
-      unknown8: r.f32(),
-      enableRotation: r.i32(),
-      rotation: r.vec(),
-      animationSpeed: r.f32(),
-      unknownShort1: r.i16(),
-      unknownShort2: r.i16(),
-      unknownVec4: r.vec(),
-      unknown11: r.f32(),
-      unknown12: r.f32(),
-      unknown13: r.i32(),
-    );
-    r.end();
-    if (out.version != 0x21) {
-      throw FormatException(
-        '$source · versión MAni inesperada: ${out.version}.',
-      );
-    }
-    return out;
-  }
-}
-
-class WorldInstance {
-  final String category, asset;
-  final v.Vector3 position, forward, up;
-  WorldInstance(
-    this.category,
-    this.asset,
-    this.position,
-    this.forward,
-    this.up,
-  );
-}
-
-class WorldData {
-  final int size;
-  final Uint16List heights;
-  final Uint8List types;
-  final List<WorldLayer> layers;
-  final List<WorldInstance> objects;
-  final String layout;
-  WorldData(
-    this.size,
-    this.heights,
-    this.types,
-    this.layers,
-    this.objects,
-    this.layout,
-  );
-  static WorldData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source), sig = r.str(4);
-    if (sig != 'FLD' && sig != 'DUN') r.fail('Cabecera WLD desconocida.');
-    var size = 0;
-    var heights = Uint16List(0);
-    var types = Uint8List(0);
-    final layers = <WorldLayer>[];
-    if (sig == 'FLD') {
-      size = r.count(8192);
-      if (size < 2 || size.isOdd) r.fail('Dimensiones WLD inválidas.');
-      final n = (size ~/ 2 + 1) * (size ~/ 2 + 1);
-      r.need(n * 3);
-      heights = Uint16List(n);
-      for (var i = 0; i < n; i++) {
-        heights[i] = r.u16();
-      }
-      types = Uint8List.fromList(bytes.sublist(r.offset, r.offset + n));
-      r.skip(n);
-      final nl = r.count(256);
-      for (var i = 0; i < nl; i++) {
-        layers.add(WorldLayer(r.str(256), r.f32(), r.str(256)));
-      }
-    }
-    final layout = r.str(256), objects = <WorldInstance>[];
-    for (final category in [
-      'Building',
-      'Shape',
-      'Tree',
-      'Grass',
-      'VAni',
-      'VAni',
-      'dungeon',
-    ]) {
-      final names = List.generate(r.count(20000), (_) => r.str(256));
-      final n = r.count(1000000);
-      r.need(n * 40);
-      for (var i = 0; i < n; i++) {
-        final id = r.u32(), p = r.vec(), f = r.vec(), u = r.vec();
-        if (id >= names.length) r.fail('Objeto WLD no definido.');
-        objects.add(WorldInstance(category, names[id], p, f, u));
-      }
-    }
-    return WorldData(size, heights, types, layers, objects, layout);
-  }
-
-  double heightAt(
-    double x,
-    double z, {
-    double scale = .02,
-    double offset = -200,
-  }) {
-    if (size == 0) return 0;
-    final width = size ~/ 2 + 1;
-    final fx = (x / 2).clamp(0.0, width - 1.001),
-        fz = (z / 2).clamp(0.0, width - 1.001),
-        a = fx.floor(),
-        b = fz.floor(),
-        tx = fx - a,
-        tz = fz - b;
-    double h(int i, int j) => heights[j * width + i] * scale + offset;
-    return (h(a, b) * (1 - tx) + h(a + 1, b) * tx) * (1 - tz) +
-        (h(a, b + 1) * (1 - tx) + h(a + 1, b + 1) * tx) * tz;
-  }
-}
-
-class StaticPart {
-  final String texture;
-  final MeshData mesh;
-  StaticPart(this.texture, this.mesh);
-}
-
-List<StaticPart> readSmod(Uint8List bytes, String source) {
-  final r = Bin(bytes, source);
-  r.skip(40);
-  final out = <StaticPart>[];
-  final n = r.count(10000);
-  for (var i = 0; i < n; i++) {
-    final tex = r.str();
-    out.add(StaticPart(tex, MeshData.rigid(r, boneField: true)));
-  }
-  return out;
-}
-, caseSensitive: false)
-          .hasMatch(texture)) {
-        r.fail('Textura VAni desconocida.');
-      }
-      final faceCount = r.count(2000000);
-      r.need(faceCount * 6);
-      final rawIndices = Uint16List(faceCount * 3);
-      for (var i = 0; i < rawIndices.length; i++) {
-        rawIndices[i] = r.u16();
-      }
-      final vertexCount = r.count(65535);
-      final total = vertexCount * frameCount;
-      if (vertexCount == 0 || total > 50000000) {
-        r.fail('VAni excede el límite de vértices animados: $total.');
-      }
-      final positions = List.generate(
-        frameCount,
-        (_) => Float32List(vertexCount * 3),
-      );
-      final normals = List.generate(
-        frameCount,
-        (_) => Float32List(vertexCount * 3),
-      );
-      final uv = List.generate(
-        frameCount,
-        (_) => Float32List(vertexCount * 2),
-      );
-      for (var frame = 0; frame < frameCount; frame++) {
-        for (var vertex = 0; vertex < vertexCount; vertex++) {
-          final p = positions[frame],
-              n = normals[frame],
-              t = uv[frame],
-              po = vertex * 3,
-              to = vertex * 2;
-          p[po] = r.f32();
-          p[po + 1] = r.f32();
-          p[po + 2] = r.f32();
-          n[po] = r.rawFloat();
-          n[po + 1] = r.rawFloat();
-          n[po + 2] = r.rawFloat();
-          r.i32();
-          t[to] = r.f32();
-          t[to + 1] = r.f32();
+  static VaniData parse(Uint8List bytes,String source){
+    final r=Bin(bytes,source);
+    final center=r.vec(),radius=r.f32(),lower=r.vec(),upper=r.vec();
+    final meshCount=r.count(10000),frameCount=r.count(10000),unknown1=r.i32();
+    if(frameCount==0)r.fail('VAni sin frames.');
+    final meshes=<VaniMeshData>[];
+    for(var meshIndex=0;meshIndex<meshCount;meshIndex++){
+      final texture=r.str();
+      final faceCount=r.count(2000000);
+      r.need(faceCount*6);
+      final rawIndices=Uint16List(faceCount*3);
+      for(var i=0;i<rawIndices.length;i++)rawIndices[i]=r.u16();
+      final vertexCount=r.count(65535);
+      final total=vertexCount*frameCount;
+      if(total>50000000)r.fail('VAni excede el límite de vertices animados: $total.');
+      final positions=List.generate(frameCount,(_)=>Float32List(vertexCount*3));
+      final normals=List.generate(frameCount,(_)=>Float32List(vertexCount*3));
+      final uv=List.generate(frameCount,(_)=>Float32List(vertexCount*2));
+      for(var frame=0;frame<frameCount;frame++){
+        for(var vertex=0;vertex<vertexCount;vertex++){
+          final p=positions[frame],n=normals[frame],t=uv[frame],po=vertex*3,to=vertex*2;
+          p[po]=r.f32();p[po+1]=r.f32();p[po+2]=r.f32();
+          n[po]=r.rawFloat();n[po+1]=r.rawFloat();n[po+2]=r.rawFloat();
+          r.i32(); // VAni bone id; native files use -1.
+          t[to]=r.f32();t[to+1]=r.f32();
         }
       }
-      for (final index in rawIndices) {
-        if (index >= vertexCount) r.fail('Triángulo VAni fuera de la malla.');
-      }
-      meshes.add(
-        VaniMeshData(
-          texture,
-          rawIndices,
-          List.unmodifiable(positions),
-          List.unmodifiable(normals),
-          List.unmodifiable(uv),
-          '$source#$meshIndex',
-        ),
-      );
+      for(final index in rawIndices){if(index>=vertexCount)r.fail('Triángulo VAni fuera de la malla.');}
+      meshes.add(VaniMeshData(
+        texture,rawIndices,List.unmodifiable(positions),List.unmodifiable(normals),
+        List.unmodifiable(uv),'$source#$meshIndex',
+      ));
     }
-    final lower2 = r.vec(), upper2 = r.vec(), unknown2 = r.i32();
+    final lower2=r.vec(),upper2=r.vec(),unknown2=r.i32();
     r.end();
     return VaniData(
-      center,
-      radius,
-      lower,
-      upper,
-      frameCount,
-      unknown1,
-      List.unmodifiable(meshes),
-      lower2,
-      upper2,
-      unknown2,
+      center,radius,lower,upper,frameCount,unknown1,List.unmodifiable(meshes),
+      lower2,upper2,unknown2,
     );
   }
 }
@@ -1287,505 +1233,52 @@ List<StaticPart> readSmod(Uint8List bytes, String source) {
 class SmodCollisionMesh {
   final List<v.Vector3> vertices;
   final Uint16List indices;
-  const SmodCollisionMesh(this.vertices, this.indices);
-  int get triangles => indices.length ~/ 3;
+  const SmodCollisionMesh(this.vertices,this.indices);
+  int get triangles=>indices.length~/3;
 }
 
 class SmodData {
-  final v.Vector3 center,
-      viewLower,
-      viewUpper,
-      collisionLower,
-      collisionUpper;
+  final v.Vector3 center,viewLower,viewUpper,collisionLower,collisionUpper;
   final double radius;
   final List<StaticPart> parts;
   final List<SmodCollisionMesh> collisions;
   const SmodData(
-    this.center,
-    this.radius,
-    this.viewLower,
-    this.viewUpper,
-    this.parts,
-    this.collisionLower,
-    this.collisionUpper,
-    this.collisions,
+    this.center,this.radius,this.viewLower,this.viewUpper,
+    this.parts,this.collisionLower,this.collisionUpper,this.collisions,
   );
 }
 
-SmodData readSmodData(Uint8List bytes, String source) {
-  final r = Bin(bytes, source);
-  final center = r.vec(),
-      radius = r.f32(),
-      viewLower = r.vec(),
-      viewUpper = r.vec();
-  if (!radius.isFinite || radius < 0) r.fail('Radio SMOD inválido.');
-  final parts = <StaticPart>[];
-  final textured = r.count(10000);
-  for (var i = 0; i < textured; i++) {
-    final tex = r.str();
-    parts.add(StaticPart(tex, MeshData.rigid(r, boneField: true)));
+SmodData readSmodData(Uint8List bytes,String source){
+  final r=Bin(bytes,source);
+  final center=r.vec(),radius=r.f32(),viewLower=r.vec(),viewUpper=r.vec();
+  final parts=<StaticPart>[];
+  final textured=r.count(10000);
+  for(var i=0;i<textured;i++){
+    final tex=r.str();
+    parts.add(StaticPart(tex,MeshData.rigid(r,boneField:true)));
   }
-  final collisionLower = r.vec(), collisionUpper = r.vec();
-  final collisions = <SmodCollisionMesh>[];
-  final collisionCount = r.count(10000);
-  for (var i = 0; i < collisionCount; i++) {
-    final vertexCount = r.count(1000000);
-    final vertices = <v.Vector3>[];
-    for (var j = 0; j < vertexCount; j++) {
-      vertices.add(r.vec());
+  final collisionLower=r.vec(),collisionUpper=r.vec();
+  final collisions=<SmodCollisionMesh>[];
+  final collisionCount=r.count(10000);
+  for(var i=0;i<collisionCount;i++){
+    final vertexCount=r.count(1000000);
+    final vertices=<v.Vector3>[];
+    for(var j=0;j<vertexCount;j++)vertices.add(r.vec());
+    final faceCount=r.count(2000000);
+    r.need(faceCount*6);
+    final indices=Uint16List(faceCount*3);
+    for(var j=0;j<indices.length;j++){
+      final index=r.u16();
+      if(index>=vertexCount)r.fail('Triángulo de colisión SMOD fuera de la malla.');
+      indices[j]=index;
     }
-    final faceCount = r.count(2000000);
-    r.need(faceCount * 6);
-    final indices = Uint16List(faceCount * 3);
-    for (var j = 0; j < indices.length; j++) {
-      final index = r.u16();
-      if (index >= vertexCount) {
-        r.fail('Triángulo de colisión SMOD fuera de la malla.');
-      }
-      indices[j] = index;
-    }
-    collisions.add(SmodCollisionMesh(List.unmodifiable(vertices), indices));
+    collisions.add(SmodCollisionMesh(List.unmodifiable(vertices),indices));
   }
   r.end();
   return SmodData(
-    center,
-    radius,
-    viewLower,
-    viewUpper,
-    List.unmodifiable(parts),
-    collisionLower,
-    collisionUpper,
-    List.unmodifiable(collisions),
+    center,radius,viewLower,viewUpper,List.unmodifiable(parts),
+    collisionLower,collisionUpper,List.unmodifiable(collisions),
   );
 }
 
-List<StaticPart> readSmod(Uint8List bytes, String source) =>
-    readSmodData(bytes, source).parts;
-
-class DgPart {
-  final String texture;
-  final MeshData mesh;
-  const DgPart(this.texture, this.mesh);
-}
-
-class DgData {
-  final v.Vector3 lower, upper;
-  final int lightmapCount;
-  final List<DgPart> parts;
-  final List<SmodCollisionMesh> collisions;
-  const DgData(
-    this.lower,
-    this.upper,
-    this.lightmapCount,
-    this.parts,
-    this.collisions,
-  );
-
-  static DgData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source);
-    final lower = r.vec(), upper = r.vec();
-    final textureCount = r.count(4096);
-    if (textureCount == 0) r.fail('DG sin texturas.');
-    final textures = List.generate(textureCount, (_) => r.str(256));
-    final lightmapCount = r.count(65536);
-    final hasRoot = r.i32();
-    final parts = <DgPart>[];
-    final collisions = <SmodCollisionMesh>[];
-
-    void readNode() {
-      r.skip(12 + 24 + 24);
-      final groupCount = r.count(100000);
-      for (var g = 0; g < groupCount; g++) {
-        final textureIndex = r.i32();
-        if (textureIndex < 0 || textureIndex >= textures.length) {
-          r.fail('DG referencia textura inexistente: $textureIndex.');
-        }
-        final meshCount = r.count(100000);
-        for (var m = 0; m < meshCount; m++) {
-          r.i32();
-          parts.add(
-            DgPart(
-              textures[textureIndex],
-              MeshData.rigid(r, boneField: true, lightUv: true),
-            ),
-          );
-        }
-      }
-      final collisionType = r.i32();
-      if (collisionType == 1) {
-        final vertexCount = r.count(2000000);
-        final vertices = <v.Vector3>[];
-        for (var i = 0; i < vertexCount; i++) {
-          vertices.add(r.vec());
-        }
-        final faceCount = r.count(2000000);
-        r.need(faceCount * 6);
-        final indices = Uint16List(faceCount * 3);
-        for (var i = 0; i < indices.length; i++) {
-          final index = r.u16();
-          if (index >= vertexCount) {
-            r.fail('Triángulo de colisión DG fuera de la malla.');
-          }
-          indices[i] = index;
-        }
-        collisions.add(SmodCollisionMesh(List.unmodifiable(vertices), indices));
-      } else if (collisionType != 0) {
-        r.fail('Tipo de colisión DG desconocido: $collisionType.');
-      }
-      for (var i = 0; i < 8; i++) {
-        if (r.i32() > 0) readNode();
-      }
-    }
-
-    if (hasRoot > 0) readNode();
-    r.end();
-    return DgData(
-      lower,
-      upper,
-      lightmapCount,
-      List.unmodifiable(parts),
-      List.unmodifiable(collisions),
-    );
-  }
-}
-
-class SvmapNpcWaypoint {
-  final v.Vector3 position;
-  final double yaw;
-  const SvmapNpcWaypoint(this.position, this.yaw);
-}
-
-class SvmapNpcPlacement {
-  final int type, id;
-  final List<SvmapNpcWaypoint> route;
-  const SvmapNpcPlacement(this.type, this.id, this.route);
-}
-
-class SvmapMobSpawn {
-  final int id, count;
-  const SvmapMobSpawn(this.id, this.count);
-}
-
-class SvmapMobArea {
-  final v.Vector3 lower, upper;
-  final List<SvmapMobSpawn> mobs;
-  const SvmapMobArea(this.lower, this.upper, this.mobs);
-}
-
-class SvmapPortal {
-  final v.Vector3 position, target;
-  final int factionOrId, minLevel, maxLevel, targetMap;
-  const SvmapPortal(
-    this.position,
-    this.factionOrId,
-    this.minLevel,
-    this.maxLevel,
-    this.targetMap,
-    this.target,
-  );
-}
-
-class SvmapSpawnArea {
-  final int faction;
-  final v.Vector3 lower, upper;
-  const SvmapSpawnArea(this.faction, this.lower, this.upper);
-}
-
-class SvmapNamedArea {
-  final v.Vector3 lower, upper;
-  final int name1, name2;
-  const SvmapNamedArea(this.lower, this.upper, this.name1, this.name2);
-}
-
-class SvmapData {
-  final int mapSize, cellSize;
-  final List<SvmapNpcPlacement> npcs;
-  final List<SvmapMobArea> mobAreas;
-  final List<SvmapPortal> portals;
-  final List<SvmapSpawnArea> spawns;
-  final List<SvmapNamedArea> namedAreas;
-  const SvmapData(
-    this.mapSize,
-    this.cellSize,
-    this.npcs,
-    this.mobAreas,
-    this.portals,
-    this.spawns,
-    this.namedAreas,
-  );
-
-  static SvmapData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source);
-    final mapSize = r.i32();
-    if (mapSize <= 0 || mapSize > 16384) {
-      r.fail('Tamaño SVMAP inválido: $mapSize.');
-    }
-    final mask = (mapSize * mapSize) ~/ 8;
-    r.skip(mask);
-    final cellSize = r.i32();
-    if (cellSize <= 0 || cellSize > mapSize) {
-      r.fail('Tamaño de celda SVMAP inválido: $cellSize.');
-    }
-    final ladders = r.count(100000);
-    r.skip(ladders * 12);
-    final areas = <SvmapMobArea>[];
-    final areaCount = r.count(100000);
-    for (var i = 0; i < areaCount; i++) {
-      final lower = r.vec(), upper = r.vec(), mobs = <SvmapMobSpawn>[];
-      final n = r.count(10000);
-      for (var j = 0; j < n; j++) {
-        mobs.add(SvmapMobSpawn(r.u32(), r.u32()));
-      }
-      areas.add(SvmapMobArea(lower, upper, mobs));
-    }
-    final npcs = <SvmapNpcPlacement>[];
-    final npcGroups = r.count(100000);
-    for (var i = 0; i < npcGroups; i++) {
-      final type = r.i32(), id = r.i32(), n = r.count(10000);
-      final route = <SvmapNpcWaypoint>[];
-      for (var j = 0; j < n; j++) {
-        route.add(SvmapNpcWaypoint(r.vec(), r.f32()));
-      }
-      if (route.isNotEmpty) {
-        npcs.add(SvmapNpcPlacement(type, id, List.unmodifiable(route)));
-      }
-    }
-    final portals = <SvmapPortal>[];
-    final portalCount = r.count(100000);
-    for (var i = 0; i < portalCount; i++) {
-      portals.add(
-        SvmapPortal(
-          r.vec(),
-          r.i32(),
-          r.u16(),
-          r.u16(),
-          r.u32(),
-          r.vec(),
-        ),
-      );
-    }
-    final spawns = <SvmapSpawnArea>[];
-    final spawnCount = r.count(100000);
-    for (var i = 0; i < spawnCount; i++) {
-      r.i32();
-      final faction = r.i32();
-      r.i32();
-      spawns.add(SvmapSpawnArea(faction, r.vec(), r.vec()));
-    }
-    final named = <SvmapNamedArea>[];
-    final namedCount = r.count(100000);
-    for (var i = 0; i < namedCount; i++) {
-      named.add(SvmapNamedArea(r.vec(), r.vec(), r.i32(), r.i32()));
-    }
-    r.end();
-    return SvmapData(
-      mapSize,
-      cellSize,
-      List.unmodifiable(npcs),
-      List.unmodifiable(areas),
-      List.unmodifiable(portals),
-      List.unmodifiable(spawns),
-      List.unmodifiable(named),
-    );
-  }
-}
-, caseSensitive: false)
-          .hasMatch(name),
-    )) {
-      r.fail('WTR sin referencias de textura reconocibles.');
-    }
-    r.end();
-    return WtrData(
-      tileSize,
-      unknown2,
-      unknown3,
-      List.unmodifiable(textures),
-    );
-  }
-}
-
-class ManiData {
-  final int version,
-      unknown1,
-      unknown5,
-      unknown6,
-      enableRotation,
-      unknownShort1,
-      unknownShort2,
-      unknown13;
-  final v.Vector3 unknownVec1, unknownVec2, rotation, unknownVec4;
-  final double unknown2,
-      unknown3,
-      unknown4,
-      unknown7,
-      unknown8,
-      animationSpeed,
-      unknown11,
-      unknown12;
-
-  const ManiData({
-    required this.version,
-    required this.unknown1,
-    required this.unknownVec1,
-    required this.unknown2,
-    required this.unknown3,
-    required this.unknown4,
-    required this.unknown5,
-    required this.unknown6,
-    required this.unknownVec2,
-    required this.unknown7,
-    required this.unknown8,
-    required this.enableRotation,
-    required this.rotation,
-    required this.animationSpeed,
-    required this.unknownShort1,
-    required this.unknownShort2,
-    required this.unknownVec4,
-    required this.unknown11,
-    required this.unknown12,
-    required this.unknown13,
-  });
-
-  static ManiData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source);
-    final out = ManiData(
-      version: r.i32(),
-      unknown1: r.i32(),
-      unknownVec1: r.vec(),
-      unknown2: r.f32(),
-      unknown3: r.f32(),
-      unknown4: r.f32(),
-      unknown5: r.i32(),
-      unknown6: r.i32(),
-      unknownVec2: r.vec(),
-      unknown7: r.f32(),
-      unknown8: r.f32(),
-      enableRotation: r.i32(),
-      rotation: r.vec(),
-      animationSpeed: r.f32(),
-      unknownShort1: r.i16(),
-      unknownShort2: r.i16(),
-      unknownVec4: r.vec(),
-      unknown11: r.f32(),
-      unknown12: r.f32(),
-      unknown13: r.i32(),
-    );
-    r.end();
-    if (out.version != 0x21) {
-      throw FormatException(
-        '$source · versión MAni inesperada: ${out.version}.',
-      );
-    }
-    return out;
-  }
-}
-
-class WorldInstance {
-  final String category, asset;
-  final v.Vector3 position, forward, up;
-  WorldInstance(
-    this.category,
-    this.asset,
-    this.position,
-    this.forward,
-    this.up,
-  );
-}
-
-class WorldData {
-  final int size;
-  final Uint16List heights;
-  final Uint8List types;
-  final List<WorldLayer> layers;
-  final List<WorldInstance> objects;
-  final String layout;
-  WorldData(
-    this.size,
-    this.heights,
-    this.types,
-    this.layers,
-    this.objects,
-    this.layout,
-  );
-  static WorldData parse(Uint8List bytes, String source) {
-    final r = Bin(bytes, source), sig = r.str(4);
-    if (sig != 'FLD' && sig != 'DUN') r.fail('Cabecera WLD desconocida.');
-    var size = 0;
-    var heights = Uint16List(0);
-    var types = Uint8List(0);
-    final layers = <WorldLayer>[];
-    if (sig == 'FLD') {
-      size = r.count(8192);
-      if (size < 2 || size.isOdd) r.fail('Dimensiones WLD inválidas.');
-      final n = (size ~/ 2 + 1) * (size ~/ 2 + 1);
-      r.need(n * 3);
-      heights = Uint16List(n);
-      for (var i = 0; i < n; i++) {
-        heights[i] = r.u16();
-      }
-      types = Uint8List.fromList(bytes.sublist(r.offset, r.offset + n));
-      r.skip(n);
-      final nl = r.count(256);
-      for (var i = 0; i < nl; i++) {
-        layers.add(WorldLayer(r.str(256), r.f32(), r.str(256)));
-      }
-    }
-    final layout = r.str(256), objects = <WorldInstance>[];
-    for (final category in [
-      'Building',
-      'Shape',
-      'Tree',
-      'Grass',
-      'VAni',
-      'VAni',
-      'dungeon',
-    ]) {
-      final names = List.generate(r.count(20000), (_) => r.str(256));
-      final n = r.count(1000000);
-      r.need(n * 40);
-      for (var i = 0; i < n; i++) {
-        final id = r.u32(), p = r.vec(), f = r.vec(), u = r.vec();
-        if (id >= names.length) r.fail('Objeto WLD no definido.');
-        objects.add(WorldInstance(category, names[id], p, f, u));
-      }
-    }
-    return WorldData(size, heights, types, layers, objects, layout);
-  }
-
-  double heightAt(
-    double x,
-    double z, {
-    double scale = .02,
-    double offset = -200,
-  }) {
-    if (size == 0) return 0;
-    final width = size ~/ 2 + 1;
-    final fx = (x / 2).clamp(0.0, width - 1.001),
-        fz = (z / 2).clamp(0.0, width - 1.001),
-        a = fx.floor(),
-        b = fz.floor(),
-        tx = fx - a,
-        tz = fz - b;
-    double h(int i, int j) => heights[j * width + i] * scale + offset;
-    return (h(a, b) * (1 - tx) + h(a + 1, b) * tx) * (1 - tz) +
-        (h(a, b + 1) * (1 - tx) + h(a + 1, b + 1) * tx) * tz;
-  }
-}
-
-class StaticPart {
-  final String texture;
-  final MeshData mesh;
-  StaticPart(this.texture, this.mesh);
-}
-
-List<StaticPart> readSmod(Uint8List bytes, String source) {
-  final r = Bin(bytes, source);
-  r.skip(40);
-  final out = <StaticPart>[];
-  final n = r.count(10000);
-  for (var i = 0; i < n; i++) {
-    final tex = r.str();
-    out.add(StaticPart(tex, MeshData.rigid(r, boneField: true)));
-  }
-  return out;
-}
+List<StaticPart> readSmod(Uint8List bytes,String source)=>readSmodData(bytes,source).parts;
