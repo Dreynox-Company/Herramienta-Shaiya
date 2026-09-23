@@ -2351,7 +2351,9 @@ class WorldHud extends StatelessWidget {
       locale=='spn'?'Estado del personaje':'Character status',
       Padding(
         padding:const EdgeInsets.all(12),
-        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        child:ListView(
+          padding:EdgeInsets.zero,
+          children:[
           Row(children:[
             Expanded(child:Text(characterName,style:const TextStyle(fontSize:14,color:Color(0xffffe26f),fontWeight:FontWeight.bold))),
             Text('Lv.$level',style:const TextStyle(fontSize:11,color:Colors.white70)),
@@ -2398,7 +2400,7 @@ class WorldHud extends StatelessWidget {
           _statLine(locale=='spn'?'Ataque mágico':'Magic attack','${a?.minMagicAttack??0}-${a?.maxMagicAttack??0}',null),
           _statLine(locale=='spn'?'Defensa':'Defense',a?.defense,null),
           _statLine(locale=='spn'?'Resistencia':'Resistance',a?.resistance,null),
-          const Spacer(),
+          const SizedBox(height:8),
           Text(
             (locale=='spn'?'Puntos de estado: ':'Stat points: ')+(d?.statPoint??0).toString()+
             '   ·   '+(locale=='spn'?'Puntos de habilidad: ':'Skill points: ')+(d?.skillPoint??0).toString(),
@@ -2409,7 +2411,8 @@ class WorldHud extends StatelessWidget {
             'HP ${hitpoints?.hp??d?.maxHp??0}/${d?.maxHp??0} · MP ${hitpoints?.mp??d?.maxMp??0}/${d?.maxMp??0} · SP ${hitpoints?.sp??d?.maxSp??0}/${d?.maxSp??0}',
             style:const TextStyle(fontSize:8.5,color:Colors.white60),
           ),
-        ]),
+        ],
+        ),
       ),
     );
   }
