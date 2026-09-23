@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dreynox_game_theme.dart';
 
 Widget shaiyaRedButton(
   String label,
@@ -14,21 +15,12 @@ Widget shaiyaRedButton(
       width:width,
       height:height,
       alignment:Alignment.center,
-      decoration:BoxDecoration(
-        borderRadius:BorderRadius.circular(3),
-        border:Border.all(color:const Color(0xff8b554f)),
-        gradient:const LinearGradient(
-          begin:Alignment.topCenter,
-          end:Alignment.bottomCenter,
-          colors:[Color(0xff8d3938),Color(0xff401719)],
-        ),
-        boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:3)],
-      ),
+      decoration:DreynoxGameStyle.buttonDecoration(active:onTap!=null),
       child:Text(
         label,
         style:TextStyle(
           fontSize:fontSize,
-          color:Colors.white,
+          color:DreynoxGameStyle.text,
           shadows:const [Shadow(color:Colors.black,blurRadius:2)],
         ),
       ),
@@ -39,8 +31,8 @@ Widget shaiyaRedButton(
 Widget shaiyaBar(Color color,double value,{double height=9})=>Container(
   height:height,
   decoration:BoxDecoration(
-    color:Colors.black,
-    border:Border.all(color:const Color(0xffc7b78e)),
+    color:const Color(0xb0061020),
+    border:Border.all(color:DreynoxGameStyle.border),
   ),
   child:FractionallySizedBox(
     alignment:Alignment.centerLeft,
