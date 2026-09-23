@@ -1,0 +1,18 @@
+{
+  "ShaiyaMeshVertex": {
+    "type": "vertex",
+    "file": "shaders/shaiya_mesh.vert"
+  },
+  "ShaiyaMeshFragment": {
+    "type": "fragment",
+    "file": "shaders/shaiya_mesh.frag"
+  },
+  "ShaiyaCloudVertex": {
+    "type": "vertex",
+    "file": "shaders/volumetric_clouds.vert"
+  },
+  "ShaiyaCloudFragment": {
+    "type": "fragment",
+    "file": "shaders/volumetric_clouds.frag"
+  }
+}
