@@ -52,3 +52,10 @@ original exacto y el mismo DATA.SPK.
   solo comienza después del contacto con el suelo.
 - La guardia y las animaciones de combate siguen siendo estados de combate, no
   reposos permanentes del editor.
+
+
+## Gate de rama
+
+La rama 0.6.20 se normaliza con `dart format` antes de exigir analyze, regresión
+completa, integración nativa y Windows Release. Un fallo de formato no debe
+ocultar errores reales de compilación.
