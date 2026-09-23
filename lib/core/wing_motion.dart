@@ -22,7 +22,7 @@ List<String> wingMotionCandidates(WingMotionPhase phase) => switch (phase) {
   WingMotionPhase.grounded => const ['Reposo', 'Respirar'],
   WingMotionPhase.hover => const ['Respirar', 'Reposo'],
   WingMotionPhase.cruise => const ['Correr', 'Caminar', 'Respirar', 'Reposo'],
-  WingMotionPhase.landing => const ['Caminar', 'Reposo', 'Respirar'],
+  WingMotionPhase.landing => const ['Respirar', 'Reposo'],
 };
 
 T? selectWingMotion<T>(Map<String, T> clips, WingMotionPhase phase) {
