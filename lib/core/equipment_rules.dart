@@ -92,6 +92,55 @@ bool isShield(WeaponRecord? w) => const {19, 34}.contains(weaponFamily(w));
 bool permitsShield(WeaponRecord? w) =>
     w == null || const {1, 3, 7, 9, 10}.contains(weaponFamily(w));
 
+/// DBItemData -> equipment layout recovered and exercised by the ps0032
+/// Flutter client. Keeping it in Studio prevents the editor from guessing
+/// where modern EP item types belong.
+int weaponFamilyForItemType(int type) {
+  if (type >= 1 && type <= 15) return type;
+  return switch (type) {
+    45 => 1,
+    46 => 2,
+    47 => 3,
+    48 => 4,
+    49 || 50 => 5,
+    51 || 52 => 6,
+    53 || 54 => 7,
+    55 || 56 => 8,
+    57 => 9,
+    58 => 10,
+    59 => 11,
+    60 || 61 => 12,
+    62 || 63 => 13,
+    64 => 14,
+    65 => 15,
+    _ => 0,
+  };
+}
+
+List<int> equipmentSlotsForItemType(int type) {
+  if ((type >= 1 && type <= 15) || (type >= 45 && type <= 65)) {
+    return const [5];
+  }
+  if (const {16, 31, 66, 72, 81, 87}.contains(type)) return const [0];
+  if (const {17, 32, 67, 73, 82, 88}.contains(type)) return const [1];
+  if (const {18, 33, 68, 74, 83, 89}.contains(type)) return const [2];
+  if (const {20, 35, 70, 76, 85, 91}.contains(type)) return const [3];
+  if (const {21, 36, 71, 77, 86, 92}.contains(type)) return const [4];
+  if (const {19, 34, 69, 75, 84, 90}.contains(type)) return const [6];
+  if (const {24, 39}.contains(type)) return const [7];
+  if (const {23, 96}.contains(type)) return const [8];
+  if (const {22, 37}.contains(type)) return const [9, 10];
+  if (const {40, 97}.contains(type)) return const [11, 12];
+  if (type == 42) return const [13];
+  if (type == 120) return const [14];
+  if (type == 150) return const [15];
+  if (type == 121) return const [16];
+  return const [];
+}
+
+const int wingItemType = 121;
+const int wingEquipmentSlot = 16;
+
 class ItemRule {
   final int country, type, model;
   final Set<String> classes;
