@@ -299,6 +299,8 @@ void main() {
     await scene.selectCreature(c.wings.first, 'wing');
     expect(scene.flightEnabled, false);
     expect(scene.flying, false);
+    expect(scene.wingAutoMotion, true);
+    expect(scene.wing!.clip, scene.wing!.clips['Reposo']);
     (state.focus as FocusNode).requestFocus();
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
@@ -328,8 +330,11 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     scene.clearMovement();
     await waitFor(
-      () => scene.flying && scene.character!.clip == scene.character!.hover,
-      'Manual flight with equipped wings; equipping alone remains grounded',
+      () =>
+          scene.flying &&
+          scene.character!.clip == scene.character!.hover &&
+          scene.wing!.clip == scene.wing!.clips['Respirar'],
+      'Manual flight enters character hover and original wing air loop',
     );
     scene.wingYaw = .65;
     scene.updateAttachments();
@@ -340,10 +345,16 @@ void main() {
     scene.wingYaw = .65;
     scene.setMovement(0, -1);
     await waitFor(
-      () => scene.character!.clip == scene.character!.flight,
-      'Supplemental flight only during wing movement',
+      () =>
+          scene.character!.clip == scene.character!.flight &&
+          scene.wing!.clip == scene.wing!.clips['Correr'],
+      'Moving flight uses supplemental body motion and original wing run slot',
     );
     scene.clearMovement();
+    await waitFor(
+      () => scene.wing!.clip == scene.wing!.clips['Respirar'],
+      'Stopping in air returns the wing to its original breathing slot',
+    );
     await scene.selectCreature(null, 'wing');
     await scene.selectCreature(c.wings.first, 'wing');
     expect(scene.wingYaw, closeTo(.65, .0001));
