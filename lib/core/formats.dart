@@ -755,8 +755,98 @@ class WtrData {
       (_) => r.str(256),
       growable: false,
     );
-    if (!textures.any(
-      (name) => RegExp(r'\.(dds|tga|bmp|png)
+    final imageExtensions = <String>['.dds', '.tga', '.bmp', '.png'];
+    if (!textures.any((name) {
+      final lower = name.toLowerCase();
+      return imageExtensions.any(lower.endsWith);
+    })) {
+      r.fail('WTR sin referencias de textura reconocibles.');
+    }
+    r.end();
+    return WtrData(
+      tileSize,
+      unknown2,
+      unknown3,
+      List.unmodifiable(textures),
+    );
+  }
+}
+
+class ManiData {
+  final int version,
+      unknown1,
+      unknown5,
+      unknown6,
+      enableRotation,
+      unknownShort1,
+      unknownShort2,
+      unknown13;
+  final v.Vector3 unknownVec1, unknownVec2, rotation, unknownVec4;
+  final double unknown2,
+      unknown3,
+      unknown4,
+      unknown7,
+      unknown8,
+      animationSpeed,
+      unknown11,
+      unknown12;
+
+  const ManiData({
+    required this.version,
+    required this.unknown1,
+    required this.unknownVec1,
+    required this.unknown2,
+    required this.unknown3,
+    required this.unknown4,
+    required this.unknown5,
+    required this.unknown6,
+    required this.unknownVec2,
+    required this.unknown7,
+    required this.unknown8,
+    required this.enableRotation,
+    required this.rotation,
+    required this.animationSpeed,
+    required this.unknownShort1,
+    required this.unknownShort2,
+    required this.unknownVec4,
+    required this.unknown11,
+    required this.unknown12,
+    required this.unknown13,
+  });
+
+  static ManiData parse(Uint8List bytes, String source) {
+    final r = Bin(bytes, source);
+    final out = ManiData(
+      version: r.i32(),
+      unknown1: r.i32(),
+      unknownVec1: r.vec(),
+      unknown2: r.f32(),
+      unknown3: r.f32(),
+      unknown4: r.f32(),
+      unknown5: r.i32(),
+      unknown6: r.i32(),
+      unknownVec2: r.vec(),
+      unknown7: r.f32(),
+      unknown8: r.f32(),
+      enableRotation: r.i32(),
+      rotation: r.vec(),
+      animationSpeed: r.f32(),
+      unknownShort1: r.i16(),
+      unknownShort2: r.i16(),
+      unknownVec4: r.vec(),
+      unknown11: r.f32(),
+      unknown12: r.f32(),
+      unknown13: r.i32(),
+    );
+    r.end();
+    if (out.version != 0x21) {
+      throw FormatException(
+        source + ' · versión MAni inesperada: ' + out.version.toString() + '.',
+      );
+    }
+    return out;
+  }
+}
 class WorldInstance {
   final String category, asset;
   final v.Vector3 position, forward, up;
