@@ -59,3 +59,11 @@ original exacto y el mismo DATA.SPK.
 La rama 0.6.20 se normaliza con `dart format` antes de exigir analyze, regresión
 completa, integración nativa y Windows Release. Un fallo de formato no debe
 ocultar errores reales de compilación.
+
+
+## Estado del gate 0.6.20
+
+Los parsers trasladados desde el cliente Flutter se validan primero con fixtures
+sintéticos y luego con la integración Windows de Studio. La compatibilidad con
+recursos propietarios se declara únicamente después de probar los archivos
+reales; una detección de formato no sustituye esa evidencia.
