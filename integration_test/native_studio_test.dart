@@ -317,27 +317,18 @@ void main() {
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.sendKeyDownEvent(
-      LogicalKeyboardKey.backslash,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-    );
-    await tester.sendKeyRepeatEvent(
-      LogicalKeyboardKey.backslash,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.space);
     await waitFor(
       () => scene.flightEnabled,
-      'ISO < flight key reached editor controller',
+      'Shift+Space flight shortcut reached editor controller',
     );
     expect(scene.walkZ, -1);
     expect(scene.running, true);
     passed.add(
-      'Physical ISO key toggles flight once without cancelling held sprint',
+      'Shift+Space toggles flight once without cancelling held sprint',
     );
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.backslash,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     scene.clearMovement();
