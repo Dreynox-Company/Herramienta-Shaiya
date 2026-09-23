@@ -763,9 +763,13 @@ class _StudioState extends State<StudioPage> {
       items,
       current,
       creatureId,
-      c.creatureLabel,
+      (v) => kind == 'wing'
+          ? c.names.wingTitle(v, c.creatureLabel(v))
+          : c.creatureLabel(v),
       (v) => scene.selectCreature(v, kind),
-      detail: (v) => v.parts.map((p) => p.mesh).join(' · '),
+      detail: (v) => kind == 'wing'
+          ? c.names.wingDetail(v)
+          : v.parts.map((p) => p.mesh).join(' · '),
       empty: kind == 'mount' ? 'A pie' : 'Ninguno',
     );
   }
@@ -1103,6 +1107,9 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
               ],
+              note(
+                'Equipamiento original: slot 16. DBItemData ItemType 121 usa Image como ID visual del registro Character/Wing/*.MON. Studio muestra esa relación cuando la metadata real está disponible.',
+              ),
               note(
                 'Anclaje calculado sobre la cadena real del torso. La calibración se separa por ala + raza/arquetipo para no reutilizar offsets de otro esqueleto.',
               ),
