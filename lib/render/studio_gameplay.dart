@@ -392,6 +392,7 @@ extension StudioGameplay on StudioScene {
         (actor.clip != desired || !actor.playing || !actor.loop)) {
       applyLocomotion(movementTransitions.requested);
     }
+    _syncWingMotion(moving);
     if (actor?.headLook != null) {
       actor!.headTracking = headTracking && combat.playerHealth > 0;
       actor.headLook!.step(
