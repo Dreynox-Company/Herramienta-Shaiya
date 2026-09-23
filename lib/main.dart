@@ -1104,7 +1104,7 @@ class _StudioState extends State<StudioPage> {
                 ),
               ],
               note(
-                'Anclaje calculado sobre la cadena real del torso. La calibración se guarda por ala + raza/arquetipo para no reutilizar offsets de otro esqueleto.',
+                'Anclaje calculado sobre la cadena real del torso. La calibración se separa por ala + raza/arquetipo para no reutilizar offsets de otro esqueleto.',
               ),
             ]),
             section('Vuelo suplementario', [
