@@ -9,21 +9,16 @@ import 'package:herramienta_shaiya/core/spk_archive.dart';
 import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/data/spk_source.dart';
 
-void _put32(Uint8List bytes, int offset, int value) =>
-    ByteData.sublistView(
-      bytes,
-      offset,
-      offset + 4,
-    ).setUint32(0, value, Endian.little);
+void _put32(Uint8List bytes, int offset, int value) => ByteData.sublistView(
+  bytes,
+  offset,
+  offset + 4,
+).setUint32(0, value, Endian.little);
 
 Uint8List _nonce(int seed) =>
     Uint8List.fromList(List<int>.generate(12, (i) => (seed + i) & 0xff));
 
-Future<SecretBox> _encrypt(
-  Uint8List clear,
-  Uint8List key,
-  Uint8List nonce,
-) =>
+Future<SecretBox> _encrypt(Uint8List clear, Uint8List key, Uint8List nonce) =>
     AesGcm.with128bits().encrypt(
       clear,
       secretKey: SecretKey(key),
@@ -42,14 +37,10 @@ Future<_Fixture> _buildSimpleFixture(
   Directory root, {
   bool resourceUsesIndexKey = false,
 }) async {
-  final indexKey = Uint8List.fromList(
-    List<int>.generate(16, (i) => 0x10 + i),
-  );
+  final indexKey = Uint8List.fromList(List<int>.generate(16, (i) => 0x10 + i));
   final resourceKey = resourceUsesIndexKey
       ? Uint8List.fromList(indexKey)
-      : Uint8List.fromList(
-          List<int>.generate(16, (i) => 0x80 + i),
-        );
+      : Uint8List.fromList(List<int>.generate(16, (i) => 0x80 + i));
 
   final bytes = BytesBuilder(copy: false)..add(Uint8List(spkHeaderBytes));
   final records = <SpkRecord>[];
@@ -121,64 +112,74 @@ Future<_Fixture> _buildSimpleFixture(
   return _Fixture(file, index, profile);
 }
 
-Future<SpkArchiveSource> _sourceFor(_Fixture fixture, SpkCryptoProfile profile) =>
-    SpkArchiveSource.fromValidatedIndexForTesting(
-      file: fixture.file,
-      index: fixture.index,
-      profile: profile,
-    );
+Future<SpkArchiveSource> _sourceFor(
+  _Fixture fixture,
+  SpkCryptoProfile profile,
+) => SpkArchiveSource.fromValidatedIndexForTesting(
+  file: fixture.file,
+  index: fixture.index,
+  profile: profile,
+);
 
 void main() {
-  test('SPK can prove offline that the index key is also the resource key', () async {
-    final root = await Directory.systemTemp.createTemp('spk-shared-key-');
-    try {
-      final fixture = await _buildSimpleFixture(
-        root,
-        resourceUsesIndexKey: true,
-      );
-      final indexOnly = SpkCryptoProfile(
-        profileId: 'synthetic-index-only',
-        indexSha256: fixture.profile.indexSha256,
-        indexSecret: fixture.profile.indexSecret,
-        resourceSecret: null,
-        resourceAad: Uint8List(0),
-        resourceKeyIsIndexKey: false,
-        chunkNonceRule: 'unsupported',
-      );
-      final source = await _sourceFor(fixture, indexOnly);
-      expect(source.canReadSimpleResources, isFalse);
+  test(
+    'SPK can prove offline that the index key is also the resource key',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-shared-key-');
+      try {
+        final fixture = await _buildSimpleFixture(
+          root,
+          resourceUsesIndexKey: true,
+        );
+        final indexOnly = SpkCryptoProfile(
+          profileId: 'synthetic-index-only',
+          indexSha256: fixture.profile.indexSha256,
+          indexSecret: fixture.profile.indexSecret,
+          resourceSecret: null,
+          resourceAad: Uint8List(0),
+          resourceKeyIsIndexKey: false,
+          chunkNonceRule: 'unsupported',
+        );
+        final source = await _sourceFor(fixture, indexOnly);
+        expect(source.canReadSimpleResources, isFalse);
 
-      final derived = await source.tryIndexKeyAsResourceProfile();
-      expect(derived, isNotNull);
-      expect(derived!.profile.resourceKeyIsIndexKey, isTrue);
-      expect(derived.canReadSimpleResources, isTrue);
-      final first = await derived.readEntry(derived.index.simpleResources.first);
-      expect(first.format, 'DDS');
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+        final derived = await source.tryIndexKeyAsResourceProfile();
+        expect(derived, isNotNull);
+        expect(derived!.profile.resourceKeyIsIndexKey, isTrue);
+        expect(derived.canReadSimpleResources, isTrue);
+        final first = await derived.readEntry(
+          derived.index.simpleResources.first,
+        );
+        expect(first.format, 'DDS');
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
-  test('SPK rejects the index-key hypothesis when resources use another key', () async {
-    final root = await Directory.systemTemp.createTemp('spk-separate-key-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final indexOnly = SpkCryptoProfile(
-        profileId: 'synthetic-index-only',
-        indexSha256: fixture.profile.indexSha256,
-        indexSecret: fixture.profile.indexSecret,
-        resourceSecret: null,
-        resourceAad: Uint8List(0),
-        resourceKeyIsIndexKey: false,
-        chunkNonceRule: 'unsupported',
-      );
-      final source = await _sourceFor(fixture, indexOnly);
-      expect(await source.tryIndexKeyAsResourceProfile(), isNull);
-      expect(source.canReadSimpleResources, isFalse);
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+  test(
+    'SPK rejects the index-key hypothesis when resources use another key',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-separate-key-');
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final indexOnly = SpkCryptoProfile(
+          profileId: 'synthetic-index-only',
+          indexSha256: fixture.profile.indexSha256,
+          indexSecret: fixture.profile.indexSecret,
+          resourceSecret: null,
+          resourceAad: Uint8List(0),
+          resourceKeyIsIndexKey: false,
+          chunkNonceRule: 'unsupported',
+        );
+        final source = await _sourceFor(fixture, indexOnly);
+        expect(await source.tryIndexKeyAsResourceProfile(), isNull);
+        expect(source.canReadSimpleResources, isFalse);
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test(
     'SPK simple payload access stays closed until real GCM samples validate',
@@ -242,59 +243,61 @@ void main() {
       expect(result['validatedResources'], 3);
       expect(result['simpleResources'], 3);
       expect(result['fragmentedResources'], 0);
-      expect(
-        Map<String, dynamic>.from(result['formats'] as Map)['DDS'],
-        3,
-      );
+      expect(Map<String, dynamic>.from(result['formats'] as Map)['DDS'], 3);
       expect(source.fullyValidatedResources, isTrue);
-      expect(
-        source.diagnostics()['fullyValidatedResources'],
-        isTrue,
-      );
+      expect(source.diagnostics()['fullyValidatedResources'], isTrue);
       expect(progress.last, 3);
     } finally {
       await root.delete(recursive: true);
     }
   });
 
-  test('full audit validates inferred extensions and exposes real technical formats', () async {
-    final root = await Directory.systemTemp.createTemp('spk-name-format-audit-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await _sourceFor(fixture, fixture.profile);
-      source.names.mergeHints(
-        {
-          0x1000: 'Character/Human/body.dds',
-          0x1001: 'Character/Human/wrong.xml',
-          0x1002: 'Custom/unknown.asset',
-        },
-        confidence: 'strong-inferred',
-        evidence: 'fixture-name-correlation',
+  test(
+    'full audit validates inferred extensions and exposes real technical formats',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'spk-name-format-audit-',
       );
-      await source.validateSimpleResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
+        source.names.mergeHints(
+          {
+            0x1000: 'Character/Human/body.dds',
+            0x1001: 'Character/Human/wrong.xml',
+            0x1002: 'Custom/unknown.asset',
+          },
+          confidence: 'strong-inferred',
+          evidence: 'fixture-name-correlation',
+        );
+        await source.validateSimpleResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-      final validation = source.validateInferredNamesByFormat();
-      expect(validation['validated'], 1);
-      expect(validation['rejected'], 1);
-      expect(validation['preservedUnknown'], 1);
-      expect(source.names.confidence(0x1000), 'validated-inferred');
-      expect(source.names[0x1001], isNull);
-      expect(source.names[0x1002], 'Custom/unknown.asset');
+        final validation = source.validateInferredNamesByFormat();
+        expect(validation['validated'], 1);
+        expect(validation['rejected'], 1);
+        expect(validation['preservedUnknown'], 1);
+        expect(source.names.confidence(0x1000), 'validated-inferred');
+        expect(source.names[0x1001], isNull);
+        expect(source.names[0x1002], 'Custom/unknown.asset');
 
-      final wrong = source.index.resources.firstWhere(
-        (record) => record.entryId == 0x1001,
-      );
-      expect(source.displayType(wrong), 'DDS');
-      expect(source.technicalPath(wrong), endsWith('.dds'));
-      expect(source.technicalPath(wrong), contains('_SPK_SinNombre/Simples/'));
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+        final wrong = source.index.resources.firstWhere(
+          (record) => record.entryId == 0x1001,
+        );
+        expect(source.displayType(wrong), 'DDS');
+        expect(source.technicalPath(wrong), endsWith('.dds'));
+        expect(
+          source.technicalPath(wrong),
+          contains('_SPK_SinNombre/Simples/'),
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test('full audit accepts zero decodedBytes as unspecified length', () async {
     final root = await Directory.systemTemp.createTemp('spk-zero-declared-');
@@ -339,285 +342,293 @@ void main() {
     }
   });
 
-  test('audited SPK can mount a table-only workspace without Character paths', () async {
-    final root = await Directory.systemTemp.createTemp('spk-table-only-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await _sourceFor(fixture, fixture.profile);
-      await source.validateSimpleResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+  test(
+    'audited SPK can mount a table-only workspace without Character paths',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-table-only-');
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
+        await source.validateSimpleResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-      expect(
-        () => Library.fromSpk(
+        expect(
+          () => Library.fromSpk(
+            source,
+            overlayRoot: '${root.path}/strict-overlay',
+          ),
+          throwsA(isA<FormatException>()),
+        );
+
+        final library = await Library.fromSpk(
           source,
-          overlayRoot: '${root.path}/strict-overlay',
-        ),
-        throwsA(isA<FormatException>()),
-      );
+          requireCharacter: false,
+          overlayRoot: '${root.path}/table-overlay',
+        );
+        expect(library.files.length, 3);
+        expect(
+          library.files.keys.every(
+            (path) => path.startsWith('_spk_sinnombre/'),
+          ),
+          isTrue,
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
-      final library = await Library.fromSpk(
-        source,
-        requireCharacter: false,
-        overlayRoot: '${root.path}/table-overlay',
+  test(
+    'fully audited SPK exposes unresolved resources by technical Entry ID',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'spk-technical-mount-',
       );
-      expect(library.files.length, 3);
-      expect(
-        library.files.keys.every((path) => path.startsWith('_spk_sinnombre/')),
-        isTrue,
-      );
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
+        source.names.mergeConfirmed({0x1000: 'Character/Human/humf_upper.mlt'});
+        await source.validateSimpleResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-  test('fully audited SPK exposes unresolved resources by technical Entry ID', () async {
-    final root = await Directory.systemTemp.createTemp('spk-technical-mount-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await _sourceFor(fixture, fixture.profile);
-      source.names.mergeConfirmed({
-        0x1000: 'Character/Human/humf_upper.mlt',
-      });
-      await source.validateSimpleResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+        final library = await Library.fromSpk(
+          source,
+          overlayRoot: '${root.path}/overlay',
+        );
+        expect(library.files.length, 3);
+        expect(library.files, contains('_spk_sinnombre/0000000000001001.dds'));
+        expect(library.files, contains('_spk_sinnombre/0000000000001002.dds'));
+        expect(library.sourceDiagnostics['technicalMounted'], 2);
 
-      final library = await Library.fromSpk(
-        source,
-        overlayRoot: '${root.path}/overlay',
-      );
-      expect(library.files.length, 3);
-      expect(
-        library.files,
-        contains('_spk_sinnombre/0000000000001001.dds'),
-      );
-      expect(
-        library.files,
-        contains('_spk_sinnombre/0000000000001002.dds'),
-      );
-      expect(library.sourceDiagnostics['technicalMounted'], 2);
+        const technical = '_spk_sinnombre/0000000000001001.dds';
+        final original = await library.read(technical);
+        final replacement = Uint8List.fromList([
+          ...original.take(24),
+          0xde,
+          0xad,
+          0xbe,
+          0xef,
+        ]);
+        await library.writeSpkOverlay(
+          {technical: replacement},
+          expectedHashes: {technical: sha256.convert(original).toString()},
+        );
+        expect(await library.read(technical), orderedEquals(replacement));
+        final manifest =
+            jsonDecode(
+                  await File(
+                    '${root.path}/overlay/_SPK_OVERLAY.json',
+                  ).readAsString(),
+                )
+                as Map<String, dynamic>;
+        final entries = Map<String, dynamic>.from(manifest['entries'] as Map);
+        expect(
+          (entries[technical] as Map)['nameAuthority'],
+          'technical-entry-id',
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
-      const technical = '_spk_sinnombre/0000000000001001.dds';
-      final original = await library.read(technical);
-      final replacement = Uint8List.fromList([
-        ...original.take(24),
-        0xde,
-        0xad,
-        0xbe,
-        0xef,
-      ]);
-      await library.writeSpkOverlay(
-        {technical: replacement},
-        expectedHashes: {
-          technical: sha256.convert(original).toString(),
-        },
-      );
-      expect(await library.read(technical), orderedEquals(replacement));
-      final manifest = jsonDecode(
-        await File(
-          '${root.path}/overlay/_SPK_OVERLAY.json',
-        ).readAsString(),
-      ) as Map<String, dynamic>;
-      final entries = Map<String, dynamic>.from(manifest['entries'] as Map);
-      expect(
-        (entries[technical] as Map)['nameAuthority'],
-        'technical-entry-id',
-      );
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+  test(
+    'audited inferred resources keep a stable editable Entry-ID alias',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-inferred-alias-');
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
+        source.names.mergeConfirmed({0x1000: 'Character/Human/humf_upper.mlt'});
+        source.names.mergeHints(
+          {0x1001: 'Character/Human/DDS/humf_upper001.dds'},
+          confidence: 'strong-inferred',
+          evidence: 'fixture-inferred',
+        );
+        await source.validateSimpleResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-  test('audited inferred resources keep a stable editable Entry-ID alias', () async {
-    final root = await Directory.systemTemp.createTemp('spk-inferred-alias-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await _sourceFor(fixture, fixture.profile);
-      source.names.mergeConfirmed({
-        0x1000: 'Character/Human/humf_upper.mlt',
-      });
-      source.names.mergeHints(
-        {
-          0x1001: 'Character/Human/DDS/humf_upper001.dds',
-        },
-        confidence: 'strong-inferred',
-        evidence: 'fixture-inferred',
-      );
-      await source.validateSimpleResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+        final library = await Library.fromSpk(
+          source,
+          overlayRoot: '${root.path}/overlay',
+        );
+        expect(
+          library.files,
+          contains('character/human/dds/humf_upper001.dds'),
+        );
+        const technical = '_spk_sinnombre/0000000000001001.dds';
+        expect(library.files, contains(technical));
+        expect(
+          library.files['character/human/dds/humf_upper001.dds'],
+          library.files[technical],
+        );
 
-      final library = await Library.fromSpk(
-        source,
-        overlayRoot: '${root.path}/overlay',
-      );
-      expect(
-        library.files,
-        contains('character/human/dds/humf_upper001.dds'),
-      );
-      const technical = '_spk_sinnombre/0000000000001001.dds';
-      expect(library.files, contains(technical));
-      expect(
-        library.files['character/human/dds/humf_upper001.dds'],
-        library.files[technical],
-      );
+        final original = await library.read(technical);
+        final replacement = Uint8List.fromList([
+          ...original.take(32),
+          1,
+          2,
+          3,
+          4,
+        ]);
+        await library.writeSpkOverlay(
+          {technical: replacement},
+          expectedHashes: {technical: sha256.convert(original).toString()},
+        );
+        expect(await library.read(technical), orderedEquals(replacement));
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
-      final original = await library.read(technical);
-      final replacement = Uint8List.fromList([
-        ...original.take(32),
-        1,
-        2,
-        3,
-        4,
-      ]);
-      await library.writeSpkOverlay(
-        {technical: replacement},
-        expectedHashes: {
-          technical: sha256.convert(original).toString(),
-        },
-      );
-      expect(await library.read(technical), orderedEquals(replacement));
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+  test(
+    'validated SPK mounts as Library and overlay never mutates source',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-workspace-');
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
+        source.names.mergeConfirmed({
+          0x1000: 'Character/Human/humf_upper.mlt',
+          0x1001: 'Item/Item.SData',
+          0x1002: 'BinarySData/DBMonsterData.SData',
+        });
+        await source.validateSimpleResourceProfile();
+        expect(source.canExtractAll, isTrue);
 
-  test('validated SPK mounts as Library and overlay never mutates source', () async {
-    final root = await Directory.systemTemp.createTemp('spk-workspace-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await _sourceFor(fixture, fixture.profile);
-      source.names.mergeConfirmed({
-        0x1000: 'Character/Human/humf_upper.mlt',
-        0x1001: 'Item/Item.SData',
-        0x1002: 'BinarySData/DBMonsterData.SData',
-      });
-      await source.validateSimpleResourceProfile();
-      expect(source.canExtractAll, isTrue);
+        final beforeSource = sha256.convert(await fixture.file.readAsBytes());
+        final library = await Library.fromSpk(
+          source,
+          overlayRoot: '${root.path}/overlay',
+        );
+        expect(library.isSpkWorkspace, isTrue);
+        expect(library.files, contains('item/item.sdata'));
+        expect(library.sourceDiagnostics['sourceMode'], 'spk-v3-workspace');
 
-      final beforeSource = sha256.convert(await fixture.file.readAsBytes());
-      final library = await Library.fromSpk(
-        source,
-        overlayRoot: '${root.path}/overlay',
-      );
-      expect(library.isSpkWorkspace, isTrue);
-      expect(library.files, contains('item/item.sdata'));
-      expect(
-        library.sourceDiagnostics['sourceMode'],
-        'spk-v3-workspace',
-      );
+        final original = await library.read('item/item.sdata');
+        final originalHash = sha256.convert(original).toString();
+        final replacement = Uint8List.fromList(<int>[
+          0x44,
+          0x44,
+          0x53,
+          0x20,
+          0x7a,
+          0x7b,
+          0x7c,
+          0x7d,
+        ]);
+        await library.writeSpkOverlay(
+          {'item/item.sdata': replacement},
+          expectedHashes: {'item/item.sdata': originalHash},
+        );
 
-      final original = await library.read('item/item.sdata');
-      final originalHash = sha256.convert(original).toString();
-      final replacement = Uint8List.fromList(<int>[
-        0x44,
-        0x44,
-        0x53,
-        0x20,
-        0x7a,
-        0x7b,
-        0x7c,
-        0x7d,
-      ]);
-      await library.writeSpkOverlay(
-        {'item/item.sdata': replacement},
-        expectedHashes: {'item/item.sdata': originalHash},
-      );
+        expect(
+          await library.read('item/item.sdata'),
+          orderedEquals(replacement),
+        );
+        expect(
+          sha256.convert(await fixture.file.readAsBytes()).toString(),
+          beforeSource.toString(),
+        );
+        expect(
+          await File('${root.path}/overlay/_SPK_OVERLAY.json').exists(),
+          isTrue,
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
-      expect(
-        await library.read('item/item.sdata'),
-        orderedEquals(replacement),
+  test(
+    'SPK workspace export applies verified overlay to decoded DATA',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'spk-workspace-export-',
       );
-      expect(
-        sha256.convert(await fixture.file.readAsBytes()).toString(),
-        beforeSource.toString(),
-      );
-      expect(
-        await File('${root.path}/overlay/_SPK_OVERLAY.json').exists(),
-        isTrue,
-      );
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+      try {
+        final fixture = await _buildSimpleFixture(root);
+        final source = await _sourceFor(fixture, fixture.profile);
+        source.names.mergeConfirmed({
+          0x1000: 'Character/Human/humf_upper.mlt',
+          0x1001: 'Item/Item.SData',
+          0x1002: 'BinarySData/DBMonsterData.SData',
+        });
+        await source.validateSimpleResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-  test('SPK workspace export applies verified overlay to decoded DATA', () async {
-    final root = await Directory.systemTemp.createTemp('spk-workspace-export-');
-    try {
-      final fixture = await _buildSimpleFixture(root);
-      final source = await _sourceFor(fixture, fixture.profile);
-      source.names.mergeConfirmed({
-        0x1000: 'Character/Human/humf_upper.mlt',
-        0x1001: 'Item/Item.SData',
-        0x1002: 'BinarySData/DBMonsterData.SData',
-      });
-      await source.validateSimpleResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+        final before = sha256
+            .convert(await fixture.file.readAsBytes())
+            .toString();
+        final library = await Library.fromSpk(
+          source,
+          overlayRoot: '${root.path}/overlay',
+        );
+        final original = await library.read('item/item.sdata');
+        final replacement = Uint8List.fromList([
+          ...original.take(16),
+          0xaa,
+          0xbb,
+          0xcc,
+          0xdd,
+        ]);
+        await library.writeSpkOverlay(
+          {'item/item.sdata': replacement},
+          expectedHashes: {
+            'item/item.sdata': sha256.convert(original).toString(),
+          },
+        );
 
-      final before = sha256.convert(await fixture.file.readAsBytes()).toString();
-      final library = await Library.fromSpk(
-        source,
-        overlayRoot: '${root.path}/overlay',
-      );
-      final original = await library.read('item/item.sdata');
-      final replacement = Uint8List.fromList([
-        ...original.take(16),
-        0xaa,
-        0xbb,
-        0xcc,
-        0xdd,
-      ]);
-      await library.writeSpkOverlay(
-        {'item/item.sdata': replacement},
-        expectedHashes: {
-          'item/item.sdata': sha256.convert(original).toString(),
-        },
-      );
+        final output = Directory('${root.path}/exports')..createSync();
+        final result = await library.exportSpkWorkspace(
+          output,
+          progress: (_, _, _) {},
+        );
+        expect(result['files'], 3);
+        expect(result['overlayFiles'], 1);
 
-      final output = Directory('${root.path}/exports')..createSync();
-      final result = await library.exportSpkWorkspace(
-        output,
-        progress: (_, _, _) {},
-      );
-      expect(result['files'], 3);
-      expect(result['overlayFiles'], 1);
-
-      final folder = Directory(result['folder']! as String);
-      expect(
-        await File(
-          '${folder.path}${Platform.pathSeparator}Item'
-          '${Platform.pathSeparator}Item.SData',
-        ).readAsBytes(),
-        orderedEquals(replacement),
-      );
-      final manifest = jsonDecode(
-        await File(
-          '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
-        ).readAsString(),
-      ) as Map<String, dynamic>;
-      expect(manifest['workspaceOverlayApplied'], 1);
-      expect(
-        manifest['workspaceIndexSha256'],
-        source.index.encryptedIndexSha256,
-      );
-      expect(
-        sha256.convert(await fixture.file.readAsBytes()).toString(),
-        before,
-      );
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+        final folder = Directory(result['folder']! as String);
+        expect(
+          await File(
+            '${folder.path}${Platform.pathSeparator}Item'
+            '${Platform.pathSeparator}Item.SData',
+          ).readAsBytes(),
+          orderedEquals(replacement),
+        );
+        final manifest =
+            jsonDecode(
+                  await File(
+                    '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
+                  ).readAsString(),
+                )
+                as Map<String, dynamic>;
+        expect(manifest['workspaceOverlayApplied'], 1);
+        expect(
+          manifest['workspaceIndexSha256'],
+          source.index.encryptedIndexSha256,
+        );
+        expect(
+          sha256.convert(await fixture.file.readAsBytes()).toString(),
+          before,
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test('SPK simple payload validation rejects a wrong resource key', () async {
     final root = await Directory.systemTemp.createTemp('spk-bad-key-');

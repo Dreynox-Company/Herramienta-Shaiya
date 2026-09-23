@@ -259,8 +259,7 @@ class StudioScene extends ChangeNotifier {
     );
     final clip = selectWingMotion(actor.clips, phase);
     _wingMotionPhase = phase;
-    if (clip != null &&
-        (actor.clip != clip || !actor.playing || !actor.loop)) {
+    if (clip != null && (actor.clip != clip || !actor.playing || !actor.loop)) {
       actor.play(clip);
     }
   }

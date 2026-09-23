@@ -4,15 +4,15 @@ import 'package:herramienta_shaiya/core/game_metadata.dart';
 import 'package:herramienta_shaiya/data/game_names.dart';
 
 CreatureRecord wing(int id) => CreatureRecord(
-      id,
-      'wing-$id',
-      'character/wing/fixture.mon',
-      const {},
-      const {},
-      const {},
-      [MaterialRecord(0, 'wing.3dc', 'wing.dds', 0)],
-      1,
-    );
+  id,
+  'wing-$id',
+  'character/wing/fixture.mon',
+  const {},
+  const {},
+  const {},
+  [MaterialRecord(0, 'wing.3dc', 'wing.dds', 0)],
+  1,
+);
 
 void main() {
   test('wing titles use DBItemData type 121 image mapping', () {

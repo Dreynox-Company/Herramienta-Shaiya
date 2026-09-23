@@ -763,138 +763,131 @@ class Library {
     final folder = Directory(folderValue);
     try {
       final manifestFile = File(
-      '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
-    );
-    if (!await manifestFile.exists()) {
-      throw const FormatException(
-        'La extracción terminó sin manifiesto de integridad.',
+        '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
       );
-    }
-
-    final rawManifest = jsonDecode(await manifestFile.readAsString());
-    if (rawManifest is! Map) {
-      throw const FormatException('Manifiesto SPK de salida inválido.');
-    }
-    final manifest = Map<String, dynamic>.from(rawManifest);
-    final rows = ((manifest['files'] as List?) ?? const <Object?>[])
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
-    final rowsByPath = <String, Map<String, dynamic>>{};
-    for (final row in rows) {
-      final value = row['path']?.toString();
-      if (value == null) continue;
-      try {
-        rowsByPath[canon(value)] = row;
-      } catch (_) {
-        // La extracción original ya valida la ruta. Una entrada anómala del
-        // manifiesto no se usa para aplicar un overlay.
-      }
-    }
-
-    final overlayManifest = File(
-      '$overlayRoot${Platform.pathSeparator}_SPK_OVERLAY.json',
-    );
-    var applied = 0;
-    if (await overlayManifest.exists()) {
-      final rawOverlay = jsonDecode(await overlayManifest.readAsString());
-      if (rawOverlay is! Map) {
-        throw const FormatException('Manifiesto del overlay SPK inválido.');
-      }
-      final overlay = Map<String, dynamic>.from(rawOverlay);
-      if (overlay['indexSha256']?.toString().toLowerCase() !=
-          source.index.encryptedIndexSha256.toLowerCase()) {
+      if (!await manifestFile.exists()) {
         throw const FormatException(
-          'El overlay pertenece a otro DATA.SPK.',
+          'La extracción terminó sin manifiesto de integridad.',
         );
       }
-      final entries = Map<String, dynamic>.from(
-        (overlay['entries'] as Map?) ?? const {},
+
+      final rawManifest = jsonDecode(await manifestFile.readAsString());
+      if (rawManifest is! Map) {
+        throw const FormatException('Manifiesto SPK de salida inválido.');
+      }
+      final manifest = Map<String, dynamic>.from(rawManifest);
+      final rows = ((manifest['files'] as List?) ?? const <Object?>[])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final rowsByPath = <String, Map<String, dynamic>>{};
+      for (final row in rows) {
+        final value = row['path']?.toString();
+        if (value == null) continue;
+        try {
+          rowsByPath[canon(value)] = row;
+        } catch (_) {
+          // La extracción original ya valida la ruta. Una entrada anómala del
+          // manifiesto no se usa para aplicar un overlay.
+        }
+      }
+
+      final overlayManifest = File(
+        '$overlayRoot${Platform.pathSeparator}_SPK_OVERLAY.json',
       );
-      final list = entries.entries.toList();
-      for (var i = 0; i < list.length; i++) {
-        final entry = list[i];
-        final canonical = canon(entry.key);
-        final info = entry.value is Map
-            ? Map<String, dynamic>.from(entry.value as Map)
-            : <String, dynamic>{};
-        final expectedId = files[canonical];
-        if (expectedId == null ||
-            info['entryId']?.toString() != expectedId) {
-          throw FormatException(
-            'Overlay inconsistente para ${entry.key}.',
-          );
+      var applied = 0;
+      if (await overlayManifest.exists()) {
+        final rawOverlay = jsonDecode(await overlayManifest.readAsString());
+        if (rawOverlay is! Map) {
+          throw const FormatException('Manifiesto del overlay SPK inválido.');
         }
-        final overlayFile = _spkOverlayFile(canonical);
-        if (!await overlayFile.exists()) {
-          throw FormatException(
-            'Falta el recurso editado del overlay: ${entry.key}.',
-          );
+        final overlay = Map<String, dynamic>.from(rawOverlay);
+        if (overlay['indexSha256']?.toString().toLowerCase() !=
+            source.index.encryptedIndexSha256.toLowerCase()) {
+          throw const FormatException('El overlay pertenece a otro DATA.SPK.');
         }
-        final edited = await overlayFile.readAsBytes();
-        final editedSha = sha256.convert(edited).toString();
-        if (editedSha != info['overlaySha256']?.toString()) {
-          throw FormatException(
-            'El overlay cambió fuera de Studio: ${entry.key}.',
-          );
-        }
+        final entries = Map<String, dynamic>.from(
+          (overlay['entries'] as Map?) ?? const {},
+        );
+        final list = entries.entries.toList();
+        for (var i = 0; i < list.length; i++) {
+          final entry = list[i];
+          final canonical = canon(entry.key);
+          final info = entry.value is Map
+              ? Map<String, dynamic>.from(entry.value as Map)
+              : <String, dynamic>{};
+          final expectedId = files[canonical];
+          if (expectedId == null || info['entryId']?.toString() != expectedId) {
+            throw FormatException('Overlay inconsistente para ${entry.key}.');
+          }
+          final overlayFile = _spkOverlayFile(canonical);
+          if (!await overlayFile.exists()) {
+            throw FormatException(
+              'Falta el recurso editado del overlay: ${entry.key}.',
+            );
+          }
+          final edited = await overlayFile.readAsBytes();
+          final editedSha = sha256.convert(edited).toString();
+          if (editedSha != info['overlaySha256']?.toString()) {
+            throw FormatException(
+              'El overlay cambió fuera de Studio: ${entry.key}.',
+            );
+          }
 
-        final row = rowsByPath[canonical];
-        if (row == null) {
-          throw FormatException(
-            'La extracción completa no contiene ${entry.key}.',
+          final row = rowsByPath[canonical];
+          if (row == null) {
+            throw FormatException(
+              'La extracción completa no contiene ${entry.key}.',
+            );
+          }
+          final relative = SpkArchiveSource.safeRelative(
+            row['path']!.toString(),
           );
-        }
-        final relative = SpkArchiveSource.safeRelative(
-          row['path']!.toString(),
-        );
-        final target = File(
-          '${folder.path}${Platform.pathSeparator}$relative',
-        );
-        if (!await target.exists()) {
-          throw FormatException(
-            'Falta el destino extraído para ${entry.key}.',
+          final target = File(
+            '${folder.path}${Platform.pathSeparator}$relative',
           );
-        }
+          if (!await target.exists()) {
+            throw FormatException(
+              'Falta el destino extraído para ${entry.key}.',
+            );
+          }
 
-        final temp = File(
-          '${target.path}.${DateTime.now().microsecondsSinceEpoch}.partial',
-        );
-        await temp.writeAsBytes(edited, flush: true);
-        if (sha256.convert(await temp.readAsBytes()).toString() != editedSha) {
-          await temp.delete();
-          throw FormatException(
-            'Falló la verificación al aplicar ${entry.key}.',
+          final temp = File(
+            '${target.path}.${DateTime.now().microsecondsSinceEpoch}.partial',
           );
-        }
-        await target.delete();
-        await temp.rename(target.path);
+          await temp.writeAsBytes(edited, flush: true);
+          if (sha256.convert(await temp.readAsBytes()).toString() !=
+              editedSha) {
+            await temp.delete();
+            throw FormatException(
+              'Falló la verificación al aplicar ${entry.key}.',
+            );
+          }
+          await target.delete();
+          await temp.rename(target.path);
 
-        row['sha256'] = editedSha;
-        row['decodedBytes'] = edited.length;
-        row['workspaceOverlay'] = true;
-        row['originalSha256'] = info['originalSha256'];
-        applied++;
-        progress(
-          'Aplicando overlay ${entry.key}',
-          i + 1,
-          list.length,
-        );
+          row['sha256'] = editedSha;
+          row['decodedBytes'] = edited.length;
+          row['workspaceOverlay'] = true;
+          row['originalSha256'] = info['originalSha256'];
+          applied++;
+          progress('Aplicando overlay ${entry.key}', i + 1, list.length);
+        }
       }
-    }
 
-    manifest['files'] = rows;
-    manifest['workspaceOverlayApplied'] = applied;
-    manifest['workspaceIndexSha256'] = source.index.encryptedIndexSha256;
-    manifest['workspaceExportedAt'] =
-        DateTime.now().toUtc().toIso8601String();
-    final manifestTemp = File('${manifestFile.path}.partial');
-    await manifestTemp.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(manifest),
-      flush: true,
-    );
-    await manifestFile.delete();
-    await manifestTemp.rename(manifestFile.path);
+      manifest['files'] = rows;
+      manifest['workspaceOverlayApplied'] = applied;
+      manifest['workspaceIndexSha256'] = source.index.encryptedIndexSha256;
+      manifest['workspaceExportedAt'] = DateTime.now()
+          .toUtc()
+          .toIso8601String();
+      final manifestTemp = File('${manifestFile.path}.partial');
+      await manifestTemp.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(manifest),
+        flush: true,
+      );
+      await manifestFile.delete();
+      await manifestTemp.rename(manifestFile.path);
 
       return {
         ...extracted,
@@ -941,9 +934,7 @@ class Library {
       final manifest = Map<String, dynamic>.from(raw);
       if (manifest['indexSha256']?.toString().toLowerCase() !=
           source.index.encryptedIndexSha256.toLowerCase()) {
-        throw const FormatException(
-          'El overlay pertenece a otro DATA.SPK.',
-        );
+        throw const FormatException('El overlay pertenece a otro DATA.SPK.');
       }
       final entries = Map<String, dynamic>.from(
         (manifest['entries'] as Map?) ?? const {},
@@ -992,11 +983,7 @@ class Library {
           );
         }
         replacements[record.entryId] = Uint8List.fromList(edited);
-        progress(
-          'Verificando overlay ${entry.key}',
-          i + 1,
-          list.length,
-        );
+        progress('Verificando overlay ${entry.key}', i + 1, list.length);
       }
     }
 

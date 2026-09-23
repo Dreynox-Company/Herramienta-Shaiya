@@ -216,8 +216,18 @@ void main() {
 
     test('resource secret accepts 128 or 256 bits only', () {
       expect(spkResourceSecret('00000000000000000000000000000000').length, 16);
-      expect(spkResourceSecret('1111111111111111111111111111111111111111111111111111111111111111').length, 32);
-      expect(() => spkResourceSecret('222222222222222222222222222222222222222222222222'), throwsFormatException);
+      expect(
+        spkResourceSecret(
+          '1111111111111111111111111111111111111111111111111111111111111111',
+        ).length,
+        32,
+      );
+      expect(
+        () => spkResourceSecret(
+          '222222222222222222222222222222222222222222222222',
+        ),
+        throwsFormatException,
+      );
     });
 
     test('V8 constant AAD is preserved in the resource profile', () {
@@ -304,9 +314,7 @@ void main() {
     test('inferred alias of a confirmed path is discarded fail-closed', () {
       final map = SpkNameMap.fromJson({
         'schema': 2,
-        'paths': {
-          '0000000000000001': 'Character/Elf/3DC/elmm_upper001.3DC',
-        },
+        'paths': {'0000000000000001': 'Character/Elf/3DC/elmm_upper001.3DC'},
         'hints': {
           '0000000000000002': {
             'path': 'character\\elf\\3dc\\ELMM_UPPER001.3dc',

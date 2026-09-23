@@ -123,11 +123,10 @@ class ModelReferences {
         final animations = <String, String>{};
         for (final animation in record.animations.entries) {
           if (animation.value.isEmpty) continue;
-          final resolved = lib.resolve(
-            animation.value,
-            ['$root/ani', root],
-            uniqueFallback: true,
-          );
+          final resolved = lib.resolve(animation.value, [
+            '$root/ani',
+            root,
+          ], uniqueFallback: true);
           if (resolved != null) animations[animation.key] = resolved;
         }
         out.add(
@@ -147,8 +146,9 @@ class ModelReferences {
       return out;
     }
 
-    final equipmentSlots =
-        type == null ? const <int>[] : equipmentSlotsForItemType(type);
+    final equipmentSlots = type == null
+        ? const <int>[]
+        : equipmentSlotsForItemType(type);
     final slot = equipmentSlots.contains(0)
         ? 'helmet'
         : equipmentSlots.contains(1)

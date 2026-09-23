@@ -731,8 +731,7 @@ class SpkNameMap {
   }
 
   int removeAmbiguousHints() {
-    String canonical(String value) =>
-        value.replaceAll('\\', '/').toLowerCase();
+    String canonical(String value) => value.replaceAll('\\', '/').toLowerCase();
     final confirmedPaths = <String>{
       for (final value in paths.values) canonical(value),
     };
@@ -760,13 +759,9 @@ class SpkNameMap {
 
   Map<String, Object?> toJson() => {
     'schema': 2,
-    'paths': {
-      for (final e in paths.entries)
-        spkU64Hex(e.key): e.value,
-    },
+    'paths': {for (final e in paths.entries) spkU64Hex(e.key): e.value},
     'hints': {
-      for (final e in hints.entries)
-        spkU64Hex(e.key): e.value.toJson(),
+      for (final e in hints.entries) spkU64Hex(e.key): e.value.toJson(),
     },
     'stats': {
       'confirmed': paths.length,

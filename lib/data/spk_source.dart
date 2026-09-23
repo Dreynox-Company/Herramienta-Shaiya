@@ -456,9 +456,7 @@ class SpkArchiveSource {
 
       final result = await readEntry(record);
       final digest = sha256.convert(result.bytes).toString();
-      recordsByDigest
-          .putIfAbsent(digest, () => <SpkRecord>[])
-          .add(record);
+      recordsByDigest.putIfAbsent(digest, () => <SpkRecord>[]).add(record);
 
       for (final candidate in candidates) {
         control.check();
@@ -548,8 +546,7 @@ class SpkArchiveSource {
     return out;
   }
 
-  bool get _hasSimpleCryptoMaterial =>
-      profile.effectiveResourceSecret != null;
+  bool get _hasSimpleCryptoMaterial => profile.effectiveResourceSecret != null;
 
   bool get _hasFragmentCryptoMaterial =>
       _hasSimpleCryptoMaterial && profile.chunkNonceRule != 'unsupported';
@@ -678,7 +675,9 @@ class SpkArchiveSource {
     if (declaredIndex != index.encryptedIndexSha256.toLowerCase()) return false;
 
     final key = profile.effectiveResourceSecret;
-    final expectedKeyHash = evidence['resourceKeySha256']?.toString().toLowerCase();
+    final expectedKeyHash = evidence['resourceKeySha256']
+        ?.toString()
+        .toLowerCase();
     if (key == null ||
         expectedKeyHash == null ||
         expectedKeyHash != sha256.convert(key).toString().toLowerCase()) {
@@ -1029,9 +1028,7 @@ class SpkArchiveSource {
       'simpleResources': simple,
       'fragmentedResources': fragmented,
       'decodedBytes': decodedBytes,
-      'formats': {
-        for (final entry in sortedFormats) entry.key: entry.value,
-      },
+      'formats': {for (final entry in sortedFormats) entry.key: entry.value},
       'failures': 0,
     };
     return Map<String, Object?>.from(fullResourceValidation!);
@@ -1508,10 +1505,11 @@ class SpkArchiveSource {
     }
 
     if (bytes.length >= 8) {
-      final first = ByteData.sublistView(bytes, 0, 4).getUint32(
+      final first = ByteData.sublistView(
+        bytes,
         0,
-        Endian.little,
-      );
+        4,
+      ).getUint32(0, Endian.little);
       if (first == 0 || first == 444) {
         try {
           MeshData.skinned(bytes, 'SPK:3DC');
@@ -1735,7 +1733,8 @@ class SpkArchiveSource {
             list.length,
           );
         }
-      }      await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
+      }
+      await File('${stage.path}/_SPK_MANIFEST.json').writeAsString(
         const JsonEncoder.withIndent('  ').convert({
           'schema': 1,
           'source': file.path,

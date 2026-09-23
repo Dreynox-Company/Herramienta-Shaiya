@@ -164,16 +164,18 @@ Uint8List vani() {
 }
 
 void main() {
-  test('SPK extended detector recognizes formats learned from Flutter game work',
-      () {
-    expect(mani().length, 108);
-    expect(SpkArchiveSource.detectFormat(mani()), 'MANI');
-    expect(SpkArchiveSource.detectFormat(wtr()), 'WTR');
-    expect(SpkArchiveSource.detectFormat(svmap()), 'SVMAP');
-    expect(SpkArchiveSource.detectFormat(vani()), 'VANI');
-    expect(SpkArchiveSource.detectFormat(smod()), 'SMOD');
-    expect(SpkArchiveSource.detectFormat(dg()), 'DG');
-  });
+  test(
+    'SPK extended detector recognizes formats learned from Flutter game work',
+    () {
+      expect(mani().length, 108);
+      expect(SpkArchiveSource.detectFormat(mani()), 'MANI');
+      expect(SpkArchiveSource.detectFormat(wtr()), 'WTR');
+      expect(SpkArchiveSource.detectFormat(svmap()), 'SVMAP');
+      expect(SpkArchiveSource.detectFormat(vani()), 'VANI');
+      expect(SpkArchiveSource.detectFormat(smod()), 'SMOD');
+      expect(SpkArchiveSource.detectFormat(dg()), 'DG');
+    },
+  );
 
   test('extended formats receive stable extraction extensions', () {
     expect(SpkArchiveSource.extensionFor('MANI'), '.mani');
@@ -185,10 +187,16 @@ void main() {
   });
 
   test('nearby garbage does not become an extended Shaiya format', () {
-    final garbage = Uint8List.fromList(List<int>.generate(160, (i) => i & 0xff));
-    expect(
-      const {'MANI', 'WTR', 'VANI', 'SMOD', 'DG', 'SVMAP'},
-      isNot(contains(SpkArchiveSource.detectFormat(garbage))),
+    final garbage = Uint8List.fromList(
+      List<int>.generate(160, (i) => i & 0xff),
     );
+    expect(const {
+      'MANI',
+      'WTR',
+      'VANI',
+      'SMOD',
+      'DG',
+      'SVMAP',
+    }, isNot(contains(SpkArchiveSource.detectFormat(garbage))));
   });
 }

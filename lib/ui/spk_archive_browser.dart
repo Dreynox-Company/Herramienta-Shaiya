@@ -91,7 +91,6 @@ List<String> spkNameMapCandidatePaths(
   ];
 }
 
-
 List<String> spkResourceProfileCandidatePaths(
   String spkPath,
   String indexSha256, {
@@ -202,8 +201,9 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
       final value = await readSpkJsonFile(file);
       if (value is! Map) continue;
       final data = Map<String, dynamic>.from(value);
-      final declared =
-          (data['indexSha256'] ?? data['spkIndexSha256'])?.toString().toLowerCase();
+      final declared = (data['indexSha256'] ?? data['spkIndexSha256'])
+          ?.toString()
+          .toLowerCase();
       if (declared != null &&
           declared.isNotEmpty &&
           declared != source.index.encryptedIndexSha256.toLowerCase()) {
@@ -340,12 +340,10 @@ Future<bool> loadAutomaticSpkFullAudit(
   }
 }
 
-
 Future<dynamic> readSpkJsonFile(File file) async {
   final bytes = await file.readAsBytes();
   return jsonDecode(utf8.decode(bytes, allowMalformed: true));
 }
-
 
 class _SpkMeshPreview extends StatefulWidget {
   final MeshData mesh;
@@ -460,10 +458,7 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
     centerY = (minY + maxY) / 2;
     final centerZ = (minZ + maxZ) / 2;
     object!.position.setValues(-centerX, 0, -centerZ);
-    final span = math.max(
-      maxX - minX,
-      math.max(maxY - minY, maxZ - minZ),
-    );
+    final span = math.max(maxX - minX, math.max(maxY - minY, maxZ - minZ));
     distance = math.max(.02, span * 1.7);
     _camera();
     view.addAnimationEvent((_) => _camera());
@@ -564,15 +559,10 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
   );
 }
 
-
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   final Future<void> Function(SpkArchiveSource source)? onMount;
-  const SpkArchiveBrowserPage({
-    super.key,
-    required this.source,
-    this.onMount,
-  });
+  const SpkArchiveBrowserPage({super.key, required this.source, this.onMount});
 
   static Future<void> pickAndOpen(
     BuildContext context, {
@@ -871,8 +861,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         '',
         'Diagnóstico: $diagnosisFile',
       ],
-      if (consoleLog != null && consoleLog.isNotEmpty)
-        'Log: $consoleLog',
+      if (consoleLog != null && consoleLog.isNotEmpty) 'Log: $consoleLog',
       if (output != null && output.isNotEmpty && diagnosisFile == null)
         'Carpeta: $output',
     ];
@@ -1235,7 +1224,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'profileId': archive.profile.profileId,
         'resourceKeySha256': archive.profile.effectiveResourceSecret == null
             ? null
-            : sha256.convert(archive.profile.effectiveResourceSecret!).toString(),
+            : sha256
+                  .convert(archive.profile.effectiveResourceSecret!)
+                  .toString(),
         'chunkNonceRule': archive.profile.chunkNonceRule,
         'validation': audited,
         'resourceFormats': archive.validatedFormatsJson,
@@ -1322,15 +1313,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     var candidateKeysTested = 0;
     var candidateKeysAuthenticated = 0;
-    final candidateEvidence = File(
-      p.join(output.path, 'candidate-keys.json'),
-    );
+    final candidateEvidence = File(p.join(output.path, 'candidate-keys.json'));
     if (await candidateEvidence.exists()) {
       try {
         final raw = await readSpkJsonFile(candidateEvidence);
         if (raw is Map) {
-          candidateKeysTested =
-              (raw['tested'] as num?)?.toInt() ?? 0;
+          candidateKeysTested = (raw['tested'] as num?)?.toInt() ?? 0;
           candidateKeysAuthenticated =
               (raw['authenticated'] as num?)?.toInt() ?? 0;
         }
@@ -1360,8 +1348,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (target is Map && target['kind'] == 'chunk') chunkHits++;
     }
 
-    final simpleValidated =
-        (profile['simpleValidated'] as num?)?.toInt() ?? 0;
+    final simpleValidated = (profile['simpleValidated'] as num?)?.toInt() ?? 0;
 
     String reason;
     if (!eventCodes.contains('HOOK_READY') &&
@@ -1421,9 +1408,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       'profileModes': profile['modes'],
       'profileAadRule': profile['aadRule'],
     };
-    await File(
-      p.join(output.path, 'probe-diagnosis.json'),
-    ).writeAsString(
+    await File(p.join(output.path, 'probe-diagnosis.json')).writeAsString(
       const JsonEncoder.withIndent('  ').convert(diagnosis),
       flush: true,
     );
@@ -1618,7 +1603,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       flush: true,
     );
 
-    final profileFile = File(p.join(output.path, 'derived-resource-profile.json'));
+    final profileFile = File(
+      p.join(output.path, 'derived-resource-profile.json'),
+    );
     if (!await profileFile.exists()) {
       throw SpkFailure(
         'SPK_PROBE_NO_PROFILE',
@@ -1676,10 +1663,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!next.canExtractAll) {
       final persistent = File('${source.file.path}.resources.json');
       await persistent.writeAsString(
-        const JsonEncoder.withIndent('  ').convert({
-          ...data,
-          'studioValidation': simpleValidation,
-        }),
+        const JsonEncoder.withIndent(
+          '  ',
+        ).convert({...data, 'studioValidation': simpleValidation}),
         flush: true,
       );
     }
@@ -1953,7 +1939,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             '${result['files']} recursos extraídos en ${result['folder']}',
           ),
           duration: const Duration(seconds: 8),
-        ),      );
+        ),
+      );
     }
   });
 
@@ -1968,9 +1955,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           .join(' ')
           .padRight(47);
       final printable = String.fromCharCodes(
-        chunk.map(
-          (value) => value >= 32 && value <= 126 ? value : 46,
-        ),
+        chunk.map((value) => value >= 32 && value <= 126 ? value : 46),
       );
       rows.add(
         '${offset.toRadixString(16).padLeft(8, '0')}  $hex  |$printable|',
@@ -1978,9 +1963,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     if (limit < bytes.length) {
       rows.add('');
-      rows.add(
-        '… vista HEX limitada a $limit de ${bytes.length} bytes …',
-      );
+      rows.add('… vista HEX limitada a $limit de ${bytes.length} bytes …');
     }
     return rows.join('\n');
   }
@@ -2137,10 +2120,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     (limit < result.bytes.length
                         ? '\n\n… vista limitada a 256 KiB …'
                         : ''),
-                style: const TextStyle(
-                  fontFamily: 'Consolas',
-                  fontSize: 11,
-                ),
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
               ),
             ),
           );
@@ -2151,10 +2131,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             [
               'Materiales: ${rows.length}',
               '',
-              ...rows.take(300).map(
-                (row) =>
-                    '#${row.id} · ${row.mesh} → ${row.texture} · alpha=${row.alpha}',
-              ),
+              ...rows
+                  .take(300)
+                  .map(
+                    (row) =>
+                        '#${row.id} · ${row.mesh} → ${row.texture} · alpha=${row.alpha}',
+                  ),
               if (rows.length > 300) '… ${rows.length - 300} registros más …',
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
@@ -2166,11 +2148,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             [
               'Modelos de objetos/armas: ${rows.length}',
               '',
-              ...rows.take(300).map(
-                (row) =>
-                    '#${row.id} · ${row.mesh} → ${row.texture} · '
-                    'transformaciones=${row.transforms.length}',
-              ),
+              ...rows
+                  .take(300)
+                  .map(
+                    (row) =>
+                        '#${row.id} · ${row.mesh} → ${row.texture} · '
+                        'transformaciones=${row.transforms.length}',
+                  ),
               if (rows.length > 300) '… ${rows.length - 300} registros más …',
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
@@ -2182,11 +2166,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             [
               'Criaturas/modelos: ${rows.length}',
               '',
-              ...rows.take(300).map(
-                (row) =>
-                    '#${row.id} · ${row.name} · partes=${row.parts.length} · '
-                    'animaciones=${row.animations.length}',
-              ),
+              ...rows
+                  .take(300)
+                  .map(
+                    (row) =>
+                        '#${row.id} · ${row.name} · partes=${row.parts.length} · '
+                        'animaciones=${row.animations.length}',
+                  ),
               if (rows.length > 300) '… ${rows.length - 300} registros más …',
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
@@ -2229,12 +2215,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               'Frames: ${vani.frameCount}',
               'Mallas: ${vani.meshes.length}',
               'Radio: ${vani.radius.toStringAsFixed(3)}',
-              ...vani.meshes.take(100).map(
-                (mesh) =>
-                    '• ${mesh.texture} · ${mesh.vertices} vértices · '
-                    '${mesh.indices.length ~/ 3} triángulos · '
-                    '${mesh.frameCount} frames',
-              ),
+              ...vani.meshes
+                  .take(100)
+                  .map(
+                    (mesh) =>
+                        '• ${mesh.texture} · ${mesh.vertices} vértices · '
+                        '${mesh.indices.length ~/ 3} triángulos · '
+                        '${mesh.frameCount} frames',
+                  ),
               if (vani.meshes.length > 100)
                 '… ${vani.meshes.length - 100} mallas más …',
             ].join('\n'),
@@ -2255,11 +2243,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               'Mallas de colisión: ${smod.collisions.length}',
               'Triángulos de colisión: $triangles',
               'Radio: ${smod.radius.toStringAsFixed(3)}',
-              ...smod.parts.take(100).map(
-                (part) =>
-                    '• ${part.texture} · ${part.mesh.vertices} vértices · '
-                    '${part.mesh.triangles} triángulos',
-              ),
+              ...smod.parts
+                  .take(100)
+                  .map(
+                    (part) =>
+                        '• ${part.texture} · ${part.mesh.vertices} vértices · '
+                        '${part.mesh.triangles} triángulos',
+                  ),
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           );
@@ -2278,11 +2268,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               'Lightmaps declarados: ${dg.lightmapCount}',
               'Mallas de colisión: ${dg.collisions.length}',
               'Triángulos de colisión: $triangles',
-              ...dg.parts.take(100).map(
-                (part) =>
-                    '• ${part.texture} · ${part.mesh.vertices} vértices · '
-                    '${part.mesh.triangles} triángulos',
-              ),
+              ...dg.parts
+                  .take(100)
+                  .map(
+                    (part) =>
+                        '• ${part.texture} · ${part.mesh.vertices} vértices · '
+                        '${part.mesh.triangles} triángulos',
+                  ),
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           );
@@ -2405,9 +2397,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                                       ),
                                     ),
                                   ),
-                                  for (var col = 0;
-                                      col < visibleColumns;
-                                      col++)
+                                  for (var col = 0; col < visibleColumns; col++)
                                     SizedBox(
                                       width: 150,
                                       child: Padding(
@@ -2461,9 +2451,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                                     ),
                                   ),
                                 ),
-                                for (var col = 0;
-                                    col < visibleColumns;
-                                    col++)
+                                for (var col = 0; col < visibleColumns; col++)
                                   SizedBox(
                                     width: 150,
                                     child: Padding(
@@ -2654,10 +2642,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => DataEditorPage(
-            library: library,
-            initialPath: path,
-          ),
+          builder: (_) => DataEditorPage(library: library, initialPath: path),
         ),
       );
     } finally {
@@ -2680,9 +2665,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
 
     final path = _editableLibraryPath(record);
-    final picked = await openFile(
-      confirmButtonText: 'Usar como reemplazo',
-    );
+    final picked = await openFile(confirmButtonText: 'Usar como reemplazo');
     if (picked == null) return;
 
     final replacementFile = File(picked.path);
@@ -2730,10 +2713,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       },
     );
     try {
-      final current = await library.read(
-        path,
-        limit: maxReplacementBytes,
-      );
+      final current = await library.read(path, limit: maxReplacementBytes);
       final expectedHash = sha256.convert(current).toString();
       await library.writeSpkOverlay(
         {path: replacementBytes},
@@ -2783,8 +2763,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (!candidates.contains(path.toLowerCase())) continue;
       try {
         final result = await source.readEntry(record);
-        if (!const {'DDS', 'PNG', 'BMP', 'JPEG', 'GIF', 'TGA'}
-            .contains(result.format)) {
+        if (!const {
+          'DDS',
+          'PNG',
+          'BMP',
+          'JPEG',
+          'GIF',
+          'TGA',
+        }.contains(result.format)) {
           continue;
         }
         return Pixels.decode(result.bytes, path).png();
@@ -2974,9 +2960,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               SizedBox(
                 width: 95,
                 child: Text(
-                  source.canReadSimpleResources
-                      ? 'Formato'
-                      : 'Tipo estimado',
+                  source.canReadSimpleResources ? 'Formato' : 'Tipo estimado',
                 ),
               ),
               const SizedBox(width: 105, child: Text('Almacenado')),
@@ -3066,8 +3050,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         child: Text(
                           (() {
                             final base = fileName(record);
-                            final inferred =
-                                source.names.inferredPath(record.entryId);
+                            final inferred = source.names.inferredPath(
+                              record.entryId,
+                            );
                             if (inferred == null) return base;
                             final key = inferred
                                 .replaceAll('\\', '/')
@@ -3210,10 +3195,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   : 'PAYLOAD NO LEÍDO: la ruta mostrada es '
                         '${source.nameConfidence(record)}. Hasta autenticar '
                         'el payload no se habilitan visor ni edición.',
-              style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xffd9b66f),
-              ),
+              style: const TextStyle(fontSize: 10, color: Color(0xffd9b66f)),
             ),
           ),
           const SizedBox(height: 7),
@@ -3470,9 +3452,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: const BoxDecoration(
                 color: Color(0xff12251d),
-                border: Border(
-                  bottom: BorderSide(color: Color(0xff285c46)),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xff285c46))),
               ),
               child: Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -3504,10 +3484,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'BinarySData/DBItemData.SData',
-                              'Objetos / trade',
-                              fieldGroup: 'Requisitos',
-                            ),
+                            'BinarySData/DBItemData.SData',
+                            'Objetos / trade',
+                            fieldGroup: 'Requisitos',
+                          ),
                     icon: const Icon(Icons.inventory_2_outlined, size: 16),
                     label: const Text('Objetos / trade'),
                   ),
@@ -3515,10 +3495,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'BinarySData/DBMonsterData.SData',
-                              'Mobs / drops',
-                              fieldGroup: 'Botín y oro',
-                            ),
+                            'BinarySData/DBMonsterData.SData',
+                            'Mobs / drops',
+                            fieldGroup: 'Botín y oro',
+                          ),
                     icon: const Icon(Icons.pest_control_outlined, size: 16),
                     label: const Text('Mobs / drops'),
                   ),
@@ -3526,10 +3506,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'BinarySData/DBSkillData.SData',
-                              'Skills',
-                              fieldGroup: 'Habilidades',
-                            ),
+                            'BinarySData/DBSkillData.SData',
+                            'Skills',
+                            fieldGroup: 'Habilidades',
+                          ),
                     icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
                     label: const Text('Skills'),
                   ),
@@ -3548,9 +3528,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: const BoxDecoration(
                 color: Color(0xff2a2115),
-                border: Border(
-                  bottom: BorderSide(color: Color(0xff6f542c)),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xff6f542c))),
               ),
               child: Row(
                 children: [
@@ -3647,17 +3625,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       hintText: 'Formato',
                     ),
                     items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('Todos'),
-                      ),
+                      const DropdownMenuItem(value: '', child: Text('Todos')),
                       for (final value in availableFormatFilters())
                         DropdownMenuItem(
                           value: value,
-                          child: Text(
-                            value,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(value, overflow: TextOverflow.ellipsis),
                         ),
                     ],
                     onChanged: (value) =>

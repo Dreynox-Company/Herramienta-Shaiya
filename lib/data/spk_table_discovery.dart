@@ -15,8 +15,7 @@ class SpkCoreTableDiscovery {
     'BinarySData/DBSkillData.SData': 'DBSkillDataRecord',
     'BinarySData/DBNpcSkillData.SData': 'DBNpcSkillDataRecord',
     'BinarySData/DBSetItemData.SData': 'DBSetItemDataRecord',
-    'BinarySData/DBDualLayerClothesData.SData':
-        'DBDualLayerClothesDataRecord',
+    'BinarySData/DBDualLayerClothesData.SData': 'DBDualLayerClothesDataRecord',
     'BinarySData/DBTransformModelData.SData': 'DBTransformModelDataRecord',
     'BinarySData/DBTransformWeaponModelData.SData':
         'DBTransformWeaponModelDataRecord',
@@ -230,8 +229,7 @@ class SpkCoreTableDiscovery {
 
     final confirmed = <int, String>{};
     final binaryRows = <String, int>{};
-    final binaryCandidates =
-        <String, List<({int id, int rows})>>{};
+    final binaryCandidates = <String, List<({int id, int rows})>>{};
     final ambiguousBinaryTables = <String>{};
     final itemCandidates = <({int id, int rows, String profile})>[];
     final monsterCandidates = <({int id, int rows, String profile})>[];
@@ -278,21 +276,17 @@ class SpkCoreTableDiscovery {
         );
         if (doc.complete && doc.profile == 'binary') {
           binaryCandidates
-              .putIfAbsent(
-                binaryPath,
-                () => <({int id, int rows})>[],
-              )
+              .putIfAbsent(binaryPath, () => <({int id, int rows})>[])
               .add((id: record.entryId, rows: doc.rows.length));
           continue;
         }
       }
 
-      final item = _tryProfile(
-        result.bytes,
-        'Item/Item.SData',
-        const ['item-64', 'item-60', 'item-50'],
-        minimumRows: 20,
-      );
+      final item = _tryProfile(result.bytes, 'Item/Item.SData', const [
+        'item-64',
+        'item-60',
+        'item-50',
+      ], minimumRows: 20);
       if (item != null) {
         itemCandidates.add((
           id: record.entryId,
@@ -301,12 +295,10 @@ class SpkCoreTableDiscovery {
         ));
       }
 
-      final monster = _tryProfile(
-        result.bytes,
-        'Monster/Monster.SData',
-        const ['monster-0', 'monster-5'],
-        minimumRows: 20,
-      );
+      final monster = _tryProfile(result.bytes, 'Monster/Monster.SData', const [
+        'monster-0',
+        'monster-5',
+      ], minimumRows: 20);
       if (monster != null) {
         monsterCandidates.add((
           id: record.entryId,
@@ -315,12 +307,10 @@ class SpkCoreTableDiscovery {
         ));
       }
 
-      final skill = _tryProfile(
-        result.bytes,
-        'Skill/Skill.SData',
-        const ['skill-60', 'skill-50'],
-        minimumRows: 9,
-      );
+      final skill = _tryProfile(result.bytes, 'Skill/Skill.SData', const [
+        'skill-60',
+        'skill-50',
+      ], minimumRows: 9);
       if (skill != null) {
         skillCandidates.add((
           id: record.entryId,
@@ -390,8 +380,7 @@ class SpkCoreTableDiscovery {
       if (rows == null) return;
       final matches = unassignedSkills
           .where(
-            (value) =>
-                value.rows == rows && !confirmed.containsKey(value.id),
+            (value) => value.rows == rows && !confirmed.containsKey(value.id),
           )
           .toList();
       if (matches.length != 1 || confirmed.containsValue(path)) return;

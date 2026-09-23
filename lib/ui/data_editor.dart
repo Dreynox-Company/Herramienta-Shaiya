@@ -213,7 +213,9 @@ class _DataEditorPageState extends State<DataEditorPage> {
         if (widget.library.files.containsKey(path)) {
           unawaited(openTable(path));
         } else {
-          _note('La tabla inicial no está disponible en esta biblioteca: $path');
+          _note(
+            'La tabla inicial no está disponible en esta biblioteca: $path',
+          );
         }
       });
     }
@@ -322,7 +324,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
         ? null
         : canon(widget.initialPath!);
     final requestedGroup = widget.initialFieldGroup;
-    group = path == initialPath &&
+    group =
+        path == initialPath &&
             requestedGroup != null &&
             FieldMeaning.groups.contains(requestedGroup)
         ? requestedGroup
@@ -2105,8 +2108,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
                         onPressed: () => _scaffold.currentState?.openDrawer(),
                         icon: const Icon(Icons.folder_open),
                       ),
-                    if (widget.library.isSpkWorkspace &&
-                        !Platform.isAndroid)
+                    if (widget.library.isSpkWorkspace && !Platform.isAndroid)
                       narrow
                           ? IconButton(
                               tooltip: 'Construir nuevo DATA.SPK verificado',
@@ -2115,7 +2117,10 @@ class _DataEditorPageState extends State<DataEditorPage> {
                             )
                           : TextButton.icon(
                               onPressed: busy ? null : _rebuildSpkWorkspace,
-                              icon: const Icon(Icons.archive_outlined, size: 17),
+                              icon: const Icon(
+                                Icons.archive_outlined,
+                                size: 17,
+                              ),
                               label: const Text('Construir SPK'),
                             ),
                     PopupMenuButton<String>(
@@ -2172,15 +2177,11 @@ class _DataEditorPageState extends State<DataEditorPage> {
                             !Platform.isAndroid) ...[
                           const PopupMenuItem(
                             value: 'spkData',
-                            child: Text(
-                              'Materializar DATA completa + overlay',
-                            ),
+                            child: Text('Materializar DATA completa + overlay'),
                           ),
                           const PopupMenuItem(
                             value: 'spkRepack',
-                            child: Text(
-                              'Construir nuevo DATA.SPK verificado',
-                            ),
+                            child: Text('Construir nuevo DATA.SPK verificado'),
                           ),
                         ],
                         if (widget.library.archive != null &&

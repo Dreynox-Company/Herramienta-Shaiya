@@ -184,7 +184,8 @@ class GameNames {
   /// that Image directly to Character/Wing/*.MON record IDs.
   String wingTitle(CreatureRecord record, String fallback) {
     final titles = itemByModel['121:${record.id}'] ?? const <ItemName>[];
-    final original = titles
+    final original =
+        titles
             .where((t) => t.name.isNotEmpty && !t.name.contains('???'))
             .firstOrNull
             ?.name ??
@@ -194,7 +195,10 @@ class GameNames {
 
   String wingDetail(CreatureRecord record) {
     final names = itemByModel['121:${record.id}'] ?? const <ItemName>[];
-    final itemNames = names.map((n) => n.name).where((n) => n.isNotEmpty).toSet();
+    final itemNames = names
+        .map((n) => n.name)
+        .where((n) => n.isNotEmpty)
+        .toSet();
     final model = record.parts.isEmpty
         ? 'MON #${record.id}'
         : '${record.parts.first.mesh} · ${record.parts.first.texture}';

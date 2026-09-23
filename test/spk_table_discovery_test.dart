@@ -14,21 +14,16 @@ import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'archive_test.dart' show SahWriter;
 import 'editor_document_test.dart' show binaryTable;
 
-void _put32(Uint8List bytes, int offset, int value) =>
-    ByteData.sublistView(
-      bytes,
-      offset,
-      offset + 4,
-    ).setUint32(0, value, Endian.little);
+void _put32(Uint8List bytes, int offset, int value) => ByteData.sublistView(
+  bytes,
+  offset,
+  offset + 4,
+).setUint32(0, value, Endian.little);
 
 Uint8List _nonce(int seed) =>
     Uint8List.fromList(List<int>.generate(12, (i) => (seed + i) & 0xff));
 
-Future<SecretBox> _encrypt(
-  Uint8List clear,
-  Uint8List key,
-  Uint8List nonce,
-) =>
+Future<SecretBox> _encrypt(Uint8List clear, Uint8List key, Uint8List nonce) =>
     AesGcm.with128bits().encrypt(
       clear,
       secretKey: SecretKey(key),
@@ -44,9 +39,7 @@ Future<SpkArchiveSource> _source(
   ],
   Map<String, Uint8List> manifestFiles = const <String, Uint8List>{},
 }) async {
-  final indexKey = Uint8List.fromList(
-    List<int>.generate(16, (i) => 0x10 + i),
-  );
+  final indexKey = Uint8List.fromList(List<int>.generate(16, (i) => 0x10 + i));
   final resourceKey = Uint8List.fromList(
     List<int>.generate(16, (i) => 0x80 + i),
   );
@@ -57,10 +50,9 @@ Future<SpkArchiveSource> _source(
   final payloads = <({Uint8List bytes, String? hint})>[];
   for (var i = 0; i < tables.length; i++) {
     final schema = primitiveSchemas[tables[i]]!;
-    final raw = binaryTable(
-      schema.map((field) => field.$1).toList(),
-      [List<int>.filled(schema.length, i + 1)],
-    );
+    final raw = binaryTable(schema.map((field) => field.$1).toList(), [
+      List<int>.filled(schema.length, i + 1),
+    ]);
     payloads.add((bytes: SeedData.encode(raw), hint: null));
   }
   for (final entry in manifestFiles.entries) {
@@ -214,34 +206,39 @@ void main() {
     expect(document.read(document.fields(0)[1]), '42');
   });
 
-  test('authenticated SPK payloads identify core DB tables structurally', () async {
-    final root = await Directory.systemTemp.createTemp('spk-table-discovery-');
-    try {
-      final source = await _source(root);
-      expect(source.canExtractAll, isTrue);
-      expect(source.names.paths, isEmpty);
-
-      final result = await SpkCoreTableDiscovery.discover(
-        source,
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
+  test(
+    'authenticated SPK payloads identify core DB tables structurally',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'spk-table-discovery-',
       );
+      try {
+        final source = await _source(root);
+        expect(source.canExtractAll, isTrue);
+        expect(source.names.paths, isEmpty);
 
-      expect(result['authenticatedResources'], 3);
-      expect(result['seedEncodedResources'], 3);
-      expect(
-        source.names.paths.values,
-        containsAll(<String>[
-          'BinarySData/DBItemData.SData',
-          'BinarySData/DBMonsterData.SData',
-          'BinarySData/DBSkillData.SData',
-        ]),
-      );
-      expect(source.names.paths.length, 3);
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+        final result = await SpkCoreTableDiscovery.discover(
+          source,
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
+
+        expect(result['authenticatedResources'], 3);
+        expect(result['seedEncodedResources'], 3);
+        expect(
+          source.names.paths.values,
+          containsAll(<String>[
+            'BinarySData/DBItemData.SData',
+            'BinarySData/DBMonsterData.SData',
+            'BinarySData/DBSkillData.SData',
+          ]),
+        );
+        expect(source.names.paths.length, 3);
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test('duplicate structural matches stay ambiguous and unconfirmed', () async {
     final root = await Directory.systemTemp.createTemp('spk-table-ambiguous-');
@@ -277,60 +274,55 @@ void main() {
     }
   });
 
-  test('manifest hints are structurally validated without becoming confirmed', () async {
-    final root = await Directory.systemTemp.createTemp('spk-manifest-hints-');
-    try {
-      final writer = SahWriter();
-      writer.out.add(ascii.encode('MLT'));
-      writer.u(1);
-      writer.str('elmm_hand001.3DC');
-      writer.u(1);
-      writer.str('elmm_hand001.dds');
-      writer.u(1);
-      writer.u(0);
-      writer.u(0);
-      writer.u(0);
+  test(
+    'manifest hints are structurally validated without becoming confirmed',
+    () async {
+      final root = await Directory.systemTemp.createTemp('spk-manifest-hints-');
+      try {
+        final writer = SahWriter();
+        writer.out.add(ascii.encode('MLT'));
+        writer.u(1);
+        writer.str('elmm_hand001.3DC');
+        writer.u(1);
+        writer.str('elmm_hand001.dds');
+        writer.u(1);
+        writer.u(0);
+        writer.u(0);
+        writer.u(0);
 
-      final source = await _source(
-        root,
-        manifestFiles: {
-          'Character/Elf/elmm_hand.MLT': writer.out.takeBytes(),
-          'Item/99.itm': Uint8List.fromList([1, 2, 3, 4]),
-          'BinarySData/LegacyUnknown.SData': Uint8List.fromList([
-            1,
-            2,
-            3,
-            4,
-          ]),
-        },
-      );
-      final mltId = 0x2000 + 3;
-      final badItmId = 0x2000 + 4;
-      final legacySDataId = 0x2000 + 5;
+        final source = await _source(
+          root,
+          manifestFiles: {
+            'Character/Elf/elmm_hand.MLT': writer.out.takeBytes(),
+            'Item/99.itm': Uint8List.fromList([1, 2, 3, 4]),
+            'BinarySData/LegacyUnknown.SData': Uint8List.fromList([1, 2, 3, 4]),
+          },
+        );
+        final mltId = 0x2000 + 3;
+        final badItmId = 0x2000 + 4;
+        final legacySDataId = 0x2000 + 5;
 
-      final result = await SpkCoreTableDiscovery.discover(
-        source,
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+        final result = await SpkCoreTableDiscovery.discover(
+          source,
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-      expect(result['validatedManifestHints'], 1);
-      expect(result['rejectedManifestHints'], 1);
-      expect(result['unverifiedManifestHints'], 1);
-      expect(source.names.isConfirmed(mltId), isFalse);
-      expect(source.names.confidence(mltId), 'validated-inferred');
-      expect(source.names.evidence(mltId), contains('payload-structure'));
-      expect(source.names[mltId], 'Character/Elf/elmm_hand.MLT');
-      expect(source.names[badItmId], isNull);
-      expect(
-        source.names[legacySDataId],
-        'BinarySData/LegacyUnknown.SData',
-      );
-      expect(source.names.confidence(legacySDataId), 'inferred');
-    } finally {
-      await root.delete(recursive: true);
-    }
-  });
+        expect(result['validatedManifestHints'], 1);
+        expect(result['rejectedManifestHints'], 1);
+        expect(result['unverifiedManifestHints'], 1);
+        expect(source.names.isConfirmed(mltId), isFalse);
+        expect(source.names.confidence(mltId), 'validated-inferred');
+        expect(source.names.evidence(mltId), contains('payload-structure'));
+        expect(source.names[mltId], 'Character/Elf/elmm_hand.MLT');
+        expect(source.names[badItmId], isNull);
+        expect(source.names[legacySDataId], 'BinarySData/LegacyUnknown.SData');
+        expect(source.names.confidence(legacySDataId), 'inferred');
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
 
   test('table discovery refuses an unvalidated resource profile', () async {
     final root = await Directory.systemTemp.createTemp('spk-table-closed-');

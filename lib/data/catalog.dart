@@ -261,10 +261,12 @@ class Catalog {
     final parts = n.split('_');
     for (final entry in tokens.entries) {
       for (final token in entry.value) {
-        if (parts.any((part) =>
-            part == token ||
-            (part.startsWith(token) &&
-                int.tryParse(part.substring(token.length)) != null))) {
+        if (parts.any(
+          (part) =>
+              part == token ||
+              (part.startsWith(token) &&
+                  int.tryParse(part.substring(token.length)) != null),
+        )) {
           return entry.key;
         }
       }
@@ -299,11 +301,9 @@ class Catalog {
       final marker = meshPath.indexOf('/3dc/');
       final root = meshPath.substring(0, marker);
       final stem = file.substring(0, file.length - 4);
-      final texture = library.resolve(
-        '$stem.dds',
-        ['$root/dds'],
-        uniqueFallback: false,
-      );
+      final texture = library.resolve('$stem.dds', [
+        '$root/dds',
+      ], uniqueFallback: false);
       if (texture == null) continue;
 
       final slotMap = byCode.putIfAbsent(
@@ -345,13 +345,7 @@ class Catalog {
           )
           .toList();
       archetypes.add(
-        Archetype(
-          entry.key,
-          root.split('/')[1],
-          root,
-          entry.value,
-          animations,
-        ),
+        Archetype(entry.key, root.split('/')[1], root, entry.value, animations),
       );
       added++;
     }
@@ -366,6 +360,7 @@ class Catalog {
       progress('SPK: ${archetypes.length} arquetipos disponibles para 3D');
     }
   }
+
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
     for (final p in paths.where(

@@ -21,11 +21,7 @@ class _Fixture {
 Uint8List _nonce(int seed) =>
     Uint8List.fromList(List<int>.generate(12, (i) => (seed + i) & 0xff));
 
-Future<SecretBox> _encrypt(
-  Uint8List clear,
-  Uint8List key,
-  Uint8List nonce,
-) =>
+Future<SecretBox> _encrypt(Uint8List clear, Uint8List key, Uint8List nonce) =>
     AesGcm.with128bits().encrypt(
       clear,
       secretKey: SecretKey(key),
@@ -34,11 +30,7 @@ Future<SecretBox> _encrypt(
 
 int _u64(int value) => value.toUnsigned(64);
 
-Uint8List _metadata(
-  Uint8List nonce,
-  Uint8List tag, {
-  int flags = 0,
-}) {
+Uint8List _metadata(Uint8List nonce, Uint8List tag, {int flags = 0}) {
   final out = Uint8List(32)
     ..setRange(0, 12, nonce)
     ..setRange(12, 28, tag);
@@ -126,9 +118,7 @@ Uint8List _dds(int seed, int bytes) {
 }
 
 Future<_Fixture> _fixture(Directory root) async {
-  final indexKey = Uint8List.fromList(
-    List<int>.generate(16, (i) => 0x10 + i),
-  );
+  final indexKey = Uint8List.fromList(List<int>.generate(16, (i) => 0x10 + i));
   final resourceKey = Uint8List.fromList(
     List<int>.generate(16, (i) => 0x80 + i),
   );
@@ -158,11 +148,7 @@ Future<_Fixture> _fixture(Directory root) async {
         recordType: 1,
         auxiliaryStart: 0xffffffff,
         chunkCount: 0,
-        metadata: _metadata(
-          nonce,
-          Uint8List.fromList(box.mac.bytes),
-          flags: i,
-        ),
+        metadata: _metadata(nonce, Uint8List.fromList(box.mac.bytes), flags: i),
       ),
     );
     output.add(cipher);
@@ -318,101 +304,103 @@ void main() {
   test(
     'SPK writer rebuilds, edits and self-validates simple + fragmented payloads',
     () async {
-    final root = await Directory.systemTemp.createTemp('spk-writer-');
-    try {
-      final fixture = await _fixture(root);
-      final originalHash = sha256.convert(await fixture.file.readAsBytes()).toString();
-      final source = await SpkArchiveSource.open(
-        fixture.file.path,
-        fixture.profile,
-      );
-      await source.validateSimpleResourceProfile();
-      await source.validateFragmentedResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+      final root = await Directory.systemTemp.createTemp('spk-writer-');
+      try {
+        final fixture = await _fixture(root);
+        final originalHash = sha256
+            .convert(await fixture.file.readAsBytes())
+            .toString();
+        final source = await SpkArchiveSource.open(
+          fixture.file.path,
+          fixture.profile,
+        );
+        await source.validateSimpleResourceProfile();
+        await source.validateFragmentedResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-      final simpleReplacement = _dds(0x91, 116);
-      final fragmentedReplacement = _dds(0xa7, 164);
-      final target = File('${root.path}/edited.spk');
-      final result = await SpkWriter.rebuild(
-        source,
-        target,
-        replacements: {
-          0x1101: simpleReplacement,
-          0x2200: fragmentedReplacement,
-        },
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+        final simpleReplacement = _dds(0x91, 116);
+        final fragmentedReplacement = _dds(0xa7, 164);
+        final target = File('${root.path}/edited.spk');
+        final result = await SpkWriter.rebuild(
+          source,
+          target,
+          replacements: {
+            0x1101: simpleReplacement,
+            0x2200: fragmentedReplacement,
+          },
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-      expect(result.replaced, 2);
-      expect(result.resources, 5);
-      expect(result.validation['status'], 'validated');
-      expect(await target.exists(), isTrue);
-      expect(await File(result.profileFile).exists(), isTrue);
-      expect(await File(result.namesFile).exists(), isTrue);
-      expect(await File(result.auditFile).exists(), isTrue);
-      expect(
-        sha256.convert(await fixture.file.readAsBytes()).toString(),
-        originalHash,
-      );
+        expect(result.replaced, 2);
+        expect(result.resources, 5);
+        expect(result.validation['status'], 'validated');
+        expect(await target.exists(), isTrue);
+        expect(await File(result.profileFile).exists(), isTrue);
+        expect(await File(result.namesFile).exists(), isTrue);
+        expect(await File(result.auditFile).exists(), isTrue);
+        expect(
+          sha256.convert(await fixture.file.readAsBytes()).toString(),
+          originalHash,
+        );
 
-      final profileJson = jsonDecode(
-        await File(result.profileFile).readAsString(),
-      ) as Map<String, dynamic>;
-      final profile = SpkCryptoProfile.fromJson(profileJson);
-      final rebuilt = await SpkArchiveSource.open(target.path, profile);
-      await rebuilt.validateSimpleResourceProfile();
-      await rebuilt.validateFragmentedResourceProfile();
-      await rebuilt.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
-      expect(rebuilt.fullyValidatedResources, isTrue);
+        final profileJson =
+            jsonDecode(await File(result.profileFile).readAsString())
+                as Map<String, dynamic>;
+        final profile = SpkCryptoProfile.fromJson(profileJson);
+        final rebuilt = await SpkArchiveSource.open(target.path, profile);
+        await rebuilt.validateSimpleResourceProfile();
+        await rebuilt.validateFragmentedResourceProfile();
+        await rebuilt.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
+        expect(rebuilt.fullyValidatedResources, isTrue);
 
-      final simple = rebuilt.index.resources.singleWhere(
-        (row) => row.entryId == 0x1101,
-      );
-      final fragmented = rebuilt.index.resources.singleWhere(
-        (row) => row.entryId == 0x2200,
-      );
-      expect(fragmented.chunkCount, greaterThan(2));
-      expect(
-        (await rebuilt.readEntry(simple)).bytes,
-        orderedEquals(simpleReplacement),
-      );
-      expect(
-        (await rebuilt.readEntry(fragmented)).bytes,
-        orderedEquals(fragmentedReplacement),
-      );
+        final simple = rebuilt.index.resources.singleWhere(
+          (row) => row.entryId == 0x1101,
+        );
+        final fragmented = rebuilt.index.resources.singleWhere(
+          (row) => row.entryId == 0x2200,
+        );
+        expect(fragmented.chunkCount, greaterThan(2));
+        expect(
+          (await rebuilt.readEntry(simple)).bytes,
+          orderedEquals(simpleReplacement),
+        );
+        expect(
+          (await rebuilt.readEntry(fragmented)).bytes,
+          orderedEquals(fragmentedReplacement),
+        );
 
-      final auditJson = jsonDecode(
-        await File(result.auditFile).readAsString(),
-      ) as Map<String, dynamic>;
-      final restored = await SpkArchiveSource.open(target.path, profile);
-      await restored.validateSimpleResourceProfile();
-      await restored.validateFragmentedResourceProfile();
-      expect(restored.restoreFullResourceValidation(auditJson), isTrue);
-      expect(restored.fullyValidatedResources, isTrue);
+        final auditJson =
+            jsonDecode(await File(result.auditFile).readAsString())
+                as Map<String, dynamic>;
+        final restored = await SpkArchiveSource.open(target.path, profile);
+        await restored.validateSimpleResourceProfile();
+        await restored.validateFragmentedResourceProfile();
+        expect(restored.restoreFullResourceValidation(auditJson), isTrue);
+        expect(restored.fullyValidatedResources, isTrue);
 
-      final special = rebuilt.index.specialRecords.single;
-      expect(special.entryId, 0x3300);
-      expect(special.recordType, 32768);
-      expect(special.storedBytes, 256);
+        final special = rebuilt.index.specialRecords.single;
+        expect(special.entryId, 0x3300);
+        expect(special.recordType, 32768);
+        expect(special.storedBytes, 256);
 
-      final bytes = await target.readAsBytes();
-      expect(
-        bytes.sublist(bytes.length - spkFooterBytes),
-        orderedEquals(fixture.footer),
-      );
-      expect(bytes.sublist(68, 100), everyElement(0xa5));
-      expect(bytes.sublist(112, 128), everyElement(0xb6));
-    } finally {
-      await root.delete(recursive: true);
-    }
-  },
+        final bytes = await target.readAsBytes();
+        expect(
+          bytes.sublist(bytes.length - spkFooterBytes),
+          orderedEquals(fixture.footer),
+        );
+        expect(bytes.sublist(68, 100), everyElement(0xa5));
+        expect(bytes.sublist(112, 128), everyElement(0xb6));
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
     skip: !Platform.isWindows
         ? 'Requiere zstandard_windows.dll; se ejecuta en el gate nativo Windows.'
         : false,
@@ -421,43 +409,43 @@ void main() {
   test(
     'SPK writer refuses unknown replacement IDs and never overwrites source',
     () async {
-    final root = await Directory.systemTemp.createTemp('spk-writer-guards-');
-    try {
-      final fixture = await _fixture(root);
-      final source = await SpkArchiveSource.open(
-        fixture.file.path,
-        fixture.profile,
-      );
-      await source.validateSimpleResourceProfile();
-      await source.validateFragmentedResourceProfile();
-      await source.validateAllResources(
-        control: SpkExtractControl(),
-        progress: (_, _, _) {},
-      );
+      final root = await Directory.systemTemp.createTemp('spk-writer-guards-');
+      try {
+        final fixture = await _fixture(root);
+        final source = await SpkArchiveSource.open(
+          fixture.file.path,
+          fixture.profile,
+        );
+        await source.validateSimpleResourceProfile();
+        await source.validateFragmentedResourceProfile();
+        await source.validateAllResources(
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        );
 
-      await expectLater(
-        SpkWriter.rebuild(
-          source,
-          File('${root.path}/bad.spk'),
-          replacements: {0x9999: _dds(1, 80)},
-          control: SpkExtractControl(),
-          progress: (_, _, _) {},
-        ),
-        throwsA(isA<FormatException>()),
-      );
-      await expectLater(
-        SpkWriter.rebuild(
-          source,
-          fixture.file,
-          control: SpkExtractControl(),
-          progress: (_, _, _) {},
-        ),
-        throwsA(isA<FileSystemException>()),
-      );
-    } finally {
-      await root.delete(recursive: true);
-    }
-  },
+        await expectLater(
+          SpkWriter.rebuild(
+            source,
+            File('${root.path}/bad.spk'),
+            replacements: {0x9999: _dds(1, 80)},
+            control: SpkExtractControl(),
+            progress: (_, _, _) {},
+          ),
+          throwsA(isA<FormatException>()),
+        );
+        await expectLater(
+          SpkWriter.rebuild(
+            source,
+            fixture.file,
+            control: SpkExtractControl(),
+            progress: (_, _, _) {},
+          ),
+          throwsA(isA<FileSystemException>()),
+        );
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
     skip: !Platform.isWindows
         ? 'Requiere zstandard_windows.dll; se ejecuta en el gate nativo Windows.'
         : false,
