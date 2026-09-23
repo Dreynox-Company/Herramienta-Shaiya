@@ -14,5 +14,13 @@
   "ShaiyaCloudFragment": {
     "type": "fragment",
     "file": "shaders/volumetric_clouds.frag"
+  },
+  "ShaiyaCloudCompositeVertex": {
+    "type": "vertex",
+    "file": "shaders/cloud_composite.vert"
+  },
+  "ShaiyaCloudCompositeFragment": {
+    "type": "fragment",
+    "file": "shaders/cloud_composite.frag"
   }
 }
