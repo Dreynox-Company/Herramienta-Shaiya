@@ -1,11 +1,35 @@
-# SPK real reader / writer — estado auditado 0.6.17
+# SPK real reader / writer — estado auditado 0.6.20
 
 Fecha de corte: 2026-09-22.
 
 Esta nota es el punto de reanudación del trabajo SPK. No volver a empezar desde
-cero. La rama `feat/studio-0612-spk-workspace` contiene lector v3, AutoPerfil,
+cero. La rama `feat/studio-0620-spk-wings` continúa el lector v3, AutoPerfil,
 auditoría integral, montaje transparente en Studio, edición por overlay y el
 primer escritor/repacker DATA.SPK con autoverificación.
+
+## Actualización 0.6.20 — V13 y recursos del motor
+
+Se reutilizó evidencia obtenida durante el trabajo del cliente Flutter sin
+mezclar ambos productos. Studio incorpora ahora conocimiento confirmado del
+cliente sobre:
+
+- alas: equipo slot 16, `DBItemData.ItemType = 121` y `Image` como ID del
+  registro `Character/Wing/*.MON`;
+- formatos del motor que antes quedaban frecuentemente como BIN:
+  `WTR`, `MAni`, `VAni`, `SMOD`, `DG` y `SVMAP`;
+- inspección estructurada de esos formatos directamente desde el explorador SPK;
+- familias modernas de objetos y su slot de equipo, usando el contrato
+  ps0032/metadata ya ejercitado por el cliente Flutter.
+
+ResourceProbe sube a **V13**. Mantiene el mismo oráculo fail-closed AES-GCM y
+amplía observación de candidatos a BoringSSL, mbedTLS y wolfSSL además de
+CNG/OpenSSL. La presencia de una candidata no desbloquea ningún payload:
+Studio debe autenticarla offline contra ciphertexts y tags exactos del SPK.
+
+La evidencia real del DATA.SPK del usuario **no cambia por estos commits**:
+hasta ejecutar este build con el par exacto `game.exe + data.spk`, no se afirma
+que los 50.135 payloads estén descifrados ni que el writer sea aceptado por el
+cliente oficial.
 
 ## DATA.SPK real de referencia
 
