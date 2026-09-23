@@ -17,6 +17,8 @@ class PsPacketType {
   static const gameHandshake=0xA301;
   static const characterList=0x0101;
   static const createCharacter=0x0102;
+  static const autoStatsList=0x0120;
+  static const autoStatsSet=0x0121;
   static const deleteCharacter=0x0103;
   static const selectCharacter=0x0104;
   static const characterDetails=0x0105;
@@ -67,6 +69,9 @@ class PsPacketType {
   static const inventoryMoveItem=0x0204;
   static const experienceGain=0x0207;
   static const updateStats=0x0208;
+  static const statsReset=0x0214;
+  static const resetSkills=0x0215;
+  static const userKillCountUpdate=0x020E;
   static const learnNewSkill=0x0209;
   static const addItem=0x0205;
   static const removeItem=0x0206;
@@ -102,6 +107,7 @@ class PsPacketType {
   static const characterLeaveDead=0x0406;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
+  static const characterAttributeSet=0xF701;
   static const mobEnter=0x0601;
   static const mobLeave=0x0602;
   static const mobMove=0x0603;
@@ -2142,6 +2148,91 @@ class PsHitpoints {
   }
 }
 
+class PsCharacterAttribute {
+  final int attribute,value;
+  const PsCharacterAttribute(this.attribute,this.value);
+  static const grow=0,level=1,money=2,statPoint=3,skillPoint=4,
+    strength=5,dexterity=6,reaction=7,intelligence=8,luck=9,wisdom=10,
+    hg=11,vg=12,cg=13,og=14,ig=15,experience=16,kills=17,deaths=18;
+  static PsCharacterAttribute parse(PsPacket p){
+    if(p.type!=PsPacketType.characterAttributeSet||p.body.length<5){
+      throw FormatException('CHARACTER_ATTRIBUTE_SET truncado: ${p.body.length}.');
+    }
+    return PsCharacterAttribute(
+      p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little),
+    );
+  }
+}
+
+class PsAutoStats {
+  final int strength,dexterity,reaction,intelligence,wisdom,luck;
+  const PsAutoStats(
+    this.strength,this.dexterity,this.reaction,this.intelligence,this.wisdom,this.luck,
+  );
+  int get total=>strength+dexterity+reaction+intelligence+wisdom+luck;
+  List<int> get values=>[strength,dexterity,reaction,intelligence,wisdom,luck];
+  static PsAutoStats parse(PsPacket p){
+    if(p.type!=PsPacketType.autoStatsList||p.body.length<6){
+      throw FormatException('AUTO_STATS_LIST truncado: ${p.body.length}.');
+    }
+    final b=p.body;
+    return PsAutoStats(b[0],b[1],b[2],b[3],b[4],b[5]);
+  }
+}
+
+class PsStatsReset {
+  final bool success;
+  final int statPoint,strength,reaction,intelligence,wisdom,dexterity,luck;
+  const PsStatsReset({
+    required this.success,required this.statPoint,required this.strength,
+    required this.reaction,required this.intelligence,required this.wisdom,
+    required this.dexterity,required this.luck,
+  });
+  static PsStatsReset parse(PsPacket p){
+    if(p.type!=PsPacketType.statsReset||p.body.length<15){
+      throw FormatException('STATS_RESET truncado: ${p.body.length}.');
+    }
+    final d=ByteData.sublistView(p.body);
+    return PsStatsReset(
+      success:p.body[0]!=0,
+      statPoint:d.getUint16(1,Endian.little),
+      strength:d.getUint16(3,Endian.little),
+      reaction:d.getUint16(5,Endian.little),
+      intelligence:d.getUint16(7,Endian.little),
+      wisdom:d.getUint16(9,Endian.little),
+      dexterity:d.getUint16(11,Endian.little),
+      luck:d.getUint16(13,Endian.little),
+    );
+  }
+}
+
+class PsSkillsReset {
+  final bool success;
+  final int skillPoint;
+  const PsSkillsReset(this.success,this.skillPoint);
+  static PsSkillsReset parse(PsPacket p){
+    if(p.type!=PsPacketType.resetSkills||p.body.length<3){
+      throw FormatException('RESET_SKILLS truncado: ${p.body.length}.');
+    }
+    return PsSkillsReset(
+      p.body[0]!=0,ByteData.sublistView(p.body).getUint16(1,Endian.little),
+    );
+  }
+}
+
+class PsKillCountUpdate {
+  final int index,count;
+  const PsKillCountUpdate(this.index,this.count);
+  static PsKillCountUpdate parse(PsPacket p){
+    if(p.type!=PsPacketType.userKillCountUpdate||p.body.length<5){
+      throw FormatException('USER_KILLCOUNT_UPDATE truncado: ${p.body.length}.');
+    }
+    return PsKillCountUpdate(
+      p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little),
+    );
+  }
+}
+
 class PsMoneyUpdate {
   final int gold;
   const PsMoneyUpdate(this.gold);
@@ -2908,6 +2999,35 @@ class PsWorldSession {
     final d=ByteData.sublistView(packet.body);
     return List<int>.generate(6,(i)=>d.getUint16(i*2,Endian.little));
   }
+  Future<PsAutoStats> requestAutoStats() async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de consultar Auto Stats.');
+    final response=connection.waitStream(
+      (p)=>p.type==PsPacketType.autoStatsList,
+      timeout:const Duration(seconds:5),
+    );
+    await connection.send(PsPacketType.autoStatsList);
+    return PsAutoStats.parse(await response);
+  }
+
+  Future<PsAutoStats> setAutoStats(
+    int characterId,{
+    int str=0,int dex=0,int rec=0,int intl=0,int wis=0,int luc=0,
+  }) async {
+    if(!_expanded)throw StateError('Selecciona un personaje antes de configurar Auto Stats.');
+    final values=[str,dex,rec,intl,wis,luc];
+    if(characterId<=0)throw RangeError('CharacterId inválido para AUTO_STATS_SET.');
+    if(values.any((v)=>v<0||v>255))throw RangeError('AUTO_STATS_SET usa valores byte.');
+    final response=connection.waitStream(
+      (p)=>p.type==PsPacketType.autoStatsList,
+      timeout:const Duration(seconds:5),
+    );
+    // Native request layout is uint CharacterId + STR,DEX,REC,INT,LUC,WIS.
+    await connection.send(PsPacketType.autoStatsSet,[
+      ..._u32Bytes(characterId),str,dex,rec,intl,luc,wis,
+    ]);
+    return PsAutoStats.parse(await response);
+  }
+
   Future<PsLearnSkillResult> learnSkill(int skillId,int level) async {
     if(!_expanded)throw StateError('Selecciona un personaje antes de aprender habilidades.');
     if(skillId<=0||skillId>65535||level<=0||level>255)throw RangeError('Skill id/nivel inválido.');

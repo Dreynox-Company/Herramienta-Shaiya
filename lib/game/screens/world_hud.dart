@@ -16,6 +16,7 @@ class WorldHud extends StatelessWidget {
   final String characterName,locale;
   final int mapId,level;
   final PsCharacterDetails? details;
+  final PsAutoStats? autoStats;
   final PsAdditionalStats? additionalStats;
   final PsHitpoints? hitpoints;
   final bool dead,rebirthPending;
@@ -76,6 +77,7 @@ class WorldHud extends StatelessWidget {
   final ValueChanged<PsMapItem> onPickMapItem;
   final VoidCallback onToggleInventory,onToggleSocial,onToggleGuild,onToggleGuildWarehouse,onToggleStatus,onToggleSkills,onToggleQuestLog,onToggleVehicle,onLeaveParty,onCreateRaid,onLeaveRaid,onDismantleRaid,onToggleRaidAutoJoin,onLeaveGuild,onDismantleGuild;
   final ValueChanged<int> onAddStat;
+  final void Function(int index,int delta) onAdjustAutoStat;
   final ValueChanged<int> onHotbar,onOpenQuest;
   final ValueChanged<String> onRequestFriend,onJoinRaid;
   final ValueChanged<bool> onRespondFriend,onRespondParty,onRespondRaid,onRespondVehicle;
@@ -118,6 +120,7 @@ class WorldHud extends StatelessWidget {
     required this.mapId,
     required this.level,
     required this.details,
+    required this.autoStats,
     required this.additionalStats,
     required this.hitpoints,
     required this.dead,
@@ -249,6 +252,7 @@ class WorldHud extends StatelessWidget {
     required this.onToggleGuildWarehouse,
     required this.onToggleStatus,
     required this.onAddStat,
+    required this.onAdjustAutoStat,
     required this.onToggleSkills,
     required this.onToggleQuestLog,
     required this.onToggleVehicle,
@@ -2308,13 +2312,48 @@ class WorldHud extends StatelessWidget {
       ],
     ]),
   );
+
+  Widget _autoStatControl(int index,String label,int value)=>Container(
+    width:88,
+    padding:const EdgeInsets.symmetric(horizontal:4,vertical:3),
+    decoration:BoxDecoration(
+      color:const Color(0xff17120e),
+      border:Border.all(color:const Color(0xff514231)),
+    ),
+    child:Row(children:[
+      Expanded(child:Text(label,style:const TextStyle(fontSize:7.5,color:Colors.white60))),
+      SizedBox(
+        width:18,height:18,
+        child:TextButton(
+          onPressed:value>0?()=>onAdjustAutoStat(index,-1):null,
+          style:TextButton.styleFrom(padding:EdgeInsets.zero,minimumSize:Size.zero),
+          child:const Text('−',style:TextStyle(fontSize:11)),
+        ),
+      ),
+      SizedBox(
+        width:18,
+        child:Text(value.toString(),textAlign:TextAlign.center,style:const TextStyle(fontSize:8.5,color:Color(0xffffd26a))),
+      ),
+      SizedBox(
+        width:18,height:18,
+        child:TextButton(
+          onPressed:()=>onAdjustAutoStat(index,1),
+          style:TextButton.styleFrom(padding:EdgeInsets.zero,minimumSize:Size.zero),
+          child:const Text('+',style:TextStyle(fontSize:11)),
+        ),
+      ),
+    ]),
+  );
+
   Widget _statusWindow(){
     final d=details,a=additionalStats;
     return _panelShell(
       locale=='spn'?'Estado del personaje':'Character status',
       Padding(
         padding:const EdgeInsets.all(12),
-        child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        child:ListView(
+          padding:EdgeInsets.zero,
+          children:[
           Row(children:[
             Expanded(child:Text(characterName,style:const TextStyle(fontSize:14,color:Color(0xffffe26f),fontWeight:FontWeight.bold))),
             Text('Lv.$level',style:const TextStyle(fontSize:11,color:Colors.white70)),
@@ -2333,12 +2372,35 @@ class WorldHud extends StatelessWidget {
           _statLine(locale=='spn'?'Inteligencia':'Intelligence',d?.intelligence,a?.intelligence,onAdd:(d?.statPoint??0)>0?()=>onAddStat(3):null),
           _statLine(locale=='spn'?'Sabiduría':'Wisdom',d?.wisdom,a?.wisdom,onAdd:(d?.statPoint??0)>0?()=>onAddStat(4):null),
           _statLine(locale=='spn'?'Suerte':'Luck',d?.luck,a?.luck,onAdd:(d?.statPoint??0)>0?()=>onAddStat(5):null),
+          const SizedBox(height:4),
+          Row(children:[
+            Expanded(child:Text(
+              locale=='spn'?'Auto Stats por nivel':'Auto Stats per level',
+              style:const TextStyle(fontSize:8.5,color:Colors.white54),
+            )),
+            Text(
+              (autoStats?.total??0).toString(),
+              style:const TextStyle(fontSize:8.5,color:Color(0xffffd26a)),
+            ),
+          ]),
+          const SizedBox(height:4),
+          Wrap(
+            spacing:4,runSpacing:4,
+            children:[
+              _autoStatControl(0,'STR',autoStats?.strength??0),
+              _autoStatControl(1,'DEX',autoStats?.dexterity??0),
+              _autoStatControl(2,'REC',autoStats?.reaction??0),
+              _autoStatControl(3,'INT',autoStats?.intelligence??0),
+              _autoStatControl(4,'WIS',autoStats?.wisdom??0),
+              _autoStatControl(5,'LUC',autoStats?.luck??0),
+            ],
+          ),
           const Divider(color:Color(0xff65533b),height:14),
           _statLine(locale=='spn'?'Ataque':'Attack','${a?.minAttack??0}-${a?.maxAttack??0}',null),
           _statLine(locale=='spn'?'Ataque mágico':'Magic attack','${a?.minMagicAttack??0}-${a?.maxMagicAttack??0}',null),
           _statLine(locale=='spn'?'Defensa':'Defense',a?.defense,null),
           _statLine(locale=='spn'?'Resistencia':'Resistance',a?.resistance,null),
-          const Spacer(),
+          const SizedBox(height:8),
           Text(
             (locale=='spn'?'Puntos de estado: ':'Stat points: ')+(d?.statPoint??0).toString()+
             '   ·   '+(locale=='spn'?'Puntos de habilidad: ':'Skill points: ')+(d?.skillPoint??0).toString(),
@@ -2349,7 +2411,8 @@ class WorldHud extends StatelessWidget {
             'HP ${hitpoints?.hp??d?.maxHp??0}/${d?.maxHp??0} · MP ${hitpoints?.mp??d?.maxMp??0}/${d?.maxMp??0} · SP ${hitpoints?.sp??d?.maxSp??0}/${d?.maxSp??0}',
             style:const TextStyle(fontSize:8.5,color:Colors.white60),
           ),
-        ]),
+        ],
+        ),
       ),
     );
   }
