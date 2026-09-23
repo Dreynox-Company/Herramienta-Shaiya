@@ -15,7 +15,7 @@ SPEC.loader.exec_module(probe)
 
 
 class ResourceProbeContractTest(unittest.TestCase):
-    def test_v12_agent_recovers_and_authenticates_crypto_candidates(self):
+    def test_v13_agent_recovers_and_authenticates_crypto_candidates(self):
         text = AGENT.read_text(encoding='utf-8')
         self.assertIn("BCryptExportKey", text)
         self.assertIn("KeyDataBlob", text)
@@ -32,6 +32,14 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn("BCryptFinishHash", text)
         self.assertIn("AES_set_decrypt_key", text)
         self.assertIn("EVP_DecryptInit_ex", text)
+        self.assertIn("EVP_AEAD_CTX_init", text)
+        self.assertIn("mbedtls_gcm_setkey", text)
+        self.assertIn("mbedtls_aes_setkey_enc", text)
+        self.assertIn("mbedtls_aes_setkey_dec", text)
+        self.assertIn("wc_AesGcmSetKey", text)
+        self.assertIn("wc_AesSetKey", text)
+        self.assertIn("mbedcrypto", text)
+        self.assertIn("wolfssl", text)
         self.assertIn("CANDIDATE_HOOK_READY", text)
         probe_text = MODULE.read_text(encoding='utf-8')
         self.assertIn("print('EVENT'", probe_text)
