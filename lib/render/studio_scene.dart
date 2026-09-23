@@ -13,6 +13,7 @@ import '../core/locomotion.dart';
 import '../core/pose_layers.dart';
 import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
+import '../core/wing_motion.dart';
 import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
@@ -187,7 +188,11 @@ class StudioScene extends ChangeNotifier {
   CharacterClass? selectedClass;
   ExtraMotionLibrary? extraMotions;
   final FlightTransition flightState = FlightTransition();
-  bool flightEnabled = false, headTracking = true, inspectAnyEquipment = false;
+  bool flightEnabled = false,
+      wingAutoMotion = true,
+      headTracking = true,
+      inspectAnyEquipment = false;
+  WingMotionPhase? _wingMotionPhase;
   double hoverOffset = .38, wingYaw = 0;
   final Map<String, ({double height, double depth, double size, double yaw})>
   _wingSettings = {};
@@ -196,6 +201,70 @@ class StudioScene extends ChangeNotifier {
       selectedClass ?? classesFor(appearance?.archetype.id ?? 'humf').first;
   List<CharacterClass> get availableClasses =>
       classesFor(appearance?.archetype.id ?? 'humf');
+  String get wingMotionStatus => _wingMotionPhase == null
+      ? 'Sin sincronización automática'
+      : wingMotionLabel(_wingMotionPhase!);
+
+  String _wingBindingKey(CreatureRecord record, {Archetype? archetype}) {
+    final a = archetype ?? appearance?.archetype;
+    final identity = a == null ? 'sin-personaje' : '${a.race}/${a.id}';
+    return '$identity|${record.source}#${record.id}';
+  }
+
+  void _rememberWingSettings() {
+    final record = wingRecord;
+    if (record == null) return;
+    _wingSettings[_wingBindingKey(record)] = (
+      height: wingHeight,
+      depth: wingDepth,
+      size: wingSize,
+      yaw: wingYaw,
+    );
+  }
+
+  void _restoreWingSettings() {
+    final record = wingRecord, char = character;
+    if (record == null || char == null) return;
+    final cfg = _wingSettings[_wingBindingKey(record)];
+    final bone = char.wingBone;
+    final reference = char.normal?.pose(0);
+    final p = bone != null && reference != null && bone < reference.length
+        ? reference[bone].getTranslation()
+        : v.Vector3(0, 1.3, 0);
+    wingHeight = cfg?.height ?? p.y;
+    wingDepth = cfg?.depth ?? (p.z + .08);
+    wingSize = cfg?.size ?? 1;
+    wingYaw = cfg?.yaw ?? 0;
+  }
+
+  Future<void> setWingAutoMotion(bool enabled) async {
+    wingAutoMotion = enabled;
+    _wingMotionPhase = null;
+    if (enabled) {
+      final moving =
+          walkX.abs() + walkZ.abs() > 1e-8 || game.destination != null;
+      _syncWingMotion(moving);
+    }
+    changed();
+  }
+
+  void _syncWingMotion(bool moving) {
+    final actor = wing;
+    if (!wingAutoMotion || actor == null || actor.clips.isEmpty) return;
+    final phase = wingMotionPhase(
+      flightEnabled: flightEnabled,
+      grounded: flightState.grounded,
+      landing: flightState.landing || flightState.combatDescent,
+      moving: moving,
+    );
+    final clip = selectWingMotion(actor.clips, phase);
+    _wingMotionPhase = phase;
+    if (clip != null &&
+        (actor.clip != clip || !actor.playing || !actor.loop)) {
+      actor.play(clip);
+    }
+  }
+
   EquipmentCompatibility compatibilityFor(
     WeaponRecord item, {
     Archetype? archetype,
@@ -634,6 +703,7 @@ class StudioScene extends ChangeNotifier {
   }
 
   Future<void> setAppearance(Appearance next) async {
+    _rememberWingSettings();
     final revision = ++_appearanceRevision;
     busy = true;
     notifyListeners();
@@ -808,6 +878,8 @@ class StudioScene extends ChangeNotifier {
       game.jump.reset();
       game.jumpClip = nextJumpClip;
       appearance = next;
+      _restoreWingSettings();
+      _wingMotionPhase = null;
       view!.scene.add(staged.root);
       committed = true;
       combat.reset();
@@ -907,13 +979,8 @@ class StudioScene extends ChangeNotifier {
         : kind == 'mount'
         ? ++_mountRevision
         : ++_wingRevision;
-    if (kind == 'wing' && wingRecord != null) {
-      _wingSettings['${wingRecord!.source}#${wingRecord!.id}'] = (
-        height: wingHeight,
-        depth: wingDepth,
-        size: wingSize,
-        yaw: wingYaw,
-      );
+    if (kind == 'wing') {
+      _rememberWingSettings();
     }
     if (kind == 'mount' && mountRecord != null) {
       _seats['${mountRecord!.source}#${mountRecord!.id}'] = (
@@ -969,18 +1036,15 @@ class StudioScene extends ChangeNotifier {
       wing?.dispose();
       wing = staged;
       wingRecord = c;
-      if (c == null) flightEnabled = false;
-      final cfg = _wingSettings['${c?.source}#${c?.id}'];
-      final char = character;
-      final b = char?.wingBone;
-      final reference = char?.normal?.pose(0);
-      final p = b != null && reference != null
-          ? reference[b].getTranslation()
-          : v.Vector3(0, 1.3, 0);
-      wingHeight = cfg?.height ?? p.y;
-      wingDepth = cfg?.depth ?? (p.z + .08);
-      wingSize = cfg?.size ?? 1;
-      wingYaw = cfg?.yaw ?? 0;
+      if (c == null) {
+        flightEnabled = false;
+        _wingMotionPhase = null;
+      } else {
+        wingAutoMotion = true;
+        _restoreWingSettings();
+        _wingMotionPhase = null;
+        _syncWingMotion(false);
+      }
     }
     if (staged != null) view!.scene.add(staged.root);
     if (kind == 'wing' && staged != null) staged.root.matrixAutoUpdate = false;
@@ -1317,6 +1381,9 @@ class StudioScene extends ChangeNotifier {
       }
     }
     setFlightEnabled(enabled);
+    _syncWingMotion(
+      walkX.abs() + walkZ.abs() > 1e-8 || game.destination != null,
+    );
     say(
       enabled
           ? (combat.inGuard
@@ -1517,6 +1584,10 @@ class StudioScene extends ChangeNotifier {
         ? mount
         : wing;
     final c = a?.clips[name];
+    if (target == 'wing') {
+      wingAutoMotion = false;
+      _wingMotionPhase = null;
+    }
     if (a != null && c != null) a.play(c);
     notifyListeners();
   }
