@@ -284,108 +284,110 @@ void main() {
     },
   );
   for (final shift in [
-    null,
     LogicalKeyboardKey.shiftLeft,
     LogicalKeyboardKey.shiftRight,
   ]) {
-    testWidgets('ISO flight key toggles once and preserves sprint ($shift)', (
-      tester,
-    ) async {
-      final focus = FocusNode();
-      var flights = 0, jumps = 0;
-      var running = false;
-      var direction = 0.0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Column(
-              children: [
-                const TextField(key: ValueKey('search')),
-                Expanded(
-                  child: ViewportMovementInput(
-                    focusNode: focus,
-                    onChanged: (x, z, run) {
-                      direction = z;
-                      running = run;
-                    },
-                    onFlightToggle: () => flights++,
-                    onAction: (key) {
-                      if (key == LogicalKeyboardKey.space) jumps++;
-                    },
-                    child: const SizedBox.expand(),
+    testWidgets(
+      'Shift+Space flight toggles once and preserves sprint ($shift)',
+      (tester) async {
+        final focus = FocusNode();
+        var flights = 0, jumps = 0;
+        var running = false;
+        var direction = 0.0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  const TextField(key: ValueKey('search')),
+                  Expanded(
+                    child: ViewportMovementInput(
+                      focusNode: focus,
+                      onChanged: (x, z, run) {
+                        direction = z;
+                        running = run;
+                      },
+                      onFlightToggle: () => flights++,
+                      onAction: (key) {
+                        if (key == LogicalKeyboardKey.space) jumps++;
+                      },
+                      child: const SizedBox.expand(),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-      focus.requestFocus();
-      await tester.pump();
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW, platform: 'web');
-      if (shift != null) await tester.sendKeyDownEvent(shift, platform: 'web');
-      final logical = shift == null
-          ? LogicalKeyboardKey.less
-          : LogicalKeyboardKey.greater;
-      await tester.sendKeyDownEvent(
-        logical,
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        platform: 'web',
-      );
-      for (var i = 0; i < 5; i++) {
-        await tester.sendKeyRepeatEvent(
-          logical,
-          physicalKey: PhysicalKeyboardKey.intlBackslash,
+        );
+        focus.requestFocus();
+        await tester.pump();
+
+        await tester.sendKeyDownEvent(
+          LogicalKeyboardKey.keyW,
           platform: 'web',
         );
-      }
-      expect(flights, 1);
-      expect(jumps, 0);
-      expect(direction, -1);
-      expect(running, shift != null);
-      await tester.sendKeyUpEvent(
-        logical,
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        platform: 'web',
-      );
-      // Space is always jump, including Shift+Space while sprinting.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.space, platform: 'web');
-      await tester.sendKeyRepeatEvent(
-        LogicalKeyboardKey.space,
-        platform: 'web',
-      );
-      expect(jumps, 1);
-      expect(flights, 1);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.space, platform: 'web');
-      await tester.sendKeyDownEvent(
-        logical,
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        platform: 'web',
-      );
-      expect(flights, 2);
-      await tester.sendKeyUpEvent(
-        logical,
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        platform: 'web',
-      );
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW, platform: 'web');
-      if (shift != null) await tester.sendKeyUpEvent(shift, platform: 'web');
-      await tester.tap(find.byKey(const ValueKey('search')));
-      await tester.pump();
-      await tester.sendKeyDownEvent(
-        LogicalKeyboardKey.less,
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        platform: 'web',
-      );
-      expect(flights, 2);
-      expect(jumps, 1);
-      await tester.sendKeyUpEvent(
-        LogicalKeyboardKey.less,
-        physicalKey: PhysicalKeyboardKey.intlBackslash,
-        platform: 'web',
-      );
-      await tester.pumpWidget(const SizedBox());
-      focus.dispose();
-    });
+        await tester.sendKeyDownEvent(shift, platform: 'web');
+        await tester.sendKeyDownEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+        for (var i = 0; i < 5; i++) {
+          await tester.sendKeyRepeatEvent(
+            LogicalKeyboardKey.space,
+            platform: 'web',
+          );
+        }
+        expect(flights, 1);
+        expect(jumps, 0);
+        expect(direction, -1);
+        expect(running, true);
+
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+        await tester.sendKeyUpEvent(shift, platform: 'web');
+        expect(running, false);
+
+        // Space alone keeps its original terrestrial jump action.
+        await tester.sendKeyDownEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+        await tester.sendKeyRepeatEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+        expect(jumps, 1);
+        expect(flights, 1);
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.keyW,
+          platform: 'web',
+        );
+        await tester.tap(find.byKey(const ValueKey('search')));
+        await tester.pump();
+        await tester.sendKeyDownEvent(shift, platform: 'web');
+        await tester.sendKeyDownEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+        expect(flights, 1);
+        expect(jumps, 1);
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.space,
+          platform: 'web',
+        );
+        await tester.sendKeyUpEvent(shift, platform: 'web');
+
+        await tester.pumpWidget(const SizedBox());
+        focus.dispose();
+      },
+    );
   }
+
 }
