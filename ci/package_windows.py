@@ -33,7 +33,7 @@ def main():
         'nativeChecks':len(native.get('checks',[])),'nativeFixture':'synthetic resources only',
         'startupResult':startup,'editor06WorkbenchDelivered':True,'completeOriginalGameRecreation':False,'offlineGameDelivered':False}
     (release/'build-provenance.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    readme=f'''SHAIYA STUDIO {version} - DATA.SPK V12
+    readme=f'''SHAIYA STUDIO {version} - DATA.SPK V13
 Version: {version}
 Commit: {commit}
 
@@ -44,7 +44,7 @@ Abre el DATA.SPK desde la aplicacion.
 FLUJO RECOMENDADO:
   1. Abre DATA.SPK.
   2. Pulsa Desbloquear SPK / AutoPerfil.
-  3. ResourceProbe V12 intenta primero un barrido estatico fail-closed:
+  3. ResourceProbe V13 intenta primero un barrido estatico fail-closed:
      ninguna clave se acepta si no autentica payloads reales por AES-GCM.
   4. Si no encuentra coincidencia, instrumenta una copia local de game.exe
      x86/x64. Hazlo offline y no introduzcas credenciales.
