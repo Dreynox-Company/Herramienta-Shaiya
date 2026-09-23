@@ -2,6 +2,7 @@ in vec3 v_normal;
 in vec2 v_uv;
 
 out vec4 frag_color;
+out vec4 frag_linear_depth;
 
 void main() {
   vec3 normal = normalize(v_normal);
@@ -14,4 +15,10 @@ void main() {
     clamp(v_uv.y, 0.0, 1.0)
   );
   frag_color = vec4(base * (ambient + diffuse * 0.72), 1.0);
+
+  // Flutter GPU currently exposes depth+stencil attachments as render
+  // attachments but not a portable sampled depth-only format. Mirror the
+  // hardware depth into an MRT color attachment so the half-resolution cloud
+  // pass can reject covered pixels before raymarching.
+  frag_linear_depth = vec4(gl_FragCoord.zzz, 1.0);
 }
