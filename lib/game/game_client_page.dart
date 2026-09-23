@@ -155,6 +155,8 @@ class _GameClientPageState extends State<GameClientPage> {
   int faceIndex=0;
   int hairIndex=0;
   int modeIndex=0;
+  String? creationArchetypeKey;
+  final Map<String,String> enhancedArchetypeByCharacter=<String,String>{};
   double gestureScale=1;
   final messages=<String>[];
   final captureKey=GlobalKey();
@@ -343,6 +345,34 @@ class _GameClientPageState extends State<GameClientPage> {
   }
   int _protocolMode()=>modeIndex==0?2:3;
 
+  String _archetypeKey(Archetype archetype)=>archetype.race+'/'+archetype.id;
+
+  List<CharacterArchetypeChoice> get _creationArchetypeChoices {
+    final c=catalog;
+    if(c==null)return const <CharacterArchetypeChoice>[];
+    final items=c.archetypes.map((a)=>CharacterArchetypeChoice(
+      key:_archetypeKey(a),
+      label:a.label,
+      panda:a.race.toLowerCase().startsWith('pand'),
+      female:a.female,
+    )).toList();
+    items.sort((a,b){
+      if(a.panda!=b.panda)return a.panda?1:-1;
+      return a.label.compareTo(b.label);
+    });
+    return items;
+  }
+
+  String _standardRaceName(){
+    final race=_protocolRace();
+    return switch(race){
+      0=>'human',
+      1=>'elf',
+      2=>'vile',
+      _=>'deatheater',
+    };
+  }
+
   Future<void> _connectLiveProtocol(String password) async {
     try{
       protocolClient=Ps0032Client(trace:(s){
@@ -371,7 +401,10 @@ class _GameClientPageState extends State<GameClientPage> {
     faceIndex=slot.face.clamp(0,4);
     hairIndex=slot.hair.clamp(0,4);
     modeIndex=slot.mode>=3?1:0;
-    if(slot.name.isNotEmpty)nameController.text=slot.name;
+    if(slot.name.isNotEmpty){
+      nameController.text=slot.name;
+      creationArchetypeKey=enhancedArchetypeByCharacter[slot.name];
+    }
   }
 
   PsCharacterSlot _emptyCharacterSlot(int slot)=>PsCharacterSlot(
@@ -398,6 +431,7 @@ class _GameClientPageState extends State<GameClientPage> {
   Future<void> _selectCharacterSlot(PsCharacterSlot slot) async {
     if(!slot.exists)return;
     liveCharacter=slot;_syncUiFromLiveCharacter(slot);
+    creationArchetypeKey=enhancedArchetypeByCharacter[slot.name];
     if(mounted)setState((){});
     try{await _applyDefaultAppearance();}
     catch(e){messages.insert(0,'[Personaje] '+e.toString());}
@@ -568,19 +602,28 @@ class _GameClientPageState extends State<GameClientPage> {
 
   Future<void> _applyDefaultAppearance() async {
     final c=catalog!;
-    final preferred=faction=='light'
-      ?(genderIndex==0?'humf':'huwf')
-      :(genderIndex==0?'demf':'dewf');
-    final a=c.archetypes.where((x)=>x.id.toLowerCase()==preferred).firstOrNull
-      ??c.archetypes.where((x)=>faction=='light'
-        ?['human','elf'].contains(x.race)
-        :['vile','deatheater'].contains(x.race)).firstOrNull
-      ??c.archetypes.first;
-    var look=Appearance.initial(a);
-    final faces=a.parts[Slot.face]??const <PartRecord>[];
-    final hairs=a.parts[Slot.hair]??const <PartRecord>[];
-    if(faces.isNotEmpty){look=look.withPart(Slot.face,faces[faceIndex.clamp(0,faces.length-1)]);}
-    if(hairs.isNotEmpty){look=look.withPart(Slot.hair,hairs[hairIndex.clamp(0,hairs.length-1)]);}
+    Archetype? selected;
+    final explicit=creationArchetypeKey;
+    if(explicit!=null){
+      selected=c.archetypes.where((a)=>_archetypeKey(a)==explicit).firstOrNull;
+    }
+    final raceName=_standardRaceName();
+    selected??=c.archetypes.where((a)=>
+      a.race==raceName&&a.female==(genderIndex==1)
+    ).firstOrNull;
+    selected??=c.archetypes.where((a)=>a.race==raceName).firstOrNull;
+    selected??=c.archetypes.where((a)=>a.female==(genderIndex==1)).firstOrNull;
+    selected??=c.archetypes.first;
+    creationArchetypeKey??=_archetypeKey(selected);
+    var look=Appearance.initial(selected);
+    final faces=selected.parts[Slot.face]??const <PartRecord>[];
+    final hairs=selected.parts[Slot.hair]??const <PartRecord>[];
+    if(faces.isNotEmpty){
+      look=look.withPart(Slot.face,faces[faceIndex.clamp(0,faces.length-1)]);
+    }
+    if(hairs.isNotEmpty){
+      look=look.withPart(Slot.hair,hairs[hairIndex.clamp(0,hairs.length-1)]);
+    }
     await scene.setAppearance(look);
   }
 
@@ -590,9 +633,10 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.panX=0;
     scene.panZ=0;
     scene.yaw=0;
-    scene.pitch=.025;
-    scene.distance=2.72;
-    scene.targetY=1.06;
+    scene.pitch=.045;
+    scene.distance=3.45;
+    scene.targetY=1.08;
+    scene.configureCamera(minDistance:2.35,maxDistance:6.8,collision:true);
     if(scene.character!=null){scene.character!.root.rotation.y=0;}
     scene.updateCamera();
   }
@@ -609,6 +653,7 @@ class _GameClientPageState extends State<GameClientPage> {
       scene.pitch=.01;
       scene.distance=3.25;
       scene.targetY=1.16;
+      scene.configureCamera(minDistance:2.4,maxDistance:7.5,collision:false);
       scene.updateCamera();
       return;
     }
@@ -812,6 +857,7 @@ class _GameClientPageState extends State<GameClientPage> {
     scene.pitch=.12;
     scene.distance=5.9;
     scene.targetY=1.18;
+    scene.configureCamera(minDistance:2.45,maxDistance:17.5,collision:true);
     if(scene.character!=null){scene.character!.root.rotation.y=math.pi;}
     scene.updateCamera();
 
@@ -911,6 +957,7 @@ class _GameClientPageState extends State<GameClientPage> {
         finishedQuests:previous?.finishedQuests??const <PsFinishedQuest>[],
       );
       scene.yaw=0;scene.pitch=.12;scene.distance=5.9;scene.targetY=1.18;
+      scene.configureCamera(minDistance:2.45,maxDistance:17.5,collision:true);
       if(scene.character!=null)scene.character!.root.rotation.y=math.pi;
       scene.updateCamera();
       await liveWorld?.confirmMapLoaded();
@@ -3964,6 +4011,10 @@ class _GameClientPageState extends State<GameClientPage> {
           name:nameController.text.trim(),
         );
         liveCharacters=slots;
+        final selectedEnhanced=creationArchetypeKey;
+        if(selectedEnhanced!=null){
+          enhancedArchetypeByCharacter[requestedName]=selectedEnhanced;
+        }
         liveCharacter=slots.where((s)=>s.exists&&s.name==nameController.text.trim()).firstOrNull
           ??slots.where((s)=>s.exists&&!s.isDelete).firstOrNull;
         if(liveCharacter!=null)_syncUiFromLiveCharacter(liveCharacter!);
@@ -4002,8 +4053,45 @@ class _GameClientPageState extends State<GameClientPage> {
     }
   }
 
+  Future<void> _changeClass(int value) async {
+    classIndex=value.clamp(0,5);
+    final explicit=creationArchetypeKey;
+    final isPanda=explicit!=null&&
+      catalog?.archetypes.where((a)=>_archetypeKey(a)==explicit)
+        .firstOrNull?.race.toLowerCase().startsWith('pand')==true;
+    if(!isPanda)creationArchetypeKey=null;
+    if(mounted)setState((){});
+    await _applyDefaultAppearance();
+    _applyCreationCamera();
+  }
+
+  Future<void> _changeCreationArchetype(String key) async {
+    final c=catalog;
+    if(c==null)return;
+    final archetype=c.archetypes.where((a)=>_archetypeKey(a)==key).firstOrNull;
+    if(archetype==null)return;
+    creationArchetypeKey=key;
+    genderIndex=archetype.female?1:0;
+    faceIndex=0;
+    hairIndex=0;
+    if(mounted)setState((){});
+    await _applyDefaultAppearance();
+    _applyCreationCamera();
+  }
+
   Future<void> _changeGender(int value) async {
     genderIndex=value;
+    final c=catalog;
+    final currentKey=creationArchetypeKey;
+    if(c!=null&&currentKey!=null){
+      final current=c.archetypes.where((a)=>_archetypeKey(a)==currentKey).firstOrNull;
+      if(current!=null){
+        final sameRace=c.archetypes.where((a)=>
+          a.race==current.race&&a.female==(value==1)
+        ).firstOrNull;
+        creationArchetypeKey=sameRace==null?null:_archetypeKey(sameRace);
+      }
+    }
     if(mounted)setState((){});
     await _applyDefaultAppearance();
     _applyCreationCamera();
@@ -4155,8 +4243,11 @@ class _GameClientPageState extends State<GameClientPage> {
             faceIndex:faceIndex,
             hairIndex:hairIndex,
             modeIndex:modeIndex,
-            onClass:(value)=>setState(()=>classIndex=value),
+            archetypes:_creationArchetypeChoices,
+            archetypeKey:creationArchetypeKey,
+            onClass:(value)=>unawaited(_changeClass(value)),
             onGender:(value)=>unawaited(_changeGender(value)),
+            onArchetype:(value)=>unawaited(_changeCreationArchetype(value)),
             onTab:(value)=>setState(()=>createTab=value),
             onFace:(value)=>unawaited(_changeFace(value)),
             onHair:(value)=>unawaited(_changeHair(value)),
