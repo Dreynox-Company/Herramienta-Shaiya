@@ -1,5 +1,6 @@
-in vec2 position;
+#version 460 core
 
+in vec2 position;
 out vec2 v_uv;
 
 void main() {
