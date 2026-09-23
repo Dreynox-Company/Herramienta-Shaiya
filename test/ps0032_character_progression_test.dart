@@ -4,6 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/game/ps0032_protocol.dart';
 
 void main(){
+  test('CHARACTER_ATTRIBUTE_SET decodes enum byte and uint value',(){
+    final b=Uint8List(5),d=ByteData.sublistView(b);
+    b[0]=PsCharacterAttribute.experience;
+    d.setUint32(1,1234567,Endian.little);
+    final value=PsCharacterAttribute.parse(PsPacket(PsPacketType.characterAttributeSet,b));
+    expect((value.attribute,value.value),(PsCharacterAttribute.experience,1234567));
+  });
+
   test('AUTO_STATS_LIST keeps server response order STR DEX REC INT WIS LUC',(){
     final value=PsAutoStats.parse(PsPacket(
       PsPacketType.autoStatsList,
@@ -50,6 +58,10 @@ void main(){
   });
 
   test('progression parsers reject truncation',(){
+    expect(
+      ()=>PsCharacterAttribute.parse(PsPacket(PsPacketType.characterAttributeSet,Uint8List(4))),
+      throwsFormatException,
+    );
     expect(
       ()=>PsAutoStats.parse(PsPacket(PsPacketType.autoStatsList,Uint8List(5))),
       throwsFormatException,
