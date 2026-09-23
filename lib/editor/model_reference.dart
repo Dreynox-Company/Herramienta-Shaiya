@@ -1,4 +1,5 @@
 import '../core/formats.dart';
+import '../core/equipment_rules.dart';
 import '../data/library.dart';
 import 'catalog_document.dart';
 import 'document.dart';
@@ -85,10 +86,13 @@ class ModelReferences {
     }
     final type = int.tryParse(v['itemtype'] ?? v['type'] ?? ''),
         model = int.tryParse(v['image'] ?? v['model'] ?? v['modelid'] ?? '');
+    final weaponFamily = type == null ? 0 : weaponFamilyForItemType(type);
     if (type != null &&
         model != null &&
-        (type <= 15 || {19, 34, 69, 84}.contains(type))) {
-      final family = type == 69
+        (weaponFamily > 0 || {19, 34, 69, 84}.contains(type))) {
+      final family = weaponFamily > 0
+          ? weaponFamily
+          : type == 69
           ? 19
           : type == 84
           ? 34
@@ -105,14 +109,57 @@ class ModelReferences {
         ),
       ];
     }
-    final slot = switch (type) {
-      16 || 31 => 'helmet',
-      17 || 32 || 67 || 82 => 'upper',
-      18 || 33 || 68 || 83 => 'lower',
-      20 || 35 || 70 || 85 => 'hand',
-      21 || 36 || 71 || 86 => 'foot',
-      _ => null,
-    };
+
+    if (type == wingItemType && model != null) {
+      final out = <ModelReference>[];
+      for (final path in lib.files.keys.where(
+        (p) => p.startsWith('character/wing/') && p.endsWith('.mon'),
+      )) {
+        final rows = readMon(await lib.read(path), path);
+        if (model < 0 || model >= rows.length) continue;
+        final record = rows[model];
+        if (!record.parts.any((p) => !p.isNull)) continue;
+        final root = directoryName(path);
+        final animations = <String, String>{};
+        for (final animation in record.animations.entries) {
+          if (animation.value.isEmpty) continue;
+          final resolved = lib.resolve(
+            animation.value,
+            ['$root/ani', root],
+            uniqueFallback: true,
+          );
+          if (resolved != null) animations[animation.key] = resolved;
+        }
+        out.add(
+          ModelReference(
+            'Alas · ItemType $wingItemType · Image $model · ${baseName(path)}',
+            locate(
+              record.parts
+                  .where((p) => !p.isNull)
+                  .map((p) => (p.mesh, p.texture, p.alpha))
+                  .toList(),
+              path,
+            ),
+            animations: animations,
+          ),
+        );
+      }
+      return out;
+    }
+
+    final equipmentSlots =
+        type == null ? const <int>[] : equipmentSlotsForItemType(type);
+    final slot = equipmentSlots.contains(0)
+        ? 'helmet'
+        : equipmentSlots.contains(1)
+        ? 'upper'
+        : equipmentSlots.contains(2)
+        ? 'lower'
+        : equipmentSlots.contains(3)
+        ? 'hand'
+        : equipmentSlots.contains(4)
+        ? 'foot'
+        : null;
     if (slot != null && model != null) {
       final out = <ModelReference>[];
       for (final path in lib.files.keys.where(
