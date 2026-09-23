@@ -91,7 +91,10 @@ class Actor {
   void tick(double dt){if(playing)time+=dt*speed;if(!loop&&clip!=null&&time>clip!.duration&&idle!=null)play(idle!);pose();}
   void play(ClipData c,{bool repeat=true}){clip=c;time=0;loop=repeat;playing=true;pose();}
   int get requiredBones=>parts.fold(0,(n,p)=>math.max(n,p.data.requiredBones));
-  double get height=>parts.isEmpty?2:parts.map((p)=>p.data.maxY).reduce(math.max);
+  double get minY=>parts.isEmpty?0:parts.map((p)=>p.data.minY).reduce(math.min);
+  double get maxY=>parts.isEmpty?2:parts.map((p)=>p.data.maxY).reduce(math.max);
+  double get height=>math.max(.1,maxY-minY);
+  double get groundingOffset=>-minY;
   void dispose(){root.removeFromParent();for(final p in parts){p.dispose();}parts.clear();}
 }
 
@@ -157,12 +160,14 @@ class StudioScene extends ChangeNotifier {
   bool sound=false,wireframe=false,ready=false,disposed=false,busy=false;
   int _appearanceRevision=0,_creatureRevision=0,_mountRevision=0,_wingRevision=0,_worldRevision=0,_weaponRevision=0,_clipRevision=0,_effectRevision=0,_skyRevision=0;
   double yaw=.25,pitch=.18,distance=5.2,targetY=1.05,panX=0,panZ=0;
+  double cameraMinDistance=2.2,cameraMaxDistance=18,cameraCollisionRadius=.18;
+  bool cameraCollisionEnabled=true;
   double riderHeight=1.0,riderForward=0,wingHeight=1.3,wingDepth=.25,wingSize=1;
   double originX=0,originZ=0,groundY=0,walkX=0,walkZ=0,_frameAccumulator=0,_uiAccumulator=0,_worldAudioAccumulator=0,_footstepAccumulator=0;
   String status='Selecciona la carpeta DATA.';
   List<String> get animations=>appearance?.archetype.animations??[];
   Future<void> setup(t.ThreeJS three) async {
-    view=three;three.scene=t.Scene();three.camera=t.PerspectiveCamera(45,three.width/three.height,.02,2500);three.scene.background=t.Color.fromHex32(0x11151e);three.scene.add(environment);
+    view=three;three.scene=t.Scene();three.camera=t.PerspectiveCamera(45,three.width/three.height,.08,2500);three.scene.background=t.Color.fromHex32(0x11151e);three.scene.add(environment);
     final ambient=t.AmbientLight(0xb8b8b8,1.0);
     three.scene.add(ambient);
     final sun=t.DirectionalLight(0xfff4e6,.82);
@@ -194,7 +199,7 @@ class StudioScene extends ChangeNotifier {
 
   void say(String value){status=value;report(value);if(!disposed)notifyListeners();}
   void setGridVisible(bool value){gridVisible=value;if(grid!=null)grid!.visible=value;notifyListeners();}
-  Future<RenderPart> makePart(MeshData data,String texturePath,{bool opaque=false}) async {
+  Future<RenderPart> makePart(MeshData data,String texturePath,{bool opaque=false,bool frustumCulled=true}) async {
     final bytes=await catalog!.library.read(texturePath);final png=await compute(_decodeTexture,{'bytes':bytes,'path':texturePath,'opaque':opaque});
     // Shaiya meshes were authored for Direct3D UVs (V=0 at the top).  Do not
     // apply Three/OpenGL's image flip here; doing so maps skin/face regions to
@@ -203,7 +208,7 @@ class StudioScene extends ChangeNotifier {
     texture.colorSpace=t.SRGBColorSpace;texture.wrapS=t.RepeatWrapping;texture.wrapT=t.RepeatWrapping;
     final geometry=t.BufferGeometry(),positions=t.Float32BufferAttribute.fromList(data.positions.toList(),3),normals=t.Float32BufferAttribute.fromList(data.normals.toList(),3),uv=t.Float32BufferAttribute.fromList(data.uv.toList(),2);
     geometry.setAttributeFromString('position',positions);geometry.setAttributeFromString('normal',normals);geometry.setAttributeFromString('uv',uv);geometry.setIndex(data.indices.toList());
-    final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=false;return RenderPart(data,mesh,positions,normals,uv,texture);
+    final material=t.MeshLambertMaterial.fromMap({'map':texture,'color':0xffffff,'side':t.DoubleSide,'alphaTest':opaque?0.0:.35,'wireframe':wireframe,'toneMapped':false});final mesh=t.Mesh(geometry,material);mesh.frustumCulled=frustumCulled;return RenderPart(data,mesh,positions,normals,uv,texture);
   }
   Future<RenderPart> _makeSkyLayer(
     MeshData data,
@@ -240,10 +245,11 @@ class StudioScene extends ChangeNotifier {
       throw const FormatException('Cúpula de cielo vacía.');
     }
     mesh.scale.setValues(radius/sourceRadius,radius/sourceRadius,-radius/sourceRadius);
+    mesh.frustumCulled=false;
     mesh.renderOrder=renderOrder;
     return RenderPart(data,mesh,positions,normals,uv,texture);
   }
-  Future<RenderPart> skinned(String mesh,String texture,{int alpha=0}) async {final data=MeshData.skinned(await catalog!.library.read(mesh),mesh);for(final repair in data.repairs){report('$mesh · $repair');}return makePart(data,texture,opaque:alpha==1);}
+  Future<RenderPart> skinned(String mesh,String texture,{int alpha=0}) async {final data=MeshData.skinned(await catalog!.library.read(mesh),mesh);for(final repair in data.repairs){report('$mesh · $repair');}return makePart(data,texture,opaque:alpha==1,frustumCulled:false);}
   Future<ClipData> clip(String path)=>catalog!.library.read(path).then((b)=>ClipData.parse(b,path));
   bool compatible(Actor actor,ClipData clip)=>actor.requiredBones<=clip.bones.length;
   Future<ClipData?> firstCompatible(Actor actor,List<String> paths) async {
@@ -841,13 +847,13 @@ class StudioScene extends ChangeNotifier {
     final a=character;if(a==null)return;final rev=++_weaponRevision;
     if(w==null){weapon?.dispose();secondWeapon?.dispose();weapon=null;secondWeapon=null;weaponRecord=null;weaponAttachment=null;secondAttachment=null;await prepareWeaponMotions();notifyListeners();return;}
     final lib=catalog!.library,root=directoryName(w.source),m=lib.resolve(w.mesh,['$root/3do',root]),tex=lib.resolve(w.texture,['$root/dds',root]);if(m==null||tex==null)throw FormatException('Faltan recursos del arma ${w.id}.');
-    final r=Bin(await lib.read(m),m);r.str();final data=MeshData.rigid(r);r.end();final part=await makePart(data,tex,opaque:w.alpha==1);
+    final r=Bin(await lib.read(m),m);r.str();final data=MeshData.rigid(r);r.end();final part=await makePart(data,tex,opaque:w.alpha==1,frustumCulled:false);
     if(disposed||rev!=_weaponRevision||character!=a){part.dispose();return;}
     final code=archetypeCodes.indexOf(appearance!.archetype.id);Attachment? attachment;
     if(code>=0&&code<w.transforms.length)attachment=w.transforms[code][0];
     if(attachment==null||!attachment.defined||attachment.bone>=a.world.length){part.dispose();throw const FormatException('Esta arma no define un anclaje válido para el arquetipo actual.');}
     RenderPart? other;Attachment? otherAttachment;
-    if([5,15].contains(weaponFamily(w))&&w.transforms[code][1].defined){otherAttachment=w.transforms[code][1];if(otherAttachment.bone>=a.world.length){part.dispose();throw const FormatException('El segundo anclaje requiere otro esqueleto.');}try{other=await makePart(data,tex,opaque:w.alpha==1);}catch(_){part.dispose();rethrow;}}
+    if([5,15].contains(weaponFamily(w))&&w.transforms[code][1].defined){otherAttachment=w.transforms[code][1];if(otherAttachment.bone>=a.world.length){part.dispose();throw const FormatException('El segundo anclaje requiere otro esqueleto.');}try{other=await makePart(data,tex,opaque:w.alpha==1,frustumCulled:false);}catch(_){part.dispose();rethrow;}}
     if(disposed||rev!=_weaponRevision||character!=a){part.dispose();other?.dispose();return;}
     weapon?.dispose();secondWeapon?.dispose();weapon=part;secondWeapon=other;weaponRecord=w;weaponAttachment=attachment;secondAttachment=otherAttachment;
     for(final p in [part,other]){if(p!=null){a.root.add(p.mesh);p.mesh.matrixAutoUpdate=false;}}
@@ -879,10 +885,10 @@ class StudioScene extends ChangeNotifier {
   }
   void updateAttachments(){
     final a=character;if(a==null)return;final x=a.root.position.x,z=a.root.position.z,rotation=a.root.rotation.y;
-    a.root.position.y=groundY+(mount==null?0:riderHeight);
+    a.root.position.y=groundY+a.groundingOffset+(mount==null?0:riderHeight);
     if(weapon!=null&&weaponAttachment!=null&&weaponAttachment!.bone<a.world.length){weapon!.mesh.matrix.copyFromArray((a.world[weaponAttachment!.bone]*weaponAttachment!.matrix).storage);weapon!.mesh.matrixWorldNeedsUpdate=true;}
     if(secondWeapon!=null&&secondAttachment!=null&&secondAttachment!.bone<a.world.length){secondWeapon!.mesh.matrix.copyFromArray((a.world[secondAttachment!.bone]*secondAttachment!.matrix).storage);secondWeapon!.mesh.matrixWorldNeedsUpdate=true;}
-    if(mount!=null){mount!.root.position.setValues(x+math.sin(rotation)*riderForward,groundY,z+math.cos(rotation)*riderForward);mount!.root.rotation.y=rotation;}
+    if(mount!=null){mount!.root.position.setValues(x+math.sin(rotation)*riderForward,groundY+mount!.groundingOffset,z+math.cos(rotation)*riderForward);mount!.root.rotation.y=rotation;}
     if(wing!=null){final bone=a.wingBone;final valid=bone!=null&&bone<a.world.length&&a.wingReference!=null;final matrix=backAttachmentPose(position:v.Vector3(x,a.root.position.y,z),yaw:rotation,bone:valid?a.world[bone]:v.Matrix4.identity(),referenceInverse:valid?a.wingReference!:v.Matrix4.identity(),offset:v.Vector3(0,wingHeight,wingDepth),scale:wingSize);wing!.root.matrix.copyFromArray(matrix.storage);wing!.root.matrixWorldNeedsUpdate=true;}
   }
   Future<void> previewActorAnimation(String target,String name) async {final a=target=='enemy'?enemy:target=='mount'?mount:wing;final c=a?.clips[name];if(a!=null&&c!=null)a.play(c);notifyListeners();}
@@ -1012,7 +1018,7 @@ class StudioScene extends ChangeNotifier {
     groundY=_worldGroundAtLocal(nextX,nextZ);
   }
   void tick(double dt){
-    if(disposed)return;_frameAccumulator+=dt;_uiAccumulator+=dt;if(_frameAccumulator<1/30)return;final delta=_frameAccumulator.clamp(0.0,.1);_frameAccumulator=0;
+    if(disposed)return;_frameAccumulator+=dt;_uiAccumulator+=dt;if(_frameAccumulator<1/60)return;final delta=_frameAccumulator.clamp(0.0,.1);_frameAccumulator=0;
     final moving=walkX!=0||walkZ!=0;final transition=movementTransitions.update(x:walkX,z:walkZ,running:running,blocked:sceneCombatLocked);if(transition!=null)applyLocomotion(transition);final desired=movementClip(movementTransitions.requested);
     if(moving&&!sceneCombatLocked&&desired!=null&&character!=null&&(character!.clip!=desired||!character!.playing||!character!.loop))applyLocomotion(movementTransitions.requested);
     for(final a in [character,enemy,mount,wing,...gameActors]){a?.tick(delta);}for(final a in animatedWorldActors){a.tick(delta);}for(final a in maniWorldActors){a.tick(delta);}
@@ -1035,9 +1041,56 @@ class StudioScene extends ChangeNotifier {
     }
     if(_uiAccumulator>.2){_uiAccumulator=0;notifyListeners();}
   }
-  void orbit(double dx,double dy){yaw-=dx*.006;pitch=(pitch+dy*.006).clamp(-1.2,1.2);updateCamera();}
-  void zoom(double amount){distance=(distance*amount).clamp(.4,250);updateCamera();}
-  void updateCamera(){if(!ready||view==null)return;final a=character;final x=(a?.root.position.x??0)+panX,z=(a?.root.position.z??0)+panZ,y=groundY+targetY+(mount==null?0:riderHeight*.6);view!.camera.position.setValues(x+math.sin(yaw)*math.cos(pitch)*distance,y+math.sin(pitch)*distance,z+math.cos(yaw)*math.cos(pitch)*distance);view!.camera.lookAt(t.Vector3(x,y,z));for(final layer in [sky,secondaryCloud,primaryCloud]){layer?.mesh.position.setValues(view!.camera.position.x,view!.camera.position.y,view!.camera.position.z);}}
+  void configureCamera({
+    double? minDistance,
+    double? maxDistance,
+    bool? collision,
+  }){
+    if(minDistance!=null)cameraMinDistance=math.max(.5,minDistance);
+    if(maxDistance!=null)cameraMaxDistance=math.max(cameraMinDistance+.1,maxDistance);
+    if(collision!=null)cameraCollisionEnabled=collision;
+    distance=distance.clamp(cameraMinDistance,cameraMaxDistance);
+    updateCamera();
+  }
+  void orbit(double dx,double dy){
+    yaw-=dx*.0052;
+    pitch=(pitch+dy*.0052).clamp(-.72,.92);
+    updateCamera();
+  }
+  void zoom(double amount){
+    distance=(distance*amount).clamp(cameraMinDistance,cameraMaxDistance);
+    updateCamera();
+  }
+  void updateCamera(){
+    if(!ready||view==null)return;
+    final a=character;
+    final x=(a?.root.position.x??0)+panX;
+    final z=(a?.root.position.z??0)+panZ;
+    final y=(a?.root.position.y??groundY)+targetY-(mount==null?0:riderHeight*.35);
+    final target=v.Vector3(x,y,z);
+    final desired=v.Vector3(
+      x+math.sin(yaw)*math.cos(pitch)*distance,
+      y+math.sin(pitch)*distance,
+      z+math.cos(yaw)*math.cos(pitch)*distance,
+    );
+    final resolved=cameraCollisionEnabled&&world!=null&&!worldCollision.isEmpty
+      ?worldCollision.clipCameraSegment(
+          target,
+          desired,
+          radius:cameraCollisionRadius,
+          minDistance:math.min(cameraMinDistance*.75,distance),
+        )
+      :desired;
+    view!.camera.position.setValues(resolved.x,resolved.y,resolved.z);
+    view!.camera.lookAt(t.Vector3(x,y,z));
+    for(final layer in [sky,secondaryCloud,primaryCloud]){
+      layer?.mesh.position.setValues(
+        view!.camera.position.x,
+        view!.camera.position.y,
+        view!.camera.position.z,
+      );
+    }
+  }
   Future<void> setBackdrop(String? path) async {
     backdropTexture?.dispose();
     backdropTexture=null;
@@ -1177,9 +1230,9 @@ class StudioScene extends ChangeNotifier {
         environment.removeFromParent();environment=stage;view!.scene.add(stage);
         waterAnimation=null;waterPath=null;waterTexturePaths.clear();
         worldCollision.replaceWith(collision);world=w;dungeon=dg;worldPath=path;originX=ox;originZ=oz;groundY=dg.floorAt(ox,oz);_applyWorldFog(w);
-        character?.root.position.setValues(0,groundY,0);
+        if(character!=null){character!.root.position.x=0;character!.root.position.z=0;}
         enemy?.root.position.setValues(1.8,groundY,0);
-        distance=6;updateCamera();
+        distance=6;updateAttachments();updateCamera();
         view!.scene.background=t.Color.fromHex32(0x090806);
         say('Mazmorra ${w.layout} · $loaded submallas · ${dg.parts.fold<int>(0,(n,p)=>n+p.mesh.triangles)} triángulos · ${worldCollision.triangleCount} triángulos de colisión nativos.');
         notifyListeners();
@@ -1420,7 +1473,7 @@ class StudioScene extends ChangeNotifier {
       for(final a in maniWorldActors){a.dispose();}
       maniWorldActors..clear()..addAll(maniAnimated);
       environment.removeFromParent();environment=stage;view!.scene.add(stage);
-      worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);character?.root.position.setValues(0,groundY,0);enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateCamera();
+      worldCollision.replaceWith(collision);world=w;dungeon=null;worldPath=path;originX=ox;originZ=oz;groundY=w.heightAt(ox,oz,scale:.02,offset:-200);_applyWorldFog(w);if(character!=null){character!.root.position.x=0;character!.root.position.z=0;}enemy?.root.position.setValues(1.8,groundY,0);distance=8;updateAttachments();updateCamera();
       if(catalog!.skies.isNotEmpty){
         final choice=(w.skyFile.isNotEmpty?lib.resolve(w.skyFile,['sky'],uniqueFallback:true):null)
           ??lib.resolve('sky_a1.bmp',['sky'])
