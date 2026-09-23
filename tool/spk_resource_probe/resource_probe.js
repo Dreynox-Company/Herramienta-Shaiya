@@ -129,7 +129,11 @@ function attachCandidateModule(module) {
   if (
     lower !== 'bcrypt.dll' &&
     !lower.includes('crypto') &&
-    !lower.includes('libeay')
+    !lower.includes('libeay') &&
+    !lower.includes('mbedtls') &&
+    !lower.includes('mbedcrypto') &&
+    !lower.includes('wolfssl') &&
+    !lower.includes('boringssl')
   ) {
     return;
   }
@@ -263,6 +267,82 @@ function attachCandidateModule(module) {
             candidateBytes: bytes,
           });
         }
+      },
+    });
+  }
+
+  // BoringSSL exposes the AEAD key directly during context initialization.
+  // It is still only a candidate: Python must reproduce AES-GCM on the exact
+  // DATA.SPK ciphertext/tag samples before Studio accepts it.
+  hook('EVP_AEAD_CTX_init', {
+    onEnter(args) {
+      try {
+        const keyPointer = args[2];
+        const bytes = args[3].toUInt32();
+        if (!keyPointer || keyPointer.isNull() || ![16, 32].includes(bytes)) {
+          return;
+        }
+        emitCandidate(safe(keyPointer, bytes, 64), bytes, 'EVP_AEAD_CTX_init', {
+          module: module.name,
+          source: 'boringssl-aead-key',
+        });
+      } catch (_) {}
+    },
+  });
+
+  // mbedTLS is common in game launchers/clients that do not route symmetric
+  // crypto through Windows CNG. These hooks observe only the documented key
+  // argument; the offline SPK oracle remains authoritative.
+  hook('mbedtls_gcm_setkey', {
+    onEnter(args) {
+      try {
+        const keyPointer = args[2];
+        const bits = args[3].toUInt32();
+        if (!keyPointer || keyPointer.isNull() || ![128, 256].includes(bits)) {
+          return;
+        }
+        const bytes = bits / 8;
+        emitCandidate(safe(keyPointer, bytes, 64), bytes, 'mbedtls_gcm_setkey', {
+          module: module.name,
+          source: 'mbedtls-gcm-key',
+        });
+      } catch (_) {}
+    },
+  });
+  for (const symbol of ['mbedtls_aes_setkey_enc', 'mbedtls_aes_setkey_dec']) {
+    hook(symbol, {
+      onEnter(args) {
+        try {
+          const keyPointer = args[1];
+          const bits = args[2].toUInt32();
+          if (!keyPointer || keyPointer.isNull() || ![128, 256].includes(bits)) {
+            return;
+          }
+          const bytes = bits / 8;
+          emitCandidate(safe(keyPointer, bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'mbedtls-aes-key',
+          });
+        } catch (_) {}
+      },
+    });
+  }
+
+  // wolfSSL exposes byte lengths instead of bit lengths.
+  for (const symbol of ['wc_AesGcmSetKey', 'wc_AesSetKey']) {
+    hook(symbol, {
+      onEnter(args) {
+        try {
+          const keyPointer = args[1];
+          const bytes = args[2].toUInt32();
+          if (!keyPointer || keyPointer.isNull() || ![16, 32].includes(bytes)) {
+            return;
+          }
+          emitCandidate(safe(keyPointer, bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'wolfssl-aes-key',
+          });
+        } catch (_) {}
       },
     });
   }
