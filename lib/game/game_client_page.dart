@@ -1295,6 +1295,71 @@ class _GameClientPageState extends State<GameClientPage> {
 
   bool _applyPassiveSessionPacket(PsPacket packet,{bool announce=true}){
     try{
+      if(packet.type==PsPacketType.characterAttributeSet){
+        final update=PsCharacterAttribute.parse(packet),details=liveDetails;
+        if(details!=null){
+          switch(update.attribute){
+            case PsCharacterAttribute.money:
+              liveGold=update.value;
+              liveDetails=details.copyWith(gold:update.value);
+              break;
+            case PsCharacterAttribute.statPoint:
+              liveDetails=details.copyWith(statPoint:update.value);
+              break;
+            case PsCharacterAttribute.skillPoint:
+              liveDetails=details.copyWith(skillPoint:update.value);
+              if(liveSkills!=null){
+                liveSkills=PsSkillBook(update.value,liveSkills!.skills);
+              }
+              break;
+            case PsCharacterAttribute.strength:
+              liveDetails=details.copyWith(strength:update.value);
+              break;
+            case PsCharacterAttribute.dexterity:
+              liveDetails=details.copyWith(dexterity:update.value);
+              break;
+            case PsCharacterAttribute.reaction:
+              liveDetails=details.copyWith(reaction:update.value);
+              break;
+            case PsCharacterAttribute.intelligence:
+              liveDetails=details.copyWith(intelligence:update.value);
+              break;
+            case PsCharacterAttribute.wisdom:
+              liveDetails=details.copyWith(wisdom:update.value);
+              break;
+            case PsCharacterAttribute.luck:
+              liveDetails=details.copyWith(luck:update.value);
+              break;
+            case PsCharacterAttribute.experience:
+              liveDetails=details.copyWith(currentExp:update.value);
+              break;
+            case PsCharacterAttribute.kills:
+              liveKillCounts[0]=update.value;
+              liveDetails=details.copyWith(kills:update.value);
+              break;
+            case PsCharacterAttribute.deaths:
+              liveKillCounts[1]=update.value;
+              liveDetails=details.copyWith(deaths:update.value);
+              break;
+          }
+        }
+        if(update.attribute==PsCharacterAttribute.level){
+          final current=liveCharacter;
+          if(current!=null){
+            final next=current.copyWith(level:update.value);
+            liveCharacter=next;
+            liveCharacters=liveCharacters.map((x)=>x.id==next.id?next:x).toList();
+          }
+        }else if(update.attribute==PsCharacterAttribute.grow){
+          final current=liveCharacter;
+          if(current!=null){
+            final next=current.copyWith(mode:update.value);
+            liveCharacter=next;
+            liveCharacters=liveCharacters.map((x)=>x.id==next.id?next:x).toList();
+          }
+        }
+        return true;
+      }
       if(packet.type==PsPacketType.autoStatsList){
         liveAutoStats=PsAutoStats.parse(packet);
         return true;
