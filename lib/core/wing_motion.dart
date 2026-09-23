@@ -30,7 +30,7 @@ T? selectWingMotion<T>(Map<String, T> clips, WingMotionPhase phase) {
     final clip = clips[key];
     if (clip != null) return clip;
   }
-  return clips.values.firstOrNull;
+  return clips.isEmpty ? null : clips.values.first;
 }
 
 String wingMotionLabel(WingMotionPhase phase) => switch (phase) {
