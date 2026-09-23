@@ -1038,7 +1038,31 @@ class _StudioState extends State<StudioPage> {
             section('Alas', [
               creatureField('wing'),
               if (scene.wing != null) ...[
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: const Text(
+                    'Animación automática desde MON',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  subtitle: Text(
+                    scene.wingMotionStatus,
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  value: scene.wingAutoMotion,
+                  onChanged: disabled
+                      ? null
+                      : (value) => act(
+                          () => scene.setWingAutoMotion(value),
+                          preserveMovement: true,
+                          restoreFocus: true,
+                        ),
+                ),
                 actorAnimation(scene.wing!, 'wing'),
+                note(
+                  'La selección automática usa únicamente los slots ANI declarados por el MON original del ala. Elegir una animación manual desactiva temporalmente la sincronización automática.',
+                ),
                 slider(
                   'Rotación horizontal',
                   scene.wingYaw * 180 / 3.141592653589793,
@@ -1080,7 +1104,7 @@ class _StudioState extends State<StudioPage> {
                 ),
               ],
               note(
-                'Anclaje en la cadena del torso, independiente de los brazos. Sigue el asiento al montar.',
+                'Anclaje calculado sobre la cadena real del torso. La calibración se guarda por ala + raza/arquetipo para no reutilizar offsets de otro esqueleto.',
               ),
             ]),
             section('Vuelo suplementario', [
