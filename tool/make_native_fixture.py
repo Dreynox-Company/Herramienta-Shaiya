@@ -90,6 +90,15 @@ columns=['id','money1','money2','hp']+[s for i in range(1,19) for s in (f'item{i
 header=bytes(128)+u(len(columns))+b''.join(bytes([len(c)])+c.encode('utf-16-le') for c in columns)
 rows=[[1,10,20,400]+[v for i in range(1,19) for v in (200+i,10)], [2,30,50,600]+[0]*36]
 write('BinarySData/DBMonsterData.SData',header+u(len(rows))+b''.join(struct.pack('<q',v) for r in rows for v in r))
+# Wing equipment relation exercised by the Flutter game client:
+# equipment slot 16 <- DBItemData ItemType 121 <- Image <- Character/Wing MON row.
+item_columns=['country','itemtype','itemtypeid','image','attackfighter','defensefighter','patrolrogue','shootrogue','attackmage','defensemage']
+item_header=bytes(128)+u(len(item_columns))+b''.join(bytes([len(c)])+c.encode('utf-16-le') for c in item_columns)
+item_row=[6,121,1,0,1,1,1,1,1,1]
+write('BinarySData/DBItemData.SData',item_header+u(1)+b''.join(struct.pack('<q',v) for v in item_row))
+text_columns=['itemtype','itemtypeid','itemname','description']
+text_header=bytes(128)+u(len(text_columns))+b''.join(bytes([len(c)])+c.encode('utf-16-le') for c in text_columns)
+write('BinarySData/DBItemText_SPN.SData',text_header+u(1)+struct.pack('<q',121)+struct.pack('<q',1)+s('Alas de Prueba')+s('Fixture de alas ItemType 121'))
 # Build real SAH/SAF wire format from the same synthetic tree, including subdirectories.
 payload=bytearray()
 all_files=sorted(p for p in root.rglob('*') if p.is_file())
