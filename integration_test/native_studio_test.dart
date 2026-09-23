@@ -127,6 +127,18 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     final c = scene.catalog!;
     expect(c.weapons, isNotEmpty);
+    expect(c.wings, isNotEmpty);
+    final wingNames = c.names.itemByModel['121:0'];
+    expect(wingNames, isNotNull);
+    expect(wingNames!.first.name, 'Alas de Prueba');
+    expect(
+      c.names.wingTitle(c.wings.first, c.creatureLabel(c.wings.first)),
+      'Alas de Prueba',
+    );
+    expect(c.names.wingDetail(c.wings.first), contains('slot de equipo 16'));
+    passed.add(
+      'DBItemData type 121 Image maps wing item to MON row and equipment slot 16',
+    );
     await scene.equip(c.weapons.first);
     expect(scene.weapon, isNotNull);
     expect(scene.weapon!.mesh.parent, scene.character!.visual);
