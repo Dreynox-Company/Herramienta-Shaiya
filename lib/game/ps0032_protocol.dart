@@ -107,6 +107,7 @@ class PsPacketType {
   static const characterLeaveDead=0x0406;
   static const characterCurrentHitpoints=0x0521;
   static const characterAdditionalStats=0x0526;
+  static const characterAttributeSet=0xF701;
   static const mobEnter=0x0601;
   static const mobLeave=0x0602;
   static const mobMove=0x0603;
@@ -2143,6 +2144,22 @@ class PsHitpoints {
       d.getInt32(0,Endian.little),
       d.getInt32(4,Endian.little),
       d.getInt32(8,Endian.little),
+    );
+  }
+}
+
+class PsCharacterAttribute {
+  final int attribute,value;
+  const PsCharacterAttribute(this.attribute,this.value);
+  static const grow=0,level=1,money=2,statPoint=3,skillPoint=4,
+    strength=5,dexterity=6,reaction=7,intelligence=8,luck=9,wisdom=10,
+    hg=11,vg=12,cg=13,og=14,ig=15,experience=16,kills=17,deaths=18;
+  static PsCharacterAttribute parse(PsPacket p){
+    if(p.type!=PsPacketType.characterAttributeSet||p.body.length<5){
+      throw FormatException('CHARACTER_ATTRIBUTE_SET truncado: ${p.body.length}.');
+    }
+    return PsCharacterAttribute(
+      p.body[0],ByteData.sublistView(p.body).getUint32(1,Endian.little),
     );
   }
 }
