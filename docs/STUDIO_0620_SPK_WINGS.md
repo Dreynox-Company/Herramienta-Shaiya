@@ -40,3 +40,15 @@ texturas y slots ANI originales. 0.6.20 añade:
 La selección automática no inventa archivos ANI ni certifica todavía paridad
 1:1 con `game.exe`. La paridad final requiere capturas/pruebas con el cliente
 original exacto y el mismo DATA.SPK.
+
+
+## Contrato de interacción conservado
+
+- W mantiene marcha; W + Shift mantiene carrera.
+- Equipar alas no activa por sí solo el vuelo.
+- Las alas permanecen vinculadas al personaje y siguen la transformación del
+  asiento cuando se equipa/cambia una montura.
+- Entrar en combate desde vuelo inicia un descenso natural; el ataque terrestre
+  solo comienza después del contacto con el suelo.
+- La guardia y las animaciones de combate siguen siendo estados de combate, no
+  reposos permanentes del editor.
