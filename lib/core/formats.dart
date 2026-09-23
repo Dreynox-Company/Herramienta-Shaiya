@@ -37,6 +37,13 @@ class Bin {
     return x;
   }
 
+  int i16() {
+    need(2);
+    final x = data.getInt16(offset, Endian.little);
+    offset += 2;
+    return x;
+  }
+
   int u32() {
     need(4);
     final x = data.getUint32(offset, Endian.little);
