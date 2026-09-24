@@ -91,7 +91,8 @@ class XmlTreeDocument {
         _XmlShape(
           name: element.name.qualified,
           attributeNames: [
-            for (final attribute in element.attributes) attribute.name.qualified,
+            for (final attribute in element.attributes)
+              attribute.name.qualified,
           ]..sort(),
           childCount: element.childElements.length,
         ),
@@ -150,7 +151,9 @@ class XmlTreeDocument {
   void validateEncoded(Uint8List bytes) {
     final parsed = XmlTreeDocument.parse(bytes, path);
     if (parsed.rootName != rootName || parsed.nodes.length != nodes.length) {
-      throw FormatException('$path: la serialización alteró la estructura XML.');
+      throw FormatException(
+        '$path: la serialización alteró la estructura XML.',
+      );
     }
     for (var i = 0; i < _shape.length; i++) {
       final expected = _shape[i];

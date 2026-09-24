@@ -190,9 +190,8 @@ class _XmlTreeEditorPanelState extends State<XmlTreeEditorPanel> {
             ),
             IconButton(
               tooltip: 'Copiar ruta XML',
-              onPressed: () => Clipboard.setData(
-                ClipboardData(text: node.path),
-              ),
+              onPressed: () =>
+                  Clipboard.setData(ClipboardData(text: node.path)),
               icon: const Icon(Icons.copy_all_outlined, size: 17),
             ),
           ],
@@ -242,9 +241,10 @@ class _XmlTreeEditorPanelState extends State<XmlTreeEditorPanel> {
                   });
                 } catch (error) {
                   setState(() {
-                    errors[key] = error
-                        .toString()
-                        .replaceFirst('FormatException: ', '');
+                    errors[key] = error.toString().replaceFirst(
+                      'FormatException: ',
+                      '',
+                    );
                   });
                 }
               },
@@ -276,9 +276,10 @@ class _XmlTreeEditorPanelState extends State<XmlTreeEditorPanel> {
                 });
               } catch (error) {
                 setState(() {
-                  errors[key] = error
-                      .toString()
-                      .replaceFirst('FormatException: ', '');
+                  errors[key] = error.toString().replaceFirst(
+                    'FormatException: ',
+                    '',
+                  );
                 });
               }
             },

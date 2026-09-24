@@ -373,13 +373,11 @@ List<ExcelXmlSemanticIssue> _wingPosition(ExcelXmlDocument document) {
         _finiteNumberError(out, sheet, s, r, c[name], name.toUpperCase());
       }
     }
-    _duplicateKeys(
-      out,
-      sheet,
-      s,
-      [family!, job!, sex!],
-      label: 'La combinación FAMILY + JOB + SEX',
-    );
+    _duplicateKeys(out, sheet, s, [
+      family!,
+      job!,
+      sex!,
+    ], label: 'La combinación FAMILY + JOB + SEX');
     if (sheet.rows.length != 48) {
       out.add(
         ExcelXmlSemanticIssue(
@@ -388,7 +386,9 @@ List<ExcelXmlSemanticIssue> _wingPosition(ExcelXmlDocument document) {
           code: 'wing-profile-count',
           message:
               'WingPosition requiere 48 perfiles (4 familias × 6 jobs × '
-              '2 sexos); hay ' + sheet.rows.length.toString() + '.',
+                  '2 sexos); hay ' +
+              sheet.rows.length.toString() +
+              '.',
         ),
       );
     }
@@ -396,9 +396,7 @@ List<ExcelXmlSemanticIssue> _wingPosition(ExcelXmlDocument document) {
   return out;
 }
 
-List<ExcelXmlSemanticIssue> _battleFieldPrize(
-  ExcelXmlDocument document,
-) {
+List<ExcelXmlSemanticIssue> _battleFieldPrize(ExcelXmlDocument document) {
   final out = <ExcelXmlSemanticIssue>[];
   for (var s = 0; s < document.sheets.length; s++) {
     final sheet = document.sheets[s];
@@ -474,9 +472,7 @@ List<ExcelXmlSemanticIssue> _guildGemItem(ExcelXmlDocument document) {
   return out;
 }
 
-List<ExcelXmlSemanticIssue> _infiniteDungeonRebirth(
-  ExcelXmlDocument document,
-) {
+List<ExcelXmlSemanticIssue> _infiniteDungeonRebirth(ExcelXmlDocument document) {
   final out = <ExcelXmlSemanticIssue>[];
   for (var s = 0; s < document.sheets.length; s++) {
     final sheet = document.sheets[s];
@@ -532,9 +528,7 @@ List<ExcelXmlSemanticIssue> _renownShop(ExcelXmlDocument document) {
   return out;
 }
 
-List<ExcelXmlSemanticIssue> _functionalPetSize(
-  ExcelXmlDocument document,
-) {
+List<ExcelXmlSemanticIssue> _functionalPetSize(ExcelXmlDocument document) {
   final out = <ExcelXmlSemanticIssue>[];
   for (var s = 0; s < document.sheets.length; s++) {
     final sheet = document.sheets[s];
@@ -729,11 +723,7 @@ List<ExcelXmlSemanticIssue> _fontStyleSet(ExcelXmlDocument document) {
     if (index == null) continue;
     for (var r = 0; r < sheet.rows.length; r++) {
       _integerError(out, sheet, s, r, index, 'Index', min: 0);
-      for (final name in const [
-        'textcolor_r',
-        'textcolor_g',
-        'textcolor_b',
-      ]) {
+      for (final name in const ['textcolor_r', 'textcolor_g', 'textcolor_b']) {
         _numberRange(out, sheet, s, r, c[name], name, 0, 255);
       }
       for (final name in const [
@@ -758,16 +748,7 @@ List<ExcelXmlSemanticIssue> _gmNotice(ExcelXmlDocument document) {
     final legacy = c['textcolor_r1'] != null;
     for (var r = 0; r < sheet.rows.length; r++) {
       if (type != null) {
-        _integerError(
-          out,
-          sheet,
-          s,
-          r,
-          type,
-          'Type',
-          min: 1,
-          allowZero: false,
-        );
+        _integerError(out, sheet, s, r, type, 'Type', min: 1, allowZero: false);
       }
       final colors = legacy
           ? const [
@@ -807,9 +788,7 @@ List<ExcelXmlSemanticIssue> _ymEventInfo(ExcelXmlDocument document) {
   return out;
 }
 
-List<ExcelXmlSemanticIssue> _visiblePartyBuff(
-  ExcelXmlDocument document,
-) {
+List<ExcelXmlSemanticIssue> _visiblePartyBuff(ExcelXmlDocument document) {
   final out = <ExcelXmlSemanticIssue>[];
   for (var s = 0; s < document.sheets.length; s++) {
     final sheet = document.sheets[s];

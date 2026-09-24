@@ -104,11 +104,7 @@ class ExcelXmlDocument {
       final parsedRows = <Map<int, XmlElement>>[
         for (final row in rows) _dataCells(row),
       ];
-      final header = _headerIndex(
-        parsedRows,
-        path: path,
-        sheetName: name,
-      );
+      final header = _headerIndex(parsedRows, path: path, sheetName: name);
       if (header < 0) continue;
       final headerCells = parsedRows[header];
       final maxColumn = parsedRows.fold<int>(
