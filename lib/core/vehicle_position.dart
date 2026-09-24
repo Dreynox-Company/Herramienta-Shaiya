@@ -7,13 +7,13 @@ const Map<int, ({int idle, int moving, String label})> riderAnimationProfiles =
       1: (idle: 97, moving: 22, label: 'Vehículo alterno · 097/022'),
       2: (idle: 98, moving: 98, label: 'Carruaje · 098/098'),
       3: (idle: 97, moving: 22, label: 'Vehículo alterno B · 097/022'),
-      4: (idle: 30, moving: 31, label: 'VehB corpus · 030/031'),
+      4: (idle: 30, moving: 31, label: 'VehB corpus · 030/031 · preview'),
     };
 
 int? vehicleFamilyFromSource(String source) {
   final path = source.toLowerCase().replaceAll('\\', '/');
   final file = path.split('/').last;
-  final match = RegExp(r'^vehicle_(hu|el|vi|de)(?:_|\\.|$)').firstMatch(file);
+  final match = RegExp(r'^vehicle_(hu|el|vi|de)(?:_|\.|$)').firstMatch(file);
   return switch (match?.group(1)) {
     'hu' => 0,
     'el' => 1,
@@ -228,14 +228,11 @@ class VehiclePositionDocument {
       raw = Uint8List.sublistView(raw, 3);
     }
     final text = utf8.decode(raw, allowMalformed: false);
+    final lines = const LineSplitter().convert(text);
     final sections = <String, Map<String, String>>{};
     Map<String, String>? current;
-    for (
-      var lineNumber = 0;
-      lineNumber < const LineSplitter().convert(text).length;
-      lineNumber++
-    ) {
-      final sourceLine = const LineSplitter().convert(text)[lineNumber];
+    for (var lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+      final sourceLine = lines[lineNumber];
       final line = sourceLine.trim();
       if (line.isEmpty || line.startsWith(';') || line.startsWith('#')) {
         continue;
