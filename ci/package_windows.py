@@ -26,6 +26,7 @@ def main():
     for name in [
         'STUDIO_0620_SPK_WINGS.md',
         'EXCELXML_STUDIO_AUDIT.md',
+        'FLIGHT_V3_REAL_RUNTIME_AUDIT.md',
         'GAME_PS0032_VEHICLE_BRIDGE.md',
         'SPK_REAL_READER_STATUS.md',
         'DATA_CAPABILITY_MATRIX.md',
@@ -76,6 +77,7 @@ NOVEDADES 0.6.22:
   - ExcelXml Lab: tablas reales de DATA, celdas sparse, ss:Type,
     validación en vivo, reparación XML fail-closed y accesos por dominio.
   - Vehicle.MON completo + ps0032 VehiclePosition Studio Bridge 6DoF.
+  - auditoría real del runtime Flight V3 incluida en Docs/.
   - documentación técnica incluida en Docs/.
 
 FLIGHT V3:
