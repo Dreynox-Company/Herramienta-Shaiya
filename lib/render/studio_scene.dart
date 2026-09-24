@@ -612,7 +612,18 @@ class StudioScene extends ChangeNotifier {
       game.loaded?.parts ?? const <RenderPart>[];
   WorldData? world;
   String? worldPath, effectPath, skyPath;
-  final Map<String, ({double height, double forward})> _seats = {};
+  final Map<
+    String,
+    ({
+      double lateral,
+      double height,
+      double forward,
+      double rotX,
+      double rotY,
+      double rotZ,
+    })
+  >
+  _seats = {};
   String lastImpact = '';
   t.Sprite? hitSprite;
   t.Texture? effectTexture;
@@ -754,7 +765,12 @@ class StudioScene extends ChangeNotifier {
       targetY = 1.05,
       panX = 0,
       panZ = 0;
-  double riderHeight = 1.0, riderForward = 0;
+  double riderLateral = 0,
+      riderHeight = 1.0,
+      riderForward = 0,
+      riderRotX = 0,
+      riderRotY = 0,
+      riderRotZ = 0;
   double originX = 0,
       originZ = 0,
       groundY = 0,
@@ -1247,6 +1263,20 @@ class StudioScene extends ChangeNotifier {
     }
   }
 
+  void resetMountSeatCalibration() {
+    final record = mountRecord;
+    if (record != null) {
+      _seats.remove('${record.source}#${record.id}');
+    }
+    riderLateral = 0;
+    riderHeight = .04;
+    riderForward = 0;
+    riderRotX = 0;
+    riderRotY = 0;
+    riderRotZ = 0;
+    changed();
+  }
+
   Future<void> selectCreature(CreatureRecord? c, String kind) async {
     if (kind == 'enemy') {
       await replaceOpponent(c);
@@ -1262,8 +1292,12 @@ class StudioScene extends ChangeNotifier {
     }
     if (kind == 'mount' && mountRecord != null) {
       _seats['${mountRecord!.source}#${mountRecord!.id}'] = (
+        lateral: riderLateral,
         height: riderHeight,
         forward: riderForward,
+        rotX: riderRotX,
+        rotY: riderRotY,
+        rotZ: riderRotZ,
       );
     }
     final staged = c == null ? null : await loadCreature(c);
@@ -1304,8 +1338,12 @@ class StudioScene extends ChangeNotifier {
             'Montura sin superficie central reconocida. Usa los ajustes del asiento; no se ha certificado el encaje automático.',
           );
         }
+        riderLateral = seat?.lateral ?? 0;
         riderHeight = seat?.height ?? .04;
         riderForward = seat?.forward ?? 0;
+        riderRotX = seat?.rotX ?? 0;
+        riderRotY = seat?.rotY ?? 0;
+        riderRotZ = seat?.rotZ ?? 0;
         await riderPose();
       } else if (character?.idle != null) {
         character!.play(character!.idle!);
@@ -1796,8 +1834,12 @@ class StudioScene extends ChangeNotifier {
           saddle,
           q,
           pelvis,
+          lateral: riderLateral,
           height: riderHeight,
           forward: riderForward,
+          rotX: riderRotX,
+          rotY: riderRotY,
+          rotZ: riderRotZ,
         ).storage,
       );
       a.root.position.y = groundY;
