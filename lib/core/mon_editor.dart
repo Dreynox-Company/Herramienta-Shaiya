@@ -18,6 +18,14 @@ const monSoundSlots = <String>['Ataque 1', 'Ataque 2', 'Ataque 3', 'Caída'];
 
 const monEffectSlots = <String>['Ataque 1', 'Ataque 2', 'Ataque 3', 'Caída'];
 
+/// Native Shaiya MON sentinel observed in the real Vehicle corpus. A MON slot
+/// containing LOAD delegates resolution to the client instead of naming a
+/// concrete ANI/WAV/EFT resource.
+const monLoadSentinel = 'LOAD';
+
+bool isMonLoadSentinel(String? value) =>
+    value != null && value.trim().toUpperCase() == monLoadSentinel;
+
 class EditableMonString {
   final Uint8List originalBytes;
   final String originalValue;
@@ -102,8 +110,12 @@ class EditableMonDocument {
     required String label,
     required Set<String> extensions,
     bool allowEmpty = false,
+    bool allowLoadSentinel = false,
   }) {
     final normalized = value.trim().replaceAll('\\', '/');
+    if (allowLoadSentinel && isMonLoadSentinel(normalized)) {
+      return monLoadSentinel;
+    }
     if (normalized.isEmpty && allowEmpty) return '';
     if (normalized.isEmpty ||
         normalized.contains('..') ||
@@ -126,6 +138,7 @@ class EditableMonDocument {
       animation,
       label: 'ANI',
       extensions: const {'.ani'},
+      allowLoadSentinel: true,
     );
   }
 
@@ -138,6 +151,7 @@ class EditableMonDocument {
       label: 'sonido',
       extensions: const {'.wav', '.ogg'},
       allowEmpty: true,
+      allowLoadSentinel: true,
     );
   }
 
@@ -150,6 +164,7 @@ class EditableMonDocument {
       label: 'efecto',
       extensions: const {'.eft', '.3de'},
       allowEmpty: true,
+      allowLoadSentinel: true,
     );
   }
 
@@ -165,6 +180,7 @@ class EditableMonDocument {
       label: 'efecto adjunto',
       extensions: const {'.eft', '.3de'},
       allowEmpty: true,
+      allowLoadSentinel: true,
     );
   }
 
