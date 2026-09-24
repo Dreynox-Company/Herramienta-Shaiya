@@ -2,9 +2,38 @@
 from pathlib import Path
 import hashlib, json, os, re, shutil, struct, subprocess, zipfile
 ROOT=Path(__file__).resolve().parents[1]
+FLIGHT_RUNTIME_NAME='Shaiya_Studio_FlightV3_Runtime.zip'
+FLIGHT_RUNTIME_SHA256='6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba'
+
 def sha(p):
     with p.open('rb') as stream: return hashlib.file_digest(stream,'sha256').hexdigest()
 def git(*args): return subprocess.check_output(['git',*args],cwd=ROOT,text=True).strip()
+
+def install_flight_runtime(release):
+    candidates=[]
+    configured=os.environ.get('SHAIYA_FLIGHT_V3_RUNTIME')
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.extend([
+        ROOT/'qa-assets'/FLIGHT_RUNTIME_NAME,
+        ROOT/'Extras'/'FlightV3'/FLIGHT_RUNTIME_NAME,
+    ])
+    source=next((p for p in candidates if p.is_file()),None)
+    if source is None:
+        return None
+    actual=sha(source)
+    if actual!=FLIGHT_RUNTIME_SHA256:
+        raise RuntimeError(
+            'Flight V3 runtime hash mismatch: '
+            f'{source} -> {actual}'
+        )
+    target=release/'Extras'/'FlightV3'/FLIGHT_RUNTIME_NAME
+    target.parent.mkdir(parents=True,exist_ok=True)
+    shutil.copy2(source,target)
+    if sha(target)!=FLIGHT_RUNTIME_SHA256:
+        raise RuntimeError('Flight V3 runtime copy verification failed')
+    return target
+
 def main():
     release=ROOT/'build/windows/x64/runner/Release'
     for relative in ['herramienta_shaiya.exe','flutter_windows.dll','data/app.so','Extras/SPK/Shaiya_SPK_ResourceProbe.exe']:
@@ -37,11 +66,12 @@ def main():
         if source.is_file(): shutil.copy2(source,docs_target/name)
     flight_target=release/'Extras'/'FlightV3'
     flight_target.mkdir(parents=True,exist_ok=True)
+    bundled_flight_runtime=install_flight_runtime(release)
     (flight_target/'LEEME_RUNTIME.txt').write_text(
         'Shaiya Studio Flight V3 Runtime\n'
         'Archivo recomendado: Shaiya_Studio_FlightV3_Runtime.zip\n'
         'SHA-256 runtime auditado: '
-        '6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba\n'
+        f'{FLIGHT_RUNTIME_SHA256}\n'
         'Fuente completa auditada SHA-256: '
         '7f720a9e339d96a6e47cdce11094ecb64663c2f80f102de179f76e7f0b2c8a44\n'
         'Importa el ZIP desde Alas y monturas > Vuelo suplementario. '
@@ -83,12 +113,11 @@ def main():
             'graphicsRuntimeHardeningComplete':not debug_crt,
         },
         'flightV3':{
-            'runtimeExpectedSha256':
-                '6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba',
+            'runtimeExpectedSha256':FLIGHT_RUNTIME_SHA256,
             'sourceExpectedSha256':
                 '7f720a9e339d96a6e47cdce11094ecb64663c2f80f102de179f76e7f0b2c8a44',
             'realRuntimeAuditDocumented':(ROOT/'docs'/'FLIGHT_V3_REAL_RUNTIME_AUDIT.md').is_file(),
-            'runtimeBundled':(release/'Extras'/'FlightV3'/'Shaiya_Studio_FlightV3_Runtime.zip').is_file(),
+            'runtimeBundled':bundled_flight_runtime is not None,
         },
         'spk':{
             'resourceKeyValidated':resource_key_validated,
