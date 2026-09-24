@@ -2417,6 +2417,18 @@ class _StudioState extends State<StudioPage> {
                     style: TextStyle(fontSize: 10),
                   ),
                 ),
+              if (scene.worldPath != null &&
+                  scene.worldPath!.toLowerCase().endsWith('.wld'))
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => openDataEditor(initialPath: scene.worldPath),
+                  icon: const Icon(Icons.layers_outlined, size: 16),
+                  label: const Text(
+                    'Capas de terreno WLD',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
             ]),
             worldOptions(),
             section('Visualización', [
