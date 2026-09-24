@@ -70,6 +70,22 @@ void main() {
     },
   );
 
+  test('SpreadsheetML Number validation rejects malformed edits', () {
+    final doc = ExcelXmlDocument.parse(
+      spreadsheet(),
+      'excelxml/wingposition.xml',
+    );
+    final row = doc.sheets.single.rows.first;
+    expect(row.cellType(2), 'Number');
+    expect(
+      () => doc.setCell(0, 0, 2, 'not-a-number'),
+      throwsFormatException,
+    );
+    expect(row.value(2), '170');
+    doc.setCell(0, 0, 2, '-180.125');
+    expect(row.value(2), '-180.125');
+  });
+
   test(
     'missing sparse cell is fail-closed instead of inventing XML structure',
     () {
