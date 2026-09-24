@@ -554,10 +554,12 @@ class StudioScene extends ChangeNotifier {
   }
 
   String? wingMonAnimation(String slot) => wingRecord?.animations[slot];
+  bool wingMonAnimationUsesLoad(String slot) =>
+      isMonLoadSentinel(wingMonAnimation(slot));
 
   String? wingMonAnimationCandidate(String slot) {
     final raw = wingMonAnimation(slot);
-    if (raw == null || raw.isEmpty) return null;
+    if (raw == null || raw.isEmpty || isMonLoadSentinel(raw)) return null;
     final name = baseName(raw).toLowerCase();
     return wingMonAnimationCandidates
         .where((p) => baseName(p).toLowerCase() == name)
@@ -639,6 +641,11 @@ class StudioScene extends ChangeNotifier {
   String? wingMonSound(String slot) => wingRecord?.sounds[slot];
   String? wingMonEffect(String slot) => wingRecord?.effects[slot];
   String? get wingMonAttachedEffect => wingRecord?.effects['Adjunto'];
+  bool wingMonSoundUsesLoad(String slot) => isMonLoadSentinel(wingMonSound(slot));
+  bool wingMonEffectUsesLoad(String slot) =>
+      isMonLoadSentinel(wingMonEffect(slot));
+  bool get wingMonAttachedEffectUsesLoad =>
+      isMonLoadSentinel(wingMonAttachedEffect);
 
   String? wingMonSoundCandidate(String slot) =>
       _candidateByBase(wingMonSound(slot), wingMonSoundCandidates);
@@ -665,7 +672,7 @@ class StudioScene extends ChangeNotifier {
   }
 
   String? _candidateByBase(String? raw, List<String> candidates) {
-    if (raw == null || raw.isEmpty) return null;
+    if (raw == null || raw.isEmpty || isMonLoadSentinel(raw)) return null;
     final name = baseName(raw).toLowerCase();
     return candidates
         .where((path) => baseName(path).toLowerCase() == name)
@@ -682,7 +689,7 @@ class StudioScene extends ChangeNotifier {
     await selectCreature(updated, 'wing');
     report(
       '${updated.source} #${updated.id} · sonido $slot = '
-      '${soundPath.isEmpty ? 'vacío' : baseName(soundPath)} · MON revalidado.',
+      '${soundPath.isEmpty ? 'vacío' : isMonLoadSentinel(soundPath) ? 'LOAD (nativo)' : baseName(soundPath)} · MON revalidado.',
     );
   }
 
@@ -696,7 +703,7 @@ class StudioScene extends ChangeNotifier {
     await selectCreature(updated, 'wing');
     report(
       '${updated.source} #${updated.id} · efecto $slot = '
-      '${effectPath.isEmpty ? 'vacío' : baseName(effectPath)} · MON revalidado.',
+      '${effectPath.isEmpty ? 'vacío' : isMonLoadSentinel(effectPath) ? 'LOAD (nativo)' : baseName(effectPath)} · MON revalidado.',
     );
   }
 
@@ -710,7 +717,7 @@ class StudioScene extends ChangeNotifier {
     await selectCreature(updated, 'wing');
     report(
       '${updated.source} #${updated.id} · efecto adjunto = '
-      '${effectPath.isEmpty ? 'vacío' : baseName(effectPath)} · MON revalidado.',
+      '${effectPath.isEmpty ? 'vacío' : isMonLoadSentinel(effectPath) ? 'LOAD (nativo)' : baseName(effectPath)} · MON revalidado.',
     );
   }
 
@@ -754,10 +761,12 @@ class StudioScene extends ChangeNotifier {
   }
 
   String? mountMonAnimation(String slot) => mountRecord?.animations[slot];
+  bool mountMonAnimationUsesLoad(String slot) =>
+      isMonLoadSentinel(mountMonAnimation(slot));
 
   String? mountMonAnimationCandidate(String slot) {
     final raw = mountMonAnimation(slot);
-    if (raw == null || raw.isEmpty) return null;
+    if (raw == null || raw.isEmpty || isMonLoadSentinel(raw)) return null;
     final name = baseName(raw).toLowerCase();
     return mountMonAnimationCandidates
         .where((path) => baseName(path).toLowerCase() == name)
@@ -786,6 +795,10 @@ class StudioScene extends ChangeNotifier {
 
   String? mountMonSound(String slot) => mountRecord?.sounds[slot];
   String? mountMonEffect(String slot) => mountRecord?.effects[slot];
+  bool mountMonSoundUsesLoad(String slot) =>
+      isMonLoadSentinel(mountMonSound(slot));
+  bool mountMonEffectUsesLoad(String slot) =>
+      isMonLoadSentinel(mountMonEffect(slot));
 
   String? mountMonSoundCandidate(String slot) =>
       _candidateByBase(mountMonSound(slot), mountMonSoundCandidates);
