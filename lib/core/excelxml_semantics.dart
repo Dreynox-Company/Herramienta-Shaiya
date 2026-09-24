@@ -206,8 +206,9 @@ List<ExcelXmlSemanticIssue> _wingDecompose(ExcelXmlDocument document) {
     final grade = c['grade'];
     final oldItem = c['oldwingitem'];
     final maxLevel = c['maxlevel'];
-    if ([wing, grade, oldItem, maxLevel].any((value) => value == null))
+    if ([wing, grade, oldItem, maxLevel].any((value) => value == null)) {
       continue;
+    }
     for (var r = 0; r < sheet.rows.length; r++) {
       _integerError(out, sheet, s, r, wing, 'WingID', min: 0);
       _integerError(out, sheet, s, r, grade, 'Grade', min: 0);
