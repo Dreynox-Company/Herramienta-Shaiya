@@ -3755,6 +3755,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     icon: const Icon(Icons.security_outlined, size: 16),
                     label: const Text('Desbloquear con AutoPerfil'),
                   ),
+                  const SizedBox(width: 6),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : resolveNamesFromReferenceData,
+                    icon: const Icon(Icons.folder_open_outlined, size: 16),
+                    label: Text(
+                      referenceDataDirectory == null
+                          ? 'Usar DATA de referencia'
+                          : 'Cambiar DATA de referencia',
+                    ),
+                  ),
                 ],
               ),
             ),
