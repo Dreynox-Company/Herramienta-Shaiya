@@ -38,22 +38,22 @@ List<String> combatFiles() => [
   'ANI/Combate_Humano/humf_034_onready.ani',
   for (var i = 35; i <= 38; i++)
     'ANI/Combate_Humano/humf_${i.toString().padLeft(3, '0')}_'
-    'onattack0${i - 34}.ani',
+        'onattack0${i - 34}.ani',
   'ANI/Combate_Humano/humf_040_onrun.ani',
   'ANI/Combate_Humano/humf_041_duready.ani',
   for (var i = 42; i <= 45; i++)
     'ANI/Combate_Humano/humf_${i.toString().padLeft(3, '0')}_'
-    'duattack0${i - 41}.ani',
+        'duattack0${i - 41}.ani',
   'ANI/Combate_Humano/humf_047_durun.ani',
   'ANI/Combate_Humano/humf_023_thready.ani',
   for (var i = 24; i <= 27; i++)
     'ANI/Combate_Humano/humf_${i.toString().padLeft(3, '0')}_'
-    'thattack0${i - 23}.ani',
+        'thattack0${i - 23}.ani',
   'ANI/Combate_Humano/humf_029_thrun.ani',
   'ANI/Combate_Humano/humf_048_spready.ani',
   for (var i = 49; i <= 52; i++)
     'ANI/Combate_Humano/humf_${i.toString().padLeft(3, '0')}_'
-    'spattack0${i - 48}.ani',
+        'spattack0${i - 48}.ani',
   'ANI/Combate_Humano/humf_054_sprun.ani',
 ];
 
@@ -136,10 +136,7 @@ Uint8List package({bool tamperHash = false, int transitions = 26}) {
   final archive = Archive();
   for (final entry in files.entries) {
     archive.addFile(
-      ArchiveFile.bytes(
-        'Shaiya_Vuelo_Combate_V3/${entry.key}',
-        entry.value,
-      ),
+      ArchiveFile.bytes('Shaiya_Vuelo_Combate_V3/${entry.key}', entry.value),
     );
   }
   return ZipEncoder().encodeBytes(archive);
