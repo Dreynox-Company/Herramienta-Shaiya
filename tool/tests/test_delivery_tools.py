@@ -98,6 +98,101 @@ class DeliveryToolsTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'hash mismatch'):
                     package_windows.install_flight_runtime(release)
 
+    def test_real_acceptance_is_hash_bound_and_can_close_gates(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            qa = root / 'qa-real'
+            qa.mkdir()
+            game_sha = 'ab' * 32
+            payload = {
+                'schema': 1,
+                'gameExeSha256': game_sha,
+                'wing': {
+                    'positionGameExe': True,
+                    'positionSha256': package_windows.WING_POSITION_SHA256,
+                    'monExactInstall': True,
+                    'monSha256': package_windows.WING_MON_SHA256,
+                },
+                'vehicle': {
+                    'monExactInstall': True,
+                    'bridgeGameExe': True,
+                    'monSha256': dict(package_windows.VEHICLE_MON_SHA256),
+                },
+                'spk': {
+                    'indexSha256': package_windows.REAL_INDEX_SHA256,
+                    'canReadSimpleResources': True,
+                    'canReadFragmentedResources': True,
+                    'canExtractAll': True,
+                    'validatedResources': 50135,
+                    'failures': 0,
+                    'repackReopened': True,
+                    'gameExeAccepted': True,
+                },
+            }
+            (qa / 'acceptance.json').write_text(
+                json.dumps(payload),
+                encoding='utf-8',
+            )
+            with patch.object(package_windows, 'ROOT', root), \
+                    patch.dict(package_windows.os.environ, {}, clear=True):
+                result = package_windows.load_real_acceptance()
+            self.assertTrue(result['wingPositionGameExe'])
+            self.assertTrue(result['wingMonExactInstall'])
+            self.assertTrue(result['vehicleMonExactInstall'])
+            self.assertTrue(result['vehicleBridgeGameExe'])
+            self.assertTrue(result['spkFullAuditComplete'])
+            self.assertTrue(result['spkRepackReopened'])
+            self.assertTrue(result['spkGameExeAccepted'])
+            self.assertEqual(result['gameExeSha256'], game_sha)
+
+    def test_real_acceptance_rejects_mismatched_real_resource_hashes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            qa = root / 'qa-real'
+            qa.mkdir()
+            payload = {
+                'schema': 1,
+                'gameExeSha256': 'cd' * 32,
+                'wing': {
+                    'positionGameExe': True,
+                    'positionSha256': '0' * 64,
+                    'monExactInstall': True,
+                    'monSha256': '0' * 64,
+                },
+                'vehicle': {
+                    'monExactInstall': True,
+                    'bridgeGameExe': True,
+                    'monSha256': {
+                        key: '0' * 64
+                        for key in package_windows.VEHICLE_MON_SHA256
+                    },
+                },
+                'spk': {
+                    'indexSha256': '0' * 64,
+                    'canReadSimpleResources': True,
+                    'canReadFragmentedResources': True,
+                    'canExtractAll': True,
+                    'validatedResources': 50135,
+                    'failures': 0,
+                    'repackReopened': True,
+                    'gameExeAccepted': True,
+                },
+            }
+            (qa / 'acceptance.json').write_text(
+                json.dumps(payload),
+                encoding='utf-8',
+            )
+            with patch.object(package_windows, 'ROOT', root), \
+                    patch.dict(package_windows.os.environ, {}, clear=True):
+                result = package_windows.load_real_acceptance()
+            self.assertFalse(result['wingPositionGameExe'])
+            self.assertFalse(result['wingMonExactInstall'])
+            self.assertFalse(result['vehicleMonExactInstall'])
+            self.assertTrue(result['vehicleBridgeGameExe'])
+            self.assertFalse(result['spkFullAuditComplete'])
+            self.assertFalse(result['spkRepackReopened'])
+            self.assertFalse(result['spkGameExeAccepted'])
+
     def test_unknown_platform_is_rejected_before_running_flutter(self):
         with patch.object(prepare.subprocess, 'run') as run:
             with self.assertRaises(ValueError):
