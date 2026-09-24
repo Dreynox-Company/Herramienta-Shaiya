@@ -327,6 +327,108 @@ class StudioScene extends ChangeNotifier {
         'Sexo ${identity.sex} · hueso ${profile.boneIndex} · $source';
   }
 
+  int get wingBoneIndex =>
+      character?.wingBone ?? activeWingPositionProfile?.boneIndex ?? 4;
+
+  int get wingBoneCount => character?.world.length ?? 0;
+
+  bool get wingBoneWritable =>
+      wingPositionUsesMountedData &&
+      (activeWingPositionProfile?.boneWritable ?? false);
+
+  void setWingBoneIndex(int value) {
+    final char = character;
+    if (char == null) {
+      throw const FormatException('Carga un personaje antes de cambiar el hueso.');
+    }
+    if (!wingBoneWritable) {
+      throw const FormatException(
+        'Este WingPosition.xml no expone un campo de hueso editable.',
+      );
+    }
+    if (value < 0 || value >= char.world.length) {
+      throw FormatException(
+        'Hueso de ala fuera de rango: $value · rig 0..${char.world.length - 1}.',
+      );
+    }
+    char.wingBone = value;
+    char.wingReference = v.Matrix4.inverted(char.world[value]);
+    changed();
+  }
+
+  Map<String, Object> get wingTransformSnapshot => {
+    'schema': 1,
+    'kind': 'shaiya-studio-wing-transform',
+    'position': {
+      'x': wingOffsetX,
+      'y': wingOffsetY,
+      'z': wingOffsetZ,
+    },
+    'rotationDegrees': {
+      'x': wingRotX,
+      'y': wingRotY,
+      'z': wingRotZ,
+    },
+    'scale': {
+      'x': wingScaleX,
+      'y': wingScaleY,
+      'z': wingScaleZ,
+    },
+    'mirror': {
+      'x': wingMirrorX,
+      'y': wingMirrorY,
+      'z': wingMirrorZ,
+    },
+    'boneIndex': wingBoneIndex,
+    'nativeWritable': {
+      'positionRotation': wingPositionFileAvailable,
+      'bone': wingBoneWritable,
+      'scaleMirror': false,
+    },
+  };
+
+  void applyWingTransformSnapshot(Map<String, dynamic> raw) {
+    double number(Map<dynamic, dynamic>? map, String key, double fallback) {
+      final value = map?[key];
+      if (value is num && value.toDouble().isFinite) return value.toDouble();
+      return fallback;
+    }
+
+    bool flag(Map<dynamic, dynamic>? map, String key, bool fallback) {
+      final value = map?[key];
+      return value is bool ? value : fallback;
+    }
+
+    final position = raw['position'] is Map ? raw['position'] as Map : null;
+    final rotation =
+        raw['rotationDegrees'] is Map ? raw['rotationDegrees'] as Map : null;
+    final scale = raw['scale'] is Map ? raw['scale'] as Map : null;
+    final mirror = raw['mirror'] is Map ? raw['mirror'] as Map : null;
+    wingOffsetX = number(position, 'x', wingOffsetX).clamp(-100.0, 100.0);
+    wingOffsetY = number(position, 'y', wingOffsetY).clamp(-100.0, 100.0);
+    wingOffsetZ = number(position, 'z', wingOffsetZ).clamp(-100.0, 100.0);
+    wingRotX = number(rotation, 'x', wingRotX).clamp(-3600.0, 3600.0);
+    wingRotY = number(rotation, 'y', wingRotY).clamp(-3600.0, 3600.0);
+    wingRotZ = number(rotation, 'z', wingRotZ).clamp(-3600.0, 3600.0);
+    wingScaleX = number(scale, 'x', wingScaleX).clamp(.01, 100.0);
+    wingScaleY = number(scale, 'y', wingScaleY).clamp(.01, 100.0);
+    wingScaleZ = number(scale, 'z', wingScaleZ).clamp(.01, 100.0);
+    wingMirrorX = flag(mirror, 'x', wingMirrorX);
+    wingMirrorY = flag(mirror, 'y', wingMirrorY);
+    wingMirrorZ = flag(mirror, 'z', wingMirrorZ);
+    final bone = raw['boneIndex'];
+    if (bone is num && wingBoneWritable) {
+      setWingBoneIndex(bone.toInt());
+    }
+    changed();
+  }
+
+  void resetWingPreviewOnlyTransform() {
+    wingScaleX = wingScaleY = wingScaleZ = 1;
+    wingMirrorX = wingMirrorY = wingMirrorZ = false;
+    changed();
+  }
+
   void _applyWingProfile(WingPositionProfile profile) {
     wingOffsetX = profile.leftRight;
     wingOffsetY = profile.upDown;
