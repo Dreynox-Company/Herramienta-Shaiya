@@ -206,6 +206,25 @@ class StudioScene extends ChangeNotifier {
       wingScaleY = 1,
       wingScaleZ = 1;
   bool wingMirrorX = false, wingMirrorY = false, wingMirrorZ = false;
+  // Backward-compatible scene-profile aliases. Legacy scenes store yaw in
+  // radians plus one uniform scale; the new native editor stores full Euler
+  // degrees and per-axis scale.
+  double get wingYaw => wingRotY * math.pi / 180;
+  set wingYaw(double radians) => wingRotY = radians * 180 / math.pi;
+
+  double get wingHeight => wingOffsetY;
+  set wingHeight(double value) => wingOffsetY = value;
+
+  double get wingDepth => wingOffsetZ;
+  set wingDepth(double value) => wingOffsetZ = value;
+
+  double get wingSize => (wingScaleX + wingScaleY + wingScaleZ) / 3;
+  set wingSize(double value) {
+    wingScaleX = value;
+    wingScaleY = value;
+    wingScaleZ = value;
+  }
+
   final Map<
     String,
     ({
