@@ -110,7 +110,8 @@ def _key_authenticates_samples(spk:Path, records:list, key:bytes):
         ct=r.get('_cipherText')
         if not isinstance(ct,(bytes,bytearray)):
           ct=read_range(spk,r['dataOffset'],r['storedBytes'])
-        aes.decrypt(nonce,bytes(ct)+tag,None)
+        ct=bytes(ct)
+        aes.decrypt(nonce,ct+tag,None)
       return True
     except Exception:
       return False
