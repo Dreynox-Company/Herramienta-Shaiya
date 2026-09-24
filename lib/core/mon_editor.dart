@@ -113,9 +113,7 @@ class EditableMonDocument {
     }
     final lower = normalized.toLowerCase();
     if (!extensions.any(lower.endsWith)) {
-      throw FormatException(
-        'Extensión no admitida para $label MON: $value',
-      );
+      throw FormatException('Extensión no admitida para $label MON: $value');
     }
     return normalized;
   }
@@ -170,12 +168,7 @@ class EditableMonDocument {
     );
   }
 
-  void setPart(
-    int recordId,
-    int partId, {
-    String? mesh,
-    String? texture,
-  }) {
+  void setPart(int recordId, int partId, {String? mesh, String? texture}) {
     final record = _record(recordId);
     if (partId < 0 || partId >= record.parts.length) {
       throw FormatException('Parte MON fuera de rango: $partId');
