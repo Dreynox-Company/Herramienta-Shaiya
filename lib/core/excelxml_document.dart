@@ -217,12 +217,14 @@ class ExcelXmlDocument {
             '$value',
           );
         }
+        return;
       case 'boolean':
         if (source != '0' && source != '1') {
           throw FormatException(
             'La celda SpreadsheetML es Boolean y requiere 0 o 1: $value',
           );
         }
+        return;
       case 'datetime':
         if (DateTime.tryParse(source) == null) {
           throw FormatException(
@@ -230,6 +232,7 @@ class ExcelXmlDocument {
             '$value',
           );
         }
+        return;
       default:
         // Error and custom/legacy cell types are preserved without inventing
         // semantics that are not present in the source workbook.
