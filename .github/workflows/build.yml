@@ -40,7 +40,12 @@ jobs:
           cp lib/ui/spk_archive_browser.dart qa-sources/formatted/spk_archive_browser.dart.txt
           cp lib/render/studio_scene.dart qa-sources/formatted/studio_scene.dart.txt
           cp lib/ui/excelxml_lab.dart qa-sources/formatted/excelxml_lab.dart.txt
+          cp lib/ui/world_authoring.dart qa-sources/formatted/world_authoring.dart.txt
+          cp lib/core/svmap_editor.dart qa-sources/formatted/svmap_editor.dart.txt
+          cp lib/core/wtr_editor.dart qa-sources/formatted/wtr_editor.dart.txt
           cp test/spk_archive_test.dart qa-sources/formatted/spk_archive_test.dart.txt
+          cp test/svmap_editor_test.dart qa-sources/formatted/svmap_editor_test.dart.txt
+          cp test/wtr_editor_test.dart qa-sources/formatted/wtr_editor_test.dart.txt
       - name: Static analysis
         run: |
           set -euo pipefail

@@ -1,0 +1,23 @@
+name: Shaiya Studio 0.6.23 world authoring
+
+on:
+  push:
+    branches:
+      - feat/studio-0623-world-authoring
+  pull_request:
+    branches:
+      - feat/studio-0620-spk-wings
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-0623-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-build:
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ github.event.pull_request.head.sha || github.sha }}
