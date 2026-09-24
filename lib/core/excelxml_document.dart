@@ -16,6 +16,12 @@ class ExcelXmlRow {
 
   String value(int column) => cells[column]?.innerText.trim() ?? '';
   bool hasCell(int column) => cells.containsKey(column);
+
+  String? cellType(int column) => cells[column]?.attributes
+      .where((attribute) => attribute.name.local.toLowerCase() == 'type')
+      .map((attribute) => attribute.value.trim())
+      .where((value) => value.isNotEmpty)
+      .firstOrNull;
 }
 
 class ExcelXmlSheet {
@@ -165,6 +171,7 @@ class ExcelXmlDocument {
     if (value.contains('\u0000')) {
       throw const FormatException('ExcelXml no admite NUL en una celda.');
     }
+    _validateCellValue(data, value);
     data.innerText = value;
   }
 
@@ -189,6 +196,44 @@ class ExcelXmlDocument {
           '$path: la serialización alteró filas/columnas de ${expected.name}.',
         );
       }
+    }
+  }
+
+  static void _validateCellValue(XmlElement data, String value) {
+    final type = data.attributes
+        .where((attribute) => attribute.name.local.toLowerCase() == 'type')
+        .map((attribute) => attribute.value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .firstOrNull;
+    if (type == null || type == 'string') return;
+
+    final source = value.trim();
+    switch (type) {
+      case 'number':
+        final number = double.tryParse(source);
+        if (number == null || !number.isFinite) {
+          throw FormatException(
+            'La celda SpreadsheetML es Number y requiere un número finito: '
+            '$value',
+          );
+        }
+      case 'boolean':
+        if (source != '0' && source != '1') {
+          throw FormatException(
+            'La celda SpreadsheetML es Boolean y requiere 0 o 1: $value',
+          );
+        }
+      case 'datetime':
+        if (DateTime.tryParse(source) == null) {
+          throw FormatException(
+            'La celda SpreadsheetML es DateTime y el valor no es válido: '
+            '$value',
+          );
+        }
+      default:
+        // Error and custom/legacy cell types are preserved without inventing
+        // semantics that are not present in the source workbook.
+        return;
     }
   }
 
