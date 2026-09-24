@@ -115,7 +115,7 @@ class _XmlTreeEditorPanelState extends State<XmlTreeEditorPanel> {
                   child: Container(
                     color: active ? const Color(0xff29384f) : null,
                     padding: EdgeInsets.fromLTRB(
-                      8 + node.depth.clamp(0, 12) * 11.0,
+                      8 + node.depth.clamp(0, 12).toDouble() * 11.0,
                       6,
                       8,
                       6,
@@ -171,7 +171,8 @@ class _XmlTreeEditorPanelState extends State<XmlTreeEditorPanel> {
     if (document.nodes.isEmpty) {
       return const Center(child: Text('XML sin elementos.'));
     }
-    final node = document.nodes[selected.clamp(0, document.nodes.length - 1)];
+    final node =
+        document.nodes[selected.clamp(0, document.nodes.length - 1).toInt()];
     final attrs = node.attributes;
     return ListView(
       padding: const EdgeInsets.all(14),
