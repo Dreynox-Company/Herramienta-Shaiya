@@ -37,7 +37,7 @@ import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
-const studioVersion = '0.6.22';
+const studioVersion = '0.6.23';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -218,7 +218,10 @@ class _StudioState extends State<StudioPage> {
     });
   }
 
-  Future<void> openDataEditor() async {
+  Future<void> openDataEditor({
+    String? initialPath,
+    String? initialFieldGroup,
+  }) async {
     final library = catalog?.library;
     if (library == null || working) return;
     final beforeRevision = library.revision;
@@ -231,6 +234,8 @@ class _StudioState extends State<StudioPage> {
           child: DataEditorPage(
             library: library,
             initialEncoding: LegacyText.preferred,
+            initialPath: initialPath,
+            initialFieldGroup: initialFieldGroup,
           ),
         ),
       ),
@@ -790,6 +795,21 @@ class _StudioState extends State<StudioPage> {
               path.startsWith('excelxml/') &&
               baseName(path).toLowerCase() == wanted,
         )
+        .firstOrNull;
+  }
+
+  String? activeWorldWtrPath() {
+    final world = scene.worldPath;
+    final library = catalog?.library;
+    if (world == null || library == null) return null;
+    final dir = directoryName(world);
+    final file = baseName(
+      world,
+    ).replaceFirst(RegExp(r'\.wld$', caseSensitive: false), '.wtr');
+    final exact = library.resolve(file, [dir], uniqueFallback: false);
+    if (exact != null && exact.toLowerCase().endsWith('.wtr')) return exact;
+    return library.files.keys
+        .where((path) => path.toLowerCase().endsWith('.wtr'))
         .firstOrNull;
   }
 
@@ -2493,6 +2513,29 @@ class _StudioState extends State<StudioPage> {
                     style: TextStyle(fontSize: 10),
                   ),
                 ),
+              if (activeWorldWtrPath() != null)
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => openDataEditor(initialPath: activeWorldWtrPath()),
+                  icon: const Icon(Icons.texture_outlined, size: 16),
+                  label: const Text(
+                    'Capas / texturas WTR',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+              if (scene.worldPath != null &&
+                  scene.worldPath!.toLowerCase().endsWith('.wld'))
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => openDataEditor(initialPath: scene.worldPath),
+                  icon: const Icon(Icons.layers_outlined, size: 16),
+                  label: const Text(
+                    'Capas de terreno WLD',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
             ]),
             worldOptions(),
             section('Visualización', [
@@ -3776,7 +3819,7 @@ class _StudioState extends State<StudioPage> {
     timeline: timeline(),
     actions: actionBar(),
     hasLibrary: scene.character != null,
-    onOpenEditor: catalog == null || working ? null : openDataEditor,
+    onOpenEditor: catalog == null || working ? null : () => openDataEditor(),
     onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,
