@@ -1429,17 +1429,157 @@ class StudioScene extends ChangeNotifier {
     }
   }
 
+  List<int> get riderProfileOptions =>
+      riderAnimationProfiles.keys.toList()..sort();
+
+  String riderProfileLabel(int id) =>
+      riderAnimationProfiles[id]?.label ?? 'Perfil $id';
+
+  String get activeVehiclePositionSection {
+    final record = mountRecord;
+    if (record == null) return 'Sin montura';
+    final family = vehicleFamilyFromSource(record.source);
+    if (family == null) return 'MON sin familia Hu/El/Vi/De';
+    return vehiclePositionSection(family, record.id);
+  }
+
+  VehiclePositionProfile? get activeVehiclePositionProfile {
+    final record = mountRecord;
+    final c = catalog;
+    if (record == null || c == null) return null;
+    final family = vehicleFamilyFromSource(record.source);
+    if (family == null) return null;
+    return c.vehiclePositions.resolve(family, record.id);
+  }
+
+  void _configureRiderProfile(Actor actor) {
+    final mapping =
+        riderAnimationProfiles[riderProfile] ?? riderAnimationProfiles[0]!;
+    actor.riderIdle =
+        actor.riderMotions[mapping.idle] ??
+        actor.riderMotions[21] ??
+        actor.normal;
+    actor.riderMoving =
+        actor.riderMotions[mapping.moving] ??
+        actor.riderMotions[20] ??
+        actor.riderIdle;
+  }
+
+  void setRiderProfile(int value) {
+    if (!riderAnimationProfiles.containsKey(value)) {
+      throw FormatException('Perfil ANI de jinete no soportado: $value');
+    }
+    riderProfile = value;
+    final actor = character;
+    if (actor != null) _configureRiderProfile(actor);
+    if (mount != null) {
+      final mode = walkX == 0 && walkZ == 0
+          ? GroundMotion.idle
+          : (running || touchRun ? GroundMotion.run : GroundMotion.walk);
+      applyLocomotion(mode);
+    }
+    changed();
+  }
+
+  void _applyVehiclePositionProfile(VehiclePositionProfile profile) {
+    riderLateral = profile.posX;
+    riderHeight = profile.posY;
+    riderForward = profile.posZ;
+    riderRotX = profile.rotX;
+    riderRotY = profile.rotY;
+    riderRotZ = profile.rotZ;
+    riderScaleX = profile.scaleX.abs();
+    riderScaleY = profile.scaleY.abs();
+    riderScaleZ = profile.scaleZ.abs();
+    riderMirrorX = profile.scaleX < 0;
+    riderMirrorY = profile.scaleY < 0;
+    riderMirrorZ = profile.scaleZ < 0;
+    riderProfile = profile.riderProfile;
+    final actor = character;
+    if (actor != null) _configureRiderProfile(actor);
+  }
+
+  Future<void> saveActiveVehiclePositionToData() async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura seleccionada.');
+    }
+    final family = vehicleFamilyFromSource(record.source);
+    if (family == null) {
+      throw FormatException(
+        'No se pudo resolver la familia desde ${record.source}.',
+      );
+    }
+    final profile = VehiclePositionProfile(
+      family: family,
+      vehicleId: record.id,
+      enabled: true,
+      posX: riderLateral,
+      posY: riderHeight,
+      posZ: riderForward,
+      rotX: riderRotX,
+      rotY: riderRotY,
+      rotZ: riderRotZ,
+      scaleX: riderScaleX * (riderMirrorX ? -1 : 1),
+      scaleY: riderScaleY * (riderMirrorY ? -1 : 1),
+      scaleZ: riderScaleZ * (riderMirrorZ ? -1 : 1),
+      riderProfile: riderProfile,
+    );
+    await c.saveVehiclePosition(profile);
+    _seats['${record.source}#${record.id}'] = (
+      lateral: riderLateral,
+      height: riderHeight,
+      forward: riderForward,
+      rotX: riderRotX,
+      rotY: riderRotY,
+      rotZ: riderRotZ,
+      scaleX: riderScaleX,
+      scaleY: riderScaleY,
+      scaleZ: riderScaleZ,
+      mirrorX: riderMirrorX,
+      mirrorY: riderMirrorY,
+      mirrorZ: riderMirrorZ,
+      riderProfile: riderProfile,
+    );
+    report(
+      'VehiclePosition.ini guardado · ${profile.section} · '
+      'delta 6DoF + escala/espejo + perfil ANI ${profile.riderProfile}.',
+    );
+    changed();
+  }
+
+  void resetActiveVehiclePositionFromData() {
+    final profile = activeVehiclePositionProfile;
+    if (profile == null || !profile.enabled) {
+      throw const FormatException(
+        'La montura activa no tiene un perfil habilitado en VehiclePosition.ini.',
+      );
+    }
+    _applyVehiclePositionProfile(profile);
+    changed();
+  }
+
   void resetMountSeatCalibration() {
     final record = mountRecord;
     if (record != null) {
       _seats.remove('${record.source}#${record.id}');
     }
     riderLateral = 0;
-    riderHeight = .04;
+    riderHeight = 0;
     riderForward = 0;
     riderRotX = 0;
     riderRotY = 0;
     riderRotZ = 0;
+    riderScaleX = 1;
+    riderScaleY = 1;
+    riderScaleZ = 1;
+    riderMirrorX = false;
+    riderMirrorY = false;
+    riderMirrorZ = false;
+    riderProfile = 0;
+    final actor = character;
+    if (actor != null) _configureRiderProfile(actor);
     changed();
   }
 
@@ -1464,6 +1604,13 @@ class StudioScene extends ChangeNotifier {
         rotX: riderRotX,
         rotY: riderRotY,
         rotZ: riderRotZ,
+        scaleX: riderScaleX,
+        scaleY: riderScaleY,
+        scaleZ: riderScaleZ,
+        mirrorX: riderMirrorX,
+        mirrorY: riderMirrorY,
+        mirrorZ: riderMirrorZ,
+        riderProfile: riderProfile,
       );
     }
     final staged = c == null ? null : await loadCreature(c);
@@ -1504,12 +1651,29 @@ class StudioScene extends ChangeNotifier {
             'Montura sin superficie central reconocida. Usa los ajustes del asiento; no se ha certificado el encaje automático.',
           );
         }
-        riderLateral = seat?.lateral ?? 0;
-        riderHeight = seat?.height ?? .04;
-        riderForward = seat?.forward ?? 0;
-        riderRotX = seat?.rotX ?? 0;
-        riderRotY = seat?.rotY ?? 0;
-        riderRotZ = seat?.rotZ ?? 0;
+        final family = vehicleFamilyFromSource(c.source);
+        final persisted = family == null
+            ? null
+            : catalog?.vehiclePositions.resolve(family, c.id);
+        if (persisted?.enabled == true) {
+          _applyVehiclePositionProfile(persisted!);
+        } else {
+          riderLateral = seat?.lateral ?? 0;
+          riderHeight = seat?.height ?? 0;
+          riderForward = seat?.forward ?? 0;
+          riderRotX = seat?.rotX ?? 0;
+          riderRotY = seat?.rotY ?? 0;
+          riderRotZ = seat?.rotZ ?? 0;
+          riderScaleX = seat?.scaleX ?? 1;
+          riderScaleY = seat?.scaleY ?? 1;
+          riderScaleZ = seat?.scaleZ ?? 1;
+          riderMirrorX = seat?.mirrorX ?? false;
+          riderMirrorY = seat?.mirrorY ?? false;
+          riderMirrorZ = seat?.mirrorZ ?? false;
+          riderProfile = seat?.riderProfile ?? 0;
+          final actor = character;
+          if (actor != null) _configureRiderProfile(actor);
+        }
         await riderPose();
       } else if (character?.idle != null) {
         character!.play(character!.idle!);
