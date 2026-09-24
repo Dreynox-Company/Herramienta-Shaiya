@@ -95,8 +95,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         sourceBytes = bytes;
         document = parsed;
         rawText =
-            parsed != null && !parsed.tabular && bytes.length <= 2 * 1024 * 1024
-            ? utf8.decode(bytes, allowMalformed: false)
+            (parsed == null || !parsed.tabular) &&
+                bytes.length <= 2 * 1024 * 1024
+            ? utf8.decode(bytes, allowMalformed: true)
             : null;
         rawDirty = false;
         loadError = error;
@@ -131,25 +132,22 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
     try {
       final bytes = Uint8List.fromList(utf8.encode(text));
       final parsed = ExcelXmlDocument.parse(bytes, path);
-      if (parsed.tabular) {
-        throw const FormatException(
-          'El XML ahora contiene una tabla SpreadsheetML; vuelve a abrirlo '
-          'para editarla en modo estructurado.',
-        );
-      }
       parsed.validateEncoded(bytes);
       await widget.library.writeResource(path, bytes);
       if (!mounted) return;
       setState(() {
         sourceBytes = bytes;
         document = parsed;
+        rawText = parsed.tabular ? null : text;
         rawDirty = false;
+        structuredDirty = false;
+        cellErrors.clear();
         revision++;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${path.split('/').last} guardado como XML válido y revalidado.',
+            '${path.split('/').last} reparado/guardado como XML válido y revalidado.',
           ),
         ),
       );
