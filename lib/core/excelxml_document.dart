@@ -78,7 +78,8 @@ class ExcelXmlDocument {
 
     for (var w = 0; w < worksheets.length; w++) {
       final worksheet = worksheets[w];
-      final name = worksheet.attributes
+      final name =
+          worksheet.attributes
               .where((a) => a.name.local.toLowerCase() == 'name')
               .map((a) => a.value.trim())
               .where((v) => v.isNotEmpty)
@@ -143,12 +144,7 @@ class ExcelXmlDocument {
     );
   }
 
-  void setCell(
-    int sheetIndex,
-    int rowIndex,
-    int columnIndex,
-    String value,
-  ) {
+  void setCell(int sheetIndex, int rowIndex, int columnIndex, String value) {
     if (sheetIndex < 0 || sheetIndex >= sheets.length) {
       throw const FormatException('Hoja ExcelXml fuera de rango.');
     }
@@ -180,7 +176,9 @@ class ExcelXmlDocument {
     if (parsed.worksheetCount != worksheetCount ||
         parsed.tableCount != tableCount ||
         parsed.sheets.length != sheets.length) {
-      throw FormatException('$path: la serialización alteró la estructura XML.');
+      throw FormatException(
+        '$path: la serialización alteró la estructura XML.',
+      );
     }
     for (var i = 0; i < sheets.length; i++) {
       final expected = sheets[i];
