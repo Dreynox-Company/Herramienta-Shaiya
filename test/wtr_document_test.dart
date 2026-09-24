@@ -38,6 +38,9 @@ void main() {
     expect(doc.read(doc.fields(0)[1]), '7');
     expect(doc.read(doc.fields(0)[2]), '-2');
     expect(doc.read(doc.fields(0)[3]), '2');
+    expect(doc.fields(0)[1].spec.editable, isFalse);
+    expect(doc.fields(0)[2].spec.editable, isFalse);
+    expect(doc.fields(0)[3].spec.editable, isFalse);
     expect(doc.read(doc.fields(1).single), 'world/grass.dds');
     expect(doc.read(doc.fields(2).single), 'world/rock.tga');
   });
@@ -99,7 +102,7 @@ void main() {
       'world/test.wtr',
       GameTextEncoding.windows1252,
     );
-    final tooLong = '${'a' * 252}.dds';
+    final tooLong = '${List.filled(252, 'a').join()}.dds';
     expect(
       () => doc.edit(1, doc.fields(1).single, tooLong),
       throwsFormatException,
