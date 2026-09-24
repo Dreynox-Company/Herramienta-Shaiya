@@ -15,6 +15,7 @@ import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
 import '../core/wing_motion.dart';
 import '../core/wing_position.dart';
+import '../core/vehicle_position.dart';
 import '../core/mon_editor.dart';
 import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
@@ -97,6 +98,7 @@ class Actor {
   SurfaceAnchor? seat;
   int pelvisBone = 1;
   final Map<String, ClipData> mountedAttacks = {};
+  final Map<int, ClipData> riderMotions = {};
   final List<RenderPart> parts = [];
   ClipData? clip,
       idle,
@@ -770,6 +772,13 @@ class StudioScene extends ChangeNotifier {
       double rotX,
       double rotY,
       double rotZ,
+      double scaleX,
+      double scaleY,
+      double scaleZ,
+      bool mirrorX,
+      bool mirrorY,
+      bool mirrorZ,
+      int riderProfile,
     })
   >
   _seats = {};
@@ -915,11 +924,16 @@ class StudioScene extends ChangeNotifier {
       panX = 0,
       panZ = 0;
   double riderLateral = 0,
-      riderHeight = 1.0,
+      riderHeight = 0,
       riderForward = 0,
       riderRotX = 0,
       riderRotY = 0,
-      riderRotZ = 0;
+      riderRotZ = 0,
+      riderScaleX = 1,
+      riderScaleY = 1,
+      riderScaleZ = 1;
+  bool riderMirrorX = false, riderMirrorY = false, riderMirrorZ = false;
+  int riderProfile = 0;
   double originX = 0,
       originZ = 0,
       groundY = 0,
@@ -1212,14 +1226,16 @@ class StudioScene extends ChangeNotifier {
         staged,
         groundMotionCandidates(next.archetype.animations, GroundMotion.run),
       );
-      staged.riderIdle = await firstCompatible(
-        staged,
-        next.archetype.animations.where((p) => motionIndex(p) == 21).toList(),
-      );
-      staged.riderMoving = await firstCompatible(
-        staged,
-        next.archetype.animations.where((p) => motionIndex(p) == 20).toList(),
-      );
+      for (final motionId in const [20, 21, 22, 30, 31, 97, 98]) {
+        final riderClip = await firstCompatible(
+          staged,
+          next.archetype.animations
+              .where((p) => motionIndex(p) == motionId)
+              .toList(),
+        );
+        if (riderClip != null) staged.riderMotions[motionId] = riderClip;
+      }
+      _configureRiderProfile(staged);
       staged.idle = c;
       staged.normal = c;
       final profile = extraMotions?.profiles[next.archetype.id];
@@ -1267,8 +1283,9 @@ class StudioScene extends ChangeNotifier {
       staged.guard = motions.idle;
       staged.weaponRun = motions.run;
       staged.idle = staged.normal;
-      if (mount != null && staged.riderIdle != null) {
-        staged.play(staged.riderIdle!);
+      if (mount != null) {
+        _configureRiderProfile(staged);
+        if (staged.riderIdle != null) staged.play(staged.riderIdle!);
       } else if (staged.idle != null) {
         staged.play(staged.idle!);
       }
