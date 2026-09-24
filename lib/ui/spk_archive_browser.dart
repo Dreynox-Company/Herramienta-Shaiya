@@ -1055,6 +1055,26 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  Future<void> chooseReferenceDataDirectory() => runAction(() async {
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Usar DATA para preview',
+    );
+    if (folder == null || !mounted) return;
+    final directory = Directory(folder);
+    if (!await directory.exists()) {
+      throw const FileSystemException('La carpeta DATA de referencia no existe.');
+    }
+    setState(() => referenceDataDirectory = directory);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'DATA de referencia activa. Doble clic en una ruta candidata para '
+          'ver su recurso sin afirmar que el payload SPK esté descifrado.',
+        ),
+      ),
+    );
+  });
+
   Future<void> resolveNamesFromReferenceData() => runAction(() async {
     final folder = await getDirectoryPath(
       confirmButtonText: 'Usar DATA como referencia',
@@ -1561,9 +1581,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           width: 520,
           child: Text(
             'Shaiya Studio abrirá game.exe de esa instalación e instrumentará '
-            'solo ese proceso. ResourceProbe V13 observa CNG/OpenSSL y valida '
-            'cualquier clave candidata exclusivamente contra ciphertexts AES-GCM '
-            'reales del DATA.SPK ya indexado.\n\n'
+            'solo ese proceso. ResourceProbe V13 combina CNG/OpenSSL, BoringSSL, '
+            'mbedTLS, wolfSSL, barrido PE acotado y candidatos runtime. Ninguna '
+            'clave se acepta hasta autenticar ciphertexts AES-GCM reales del '
+            'DATA.SPK ya indexado.\n\n'
             'Desconecta Internet antes de continuar. No inicies sesión ni '
             'escribas credenciales. El aviso de servidor sin conexión es '
             'esperado. DATA.SPK y game.exe no se modifican.',
@@ -3761,7 +3782,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   ),
                   const SizedBox(width: 6),
                   OutlinedButton.icon(
-                    onPressed: busy ? null : resolveNamesFromReferenceData,
+                    onPressed: busy ? null : chooseReferenceDataDirectory,
                     icon: const Icon(Icons.folder_open_outlined, size: 16),
                     label: Text(
                       referenceDataDirectory == null
