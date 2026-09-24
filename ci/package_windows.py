@@ -29,6 +29,7 @@ def main():
         'GAME_PS0032_VEHICLE_BRIDGE.md',
         'SPK_REAL_READER_STATUS.md',
         'DATA_CAPABILITY_MATRIX.md',
+        'STUDIO_0623_WORLD_AUTHORING.md',
     ]:
         source=ROOT/'docs'/name
         if source.is_file(): shutil.copy2(source,docs_target/name)
@@ -64,7 +65,7 @@ Commit: {commit}
 Extrae TODO el ZIP y abre herramienta_shaiya.exe. Conserva sus DLL y la
 carpeta data de Flutter; NO reemplaces esa carpeta por la DATA del juego.
 
-NOVEDADES 0.6.22:
+NOVEDADES 0.6.23:
   - WingPosition.xml real (SpreadsheetML): FAMILY/JOB/SEX/BONE_IDX,
     posición XYZ y rotación XYZ con guardado/revalidación.
   - Wing.MON MO2/MO4 completo: ANI, sonidos, EFT/3DE, efecto adjunto,
@@ -76,6 +77,8 @@ NOVEDADES 0.6.22:
   - ExcelXml Lab: tablas reales de DATA, celdas sparse, ss:Type,
     validación en vivo, reparación XML fail-closed y accesos por dominio.
   - Vehicle.MON completo + ps0032 VehiclePosition Studio Bridge 6DoF.
+  - World Authoring: WTR (tileSize + capas) y SVMAP (NPC, rutas, mobs,
+    portales, spawns y áreas) con preservación de bytes opacos.
   - documentación técnica incluida en Docs/.
 
 FLIGHT V3:
