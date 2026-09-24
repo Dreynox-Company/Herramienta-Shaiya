@@ -308,6 +308,217 @@ class WingPositionDocument {
     );
   }
 
+  static ({
+    Map<int, _WingRowBinding> bindings,
+    Map<int, WingPositionProfile> profiles,
+  })? _spreadsheetBindings(XmlDocument document, String path) {
+    final tables = document.descendants
+        .whereType<XmlElement>()
+        .where((e) => e.name.local.toLowerCase() == 'table');
+
+    for (final table in tables) {
+      final rows = table.childElements
+          .where((e) => e.name.local.toLowerCase() == 'row')
+          .toList(growable: false);
+      if (rows.isEmpty) continue;
+
+      var headerIndex = -1;
+      Map<int, XmlElement>? headerCells;
+      for (var i = 0; i < rows.length; i++) {
+        final cells = _spreadsheetDataCells(rows[i]);
+        final values = <String>{
+          for (final data in cells.values) data.innerText.trim().toUpperCase(),
+        };
+        if (_rx.every(values.contains) &&
+            _ry.every(values.contains) &&
+            _rz.every(values.contains) &&
+            _up.every(values.contains) &&
+            _front.every(values.contains) &&
+            _left.every(values.contains)) {
+          headerIndex = i;
+          headerCells = cells;
+          break;
+        }
+      }
+      if (headerIndex < 0 || headerCells == null) continue;
+
+      int? column(Set<String> names) {
+        final wanted = names.map((e) => e.toUpperCase()).toSet();
+        for (final entry in headerCells!.entries) {
+          if (wanted.contains(entry.value.innerText.trim().toUpperCase())) {
+            return entry.key;
+          }
+        }
+        return null;
+      }
+
+      final familyColumn = column(_family);
+      final jobColumn = column(_job);
+      final sexColumn = column(_sex);
+      final boneColumn = column(_bone);
+      final rotXColumn = column(_rx);
+      final rotYColumn = column(_ry);
+      final rotZColumn = column(_rz);
+      final upDownColumn = column(_up);
+      final frontBackColumn = column(_front);
+      final leftRightColumn = column(_left);
+      if (rotXColumn == null ||
+          rotYColumn == null ||
+          rotZColumn == null ||
+          upDownColumn == null ||
+          frontBackColumn == null ||
+          leftRightColumn == null) {
+        continue;
+      }
+
+      final rawRows = <
+        ({
+          Map<int, XmlElement> cells,
+          int? family,
+          int? job,
+          int? sex,
+        })
+      >[];
+      for (var i = headerIndex + 1; i < rows.length; i++) {
+        final cells = _spreadsheetDataCells(rows[i]);
+        String value(int? column) =>
+            column == null ? '' : cells[column]?.innerText.trim() ?? '';
+        final poseValues = [
+          value(rotXColumn),
+          value(rotYColumn),
+          value(rotZColumn),
+          value(upDownColumn),
+          value(frontBackColumn),
+          value(leftRightColumn),
+        ];
+        if (poseValues.every((v) => v.isEmpty)) continue;
+        if (poseValues.any((v) => v.isEmpty)) {
+          throw FormatException(
+            'WingPosition.xml SpreadsheetML: fila ${i + 1} incompleta.',
+          );
+        }
+        rawRows.add((
+          cells: cells,
+          family: _identity(value(familyColumn), 'family'),
+          job: _identity(value(jobColumn), 'job'),
+          sex: _identity(value(sexColumn), 'sex'),
+        ));
+      }
+      if (rawRows.length != 48) continue;
+
+      final rf = rawRows.map((r) => r.family).toList(growable: false);
+      final rj = rawRows.map((r) => r.job).toList(growable: false);
+      final rs = rawRows.map((r) => r.sex).toList(growable: false);
+      final f1 = _oneBased(rf, 4);
+      final j1 = _oneBased(rj, 6);
+      final s1 = _oneBased(rs, 2);
+      final bindings = <int, _WingRowBinding>{};
+      final profiles = <int, WingPositionProfile>{};
+
+      _XmlValue requiredCell(
+        Map<int, XmlElement> cells,
+        int column,
+        String label,
+      ) {
+        final data = cells[column];
+        if (data == null || data.innerText.trim().isEmpty) {
+          throw FormatException(
+            'WingPosition.xml SpreadsheetML: falta $label.',
+          );
+        }
+        return _XmlValue.element(data);
+      }
+
+      for (var i = 0; i < rawRows.length; i++) {
+        final raw = rawRows[i];
+        final family =
+            raw.family == null ? i ~/ 12 : raw.family! - (f1 ? 1 : 0);
+        final job =
+            raw.job == null ? (i % 12) ~/ 2 : raw.job! - (j1 ? 1 : 0);
+        final sex = raw.sex == null ? i % 2 : raw.sex! - (s1 ? 1 : 0);
+        if (family < 0 ||
+            family > 3 ||
+            job < 0 ||
+            job > 5 ||
+            sex < 0 ||
+            sex > 1) {
+          throw FormatException(
+            'WingPosition.xml SpreadsheetML: identidad fuera de rango '
+            'en perfil $i.',
+          );
+        }
+        final boneElement = boneColumn == null ? null : raw.cells[boneColumn];
+        final bone = boneElement == null
+            ? null
+            : _XmlValue.element(boneElement);
+        final binding = _WingRowBinding(
+          family: family,
+          job: job,
+          sex: sex,
+          bone: bone,
+          rotX: requiredCell(raw.cells, rotXColumn, 'WING_ROT_X'),
+          rotY: requiredCell(raw.cells, rotYColumn, 'WING_ROT_Y'),
+          rotZ: requiredCell(raw.cells, rotZColumn, 'WING_ROT_Z'),
+          upDown: requiredCell(raw.cells, upDownColumn, 'WING_UP_DOWN'),
+          frontBack: requiredCell(
+            raw.cells,
+            frontBackColumn,
+            'WING_FRONT_BACK',
+          ),
+          leftRight: requiredCell(
+            raw.cells,
+            leftRightColumn,
+            'WING_LEFT_RIGHT',
+          ),
+        );
+        if (bindings.containsKey(binding.key)) {
+          throw FormatException(
+            'WingPosition.xml SpreadsheetML: perfil duplicado '
+            '$family/$job/$sex.',
+          );
+        }
+        bindings[binding.key] = binding;
+        profiles[binding.key] = WingPositionProfile(
+          family: family,
+          job: job,
+          sex: sex,
+          boneIndex: int.tryParse(bone?.value ?? '') ?? 4,
+          rotX: _double(binding.rotX.value, 'WING_ROT_X'),
+          rotY: _double(binding.rotY.value, 'WING_ROT_Y'),
+          rotZ: _double(binding.rotZ.value, 'WING_ROT_Z'),
+          upDown: _double(binding.upDown.value, 'WING_UP_DOWN'),
+          frontBack: _double(binding.frontBack.value, 'WING_FRONT_BACK'),
+          leftRight: _double(binding.leftRight.value, 'WING_LEFT_RIGHT'),
+          boneWritable: bone != null,
+          provenance: path,
+        );
+      }
+      return (bindings: bindings, profiles: profiles);
+    }
+    return null;
+  }
+
+  static Map<int, XmlElement> _spreadsheetDataCells(XmlElement row) {
+    final cells = <int, XmlElement>{};
+    var column = 1;
+    for (final cell in row.childElements.where(
+      (e) => e.name.local.toLowerCase() == 'cell',
+    )) {
+      final index = cell.attributes
+          .where((a) => a.name.local.toLowerCase() == 'index')
+          .map((a) => int.tryParse(a.value))
+          .whereType<int>()
+          .firstOrNull;
+      if (index != null && index > 0) column = index;
+      final data = cell.childElements
+          .where((e) => e.name.local.toLowerCase() == 'data')
+          .firstOrNull;
+      if (data != null) cells[column] = data;
+      column++;
+    }
+    return cells;
+  }
+
   static _XmlValue _required(XmlElement row, Set<String> names, String label) {
     final value = _find(row, names);
     if (value == null) {
