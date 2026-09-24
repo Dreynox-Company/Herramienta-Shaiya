@@ -552,51 +552,55 @@ class StudioScene extends ChangeNotifier {
   List<String> get wingMonSoundCandidates {
     final c = catalog;
     if (c == null) return const [];
-    final out = c.library.files.keys
-        .where((path) => path.endsWith('.wav') || path.endsWith('.ogg'))
-        .toList()
-      ..sort();
+    final out =
+        c.library.files.keys
+            .where((path) => path.endsWith('.wav') || path.endsWith('.ogg'))
+            .toList()
+          ..sort();
     return out;
   }
 
   List<String> get wingMonEffectCandidates {
     final c = catalog;
     if (c == null) return const [];
-    final out = c.library.files.keys
-        .where((path) => path.endsWith('.eft') || path.endsWith('.3de'))
-        .toList()
-      ..sort();
+    final out =
+        c.library.files.keys
+            .where((path) => path.endsWith('.eft') || path.endsWith('.3de'))
+            .toList()
+          ..sort();
     return out;
   }
 
   List<String> get wingMonMeshCandidates {
     final c = catalog;
     if (c == null) return const [];
-    final out = c.library.files.keys
-        .where(
-          (path) =>
-              path.startsWith('character/wing/') &&
-              (path.endsWith('.3dc') || path.endsWith('.3do')),
-        )
-        .toList()
-      ..sort();
+    final out =
+        c.library.files.keys
+            .where(
+              (path) =>
+                  path.startsWith('character/wing/') &&
+                  (path.endsWith('.3dc') || path.endsWith('.3do')),
+            )
+            .toList()
+          ..sort();
     return out;
   }
 
   List<String> get wingMonTextureCandidates {
     final c = catalog;
     if (c == null) return const [];
-    final out = c.library.files.keys
-        .where(
-          (path) =>
-              path.startsWith('character/wing/') &&
-              (path.endsWith('.dds') ||
-                  path.endsWith('.tga') ||
-                  path.endsWith('.png') ||
-                  path.endsWith('.bmp')),
-        )
-        .toList()
-      ..sort();
+    final out =
+        c.library.files.keys
+            .where(
+              (path) =>
+                  path.startsWith('character/wing/') &&
+                  (path.endsWith('.dds') ||
+                      path.endsWith('.tga') ||
+                      path.endsWith('.png') ||
+                      path.endsWith('.bmp')),
+            )
+            .toList()
+          ..sort();
     return out;
   }
 

@@ -1270,7 +1270,7 @@ class _StudioState extends State<StudioPage> {
                     for (final slot in scene.wingMonSoundSlots) ...[
                       field<String>(
                         'wing-mon-sound/${scene.wingRecord!.source}/'
-                        '${scene.wingRecord!.id}/$slot',
+                            '${scene.wingRecord!.id}/$slot',
                         'Sonido · $slot',
                         scene.wingMonSoundCandidates,
                         scene.wingMonSoundCandidate(slot),
@@ -1301,7 +1301,7 @@ class _StudioState extends State<StudioPage> {
                     for (final slot in scene.wingMonEffectSlots) ...[
                       field<String>(
                         'wing-mon-effect/${scene.wingRecord!.source}/'
-                        '${scene.wingRecord!.id}/$slot',
+                            '${scene.wingRecord!.id}/$slot',
                         'Efecto · $slot',
                         scene.wingMonEffectCandidates,
                         scene.wingMonEffectCandidate(slot),
@@ -1332,7 +1332,7 @@ class _StudioState extends State<StudioPage> {
                     if (scene.wingMonAttachedEffect != null) ...[
                       field<String>(
                         'wing-mon-attached/${scene.wingRecord!.source}/'
-                        '${scene.wingRecord!.id}',
+                            '${scene.wingRecord!.id}',
                         'Efecto adjunto MO4',
                         scene.wingMonEffectCandidates,
                         scene.wingMonAttachedEffectCandidate,
@@ -1340,10 +1340,9 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         scene.saveWingMonAttachedEffect,
                         detail: (p) => p,
-                        empty:
-                            scene.wingMonAttachedEffect?.isNotEmpty == true
-                                ? scene.wingMonAttachedEffect!
-                                : 'Sin efecto adjunto',
+                        empty: scene.wingMonAttachedEffect?.isNotEmpty == true
+                            ? scene.wingMonAttachedEffect!
+                            : 'Sin efecto adjunto',
                       ),
                       if (scene.wingMonAttachedEffect?.isNotEmpty == true)
                         Align(
@@ -1372,7 +1371,7 @@ class _StudioState extends State<StudioPage> {
                       ),
                       field<String>(
                         'wing-mon-mesh/${scene.wingRecord!.source}/'
-                        '${scene.wingRecord!.id}/${part.id}',
+                            '${scene.wingRecord!.id}/${part.id}',
                         'Malla · parte ${part.id}',
                         scene.wingMonMeshCandidates,
                         scene.wingMonMeshCandidate(part.id),
@@ -1384,14 +1383,13 @@ class _StudioState extends State<StudioPage> {
                       ),
                       field<String>(
                         'wing-mon-texture/${scene.wingRecord!.source}/'
-                        '${scene.wingRecord!.id}/${part.id}',
+                            '${scene.wingRecord!.id}/${part.id}',
                         'Textura · parte ${part.id}',
                         scene.wingMonTextureCandidates,
                         scene.wingMonTextureCandidate(part.id),
                         (p) => p,
                         baseName,
-                        (p) =>
-                            scene.saveWingMonPart(part.id, texturePath: p),
+                        (p) => scene.saveWingMonPart(part.id, texturePath: p),
                         detail: (p) => p,
                         empty: part.texture,
                       ),
@@ -1739,7 +1737,7 @@ class _StudioState extends State<StudioPage> {
                     for (final slot in scene.mountMonSoundSlots) ...[
                       field<String>(
                         'mount-mon-sound/${scene.mountRecord!.source}/'
-                        '${scene.mountRecord!.id}/$slot',
+                            '${scene.mountRecord!.id}/$slot',
                         'Sonido · $slot',
                         scene.mountMonSoundCandidates,
                         scene.mountMonSoundCandidate(slot),
@@ -1770,7 +1768,7 @@ class _StudioState extends State<StudioPage> {
                     for (final slot in scene.mountMonEffectSlots) ...[
                       field<String>(
                         'mount-mon-effect/${scene.mountRecord!.source}/'
-                        '${scene.mountRecord!.id}/$slot',
+                            '${scene.mountRecord!.id}/$slot',
                         'Efecto · $slot',
                         scene.mountMonEffectCandidates,
                         scene.mountMonEffectCandidate(slot),
