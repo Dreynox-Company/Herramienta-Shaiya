@@ -89,6 +89,16 @@ def _spread_simple_records(cat:dict, count:int=3):
       if row not in picks:picks.append(row)
     return picks
 
+def _load_auth_samples(spk:Path, records:list):
+    loaded=[]
+    with spk.open('rb') as f:
+      for r in records:
+        f.seek(r['dataOffset'])
+        ct=f.read(r['storedBytes'])
+        if len(ct)!=r['storedBytes']:raise IOError('Lectura SPK incompleta')
+        loaded.append({**r,'_cipherText':ct})
+    return loaded
+
 def _key_authenticates_samples(spk:Path, records:list, key:bytes):
     if len(key) not in (16,32) or len(records)<1:return False
     try:
@@ -97,8 +107,10 @@ def _key_authenticates_samples(spk:Path, records:list, key:bytes):
       for r in records[:3]:
         meta=bytes.fromhex(r['metadataHex'])
         nonce,tag=meta[:12],meta[12:28]
-        ct=read_range(spk,r['dataOffset'],r['storedBytes'])
-        aes.decrypt(nonce,ct+tag,None)
+        ct=r.get('_cipherText')
+        if not isinstance(ct,(bytes,bytearray)):
+          ct=read_range(spk,r['dataOffset'],r['storedBytes'])
+        aes.decrypt(nonce,bytes(ct)+tag,None)
       return True
     except Exception:
       return False
@@ -238,7 +250,7 @@ def _pe_initialized_data_candidates(path:Path,max_candidates:int=160000):
             return
 
 def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,index_hash:str,out:Path):
-    samples=_spread_simple_records(cat,3)
+    samples=_load_auth_samples(spk,_spread_simple_records(cat,3))
     if not samples:
       raise ValueError('No hay recursos simples para el oráculo AES-GCM')
     oracle=[min(samples,key=lambda r:max(1,int(r.get('storedBytes') or 0)))]
@@ -359,7 +371,7 @@ class Sink:
         self.lock=threading.Lock()
         self.valid_simple=[]
         self.valid_chunks=[]
-        self.samples=_spread_simple_records(cat,3)
+        self.samples=_load_auth_samples(spk,_spread_simple_records(cat,3))
         self.candidate_rows=[]
         self.candidate_seen=set()
         self.dynamic_key_match=None
