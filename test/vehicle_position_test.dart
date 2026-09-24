@@ -59,7 +59,11 @@ void main() {
   });
 
   test('native rider profiles retain the ps0032 motion IDs', () {
-    expect(riderAnimationProfiles[0], (idle: 21, moving: 20, label: 'Vehículo clásico · 021/020'));
+    expect(riderAnimationProfiles[0], (
+      idle: 21,
+      moving: 20,
+      label: 'Vehículo clásico · 021/020',
+    ));
     expect(riderAnimationProfiles[1]!.idle, 97);
     expect(riderAnimationProfiles[1]!.moving, 22);
     expect(riderAnimationProfiles[2]!.idle, 98);
@@ -70,10 +74,13 @@ void main() {
     expect(riderAnimationProfiles[4]!.moving, 31);
   });
 
-  test('section key is fail-closed outside native family and byte ID range', () {
-    expect(vehiclePositionSection(0, 0), 'F0_V00');
-    expect(vehiclePositionSection(3, 255), 'F3_VFF');
-    expect(() => vehiclePositionSection(4, 0), throwsFormatException);
-    expect(() => vehiclePositionSection(0, 256), throwsFormatException);
-  });
+  test(
+    'section key is fail-closed outside native family and byte ID range',
+    () {
+      expect(vehiclePositionSection(0, 0), 'F0_V00');
+      expect(vehiclePositionSection(3, 255), 'F3_VFF');
+      expect(() => vehiclePositionSection(4, 0), throwsFormatException);
+      expect(() => vehiclePositionSection(0, 256), throwsFormatException);
+    },
+  );
 }

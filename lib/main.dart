@@ -1505,7 +1505,7 @@ class _StudioState extends State<StudioPage> {
                 ),
                 field<int>(
                   'mount-rider-profile/${scene.mountRecord!.source}/'
-                  '${scene.mountRecord!.id}',
+                      '${scene.mountRecord!.id}',
                   'Perfil ANI del jinete',
                   scene.riderProfileOptions,
                   scene.riderProfile,
