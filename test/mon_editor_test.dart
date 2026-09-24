@@ -135,6 +135,30 @@ void main() {
     expect(() => doc.setAnimation(0, 'Ataque 1', ''), throwsFormatException);
   });
 
+  test('MON native LOAD sentinel round-trips across resource slots', () {
+    final doc = EditableMonDocument.parse(
+      fixture('MO4'),
+      'Vehicle/Vehicle_Hu_01.MON',
+    );
+    doc.setAnimation(0, 'Ataque 2', 'load');
+    doc.setSound(0, 'Ataque 1', 'LOAD');
+    doc.setEffect(0, 'Ataque 3', 'Load');
+    doc.setAttachedEffect(0, 'load');
+
+    final encoded = doc.encode();
+    doc.validateEncoded(encoded);
+    final parsed = EditableMonDocument.parse(
+      encoded,
+      'Vehicle/Vehicle_Hu_01.MON',
+    );
+    expect(parsed.records.single.animations['Ataque 2']!.value, monLoadSentinel);
+    expect(parsed.records.single.sounds['Ataque 1']!.value, monLoadSentinel);
+    expect(parsed.records.single.effects['Ataque 3']!.value, monLoadSentinel);
+    expect(parsed.records.single.attached!.value, monLoadSentinel);
+    expect(isMonLoadSentinel(' load '), isTrue);
+    expect(isMonLoadSentinel('custom.ani'), isFalse);
+  });
+
   test('MON editor rejects unsafe or non-ANI replacement paths', () {
     final doc = EditableMonDocument.parse(
       fixture('MO4'),
