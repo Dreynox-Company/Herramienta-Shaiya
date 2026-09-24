@@ -73,3 +73,17 @@ V13 amplia proveedores criptograficos observables sin relajar el oraculo:
 - wolfSSL: wc_AesGcmSetKey y wc_AesSetKey.
 Estas observaciones solo generan candidatos. Ninguna clave habilita el SPK hasta
 reproducir AES-GCM offline contra ciphertexts y tags exactos del DATA.SPK.
+
+
+V13 añade recuperación estática y runtime adicional manteniendo fail-closed:
+- barrido profundo PE acotado a un presupuesto global de candidatas sobre
+  game.exe y DLLs de la instalación;
+- búsqueda runtime de copias de la clave de índice y emisión de candidatos
+  cercanos con límites estrictos;
+- toda candidata, sin excepción, debe autenticar ciphertext+tag del DATA.SPK
+  antes de producir derived-resource-profile.json utilizable.
+
+Si el SPK sigue bloqueado, Studio puede usar una carpeta DATA externa como
+preview de referencia. Esa vista no descifra ni modifica el SPK; solo permite
+ver recursos candidatos (incluyendo 3D y texturas asociadas) mientras se
+continúa cerrando el perfil real.
