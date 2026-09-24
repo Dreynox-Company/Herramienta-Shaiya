@@ -386,9 +386,7 @@ List<ExcelXmlSemanticIssue> _wingPosition(ExcelXmlDocument document) {
           code: 'wing-profile-count',
           message:
               'WingPosition requiere 48 perfiles (4 familias × 6 jobs × '
-                  '2 sexos); hay ' +
-              sheet.rows.length.toString() +
-              '.',
+              '2 sexos); hay ${sheet.rows.length}.',
         ),
       );
     }
@@ -427,9 +425,9 @@ List<ExcelXmlSemanticIssue> _battleFieldPrize(ExcelXmlDocument document) {
           sheet,
           s,
           r,
-          c['item' + slot.toString()],
-          c['count' + slot.toString()],
-          'Recompensa ' + slot.toString(),
+          c['item$slot'],
+          c['count$slot'],
+          'Recompensa $slot',
         );
       }
     }
@@ -826,8 +824,8 @@ List<ExcelXmlSemanticIssue> _npcDisable(ExcelXmlDocument document) {
           sheet,
           s,
           r,
-          c[prefix + 'year'],
-          prefix.toUpperCase() + 'YEAR',
+          c['${prefix}year'],
+          '${prefix.toUpperCase()}YEAR',
           0,
           9999,
         );
@@ -836,8 +834,8 @@ List<ExcelXmlSemanticIssue> _npcDisable(ExcelXmlDocument document) {
           sheet,
           s,
           r,
-          c[prefix + 'month'],
-          prefix.toUpperCase() + 'MONTH',
+          c['${prefix}month'],
+          '${prefix.toUpperCase()}MONTH',
           1,
           12,
         );
@@ -846,8 +844,8 @@ List<ExcelXmlSemanticIssue> _npcDisable(ExcelXmlDocument document) {
           sheet,
           s,
           r,
-          c[prefix + 'day'],
-          prefix.toUpperCase() + 'DAY',
+          c['${prefix}day'],
+          '${prefix.toUpperCase()}DAY',
           1,
           31,
         );
@@ -856,8 +854,8 @@ List<ExcelXmlSemanticIssue> _npcDisable(ExcelXmlDocument document) {
           sheet,
           s,
           r,
-          c[prefix + 'time'],
-          prefix.toUpperCase() + 'TIME',
+          c['${prefix}time'],
+          '${prefix.toUpperCase()}TIME',
           0,
           23,
         );
@@ -866,8 +864,8 @@ List<ExcelXmlSemanticIssue> _npcDisable(ExcelXmlDocument document) {
           sheet,
           s,
           r,
-          c[prefix + 'minute'],
-          prefix.toUpperCase() + 'MINUTE',
+          c['${prefix}minute'],
+          '${prefix.toUpperCase()}MINUTE',
           0,
           59,
         );
