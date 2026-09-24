@@ -2129,6 +2129,11 @@ class StudioScene extends ChangeNotifier {
       shield = null;
       shieldRecord = null;
       shieldAttachment = null;
+      if (appearance != null) {
+        _applyFlightV3ToActor(actor, appearance!);
+      }
+      refreshIdle();
+      movementTransitions.invalidate();
       changed();
       return;
     }
@@ -2228,6 +2233,8 @@ class StudioScene extends ChangeNotifier {
         !bundle.compatibleWith(look.archetype.id, normal)) {
       return;
     }
+    final wasHover = actor.hover != null && identical(actor.clip, actor.hover);
+    final wasFlight = actor.flight != null && identical(actor.clip, actor.flight);
     final shielded = shieldRecord != null;
     actor.hover = shielded ? bundle.hoverShield : bundle.hover;
     actor.flight = shielded ? bundle.flightShield : bundle.flight;
@@ -2248,6 +2255,13 @@ class StudioScene extends ChangeNotifier {
         ..addAll(combatProfile.attacks);
       if (attackClips.isNotEmpty) {
         combat.attackDuration = attackClips.first.duration;
+      }
+    }
+    if (!flightBodyTransitionActive) {
+      if (wasHover && actor.hover != null) {
+        actor.play(actor.hover!);
+      } else if (wasFlight && actor.flight != null) {
+        actor.play(actor.flight!);
       }
     }
   }
