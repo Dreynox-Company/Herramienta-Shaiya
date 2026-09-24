@@ -1006,7 +1006,12 @@ class Library {
     if (id == null) throw FormatException('Recurso ausente: $path');
 
     if (spk != null) {
-      await writeSpkOverlay({canonical: bytes});
+      final current = await read(canonical, limit: 128 * 1024 * 1024);
+      await writeSpkOverlay(
+        {canonical: bytes},
+        expectedHashes: {canonical: sha256.convert(current).toString()},
+        keepBackup: keepBackup,
+      );
       revision++;
       return;
     }
