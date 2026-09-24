@@ -2250,8 +2250,7 @@ class StudioScene extends ChangeNotifier {
     if (code == null) return null;
     final actor = character;
     final fromFlight = actor != null && identical(actor.clip, actor.flight);
-    final shieldSuffix =
-        shieldRecord != null && code == 'on' ? '_SHIELD' : '';
+    final shieldSuffix = shieldRecord != null && code == 'on' ? '_SHIELD' : '';
     final id =
         'V3_${fromFlight ? 'FLIGHT_LAND' : 'LAND'}_COMBAT_'
         '${code.toUpperCase()}$shieldSuffix';
@@ -2262,8 +2261,7 @@ class StudioScene extends ChangeNotifier {
     if (!flightV3Compatible) return null;
     final code = _flightV3CombatCode();
     if (code == null) return null;
-    final shieldSuffix =
-        shieldRecord != null && code == 'on' ? '_SHIELD' : '';
+    final shieldSuffix = shieldRecord != null && code == 'on' ? '_SHIELD' : '';
     return flightV3
         ?.transitions['V3_TAKEOFF_COMBAT_${code.toUpperCase()}$shieldSuffix'];
   }
