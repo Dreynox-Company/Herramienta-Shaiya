@@ -13,6 +13,7 @@ import '../core/locomotion.dart';
 import '../core/pose_layers.dart';
 import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
+import '../core/flight_v3_bundle.dart';
 import '../core/wing_motion.dart';
 import '../core/wing_position.dart';
 import '../core/vehicle_position.dart';
@@ -191,6 +192,7 @@ class StudioScene extends ChangeNotifier {
   Attachment? shieldAttachment;
   CharacterClass? selectedClass;
   ExtraMotionLibrary? extraMotions;
+  FlightV3Bundle? flightV3;
   final FlightTransition flightState = FlightTransition();
   bool flightEnabled = false,
       wingAutoMotion = true,
@@ -1247,6 +1249,7 @@ class StudioScene extends ChangeNotifier {
         staged.flight = profile.flight;
         staged.mountedAttacks.addAll(profile.mounted);
       }
+      _applyFlightV3ToActor(staged, next);
       if (face != null) {
         final scores = <int, double>{};
         for (var i = 0; i < face.weights.length; i++) {
@@ -1954,6 +1957,7 @@ class StudioScene extends ChangeNotifier {
     shield = staged;
     shieldRecord = item;
     shieldAttachment = socket;
+    if (appearance != null) _applyFlightV3ToActor(actor, appearance!);
     actor.visual.add(staged.mesh);
     staged.mesh.matrixAutoUpdate = false;
     updateAttachments();
@@ -1970,6 +1974,85 @@ class StudioScene extends ChangeNotifier {
         : combat.inGuard
         ? (a.guard ?? a.normal)
         : a.normal;
+  }
+
+  String? _flightV3CombatCode() => switch (weaponFamily(weaponRecord)) {
+    1 || 3 || 7 => 'on',
+    2 || 4 || 8 => 'th',
+    5 => 'du',
+    6 => 'sp',
+    _ => null,
+  };
+
+  bool get flightV3Compatible {
+    final bundle = flightV3;
+    final a = character;
+    final look = appearance;
+    return bundle != null &&
+        a != null &&
+        look != null &&
+        a.normal != null &&
+        bundle.compatibleWith(look.archetype.id, a.normal!);
+  }
+
+  String get flightV3Status {
+    final bundle = flightV3;
+    if (bundle == null) return 'Flight V3 no instalado';
+    if (!flightV3Compatible) {
+      return 'Flight V3 verificado, pero el personaje actual no es humf de 36 huesos';
+    }
+    return 'Flight V3 activo · ${bundle.transitions.length} transiciones · '
+        '${bundle.combat.length} perfiles de combate';
+  }
+
+  void _applyFlightV3ToActor(Actor actor, Appearance look) {
+    final bundle = flightV3;
+    final normal = actor.normal;
+    if (bundle == null ||
+        normal == null ||
+        !bundle.compatibleWith(look.archetype.id, normal)) {
+      return;
+    }
+    final shielded = shieldRecord != null;
+    actor.hover = shielded ? bundle.hoverShield : bundle.hover;
+    actor.flight = shielded ? bundle.flightShield : bundle.flight;
+    actor.clips['V3 · Flotar'] = bundle.hover;
+    actor.clips['V3 · Volar'] = bundle.flight;
+    actor.clips['V3 · Flotar con escudo'] = bundle.hoverShield;
+    actor.clips['V3 · Volar con escudo'] = bundle.flightShield;
+    for (final transition in bundle.transitions.values) {
+      actor.clips['V3 · ${transition.id}'] = transition.clip;
+    }
+    final code = _flightV3CombatCode();
+    final combatProfile = code == null ? null : bundle.combatFor(code);
+    if (combatProfile != null) {
+      actor.guard = combatProfile.guard;
+      actor.weaponRun = combatProfile.run;
+      attackClips
+        ..clear()
+        ..addAll(combatProfile.attacks);
+      if (attackClips.isNotEmpty) {
+        combat.attackDuration = attackClips.first.duration;
+      }
+    }
+  }
+
+  Future<void> installFlightV3(FlightV3Bundle bundle) async {
+    flightV3 = bundle;
+    final a = character;
+    final look = appearance;
+    if (a != null && look != null) {
+      _applyFlightV3ToActor(a, look);
+      refreshIdle();
+      movementTransitions.invalidate();
+    }
+    report(
+      'Flight V3 verificado: ${bundle.evidence['binaryPassed']} checks binarios, '
+      '${bundle.evidence['numericPassed']} numericos, '
+      '${bundle.transitions.length} transiciones y '
+      '${bundle.combat.length} perfiles humf.',
+    );
+    changed();
   }
 
   Future<void> installExtras(ExtraMotionLibrary extras) async {
@@ -2028,7 +2111,21 @@ class StudioScene extends ChangeNotifier {
         );
       }
     }
+    final v3Transition = flightV3Compatible
+        ? flightV3?.transitions[
+              enabled
+                  ? (shieldRecord != null
+                        ? 'V3_TAKEOFF_NORMAL_SHIELD'
+                        : 'V3_TAKEOFF_NORMAL_NEUTRAL')
+                  : (shieldRecord != null
+                        ? 'V3_LAND_NORMAL_SHIELD'
+                        : 'V3_LAND_NORMAL_NEUTRAL')
+            ]
+        : null;
     setFlightEnabled(enabled);
+    if (v3Transition != null && character != null) {
+      character!.play(v3Transition.clip, repeat: false);
+    }
     _syncWingMotion(
       walkX.abs() + walkZ.abs() > 1e-8 || game.destination != null,
     );
