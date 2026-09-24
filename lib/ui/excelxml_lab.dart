@@ -21,6 +21,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   String? selectedPath;
   ExcelXmlDocument? document;
   Uint8List? sourceBytes;
+  String? rawText;
+  bool rawDirty = false;
   String? loadError;
   bool busy = false;
   int sheetIndex = 0;
@@ -53,6 +55,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       selectedPath = path;
       document = null;
       sourceBytes = null;
+      rawText = null;
+      rawDirty = false;
       loadError = null;
       selectedRow = null;
       sheetIndex = 0;
@@ -74,6 +78,10 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       setState(() {
         sourceBytes = bytes;
         document = parsed;
+        rawText = parsed != null && !parsed.tabular && bytes.length <= 2 * 1024 * 1024
+            ? utf8.decode(bytes, allowMalformed: false)
+            : null;
+        rawDirty = false;
         loadError = error;
       });
     } finally {
@@ -96,6 +104,41 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       }
     }
     return out;
+  }
+
+  Future<void> saveRawXml() async {
+    final path = selectedPath;
+    final text = rawText;
+    if (path == null || text == null || !rawDirty) return;
+    setState(() => busy = true);
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(text));
+      final parsed = ExcelXmlDocument.parse(bytes, path);
+      if (parsed.tabular) {
+        throw const FormatException(
+          'El XML ahora contiene una tabla SpreadsheetML; vuelve a abrirlo '
+          'para editarla en modo estructurado.',
+        );
+      }
+      parsed.validateEncoded(bytes);
+      await widget.library.writeResource(path, bytes);
+      if (!mounted) return;
+      setState(() {
+        sourceBytes = bytes;
+        document = parsed;
+        rawDirty = false;
+        revision++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${path.split('/').last} guardado como XML válido y revalidado.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   Future<void> save() async {
@@ -222,15 +265,86 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       );
     }
     if (!document!.tabular) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'XML válido, pero no contiene una tabla SpreadsheetML editable.\n'
-            '${excelXmlPurpose(selectedPath!)}\n\n'
-            'Studio lo conserva sin inventar una estructura tabular.',
-            textAlign: TextAlign.center,
-          ),
+      final editable = rawText != null;
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${selectedPath!.split('/').last} · '
+                    '${excelXmlPurpose(selectedPath!)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (editable)
+                  FilledButton.icon(
+                    onPressed: busy || !rawDirty ? null : saveRawXml,
+                    icon: const Icon(Icons.save_outlined, size: 16),
+                    label: const Text('Guardar XML'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              editable
+                  ? 'XML no tabular · edición de texto validada antes de '
+                        'escribir. Studio no reordena nodos ni inventa campos.'
+                  : 'XML válido no tabular. Vista de solo lectura porque supera '
+                        'el límite de 2 MiB para edición textual segura.',
+              style: const TextStyle(fontSize: 9, color: Color(0xff8fa0b8)),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: editable
+                  ? TextFormField(
+                      key: ValueKey('raw-$revision-$selectedPath'),
+                      initialValue: rawText,
+                      enabled: !busy,
+                      expands: true,
+                      maxLines: null,
+                      minLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      style: const TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 10,
+                      ),
+                      decoration: const InputDecoration(
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        rawText = value;
+                        if (!rawDirty) setState(() => rawDirty = true);
+                      },
+                    )
+                  : SingleChildScrollView(
+                      child: SelectableText(
+                        sourceBytes == null
+                            ? ''
+                            : utf8.decode(
+                                sourceBytes!.sublist(
+                                  0,
+                                  sourceBytes!.length
+                                      .clamp(0, 512 * 1024)
+                                      .toInt(),
+                                ),
+                                allowMalformed: true,
+                              ),
+                        style: const TextStyle(
+                          fontFamily: 'Consolas',
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
         ),
       );
     }
