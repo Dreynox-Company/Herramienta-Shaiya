@@ -382,10 +382,13 @@ class Catalog {
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
 
-    wingPositionPath = paths.where((p) =>
-      p == WingPositionDocument.canonicalPath ||
-      p.endsWith('/wingposition.xml')
-    ).firstOrNull;
+    wingPositionPath = paths
+        .where(
+          (p) =>
+              p == WingPositionDocument.canonicalPath ||
+              p.endsWith('/wingposition.xml'),
+        )
+        .firstOrNull;
     if (wingPositionPath != null) {
       try {
         wingPositions = WingPositionDocument.parse(

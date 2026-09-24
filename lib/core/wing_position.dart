@@ -108,12 +108,20 @@ class WingPositionDocument {
   static const _front = {'WING_FRONT_BACK'};
   static const _left = {'WING_LEFT_RIGHT'};
   static const _family = {
-    'FAMILY', 'FAMILY_ID', 'RACE', 'RACE_ID', 'WING_FAMILY',
+    'FAMILY',
+    'FAMILY_ID',
+    'RACE',
+    'RACE_ID',
+    'WING_FAMILY',
   };
   static const _job = {'JOB', 'JOB_ID', 'CLASS', 'CLASS_ID'};
   static const _sex = {'SEX', 'SEX_ID', 'GENDER', 'GENDER_ID'};
   static const _bone = {
-    'BONE', 'BONE_ID', 'BONE_INDEX', 'WING_BONE', 'WING_BONE_INDEX',
+    'BONE',
+    'BONE_ID',
+    'BONE_INDEX',
+    'WING_BONE',
+    'WING_BONE_INDEX',
   };
 
   final String path;
@@ -171,7 +179,11 @@ class WingPositionDocument {
       );
     }
     for (final expected in profiles) {
-      final actual = parsed.resolve(expected.family, expected.job, expected.sex);
+      final actual = parsed.resolve(
+        expected.family,
+        expected.job,
+        expected.sex,
+      );
       if (actual == null ||
           !_close(actual.rotX, expected.rotX) ||
           !_close(actual.rotY, expected.rotY) ||
@@ -189,10 +201,7 @@ class WingPositionDocument {
 
   static WingPositionDocument parse(Uint8List bytes, String path) {
     var raw = bytes;
-    if (raw.length >= 3 &&
-        raw[0] == 0xef &&
-        raw[1] == 0xbb &&
-        raw[2] == 0xbf) {
+    if (raw.length >= 3 && raw[0] == 0xef && raw[1] == 0xbb && raw[2] == 0xbf) {
       raw = Uint8List.sublistView(raw, 3);
     }
     final source = utf8.decode(raw, allowMalformed: false);
@@ -233,7 +242,12 @@ class WingPositionDocument {
       final family = rf[i] == null ? i ~/ 12 : rf[i]! - (f1 ? 1 : 0);
       final job = rj[i] == null ? (i % 12) ~/ 2 : rj[i]! - (j1 ? 1 : 0);
       final sex = rs[i] == null ? i % 2 : rs[i]! - (s1 ? 1 : 0);
-      if (family < 0 || family > 3 || job < 0 || job > 5 || sex < 0 || sex > 1) {
+      if (family < 0 ||
+          family > 3 ||
+          job < 0 ||
+          job > 5 ||
+          sex < 0 ||
+          sex > 1) {
         throw FormatException(
           'WingPosition.xml: identidad fuera de rango en fila $i.',
         );
@@ -297,8 +311,10 @@ class WingPositionDocument {
         return _XmlValue.attribute(attribute);
       }
     }
-    for (final element
-        in <XmlElement>[row, ...row.descendants.whereType<XmlElement>()]) {
+    for (final element in <XmlElement>[
+      row,
+      ...row.descendants.whereType<XmlElement>(),
+    ]) {
       if (wanted.contains(element.name.local.toUpperCase())) {
         return _XmlValue.element(element);
       }
@@ -318,14 +334,24 @@ class WingPositionDocument {
     if (numeric != null) return numeric;
     if (kind == 'family') {
       return const {
-        'human': 0, 'humano': 0, 'elf': 1, 'elfo': 1,
-        'vail': 2, 'vile': 2, 'deatheater': 3, 'nordein': 3,
+        'human': 0,
+        'humano': 0,
+        'elf': 1,
+        'elfo': 1,
+        'vail': 2,
+        'vile': 2,
+        'deatheater': 3,
+        'nordein': 3,
       }[value];
     }
     if (kind == 'sex') {
       return const {
-        'male': 0, 'masculino': 0, 'm': 0,
-        'female': 1, 'femenino': 1, 'f': 1,
+        'male': 0,
+        'masculino': 0,
+        'm': 0,
+        'female': 1,
+        'femenino': 1,
+        'f': 1,
       }[value];
     }
     return null;
@@ -348,7 +374,9 @@ class WingPositionDocument {
 
   static String _number(double value) {
     if (!value.isFinite) {
-      throw const FormatException('WingPosition.xml no admite números no finitos.');
+      throw const FormatException(
+        'WingPosition.xml no admite números no finitos.',
+      );
     }
     var out = value.toStringAsFixed(6);
     out = out.replaceFirst(RegExp(r'0+$'), '');
@@ -359,40 +387,73 @@ class WingPositionDocument {
   static bool _close(double a, double b) => (a - b).abs() <= 1e-6;
 
   static const List<List<num>> _verifiedRows = [
-    [0,0,0,4,170,0,90,.05,-.18,0],[0,0,1,4,170,0,90,.05,-.11,0],
-    [0,1,0,4,170,0,90,.05,-.18,0],[0,1,1,4,170,0,90,.05,-.11,0],
-    [0,2,0,4,0,0,90,0,0,0],[0,2,1,4,0,0,90,0,0,0],
-    [0,3,0,4,0,0,90,0,0,0],[0,3,1,4,0,0,90,0,0,0],
-    [0,4,0,4,0,0,90,0,0,0],[0,4,1,4,0,0,90,0,0,0],
-    [0,5,0,4,168,0,90,.05,-.14,0],[0,5,1,4,168,0,90,.04,-.11,0],
-    [1,0,0,4,0,0,90,0,0,0],[1,0,1,4,0,0,90,0,0,0],
-    [1,1,0,4,0,0,90,0,0,0],[1,1,1,4,0,0,90,0,0,0],
-    [1,2,0,4,180,0,90,-.04,-.12,0],[1,2,1,4,175,0,90,.03,-.12,0],
-    [1,3,0,4,180,0,90,-.04,-.12,0],[1,3,1,4,175,0,90,.03,-.12,0],
-    [1,4,0,4,183,0,90,.01,-.13,0],[1,4,1,4,175,0,90,.02,-.10,0],
-    [1,5,0,4,0,0,90,0,0,0],[1,5,1,4,0,0,90,0,0,0],
-    [2,0,0,4,0,0,90,0,0,0],[2,0,1,4,0,0,90,0,0,0],
-    [2,1,0,4,0,0,90,0,0,0],[2,1,1,4,0,0,90,0,0,0],
-    [2,2,0,4,180,0,90,.04,-.12,0],[2,2,1,4,173,0,90,.05,-.11,0],
-    [2,3,0,4,0,0,90,0,0,0],[2,3,1,4,0,0,90,0,0,0],
-    [2,4,0,4,178,0,90,.06,-.11,0],[2,4,1,4,175,0,90,.04,-.11,0],
-    [2,5,0,4,178,0,90,.06,-.11,0],[2,5,1,4,175,0,90,.04,-.11,0],
-    [3,0,0,4,192,0,90,.10,-.19,0],[3,0,1,4,165,0,90,.04,-.17,0],
-    [3,1,0,4,192,0,90,.10,-.19,0],[3,1,1,4,165,0,90,.04,-.17,0],
-    [3,2,0,4,0,0,90,0,0,0],[3,2,1,4,0,0,90,0,0,0],
-    [3,3,0,4,185,0,90,.15,-.14,0],[3,3,1,4,170,0,90,0,-.19,0],
-    [3,4,0,4,0,0,90,0,0,0],[3,4,1,4,0,0,90,0,0,0],
-    [3,5,0,4,0,0,90,0,0,0],[3,5,1,4,0,0,90,0,0,0],
+    [0, 0, 0, 4, 170, 0, 90, .05, -.18, 0],
+    [0, 0, 1, 4, 170, 0, 90, .05, -.11, 0],
+    [0, 1, 0, 4, 170, 0, 90, .05, -.18, 0],
+    [0, 1, 1, 4, 170, 0, 90, .05, -.11, 0],
+    [0, 2, 0, 4, 0, 0, 90, 0, 0, 0],
+    [0, 2, 1, 4, 0, 0, 90, 0, 0, 0],
+    [0, 3, 0, 4, 0, 0, 90, 0, 0, 0],
+    [0, 3, 1, 4, 0, 0, 90, 0, 0, 0],
+    [0, 4, 0, 4, 0, 0, 90, 0, 0, 0],
+    [0, 4, 1, 4, 0, 0, 90, 0, 0, 0],
+    [0, 5, 0, 4, 168, 0, 90, .05, -.14, 0],
+    [0, 5, 1, 4, 168, 0, 90, .04, -.11, 0],
+    [1, 0, 0, 4, 0, 0, 90, 0, 0, 0],
+    [1, 0, 1, 4, 0, 0, 90, 0, 0, 0],
+    [1, 1, 0, 4, 0, 0, 90, 0, 0, 0],
+    [1, 1, 1, 4, 0, 0, 90, 0, 0, 0],
+    [1, 2, 0, 4, 180, 0, 90, -.04, -.12, 0],
+    [1, 2, 1, 4, 175, 0, 90, .03, -.12, 0],
+    [1, 3, 0, 4, 180, 0, 90, -.04, -.12, 0],
+    [1, 3, 1, 4, 175, 0, 90, .03, -.12, 0],
+    [1, 4, 0, 4, 183, 0, 90, .01, -.13, 0],
+    [1, 4, 1, 4, 175, 0, 90, .02, -.10, 0],
+    [1, 5, 0, 4, 0, 0, 90, 0, 0, 0],
+    [1, 5, 1, 4, 0, 0, 90, 0, 0, 0],
+    [2, 0, 0, 4, 0, 0, 90, 0, 0, 0],
+    [2, 0, 1, 4, 0, 0, 90, 0, 0, 0],
+    [2, 1, 0, 4, 0, 0, 90, 0, 0, 0],
+    [2, 1, 1, 4, 0, 0, 90, 0, 0, 0],
+    [2, 2, 0, 4, 180, 0, 90, .04, -.12, 0],
+    [2, 2, 1, 4, 173, 0, 90, .05, -.11, 0],
+    [2, 3, 0, 4, 0, 0, 90, 0, 0, 0],
+    [2, 3, 1, 4, 0, 0, 90, 0, 0, 0],
+    [2, 4, 0, 4, 178, 0, 90, .06, -.11, 0],
+    [2, 4, 1, 4, 175, 0, 90, .04, -.11, 0],
+    [2, 5, 0, 4, 178, 0, 90, .06, -.11, 0],
+    [2, 5, 1, 4, 175, 0, 90, .04, -.11, 0],
+    [3, 0, 0, 4, 192, 0, 90, .10, -.19, 0],
+    [3, 0, 1, 4, 165, 0, 90, .04, -.17, 0],
+    [3, 1, 0, 4, 192, 0, 90, .10, -.19, 0],
+    [3, 1, 1, 4, 165, 0, 90, .04, -.17, 0],
+    [3, 2, 0, 4, 0, 0, 90, 0, 0, 0],
+    [3, 2, 1, 4, 0, 0, 90, 0, 0, 0],
+    [3, 3, 0, 4, 185, 0, 90, .15, -.14, 0],
+    [3, 3, 1, 4, 170, 0, 90, 0, -.19, 0],
+    [3, 4, 0, 4, 0, 0, 90, 0, 0, 0],
+    [3, 4, 1, 4, 0, 0, 90, 0, 0, 0],
+    [3, 5, 0, 4, 0, 0, 90, 0, 0, 0],
+    [3, 5, 1, 4, 0, 0, 90, 0, 0, 0],
   ];
 
-  static List<WingPositionProfile> get verifiedBaseline =>
-      _verifiedRows.map((r) => WingPositionProfile(
-        family:r[0].toInt(), job:r[1].toInt(), sex:r[2].toInt(),
-        boneIndex:r[3].toInt(), rotX:r[4].toDouble(), rotY:r[5].toDouble(),
-        rotZ:r[6].toDouble(), upDown:r[7].toDouble(),
-        frontBack:r[8].toDouble(), leftRight:r[9].toDouble(),
-        provenance:'verified-baseline',
-      )).toList(growable:false);
+  static List<WingPositionProfile> get verifiedBaseline => _verifiedRows
+      .map(
+        (r) => WingPositionProfile(
+          family: r[0].toInt(),
+          job: r[1].toInt(),
+          sex: r[2].toInt(),
+          boneIndex: r[3].toInt(),
+          rotX: r[4].toDouble(),
+          rotY: r[5].toDouble(),
+          rotZ: r[6].toDouble(),
+          upDown: r[7].toDouble(),
+          frontBack: r[8].toDouble(),
+          leftRight: r[9].toDouble(),
+          provenance: 'verified-baseline',
+        ),
+      )
+      .toList(growable: false);
 
   static WingPositionProfile? verifiedResolve(int family, int job, int sex) {
     final key = family * 100 + job * 10 + sex;

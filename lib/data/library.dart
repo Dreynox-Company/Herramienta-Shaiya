@@ -1046,7 +1046,9 @@ class Library {
       await temp.rename(target.path);
       final actual = sha256.convert(await target.readAsBytes()).toString();
       if (actual != expected) {
-        throw FormatException('La verificación posterior de escritura falló: $path');
+        throw FormatException(
+          'La verificación posterior de escritura falló: $path',
+        );
       }
       revision++;
     } catch (_) {
