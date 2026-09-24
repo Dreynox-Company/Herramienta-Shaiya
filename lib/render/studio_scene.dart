@@ -417,9 +417,8 @@ class StudioScene extends ChangeNotifier {
       );
     }
     final char = character;
-    final bone = original.boneWritable &&
-            char?.wingBone != null &&
-            char!.wingBone! >= 0
+    final bone =
+        original.boneWritable && char?.wingBone != null && char!.wingBone! >= 0
         ? char.wingBone!
         : original.boneIndex;
     await catalog!.saveWingPosition(
@@ -449,11 +448,19 @@ class StudioScene extends ChangeNotifier {
     final document = catalog?.wingPositions;
     final record = wingRecord;
     if (identity == null || document == null || record == null) {
-      throw const FormatException('No hay WingPosition.xml montado para restaurar.');
+      throw const FormatException(
+        'No hay WingPosition.xml montado para restaurar.',
+      );
     }
-    final profile = document.resolve(identity.family, identity.job, identity.sex);
+    final profile = document.resolve(
+      identity.family,
+      identity.job,
+      identity.sex,
+    );
     if (profile == null) {
-      throw const FormatException('El perfil activo no existe en WingPosition.xml.');
+      throw const FormatException(
+        'El perfil activo no existe en WingPosition.xml.',
+      );
     }
     _wingSettings.remove(_wingBindingKey(record));
     _applyWingProfile(profile);
@@ -466,7 +473,9 @@ class StudioScene extends ChangeNotifier {
     final profile = _resolveWingPosition(verifiedOnly: true);
     final record = wingRecord;
     if (profile == null || record == null) {
-      throw const FormatException('No existe baseline WingPosition para este personaje.');
+      throw const FormatException(
+        'No existe baseline WingPosition para este personaje.',
+      );
     }
     _wingSettings.remove(_wingBindingKey(record));
     _applyWingProfile(profile);
