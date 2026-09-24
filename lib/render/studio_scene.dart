@@ -2261,8 +2261,8 @@ class StudioScene extends ChangeNotifier {
   }
 
   List<FlightV3Transition> get flightV3TransitionOptions {
-    final values = flightV3?.transitions.values.toList() ??
-        const <FlightV3Transition>[];
+    final values =
+        flightV3?.transitions.values.toList() ?? const <FlightV3Transition>[];
     final out = List<FlightV3Transition>.from(values);
     out.sort((a, b) {
       final kind = a.kind.compareTo(b.kind);

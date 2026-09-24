@@ -2446,70 +2446,44 @@ class _StudioState extends State<StudioPage> {
                   style: TextStyle(fontSize: 10),
                 ),
               ),
-              excelXmlShortcutGroup(
-                'Alas',
-                const [
-                  ('wingposition.xml', 'Posición / hueso'),
-                  ('wingdecompose.xml', 'Descomposición'),
-                  ('wingexpitem.xml', 'Experiencia'),
-                  ('wingswap.xml', 'Intercambio'),
-                ],
-                subtitle: 'Pose 6DoF + progresión y sistemas',
-              ),
-              excelXmlShortcutGroup(
-                'Mundo y viaje',
-                const [
-                  ('ymwatershaderparams.xml', 'Shader / agua'),
-                  ('startmapchange.xml', 'Mapas / nombres'),
-                  ('mapcountry.xml', 'Facción por mapa'),
-                  ('maplimitlv.xml', 'Límites de nivel'),
-                  ('generalmovetowns_server.xml', 'Teletransporte'),
-                ],
-                subtitle: 'Render, mapas, acceso y movimiento',
-              ),
-              excelXmlShortcutGroup(
-                'Monstruos, drops y NPC',
-                const [
-                  ('mondeathitemworlddrop.xml', 'Drop global'),
-                  ('mondeathitemmapdrop.xml', 'Drop por mapa'),
-                  ('monsterdroprate.xml', 'Tasas de drop'),
-                  (
-                    'monsterrespawnchangesystem.xml',
-                    'Respawn dinámico',
-                  ),
-                  ('foolsevent_changemoninfo.xml', 'Stats por evento'),
-                  ('npcdisablesystem.xml', 'Disponibilidad NPC'),
-                ],
-                subtitle: 'Tablas complementarias a DBMonsterData',
-              ),
-              excelXmlShortcutGroup(
-                'Objetos y economía',
-                const [
-                  ('itemcreate.xml', 'Creación / recetas'),
-                  ('itemaddoptiondata.xml', 'Opciones adicionales'),
-                  ('itemaddoptionextradata.xml', 'Bonus enchant'),
-                  ('randomoptionedit.xml', 'Opciones aleatorias'),
-                  ('renownshop.xml', 'Tienda de renombre'),
-                  ('guildgemitem.xml', 'Gemas de gremio'),
-                  (
-                    'limitationonitemuseinmap.xml',
-                    'Restricciones por mapa',
-                  ),
-                ],
-                subtitle: 'Complemento de DBItemData',
-              ),
-              excelXmlShortcutGroup(
-                'UI, eventos y operación',
-                const [
-                  ('fontstyleset.xml', 'Fuentes / estilos'),
-                  ('gmnoticeinfo.xml', 'Avisos GM'),
-                  ('timenoticesystem.xml', 'Avisos horarios'),
-                  ('ymeventinfo.xml', 'Eventos / enlaces'),
-                  ('events.xml', 'Eventos'),
-                  ('mainquest.xml', 'Quest principal'),
-                ],
-                subtitle: 'Presentación, avisos, eventos y quests',
-              ),
+              excelXmlShortcutGroup('Alas', const [
+                ('wingposition.xml', 'Posición / hueso'),
+                ('wingdecompose.xml', 'Descomposición'),
+                ('wingexpitem.xml', 'Experiencia'),
+                ('wingswap.xml', 'Intercambio'),
+              ], subtitle: 'Pose 6DoF + progresión y sistemas'),
+              excelXmlShortcutGroup('Mundo y viaje', const [
+                ('ymwatershaderparams.xml', 'Shader / agua'),
+                ('startmapchange.xml', 'Mapas / nombres'),
+                ('mapcountry.xml', 'Facción por mapa'),
+                ('maplimitlv.xml', 'Límites de nivel'),
+                ('generalmovetowns_server.xml', 'Teletransporte'),
+              ], subtitle: 'Render, mapas, acceso y movimiento'),
+              excelXmlShortcutGroup('Monstruos, drops y NPC', const [
+                ('mondeathitemworlddrop.xml', 'Drop global'),
+                ('mondeathitemmapdrop.xml', 'Drop por mapa'),
+                ('monsterdroprate.xml', 'Tasas de drop'),
+                ('monsterrespawnchangesystem.xml', 'Respawn dinámico'),
+                ('foolsevent_changemoninfo.xml', 'Stats por evento'),
+                ('npcdisablesystem.xml', 'Disponibilidad NPC'),
+              ], subtitle: 'Tablas complementarias a DBMonsterData'),
+              excelXmlShortcutGroup('Objetos y economía', const [
+                ('itemcreate.xml', 'Creación / recetas'),
+                ('itemaddoptiondata.xml', 'Opciones adicionales'),
+                ('itemaddoptionextradata.xml', 'Bonus enchant'),
+                ('randomoptionedit.xml', 'Opciones aleatorias'),
+                ('renownshop.xml', 'Tienda de renombre'),
+                ('guildgemitem.xml', 'Gemas de gremio'),
+                ('limitationonitemuseinmap.xml', 'Restricciones por mapa'),
+              ], subtitle: 'Complemento de DBItemData'),
+              excelXmlShortcutGroup('UI, eventos y operación', const [
+                ('fontstyleset.xml', 'Fuentes / estilos'),
+                ('gmnoticeinfo.xml', 'Avisos GM'),
+                ('timenoticesystem.xml', 'Avisos horarios'),
+                ('ymeventinfo.xml', 'Eventos / enlaces'),
+                ('events.xml', 'Eventos'),
+                ('mainquest.xml', 'Quest principal'),
+              ], subtitle: 'Presentación, avisos, eventos y quests'),
               note(
                 'ExcelXml Lab conserva estilos/comentarios, respeta ss:Type, '
                 'revalida el XML antes de guardar y nunca inventa celdas sparse. '
@@ -3623,7 +3597,8 @@ class _StudioState extends State<StudioPage> {
   Future<void> exportDiagnostics() async {
     final c = catalog;
     final vehicle = scene.activeVehiclePositionProfile;
-    final excelXml = c?.library.files.keys
+    final excelXml =
+        c?.library.files.keys
             .where(
               (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
             )

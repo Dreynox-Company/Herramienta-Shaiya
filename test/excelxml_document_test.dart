@@ -77,10 +77,7 @@ void main() {
     );
     final row = doc.sheets.single.rows.first;
     expect(row.cellType(2), 'Number');
-    expect(
-      () => doc.setCell(0, 0, 2, 'not-a-number'),
-      throwsFormatException,
-    );
+    expect(() => doc.setCell(0, 0, 2, 'not-a-number'), throwsFormatException);
     expect(row.value(2), '170');
     doc.setCell(0, 0, 2, '-180.125');
     expect(row.value(2), '-180.125');

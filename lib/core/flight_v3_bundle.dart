@@ -239,7 +239,9 @@ class FlightV3Bundle {
       runtimeManifest = Map<String, dynamic>.from(raw);
       final schema = (runtimeManifest['schema'] as num?)?.toInt();
       final declaredFiles = (runtimeManifest['files'] as num?)?.toInt();
-      final sourceSha = runtimeManifest['sourceSha256']?.toString().toLowerCase();
+      final sourceSha = runtimeManifest['sourceSha256']
+          ?.toString()
+          .toLowerCase();
       if (schema != 1 ||
           declaredFiles != files.length - 1 ||
           sourceSha != canonicalSourceSha256) {
@@ -248,10 +250,11 @@ class FlightV3Bundle {
         );
       }
       final tracked = files.keys.where(
-        (path) =>
-            path != 'SHA256SUMS.txt' && path != 'RUNTIME_MANIFEST.json',
+        (path) => path != 'SHA256SUMS.txt' && path != 'RUNTIME_MANIFEST.json',
       );
-      final missingHashes = tracked.where((path) => !declared.containsKey(path));
+      final missingHashes = tracked.where(
+        (path) => !declared.containsKey(path),
+      );
       if (missingHashes.isNotEmpty) {
         throw FormatException(
           'Flight V3 Runtime contiene recursos sin SHA-256: '
@@ -365,13 +368,18 @@ class FlightV3Bundle {
       final profile = row['profile']?.toString();
       if (!RegExp(r'^V3_[A-Z0-9_]+$').hasMatch(id) ||
           transitionPath.isEmpty ||
-          !const {'TAKEOFF', 'LANDING', 'AIR_BLEND', 'BODY_SEQUENCE'}
-              .contains(kind) ||
+          !const {
+            'TAKEOFF',
+            'LANDING',
+            'AIR_BLEND',
+            'BODY_SEQUENCE',
+          }.contains(kind) ||
           duration == null ||
           !duration.isFinite ||
           duration <= 0 ||
           bones != 36 ||
-          (profile != null && !const {'on', 'du', 'th', 'sp'}.contains(profile)) ||
+          (profile != null &&
+              !const {'on', 'du', 'th', 'sp'}.contains(profile)) ||
           transitions.containsKey(id)) {
         throw FormatException('Flight V3: transición mal formada: $id.');
       }
@@ -440,8 +448,9 @@ class FlightV3Bundle {
         'combatProfiles': combat.length,
         'expandedBytes': expanded,
         'runtimeSubset': runtimeManifest != null,
-        'sourceSha256':
-            runtimeManifest?['sourceSha256']?.toString().toLowerCase(),
+        'sourceSha256': runtimeManifest?['sourceSha256']
+            ?.toString()
+            .toLowerCase(),
         'runtimeFiles': (runtimeManifest?['files'] as num?)?.toInt(),
       }),
       characterMap: Map.unmodifiable(characterMap),
