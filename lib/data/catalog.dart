@@ -5,6 +5,7 @@ export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
 import '../core/wing_position.dart';
+import '../core/vehicle_position.dart';
 import '../core/mon_editor.dart';
 import 'library.dart';
 part 'texture_discovery.dart';
@@ -186,6 +187,8 @@ class Catalog {
   final List<CreatureRecord> creatures = [], mounts = [], wings = [];
   WingPositionDocument? wingPositions;
   String? wingPositionPath;
+  VehiclePositionDocument vehiclePositions = VehiclePositionDocument.empty();
+  String? vehiclePositionPath;
   final List<String> worlds = [],
       sounds = [],
       effects = [],
@@ -456,8 +459,41 @@ class Catalog {
     wingPositions = WingPositionDocument.parse(bytes, path);
   }
 
+  Future<void> saveVehiclePosition(VehiclePositionProfile profile) async {
+    vehiclePositions.update(profile);
+    final bytes = vehiclePositions.encode();
+    vehiclePositions.validateEncoded(bytes);
+    await library.writeOrCreateLooseResource(
+      VehiclePositionDocument.canonicalPath,
+      bytes,
+    );
+    vehiclePositionPath = VehiclePositionDocument.canonicalPath;
+    vehiclePositions = VehiclePositionDocument.parse(bytes, vehiclePositionPath!);
+  }
+
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
+
+    vehiclePositionPath = paths
+        .where((p) => p == VehiclePositionDocument.canonicalPath)
+        .firstOrNull;
+    if (vehiclePositionPath != null) {
+      try {
+        vehiclePositions = VehiclePositionDocument.parse(
+          await library.read(vehiclePositionPath!),
+          vehiclePositionPath!,
+        );
+        progress(
+          'VehiclePosition.ini · '
+          '${vehiclePositions.profiles.length} perfiles Studio Bridge',
+        );
+      } catch (e) {
+        warnings.add('VehiclePosition.ini: $e');
+        vehiclePositions = VehiclePositionDocument.empty();
+      }
+    } else {
+      vehiclePositions = VehiclePositionDocument.empty();
+    }
 
     wingPositionPath = paths
         .where(
