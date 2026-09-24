@@ -1067,6 +1067,43 @@ class _StudioState extends State<StudioPage> {
                 note(
                   'La selección automática usa únicamente los slots ANI declarados por el MON original del ala. Elegir una animación manual desactiva temporalmente la sincronización automática.',
                 ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Wing.MON · slots ANI',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Caminar, correr, ataques, caída, respirar, daño y reposo',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    note(
+                      'Cada cambio modifica únicamente la cadena ANI del registro '
+                      'MON seleccionado, reserializa MO2/MO4 y vuelve a parsearlo '
+                      'antes de guardar. Los campos y colas opacas no editados se '
+                      'conservan byte por byte.',
+                    ),
+                    for (final slot in scene.wingMonAnimationSlots)
+                      field<String>(
+                        'wing-mon/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}/$slot',
+                        slot,
+                        scene.wingMonAnimationCandidates,
+                        scene.wingMonAnimationCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonAnimation(slot, p),
+                        detail: (p) => p,
+                        empty:
+                            scene.wingMonAnimation(slot)?.isNotEmpty == true
+                            ? scene.wingMonAnimation(slot)!
+                            : 'Sin ANI asignado',
+                      ),
+                  ],
+                ),
                 note(
                   'WingPosition.xml · ${scene.wingPositionProfileLabel}. '
                   'Estos seis controles son los campos que consume el cliente clásico. '
