@@ -55,6 +55,36 @@ class FlightV3Bundle {
   static const int maxZipBytes = 32 * 1024 * 1024;
   static const int maxExpandedBytes = 64 * 1024 * 1024;
   static const int maxEntries = 512;
+  static const canonicalSourceSha256 =
+      '7f720a9e339d96a6e47cdce11094ecb64663c2f80f102de179f76e7f0b2c8a44';
+  static const requiredTransitionIds = <String>{
+    'V3_TAKEOFF_NORMAL_NEUTRAL',
+    'V3_LAND_NORMAL_NEUTRAL',
+    'V3_HOVER_TO_FLIGHT_NEUTRAL',
+    'V3_FLIGHT_TO_HOVER_NEUTRAL',
+    'V3_TAKEOFF_NORMAL_SHIELD',
+    'V3_LAND_NORMAL_SHIELD',
+    'V3_HOVER_TO_FLIGHT_SHIELD',
+    'V3_FLIGHT_TO_HOVER_SHIELD',
+    'V3_LAND_COMBAT_ON',
+    'V3_FLIGHT_LAND_COMBAT_ON',
+    'V3_TAKEOFF_COMBAT_ON',
+    'V3_LAND_COMBAT_ON_SHIELD',
+    'V3_FLIGHT_LAND_COMBAT_ON_SHIELD',
+    'V3_TAKEOFF_COMBAT_ON_SHIELD',
+    'V3_LAND_COMBAT_DU',
+    'V3_FLIGHT_LAND_COMBAT_DU',
+    'V3_TAKEOFF_COMBAT_DU',
+    'V3_LAND_COMBAT_TH',
+    'V3_FLIGHT_LAND_COMBAT_TH',
+    'V3_TAKEOFF_COMBAT_TH',
+    'V3_LAND_COMBAT_SP',
+    'V3_FLIGHT_LAND_COMBAT_SP',
+    'V3_TAKEOFF_COMBAT_SP',
+    'V3_SEQUENCE_ON_NEUTRAL',
+    'V3_SEQUENCE_ON_SHIELD',
+    'V3_SEQUENCE_DU_NEUTRAL',
+  };
 
   final ClipData normal;
   final ClipData walk;
@@ -94,7 +124,7 @@ class FlightV3Bundle {
     final exact = transitions[id];
     if (exact != null) return exact;
     for (final value in transitions.values) {
-      if (value.kind != id) continue;
+      if (value.kind != id.toUpperCase()) continue;
       if (profile != null && value.profile != profile) continue;
       if (shield != null && value.shield != shield) continue;
       return value;
@@ -197,6 +227,39 @@ class FlightV3Bundle {
       return Map<String, dynamic>.from(raw);
     }
 
+    Map<String, dynamic>? runtimeManifest;
+    final runtimeBytes = files['RUNTIME_MANIFEST.json'];
+    if (runtimeBytes != null) {
+      final raw = jsonDecode(utf8.decode(runtimeBytes));
+      if (raw is! Map) {
+        throw const FormatException(
+          'Flight V3: RUNTIME_MANIFEST.json no es un objeto JSON.',
+        );
+      }
+      runtimeManifest = Map<String, dynamic>.from(raw);
+      final schema = (runtimeManifest['schema'] as num?)?.toInt();
+      final declaredFiles = (runtimeManifest['files'] as num?)?.toInt();
+      final sourceSha = runtimeManifest['sourceSha256']?.toString().toLowerCase();
+      if (schema != 1 ||
+          declaredFiles != files.length - 1 ||
+          sourceSha != canonicalSourceSha256) {
+        throw const FormatException(
+          'Flight V3 Runtime no coincide con el paquete V3 canónico auditado.',
+        );
+      }
+      final tracked = files.keys.where(
+        (path) =>
+            path != 'SHA256SUMS.txt' && path != 'RUNTIME_MANIFEST.json',
+      );
+      final missingHashes = tracked.where((path) => !declared.containsKey(path));
+      if (missingHashes.isNotEmpty) {
+        throw FormatException(
+          'Flight V3 Runtime contiene recursos sin SHA-256: '
+          '${missingHashes.take(4).join(', ')}.',
+        );
+      }
+    }
+
     final binaryQa = jsonFile('Pruebas/resultados_binarios.json');
     final numericQa = jsonFile('Pruebas/resultados_numericos.json');
     if ((binaryQa['failed'] as num?)?.toInt() != 0 ||
@@ -292,14 +355,90 @@ class FlightV3Bundle {
       final row = Map<String, dynamic>.from(item);
       final id = row['id']?.toString() ?? '';
       final path = row['file']?.toString().replaceAll('\\', '/') ?? '';
-      final kind = row['kind']?.toString() ?? '';
+      final kind = row['kind']?.toString().toUpperCase() ?? '';
       final duration = (row['duration'] as num?)?.toDouble();
       final destinationPhase =
           (row['destinationPhase'] as num?)?.toDouble() ?? 0;
       final bones = (row['bones'] as num?)?.toInt();
-      if (!RegExp(r'^V3_[A-Z0-9_]+$').hasMatch(id) ||
+      if (!RegExp(r'^V3_[A-Z0-9_]+          !duration.isFinite ||
+          duration <= 0 ||
+          bones != 36 ||
+          transitions.containsKey(id)) {
+        throw FormatException('Flight V3: transición mal formada: $id.');
+      }
+      final parsed = clip(path);
+      if (!_sameHierarchy(normal, parsed)) {
+        throw FormatException('Flight V3: $id no coincide con el rig humf.');
+      }
+      if ((parsed.duration - duration).abs() > 1 / 15) {
+        throw FormatException(
+          'Flight V3: duración declarada de $id no coincide con el ANI.',
+        );
+      }
+      transitions[id] = FlightV3Transition(
+        id: id,
+        kind: kind,
+        profile: row['profile']?.toString(),
+        targetClip: row['targetClip']?.toString(),
+        shield: row['shield'] == true,
+        duration: duration,
+        destinationPhase: destinationPhase,
+        clip: parsed,
+      );
+    }
+    if (transitions.keys.toSet().difference(requiredTransitionIds).isNotEmpty ||
+        requiredTransitionIds.difference(transitions.keys.toSet()).isNotEmpty) {
+      throw const FormatException(
+        'Flight V3: el inventario de 26 transiciones no coincide con V3 canónico.',
+      );
+    }
+
+    final characterMap = jsonFile('mapa_combate_Character.json');
+    final characters = characterMap['characters'];
+    if (characters is! Map || !characters.containsKey('humf')) {
+      throw const FormatException('Flight V3: mapa de personajes incompleto.');
+    }
+    final humf = characters['humf'];
+    final humfBones = humf is Map ? humf['bones'] : null;
+    if (humfBones is! List ||
+        !humfBones.map((value) => (value as num?)?.toInt()).contains(36)) {
+      throw const FormatException(
+        'Flight V3: mapa humf no declara el rig canónico de 36 huesos.',
+      );
+    }
+
+    return FlightV3Bundle(
+      normal: normal,
+      walk: walk,
+      run: run,
+      hover: hover,
+      flight: flight,
+      hoverShield: hoverShield,
+      flightShield: flightShield,
+      combat: Map.unmodifiable(combat),
+      transitions: Map.unmodifiable(transitions),
+      evidence: Map.unmodifiable({
+        'shaEntries': declared.length,
+        'binaryPassed': (binaryQa['passed'] as num?)?.toInt() ?? 0,
+        'binaryFailed': (binaryQa['failed'] as num?)?.toInt() ?? 0,
+        'numericPassed': (numericQa['passed'] as num?)?.toInt() ?? 0,
+        'numericFailed': (numericQa['failed'] as num?)?.toInt() ?? 0,
+        'transitions': transitions.length,
+        'combatProfiles': combat.length,
+        'expandedBytes': expanded,
+        'runtimeSubset': runtimeManifest != null,
+        'sourceSha256':
+            runtimeManifest?['sourceSha256']?.toString().toLowerCase(),
+        'runtimeFiles': (runtimeManifest?['files'] as num?)?.toInt(),
+      }),
+      characterMap: Map.unmodifiable(characterMap),
+    );
+  }
+}
+).hasMatch(id) ||
           path.isEmpty ||
-          kind.isEmpty ||
+          !const {'TAKEOFF', 'LANDING', 'AIR_BLEND', 'BODY_SEQUENCE'}
+              .contains(kind) ||
           duration == null ||
           !duration.isFinite ||
           duration <= 0 ||
