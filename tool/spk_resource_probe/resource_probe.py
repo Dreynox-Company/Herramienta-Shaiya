@@ -90,7 +90,7 @@ def _spread_simple_records(cat:dict, count:int=3):
     return picks
 
 def _key_authenticates_samples(spk:Path, records:list, key:bytes):
-    if len(key) not in (16,32) or len(records)<2:return False
+    if len(key) not in (16,32) or len(records)<1:return False
     try:
       from cryptography.hazmat.primitives.ciphers.aead import AESGCM
       aes=AESGCM(key)
@@ -180,15 +180,87 @@ def _nearby_binary_candidates(path:Path,index_key:bytes,max_candidates:int=30000
           yield f'{path.name}:{label}:raw@0x{pos:x}',key
           if emitted>=max_candidates:return
 
+def _pe_initialized_data_candidates(path:Path,max_candidates:int=160000):
+    """Yield plausible literal AES keys from readable initialized PE data.
+
+    This is a bounded second-stage sweep. It intentionally skips executable
+    code and validates every candidate through the SPK AES-GCM oracle before
+    accepting anything.
+    """
+    try:
+      blob=path.read_bytes()
+    except OSError:
+      return
+    if len(blob)<0x100 or blob[:2]!=b'MZ':
+      return
+    try:
+      pe_off=struct.unpack_from('<I',blob,0x3c)[0]
+      if pe_off<0 or pe_off+24>len(blob) or blob[pe_off:pe_off+4]!=b'PE\0\0':
+        return
+      section_count=struct.unpack_from('<H',blob,pe_off+6)[0]
+      optional_size=struct.unpack_from('<H',blob,pe_off+20)[0]
+      table=pe_off+24+optional_size
+    except (struct.error,IndexError):
+      return
+    seen=set();emitted=0
+    for i in range(min(section_count,96)):
+      at=table+i*40
+      if at+40>len(blob):
+        break
+      raw_name=blob[at:at+8].split(b'\0',1)[0]
+      name=raw_name.decode('ascii','replace') or f'section{i}'
+      try:
+        raw_size=struct.unpack_from('<I',blob,at+16)[0]
+        raw_ptr=struct.unpack_from('<I',blob,at+20)[0]
+        characteristics=struct.unpack_from('<I',blob,at+36)[0]
+      except struct.error:
+        continue
+      readable=bool(characteristics & 0x40000000)
+      initialized=bool(characteristics & 0x00000040)
+      executable=bool(characteristics & 0x20000000)
+      if not readable or not initialized or executable or raw_size<16:
+        continue
+      lo=max(0,raw_ptr);hi=min(len(blob),raw_ptr+raw_size)
+      if hi-lo<16:
+        continue
+      for width in (16,32):
+        if hi-lo<width:
+          continue
+        for pos in range(lo,hi-width+1,4):
+          key=blob[pos:pos+width]
+          if key in seen or len(set(key))<8:
+            continue
+          seen.add(key);emitted+=1
+          yield f'{path.name}:pe-data:{name}:aligned4@0x{pos:x}',key
+          if emitted>=max_candidates:
+            return
+
 def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,index_hash:str,out:Path):
     samples=_spread_simple_records(cat,3)
-    report={'schema':1,'samples':[r['entryId'] for r in samples],'modules':[],'tested':0,'match':None}
-    def test(label,key):
+    if not samples:
+      raise ValueError('No hay recursos simples para el oráculo AES-GCM')
+    oracle=[min(samples,key=lambda r:max(1,int(r.get('storedBytes') or 0)))]
+    report={
+      'schema':2,
+      'samples':[r['entryId'] for r in samples],
+      'oracleSample':oracle[0]['entryId'],
+      'modules':[],
+      'tested':0,
+      'deepTested':0,
+      'match':None,
+    }
+    tested_keys=set()
+    def test(label,key,probe_rows=None):
+      if key in tested_keys:return None
+      tested_keys.add(key)
       report['tested']+=1
-      if _key_authenticates_samples(spk,samples,key):
-        report['match']={'source':label,'secretHex':key.hex(),'secretBytes':len(key)}
-        return key
-      return None
+      rows=samples if probe_rows is None else probe_rows
+      if not _key_authenticates_samples(spk,rows,key):
+        return None
+      if probe_rows is not None and not _key_authenticates_samples(spk,samples,key):
+        return None
+      report['match']={'source':label,'secretHex':key.hex(),'secretBytes':len(key)}
+      return key
     for label,key in _derived_index_candidates(index_key,index_hash):
       found=test(label,key)
       if found:
@@ -215,10 +287,21 @@ def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,ind
           return found,label,report
       item['testedAfter']=report['tested'];report['modules'].append(item)
       if report['tested']>=120000:break
+
+    # V13 deep pass: search literal key material in non-executable initialized
+    # PE data even when it is not close to an AES/GCM/index string. A cheap
+    # one-record GCM oracle filters candidates, then three distributed samples
+    # must authenticate before the key is accepted.
+    for label,key in _pe_initialized_data_candidates(game):
+      report['deepTested']+=1
+      found=test(label,key,oracle)
+      if found:
+        (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        return found,label,report
+
     (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return None,None,report
-
-def static_resource_profile(key:bytes,source_label:str,profile_id:str='shaiya-spk-v3-resources-a3ea7e3b-v12-static'):
+def static_resource_profile(key:bytes,source_label:str,profile_id:str='shaiya-spk-v3-resources-a3ea7e3b-v13-static'):
     return {
       'schema':4,
       'profileId':profile_id,
@@ -537,7 +620,7 @@ def main():
       prof=static_resource_profile(
         dynamic_key,
         'dynamic-candidate:'+dynamic_source,
-        profile_id='shaiya-spk-v3-resources-a3ea7e3b-v12-dynamic-candidate',
+        profile_id='shaiya-spk-v3-resources-a3ea7e3b-v13-dynamic-candidate',
       )
       prof['dynamicCandidateKeysTested']=len(sink.candidate_rows)
       prof['failure']=failure
