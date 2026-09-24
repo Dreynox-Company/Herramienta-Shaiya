@@ -688,6 +688,87 @@ class _StudioState extends State<StudioPage> {
       ),
     ],
   );
+  Widget preciseSlider(
+    String title,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> change, {
+    double step = .01,
+    int decimals = 3,
+  }) {
+    final safe = value.clamp(min, max).toDouble();
+    void commit(String raw) {
+      final parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
+      if (parsed == null || !parsed.isFinite) return;
+      change(parsed.clamp(min, max).toDouble());
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 10, color: Color(0xffaebbd0)),
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '-$step',
+              onPressed: disabled
+                  ? null
+                  : () => change((safe - step).clamp(min, max).toDouble()),
+              icon: const Icon(Icons.remove, size: 14),
+            ),
+            SizedBox(
+              width: 78,
+              height: 30,
+              child: TextFormField(
+                key: ValueKey('$title:${safe.toStringAsFixed(decimals)}'),
+                initialValue: safe.toStringAsFixed(decimals),
+                enabled: !disabled,
+                textAlign: TextAlign.right,
+                keyboardType: const TextInputType.numberWithOptions(
+                  signed: true,
+                  decimal: true,
+                ),
+                style: const TextStyle(fontSize: 10),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 7,
+                  ),
+                ),
+                onFieldSubmitted: commit,
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '+$step',
+              onPressed: disabled
+                  ? null
+                  : () => change((safe + step).clamp(min, max).toDouble()),
+              icon: const Icon(Icons.add, size: 14),
+            ),
+          ],
+        ),
+        SizedBox(
+          height: 26,
+          child: Slider(
+            value: safe,
+            min: min,
+            max: max,
+            onChanged: disabled ? null : change,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget toggle(String text, bool value, ValueChanged<bool>? change) =>
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
@@ -1109,48 +1190,71 @@ class _StudioState extends State<StudioPage> {
                   'El perfil es por familia/job/sexo: guardarlo afecta a todas las alas '
                   'que usen ese perfil, no solo al modelo actualmente visible.',
                 ),
-                slider(
+                preciseSlider(
                   'Posición X · izquierda / derecha',
                   scene.wingOffsetX,
                   -3,
                   3,
                   (v) => setState(() => scene.wingOffsetX = v),
                 ),
-                slider(
+                preciseSlider(
                   'Posición Y · arriba / abajo',
                   scene.wingOffsetY,
                   -3,
                   3,
                   (v) => setState(() => scene.wingOffsetY = v),
                 ),
-                slider(
+                preciseSlider(
                   'Posición Z · frente / espalda',
                   scene.wingOffsetZ,
                   -3,
                   3,
                   (v) => setState(() => scene.wingOffsetZ = v),
                 ),
-                slider(
+                preciseSlider(
                   'Rotación X',
                   scene.wingRotX,
                   -360,
                   360,
                   (v) => setState(() => scene.wingRotX = v),
                 ),
-                slider(
+                preciseSlider(
                   'Rotación Y',
                   scene.wingRotY,
                   -360,
                   360,
                   (v) => setState(() => scene.wingRotY = v),
                 ),
-                slider(
+                preciseSlider(
                   'Rotación Z',
                   scene.wingRotZ,
                   -360,
                   360,
                   (v) => setState(() => scene.wingRotZ = v),
                 ),
+                if (scene.wingPositionFileAvailable) ...[
+                  if (scene.wingBoneWritable)
+                    preciseSlider(
+                      'Hueso de anclaje WingPosition',
+                      scene.wingBoneIndex.toDouble(),
+                      0,
+                      (scene.wingBoneCount > 0
+                              ? scene.wingBoneCount - 1
+                              : 0)
+                          .toDouble(),
+                      (v) => setState(
+                        () => scene.setWingBoneIndex(v.round()),
+                      ),
+                      step: 1,
+                      decimals: 0,
+                    )
+                  else
+                    note(
+                      'Hueso de anclaje: ${scene.wingBoneIndex}. Este XML no '
+                      'expone un campo de hueso editable; Studio lo conserva '
+                      'sin inventar una escritura que el cliente no lea.',
+                    ),
+                ],
                 Row(
                   children: [
                     Expanded(
@@ -1194,6 +1298,63 @@ class _StudioState extends State<StudioPage> {
                     style: TextStyle(fontSize: 10),
                   ),
                 ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: disabled
+                            ? null
+                            : () => act(() async {
+                                await Clipboard.setData(
+                                  ClipboardData(
+                                    text: const JsonEncoder.withIndent(
+                                      '  ',
+                                    ).convert(scene.wingTransformSnapshot),
+                                  ),
+                                );
+                              }),
+                        icon: const Icon(Icons.copy_all_outlined, size: 15),
+                        label: const Text(
+                          'Copiar transformación',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: disabled
+                            ? null
+                            : () => act(() async {
+                                final data = await Clipboard.getData(
+                                  Clipboard.kTextPlain,
+                                );
+                                final text = data?.text;
+                                if (text == null || text.trim().isEmpty) {
+                                  throw const FormatException(
+                                    'El portapapeles no contiene una transformación.',
+                                  );
+                                }
+                                final raw = jsonDecode(text);
+                                if (raw is! Map) {
+                                  throw const FormatException(
+                                    'La transformación copiada no es un JSON válido.',
+                                  );
+                                }
+                                scene.applyWingTransformSnapshot(
+                                  Map<String, dynamic>.from(raw),
+                                );
+                                setState(() {});
+                              }),
+                        icon: const Icon(Icons.content_paste_go, size: 15),
+                        label: const Text(
+                          'Pegar transformación',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const Divider(height: 20),
                 note(
                   'Transformación de previsualización de Studio: escala y espejo '
@@ -1201,21 +1362,21 @@ class _StudioState extends State<StudioPage> {
                   'eso nunca se escriben al juego hasta identificar un campo nativo '
                   'equivalente.',
                 ),
-                slider(
+                preciseSlider(
                   'Escala X',
                   scene.wingScaleX,
                   .05,
                   5,
                   (v) => setState(() => scene.wingScaleX = v),
                 ),
-                slider(
+                preciseSlider(
                   'Escala Y',
                   scene.wingScaleY,
                   .05,
                   5,
                   (v) => setState(() => scene.wingScaleY = v),
                 ),
-                slider(
+                preciseSlider(
                   'Escala Z',
                   scene.wingScaleZ,
                   .05,
@@ -1242,6 +1403,16 @@ class _StudioState extends State<StudioPage> {
                   disabled
                       ? null
                       : (v) => setState(() => scene.wingMirrorZ = v),
+                ),
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => setState(scene.resetWingPreviewOnlyTransform),
+                  icon: const Icon(Icons.restart_alt, size: 15),
+                  label: const Text(
+                    'Restablecer escala / espejo',
+                    style: TextStyle(fontSize: 10),
+                  ),
                 ),
                 TextButton(
                   onPressed: disabled
@@ -1299,42 +1470,42 @@ class _StudioState extends State<StudioPage> {
                   'no se ha confirmado un archivo DATA equivalente a WingPosition '
                   'para monturas, por lo que no se escribe al juego.',
                 ),
-                slider(
+                preciseSlider(
                   'Asiento X · izquierda / derecha',
                   scene.riderLateral,
                   -3,
                   3,
                   (v) => setState(() => scene.riderLateral = v),
                 ),
-                slider(
+                preciseSlider(
                   'Asiento Y · arriba / abajo',
                   scene.riderHeight,
                   -3,
                   3,
                   (v) => setState(() => scene.riderHeight = v),
                 ),
-                slider(
+                preciseSlider(
                   'Asiento Z · avance / retroceso',
                   scene.riderForward,
                   -3,
                   3,
                   (v) => setState(() => scene.riderForward = v),
                 ),
-                slider(
+                preciseSlider(
                   'Rotación jinete X',
                   scene.riderRotX,
                   -180,
                   180,
                   (v) => setState(() => scene.riderRotX = v),
                 ),
-                slider(
+                preciseSlider(
                   'Rotación jinete Y',
                   scene.riderRotY,
                   -180,
                   180,
                   (v) => setState(() => scene.riderRotY = v),
                 ),
-                slider(
+                preciseSlider(
                   'Rotación jinete Z',
                   scene.riderRotZ,
                   -180,
