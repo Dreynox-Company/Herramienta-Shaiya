@@ -15,7 +15,8 @@ class WtrDocument extends EditDocument {
          profile: 'wtr',
          warnings: const [
            'WTR real: TileSize + dos enteros de cabecera + tabla de texturas fijas de 256 bytes. '
-               'Solo se editan spans conocidos; el recuento estructural queda protegido.',
+               'Solo TileSize y rutas de textura tienen semántica de escritura confirmada; '
+               'los enteros desconocidos y el recuento permanecen protegidos.',
          ],
          parsedBytes: payload.length,
        );
@@ -26,7 +27,10 @@ class WtrDocument extends EditDocument {
     GameTextEncoding encoding,
   ) {
     final parsed = WtrData.parse(input, path);
-    final codec = GameTextCodec(encoding);
+    final effectiveEncoding = encoding == GameTextEncoding.automatic
+        ? GameTextEncoding.windows1252
+        : encoding;
+    final codec = GameTextCodec(effectiveEncoding);
     if (input.length != 16 + parsed.textures.length * 256) {
       throw FormatException(
         '$path: longitud WTR inesperada; Studio no escribirá una variante no autenticada.',
@@ -42,8 +46,16 @@ class WtrDocument extends EditDocument {
         ordinal: 0,
         dynamicSpans: const [
           FieldSpan(FieldSpec('TileSize', 'f32'), 0, 4),
-          FieldSpan(FieldSpec('Unknown2', 'u32'), 4, 4),
-          FieldSpan(FieldSpec('Unknown3', 'i32'), 8, 4),
+          FieldSpan(
+            FieldSpec('Unknown2', 'u32', editable: false),
+            4,
+            4,
+          ),
+          FieldSpan(
+            FieldSpec('Unknown3', 'i32', editable: false),
+            8,
+            4,
+          ),
           FieldSpan(FieldSpec('TextureCount', 'u32', editable: false), 12, 4),
         ],
       ),
