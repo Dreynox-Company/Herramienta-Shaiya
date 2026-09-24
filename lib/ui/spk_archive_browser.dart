@@ -760,6 +760,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   int operationDone = 0;
   int operationTotal = 0;
   String studioBuildLabel = '';
+  Directory? referenceDataDirectory;
 
   SpkArchiveSource get source => widget.source;
 
@@ -1059,6 +1060,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       confirmButtonText: 'Usar DATA como referencia',
     );
     if (folder == null || !mounted) return;
+
+    setState(() => referenceDataDirectory = Directory(folder));
 
     final verify = source.canReadSimpleResources
         ? await showDialog<bool>(
@@ -2825,6 +2828,87 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return null;
   }
 
+  File? _referenceFileFor(SpkRecord record) {
+    final root = referenceDataDirectory;
+    final relative = source.names[record.entryId];
+    if (root == null || relative == null || relative.isEmpty) return null;
+    final segments = relative.replaceAll('\\', '/').split('/');
+    final candidate = p.normalize(p.joinAll([root.path, ...segments]));
+    final normalizedRoot = p.normalize(root.path);
+    if (candidate != normalizedRoot && !p.isWithin(normalizedRoot, candidate)) {
+      return null;
+    }
+    return File(candidate);
+  }
+
+  Future<void> inspectReferenceResource(SpkRecord record) => runAction(() async {
+    final file = _referenceFileFor(record);
+    if (file == null || !await file.exists()) {
+      throw const SpkFailure(
+        'SPK_REFERENCE_FILE_MISSING',
+        'La ruta inferida no existe dentro de la DATA de referencia seleccionada.',
+      );
+    }
+    const maxBytes = 128 * 1024 * 1024;
+    final length = await file.length();
+    if (length > maxBytes) {
+      throw const FormatException(
+        'La copia de referencia supera el límite de inspección de 128 MiB.',
+      );
+    }
+    final bytes = await file.readAsBytes();
+    final format = SpkArchiveSource.detectFormat(bytes);
+    final result = SpkReadResult(record, bytes, format);
+    if (!mounted) return;
+    final candidatePath = source.names[record.entryId]!;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Referencia · ${fileName(record)}'),
+        content: SizedBox(
+          width: 820,
+          height: 620,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xff2a2115),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xff6f542c)),
+                ),
+                child: const Text(
+                  'COPIA DATA DE REFERENCIA · este visor NO afirma que el '
+                  'payload del SPK esté descifrado ni permite escribirlo. '
+                  'Sirve para trabajar visualmente mientras AutoPerfil cierra '
+                  'la clave real del contenedor.',
+                  style: TextStyle(fontSize: 10, color: Color(0xffe1b86e)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                'ID SPK: ${record.idHex} · Formato referencia: $format · '
+                'Bytes: ${bytesLabel(bytes.length)}\n'
+                'SHA-256 referencia: ${sha256.convert(bytes)}\n'
+                'Ruta candidata: $candidatePath',
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
+              ),
+              const Divider(height: 20),
+              Expanded(child: _inspectionPreview(result, candidatePath)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  });
+
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
     if (!source.canReadRecord(record)) {
       throw const SpkFailure(
@@ -3063,6 +3147,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     ? null
                     : source.canReadRecord(record)
                     ? () => inspectResource(record)
+                    : referenceDataDirectory != null &&
+                          source.names[record.entryId] != null
+                    ? () => inspectReferenceResource(record)
                     : captureResourceProfile,
                 child: Container(
                   color: active ? const Color(0xff29384f) : null,
@@ -3248,6 +3335,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.key_outlined, size: 17),
             label: const Text('Desbloquear con AutoPerfil SPK'),
           ),
+          if (referenceDataDirectory != null &&
+              source.names[record.entryId] != null) ...[
+            const SizedBox(height: 7),
+            OutlinedButton.icon(
+              onPressed: busy ? null : () => inspectReferenceResource(record),
+              icon: const Icon(Icons.visibility_outlined, size: 17),
+              label: const Text('Ver copia DATA de referencia'),
+            ),
+          ],
         ] else
           FilledButton.tonalIcon(
             onPressed: busy ? null : () => inspectResource(record),
@@ -3595,6 +3691,39 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy ? null : captureResourceProfile,
                     icon: const Icon(Icons.security_outlined, size: 16),
                     label: const Text('Desbloquear con AutoPerfil'),
+                  ),
+                ],
+              ),
+            ),
+          if (referenceDataDirectory != null)
+            Container(
+              constraints: const BoxConstraints(minHeight: 34),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xff172337),
+                border: Border(bottom: BorderSide(color: Color(0xff365070))),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.visibility_outlined,
+                    size: 16,
+                    color: Color(0xff9dbbdf),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'PREVIEW DE REFERENCIA ACTIVO: doble clic en una ruta '
+                      'candidata para visualizar su archivo de la DATA externa. '
+                      'El SPK sigue fail-closed hasta autenticar sus payloads.',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => setState(() => referenceDataDirectory = null),
+                    child: const Text('Desactivar'),
                   ),
                 ],
               ),
