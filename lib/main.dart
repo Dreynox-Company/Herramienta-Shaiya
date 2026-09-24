@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:file_selector/file_selector.dart';
 import 'core/extra_motion.dart';
 import 'core/equipment_rules.dart';
+import 'core/vehicle_position.dart';
 import 'core/textures.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -32,7 +33,7 @@ import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
-const studioVersion = '0.6.19';
+const studioVersion = '0.6.21';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
