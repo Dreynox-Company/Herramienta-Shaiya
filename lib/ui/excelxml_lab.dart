@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 
 import '../core/excelxml_document.dart';
 import '../core/excelxml_semantics.dart';
+import '../core/xml_tree_document.dart';
 import '../data/library.dart';
+import 'xml_tree_editor.dart';
 
 class _ExcelXmlAuditResult {
   final String path;
@@ -15,6 +17,8 @@ class _ExcelXmlAuditResult {
   final int sheets;
   final int rows;
   final int maxColumns;
+  final String? root;
+  final int elements;
   final int semanticErrors;
   final int semanticWarnings;
   final String? error;
@@ -28,6 +32,8 @@ class _ExcelXmlAuditResult {
     required this.sheets,
     required this.rows,
     required this.maxColumns,
+    this.root,
+    this.elements = 0,
     this.semanticErrors = 0,
     this.semanticWarnings = 0,
     this.error,
@@ -42,6 +48,8 @@ class _ExcelXmlAuditResult {
     'sheets': sheets,
     'rows': rows,
     'maxColumns': maxColumns,
+    if (root != null) 'root': root,
+    'elements': elements,
     'semanticErrors': semanticErrors,
     'semanticWarnings': semanticWarnings,
     if (error != null) 'error': error,
@@ -171,9 +179,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         sourceBytes = bytes;
         document = parsed;
         _refreshSemanticIssues(parsed);
-        rawText =
-            (parsed == null || !parsed.tabular) &&
-                bytes.length <= 2 * 1024 * 1024
+        rawText = parsed == null && bytes.length <= 2 * 1024 * 1024
             ? utf8.decode(bytes, allowMalformed: true)
             : null;
         rawDirty = false;
@@ -307,6 +313,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
             }
           }
           final semantics = auditExcelXmlSemantics(parsed);
+          final customTree = parsed.tabular
+              ? null
+              : XmlTreeDocument.parse(bytes, path);
           results.add(
             _ExcelXmlAuditResult(
               path: path,
@@ -317,6 +326,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               sheets: parsed.sheets.length,
               rows: rows,
               maxColumns: maxColumns,
+              root: customTree?.rootName,
+              elements: customTree?.nodes.length ?? 0,
               semanticErrors: semantics
                   .where(
                     (issue) => issue.severity == ExcelXmlIssueSeverity.error,
@@ -416,12 +427,18 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                         ),
                         subtitle: Text(
                           row.valid
-                              ? '${row.purpose} · ${row.sheets} hojas · '
-                                    '${row.rows} filas · máx. '
-                                    '${row.maxColumns} columnas · '
-                                    '${row.bytes} bytes · '
-                                    '${row.semanticErrors} errores semánticos · '
-                                    '${row.semanticWarnings} avisos'
+                              ? (row.tabular
+                                    ? '${row.purpose} · ${row.sheets} hojas · '
+                                          '${row.rows} filas · máx. '
+                                          '${row.maxColumns} columnas · '
+                                          '${row.bytes} bytes · '
+                                          '${row.semanticErrors} errores '
+                                          'semánticos · '
+                                          '${row.semanticWarnings} avisos'
+                                    : '${row.purpose} · XML estructurado · '
+                                          'raíz <${row.root}> · '
+                                          '${row.elements} nodos · '
+                                          '${row.bytes} bytes')
                               : '${row.purpose} · ${row.error}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -616,87 +633,17 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
     }
 
     if (!document!.tabular) {
-      final editable = rawText != null;
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${selectedPath!.split('/').last} · '
-                    '${excelXmlPurpose(selectedPath!)}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                if (editable)
-                  FilledButton.icon(
-                    onPressed: busy || !rawDirty ? null : saveRawXml,
-                    icon: const Icon(Icons.save_outlined, size: 16),
-                    label: const Text('Guardar XML'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              editable
-                  ? 'XML no tabular · edición de texto validada antes de '
-                        'escribir. Studio no reordena nodos ni inventa campos.'
-                  : 'XML válido no tabular. Vista de solo lectura porque supera '
-                        'el límite de 2 MiB para edición textual segura.',
-              style: const TextStyle(fontSize: 9, color: Color(0xff8fa0b8)),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: editable
-                  ? TextFormField(
-                      key: ValueKey('raw-$revision-$selectedPath'),
-                      initialValue: rawText,
-                      enabled: !busy,
-                      expands: true,
-                      maxLines: null,
-                      minLines: null,
-                      textAlignVertical: TextAlignVertical.top,
-                      style: const TextStyle(
-                        fontFamily: 'Consolas',
-                        fontSize: 10,
-                      ),
-                      decoration: const InputDecoration(
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        rawText = value;
-                        if (!rawDirty) setState(() => rawDirty = true);
-                      },
-                    )
-                  : SingleChildScrollView(
-                      child: SelectableText(
-                        sourceBytes == null
-                            ? ''
-                            : utf8.decode(
-                                sourceBytes!.sublist(
-                                  0,
-                                  sourceBytes!.length
-                                      .clamp(0, 512 * 1024)
-                                      .toInt(),
-                                ),
-                                allowMalformed: true,
-                              ),
-                        style: const TextStyle(
-                          fontFamily: 'Consolas',
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
+      final bytes = sourceBytes;
+      if (bytes == null) {
+        return const Center(
+          child: Text('No hay bytes XML disponibles para el editor.'),
+        );
+      }
+      return XmlTreeEditorPanel(
+        key: ValueKey('xml-tree-$revision-$selectedPath'),
+        library: widget.library,
+        path: selectedPath!,
+        initialBytes: bytes,
       );
     }
     return const SizedBox.shrink();
