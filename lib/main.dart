@@ -1249,6 +1249,155 @@ class _StudioState extends State<StudioPage> {
                       ),
                   ],
                 ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Wing.MON · sonido / efectos / partes',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'WAV/OGG · EFT/3DE · mallas 3DC/3DO · texturas',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    note(
+                      'Edición lossless del mismo registro MO2/MO4. Cada guardado '
+                      'reparsea el MON completo y conserva bandera, altura y cola '
+                      'opaca. Los recursos se seleccionan únicamente desde DATA.',
+                    ),
+                    for (final slot in scene.wingMonSoundSlots) ...[
+                      field<String>(
+                        'wing-mon-sound/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}/$slot',
+                        'Sonido · $slot',
+                        scene.wingMonSoundCandidates,
+                        scene.wingMonSoundCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonSound(slot, p),
+                        detail: (p) => p,
+                        empty: scene.wingMonSound(slot)?.isNotEmpty == true
+                            ? scene.wingMonSound(slot)!
+                            : 'Sin sonido',
+                      ),
+                      if (scene.wingMonSound(slot)?.isNotEmpty == true)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveWingMonSound(slot, ''),
+                                  ),
+                            child: const Text(
+                              'Vaciar sonido',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                    for (final slot in scene.wingMonEffectSlots) ...[
+                      field<String>(
+                        'wing-mon-effect/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}/$slot',
+                        'Efecto · $slot',
+                        scene.wingMonEffectCandidates,
+                        scene.wingMonEffectCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonEffect(slot, p),
+                        detail: (p) => p,
+                        empty: scene.wingMonEffect(slot)?.isNotEmpty == true
+                            ? scene.wingMonEffect(slot)!
+                            : 'Sin efecto',
+                      ),
+                      if (scene.wingMonEffect(slot)?.isNotEmpty == true)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveWingMonEffect(slot, ''),
+                                  ),
+                            child: const Text(
+                              'Vaciar efecto',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                    if (scene.wingMonAttachedEffect != null) ...[
+                      field<String>(
+                        'wing-mon-attached/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}',
+                        'Efecto adjunto MO4',
+                        scene.wingMonEffectCandidates,
+                        scene.wingMonAttachedEffectCandidate,
+                        (p) => p,
+                        baseName,
+                        scene.saveWingMonAttachedEffect,
+                        detail: (p) => p,
+                        empty:
+                            scene.wingMonAttachedEffect?.isNotEmpty == true
+                                ? scene.wingMonAttachedEffect!
+                                : 'Sin efecto adjunto',
+                      ),
+                      if (scene.wingMonAttachedEffect?.isNotEmpty == true)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveWingMonAttachedEffect(''),
+                                  ),
+                            child: const Text(
+                              'Vaciar efecto adjunto',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                    const Divider(height: 18),
+                    for (final part in scene.wingMonParts) ...[
+                      Text(
+                        'Parte ${part.id}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      field<String>(
+                        'wing-mon-mesh/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}/${part.id}',
+                        'Malla · parte ${part.id}',
+                        scene.wingMonMeshCandidates,
+                        scene.wingMonMeshCandidate(part.id),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonPart(part.id, meshPath: p),
+                        detail: (p) => p,
+                        empty: part.mesh,
+                      ),
+                      field<String>(
+                        'wing-mon-texture/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}/${part.id}',
+                        'Textura · parte ${part.id}',
+                        scene.wingMonTextureCandidates,
+                        scene.wingMonTextureCandidate(part.id),
+                        (p) => p,
+                        baseName,
+                        (p) =>
+                            scene.saveWingMonPart(part.id, texturePath: p),
+                        detail: (p) => p,
+                        empty: part.texture,
+                      ),
+                    ],
+                  ],
+                ),
                 note(
                   'ExcelXml/WingPosition.xml · ${scene.wingPositionProfileLabel}. '
                   'La fuente real es SpreadsheetML y expone BONE_IDX + posición '
