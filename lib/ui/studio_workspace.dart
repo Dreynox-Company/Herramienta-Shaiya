@@ -7,7 +7,7 @@ class StudioWorkspace extends StatefulWidget {
   final List<IconData> icons;
   final int selectedTab;
   final ValueChanged<int> onTab;
-  final VoidCallback? onOpenData, onOpenSpk, onOpenEditor, onExportScene;
+  final VoidCallback? onOpenData, onOpenSpk, onOpenEditor, onOpenExcelXml, onExportScene;
   final bool hasLibrary;
   const StudioWorkspace({
     super.key,
@@ -24,6 +24,7 @@ class StudioWorkspace extends StatefulWidget {
     required this.onOpenData,
     this.onOpenSpk,
     this.onOpenEditor,
+    this.onOpenExcelXml,
     this.onExportScene,
     this.hasLibrary = false,
   });
@@ -231,7 +232,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             const Spacer(),
             if (width > 1100)
               const Text(
-                '0.6.20 · SPK V13 + Alas',
+                '0.6.22 · SPK V13 + Flight V3 + ExcelXml',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),
@@ -246,6 +247,13 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                 onPressed: widget.onOpenSpk,
                 icon: const Icon(Icons.folder_zip_outlined, size: 17),
                 label: const Text('SPK', style: TextStyle(fontSize: 12)),
+              ),
+            if (widget.onOpenExcelXml != null)
+              TextButton.icon(
+                key: const ValueKey('open-excelxml'),
+                onPressed: widget.onOpenExcelXml,
+                icon: const Icon(Icons.table_view_outlined, size: 17),
+                label: const Text('XML', style: TextStyle(fontSize: 12)),
               ),
             if (widget.onExportScene != null)
               IconButton(
