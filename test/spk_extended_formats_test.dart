@@ -140,7 +140,8 @@ Uint8List dg() {
   w.vec(-1, -1, -1);
   w.vec(1, 1, 1);
   w.u32(1);
-  w.str('dungeon.dds');
+  // DG texture table uses fixed 256-byte legacy names.
+  w.strFixed('dungeon.dds', 256);
   w.u32(0);
   w.i32(0);
   return w.take();
