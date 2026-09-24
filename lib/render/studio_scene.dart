@@ -2585,6 +2585,47 @@ class StudioScene extends ChangeNotifier {
     );
   }
 
+  Future<void> _playWingCombatEvent(String event) async {
+    final actor = wing;
+    final record = wingRecord;
+    final lib = catalog?.library;
+    if (!wingAutoMotion || actor == null || record == null || lib == null) {
+      return;
+    }
+
+    final slot = switch (event) {
+      'attack' => 'Ataque ${((attackCounter - 1).clamp(0, 999) % 3) + 1}',
+      'death' => 'Caída',
+      'hit' || 'damage' => 'Daño',
+      _ => null,
+    };
+    if (slot == null) return;
+
+    final clip = actor.clips[slot];
+    if (clip != null) {
+      actor.play(clip, repeat: false);
+    }
+
+    final rawSound = record.sounds[slot] ?? '';
+    if (rawSound.isNotEmpty) {
+      final root = directoryName(record.source);
+      final resolved = lib.resolve(
+        rawSound,
+        [
+          '$root/sound',
+          '$root/snd',
+          'sound/wing',
+          'sound',
+          root,
+        ],
+        uniqueFallback: true,
+      );
+      if (resolved != null) {
+        unawaited(pooledSound(resolved));
+      }
+    }
+  }
+
   Future<void> _combatEvent(String who, String event) async {
     try {
       final a = who == 'enemy' ? enemy : character;
@@ -2625,6 +2666,7 @@ class StudioScene extends ChangeNotifier {
               : await firstCompatible(a, candidates);
         }
         if (c != null && a == character) a.play(c, repeat: false);
+        await _playWingCombatEvent(event);
       }
       if (event == 'death') a.idle = null;
       if (event == 'hit') {
