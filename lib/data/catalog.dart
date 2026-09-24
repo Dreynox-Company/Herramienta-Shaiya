@@ -468,7 +468,10 @@ class Catalog {
       bytes,
     );
     vehiclePositionPath = VehiclePositionDocument.canonicalPath;
-    vehiclePositions = VehiclePositionDocument.parse(bytes, vehiclePositionPath!);
+    vehiclePositions = VehiclePositionDocument.parse(
+      bytes,
+      vehiclePositionPath!,
+    );
   }
 
   Future<void> load(void Function(String) progress) async {
