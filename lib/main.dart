@@ -185,8 +185,7 @@ class _StudioState extends State<StudioPage> {
       if (!mounted) return;
       final archetype = refreshed.archetypes
           .where(
-            (a) =>
-                a.id == look?.archetype.id && a.race == look?.archetype.race,
+            (a) => a.id == look?.archetype.id && a.race == look?.archetype.race,
           )
           .firstOrNull;
       scene.catalog = refreshed;
@@ -245,9 +244,7 @@ class _StudioState extends State<StudioPage> {
     scene.clearMovement();
     focus.unfocus();
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => ExcelXmlLabPage(library: library),
-      ),
+      MaterialPageRoute(builder: (_) => ExcelXmlLabPage(library: library)),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();

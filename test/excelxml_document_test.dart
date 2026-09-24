@@ -35,63 +35,60 @@ Uint8List spreadsheet() => Uint8List.fromList(
 );
 
 void main() {
-  test('SpreadsheetML table is detected and edited without flattening metadata', () {
-    final doc = ExcelXmlDocument.parse(
-      spreadsheet(),
-      'excelxml/wingposition.xml',
-    );
-    expect(doc.sheets, hasLength(1));
-    final sheet = doc.sheets.single;
-    expect(sheet.name, 'Wing');
-    expect(sheet.headerRow, 2);
-    expect(sheet.columns.map((c) => c.label), [
-      'FAMILY',
-      'WING_ROT_X',
-      'WING_UP_DOWN',
-    ]);
-    expect(sheet.rows, hasLength(2));
-    expect(sheet.rows.first.value(2), '170');
+  test(
+    'SpreadsheetML table is detected and edited without flattening metadata',
+    () {
+      final doc = ExcelXmlDocument.parse(
+        spreadsheet(),
+        'excelxml/wingposition.xml',
+      );
+      expect(doc.sheets, hasLength(1));
+      final sheet = doc.sheets.single;
+      expect(sheet.name, 'Wing');
+      expect(sheet.headerRow, 2);
+      expect(sheet.columns.map((c) => c.label), [
+        'FAMILY',
+        'WING_ROT_X',
+        'WING_UP_DOWN',
+      ]);
+      expect(sheet.rows, hasLength(2));
+      expect(sheet.rows.first.value(2), '170');
 
-    doc.setCell(0, 0, 2, '182.5');
-    final encoded = doc.encode();
-    doc.validateEncoded(encoded);
-    final xml = utf8.decode(encoded);
-    expect(xml, contains('mso-application'));
-    expect(xml, contains('Style'));
-    expect(xml, contains('keep'));
+      doc.setCell(0, 0, 2, '182.5');
+      final encoded = doc.encode();
+      doc.validateEncoded(encoded);
+      final xml = utf8.decode(encoded);
+      expect(xml, contains('mso-application'));
+      expect(xml, contains('Style'));
+      expect(xml, contains('keep'));
 
-    final reparsed = ExcelXmlDocument.parse(
-      encoded,
-      'excelxml/wingposition.xml',
-    );
-    expect(reparsed.sheets.single.rows.first.value(2), '182.5');
-  });
+      final reparsed = ExcelXmlDocument.parse(
+        encoded,
+        'excelxml/wingposition.xml',
+      );
+      expect(reparsed.sheets.single.rows.first.value(2), '182.5');
+    },
+  );
 
-  test('missing sparse cell is fail-closed instead of inventing XML structure', () {
-    final doc = ExcelXmlDocument.parse(
-      spreadsheet(),
-      'excelxml/test.xml',
-    );
-    expect(doc.sheets.single.rows[1].hasCell(2), isFalse);
-    expect(
-      () => doc.setCell(0, 1, 2, '123'),
-      throwsA(isA<FormatException>()),
-    );
-  });
+  test(
+    'missing sparse cell is fail-closed instead of inventing XML structure',
+    () {
+      final doc = ExcelXmlDocument.parse(spreadsheet(), 'excelxml/test.xml');
+      expect(doc.sheets.single.rows[1].hasCell(2), isFalse);
+      expect(
+        () => doc.setCell(0, 1, 2, '123'),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
 
   test('purpose catalogue classifies high-value Studio tables', () {
-    expect(
-      excelXmlPurpose('excelxml/wingposition.xml'),
-      contains('Alas'),
-    );
+    expect(excelXmlPurpose('excelxml/wingposition.xml'), contains('Alas'));
     expect(
       excelXmlPurpose('excelxml/ymwatershaderparams.xml'),
       contains('Mundo'),
     );
-    expect(
-      excelXmlPurpose('excelxml/mainquest.xml'),
-      contains('Quests'),
-    );
+    expect(excelXmlPurpose('excelxml/mainquest.xml'), contains('Quests'));
     expect(
       excelXmlPurpose('excelxml/MonDeathItemWorldDrop.xml'),
       contains('Monstruos'),

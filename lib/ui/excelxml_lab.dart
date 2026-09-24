@@ -28,20 +28,21 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   int revision = 0;
 
   List<String> get paths {
-    final values = widget.library.files.keys
-        .where(
-          (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
-        )
-        .where(
-          (path) =>
-              filter.isEmpty ||
-              path.toLowerCase().contains(filter.toLowerCase()) ||
-              excelXmlPurpose(path).toLowerCase().contains(
-                filter.toLowerCase(),
-              ),
-        )
-        .toList()
-      ..sort();
+    final values =
+        widget.library.files.keys
+            .where(
+              (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
+            )
+            .where(
+              (path) =>
+                  filter.isEmpty ||
+                  path.toLowerCase().contains(filter.toLowerCase()) ||
+                  excelXmlPurpose(
+                    path,
+                  ).toLowerCase().contains(filter.toLowerCase()),
+            )
+            .toList()
+          ..sort();
     return values;
   }
 
@@ -179,10 +180,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   Widget emptyPanel() {
     if (busy) {
       return const Center(
-        child: SizedBox(
-          width: 260,
-          child: LinearProgressIndicator(),
-        ),
+        child: SizedBox(width: 260, child: LinearProgressIndicator()),
       );
     }
     if (selectedPath == null) {
@@ -433,12 +431,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               ),
               onChanged: row.hasCell(column.index)
                   ? (value) {
-                      doc.setCell(
-                        sheetIndex,
-                        rowIndex,
-                        column.index,
-                        value,
-                      );
+                      doc.setCell(sheetIndex, rowIndex, column.index, value);
                     }
                   : null,
             ),

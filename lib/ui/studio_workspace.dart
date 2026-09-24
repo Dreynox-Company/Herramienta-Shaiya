@@ -7,7 +7,11 @@ class StudioWorkspace extends StatefulWidget {
   final List<IconData> icons;
   final int selectedTab;
   final ValueChanged<int> onTab;
-  final VoidCallback? onOpenData, onOpenSpk, onOpenEditor, onOpenExcelXml, onExportScene;
+  final VoidCallback? onOpenData,
+      onOpenSpk,
+      onOpenEditor,
+      onOpenExcelXml,
+      onExportScene;
   final bool hasLibrary;
   const StudioWorkspace({
     super.key,

@@ -87,21 +87,13 @@ void main() {
 
   test('MO4 edits sound effect attached and model resources losslessly', () {
     final original = fixture('MO4');
-    final doc = EditableMonDocument.parse(
-      original,
-      'Character/Wing/Wing.MON',
-    );
+    final doc = EditableMonDocument.parse(original, 'Character/Wing/Wing.MON');
     final beforeTail = Uint8List.fromList(doc.records.single.tailRaw);
 
     doc.setSound(0, 'Ataque 1', 'custom_attack.wav');
     doc.setEffect(0, 'Ataque 2', 'custom_hit.eft');
     doc.setAttachedEffect(0, 'wing_aura.3de');
-    doc.setPart(
-      0,
-      0,
-      mesh: 'wing_new.3DC',
-      texture: 'wing_new.DDS',
-    );
+    doc.setPart(0, 0, mesh: 'wing_new.3DC', texture: 'wing_new.DDS');
 
     final encoded = doc.encode();
     doc.validateEncoded(encoded);
@@ -119,10 +111,7 @@ void main() {
     );
     expect(reparsed.records.single.attached!.value, 'wing_aura.3de');
     expect(reparsed.records.single.parts.single.mesh.value, 'wing_new.3DC');
-    expect(
-      reparsed.records.single.parts.single.texture.value,
-      'wing_new.DDS',
-    );
+    expect(reparsed.records.single.parts.single.texture.value, 'wing_new.DDS');
     expect(reparsed.records.single.tailRaw, orderedEquals(beforeTail));
   });
 
@@ -143,10 +132,7 @@ void main() {
     expect(parsed.records.single.sounds['Ataque 1']!.value, isEmpty);
     expect(parsed.records.single.effects['Ataque 1']!.value, isEmpty);
     expect(parsed.records.single.attached!.value, isEmpty);
-    expect(
-      () => doc.setAnimation(0, 'Ataque 1', ''),
-      throwsFormatException,
-    );
+    expect(() => doc.setAnimation(0, 'Ataque 1', ''), throwsFormatException);
   });
 
   test('MON editor rejects unsafe or non-ANI replacement paths', () {
