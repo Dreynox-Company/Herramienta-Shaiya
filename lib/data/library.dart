@@ -996,6 +996,69 @@ class Library {
     );
   }
 
+  Future<void> writeResource(
+    String path,
+    Uint8List bytes, {
+    bool keepBackup = true,
+  }) async {
+    final canonical = canon(path);
+    final id = files[canonical];
+    if (id == null) throw FormatException('Recurso ausente: $path');
+
+    if (spk != null) {
+      await writeSpkOverlay({canonical: bytes});
+      revision++;
+      return;
+    }
+    if (archive != null) {
+      throw const FormatException(
+        'El par SAH/SAF está montado en solo lectura. Extrae o usa DATA.SPK con overlay.',
+      );
+    }
+    if (saf) {
+      throw const FormatException(
+        'La carpeta DATA de Android está montada en solo lectura.',
+      );
+    }
+
+    final target = File(id);
+    if (!await target.exists()) {
+      throw FormatException('Recurso local ausente: $path');
+    }
+    if (keepBackup) {
+      final backup = File('$id.shaiya-studio.bak');
+      if (!await backup.exists()) {
+        await target.copy(backup.path);
+      }
+    }
+
+    final temp = File('$id.shaiya-studio.tmp');
+    await temp.writeAsBytes(bytes, flush: true);
+    final expected = sha256.convert(bytes).toString();
+    final staged = sha256.convert(await temp.readAsBytes()).toString();
+    if (staged != expected) {
+      await temp.delete();
+      throw FormatException('La verificación previa de escritura falló: $path');
+    }
+
+    try {
+      if (await target.exists()) await target.delete();
+      await temp.rename(target.path);
+      final actual = sha256.convert(await target.readAsBytes()).toString();
+      if (actual != expected) {
+        throw FormatException('La verificación posterior de escritura falló: $path');
+      }
+      revision++;
+    } catch (_) {
+      if (await temp.exists()) await temp.delete();
+      final backup = File('$id.shaiya-studio.bak');
+      if (!await target.exists() && await backup.exists()) {
+        await backup.copy(target.path);
+      }
+      rethrow;
+    }
+  }
+
   Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
     final canonical = canon(path);
     final id = files[canonical];
