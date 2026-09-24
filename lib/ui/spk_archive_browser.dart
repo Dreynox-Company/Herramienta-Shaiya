@@ -2841,6 +2841,56 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return File(candidate);
   }
 
+  Future<Uint8List?> _matchingReferenceTexturePng(
+    String meshPath,
+    String meshFormat,
+  ) async {
+    final root = referenceDataDirectory;
+    if (root == null || (meshFormat != '3DC' && meshFormat != '3DO')) {
+      return null;
+    }
+    final normalized = meshPath.replaceAll('\\', '/');
+    final dot = normalized.lastIndexOf('.');
+    if (dot < 0) return null;
+    final stem = normalized.substring(0, dot);
+    final stems = <String>{
+      stem,
+      if (normalized.toLowerCase().contains('/3dc/'))
+        stem.replaceFirst(RegExp(r'/3dc/', caseSensitive: false), '/DDS/'),
+      if (normalized.toLowerCase().contains('/3do/'))
+        stem.replaceFirst(RegExp(r'/3do/', caseSensitive: false), '/DDS/'),
+    };
+    final candidates = <String>[
+      for (final value in stems) ...['$value.dds', '$value.tga'],
+    ];
+
+    for (final relative in candidates) {
+      final file = File(
+        p.normalize(p.joinAll([root.path, ...relative.split('/')])),
+      );
+      if (!await file.exists()) continue;
+      try {
+        if (await file.length() > 64 * 1024 * 1024) continue;
+        final bytes = await file.readAsBytes();
+        final format = SpkArchiveSource.detectFormat(bytes);
+        if (!const {
+          'DDS',
+          'PNG',
+          'BMP',
+          'JPEG',
+          'GIF',
+          'TGA',
+        }.contains(format)) {
+          continue;
+        }
+        return Pixels.decode(bytes, relative).png();
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
   Future<void> inspectReferenceResource(
     SpkRecord record,
   ) => runAction(() async {
@@ -2863,6 +2913,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     final result = SpkReadResult(record, bytes, format);
     if (!mounted) return;
     final candidatePath = source.names[record.entryId]!;
+    final meshTexturePng = await _matchingReferenceTexturePng(
+      candidatePath,
+      format,
+    );
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -2897,7 +2952,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                 style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
               ),
               const Divider(height: 20),
-              Expanded(child: _inspectionPreview(result, candidatePath)),
+              Expanded(
+                child: _inspectionPreview(
+                  result,
+                  candidatePath,
+                  meshTexturePng: meshTexturePng,
+                ),
+              ),
             ],
           ),
         ),
