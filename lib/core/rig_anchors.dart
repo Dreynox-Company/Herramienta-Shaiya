@@ -156,15 +156,19 @@ v.Matrix4 seatedTransform(
   double scaleX = 1,
   double scaleY = 1,
   double scaleZ = 1,
-}) =>
-    v.Matrix4.compose(saddle, rotation, v.Vector3.all(1)) *
-    v.Matrix4.diagonal3Values(scaleX, scaleY, scaleZ) *
-    v.Matrix4.rotationX(rotX * math.pi / 180) *
-    v.Matrix4.rotationY(rotY * math.pi / 180) *
-    v.Matrix4.rotationZ(rotZ * math.pi / 180) *
-    (v.Matrix4.identity()
-      ..translateByVector3(v.Vector3(lateral, height, forward))) *
-    (v.Matrix4.identity()..translateByVector3(-pelvis));
+}) {
+  // Position calibration is expressed in the same model/world convention as
+  // the animated saddle and must not be rotated by mount pitch/roll. Rotation
+  // and scale are then applied around the rider pelvis, so changing them never
+  // drifts the pelvis away from the calibrated seat point.
+  final target = saddle + v.Vector3(lateral, height, forward);
+  return v.Matrix4.compose(target, rotation, v.Vector3.all(1)) *
+      v.Matrix4.rotationX(rotX * math.pi / 180) *
+      v.Matrix4.rotationY(rotY * math.pi / 180) *
+      v.Matrix4.rotationZ(rotZ * math.pi / 180) *
+      v.Matrix4.diagonal3Values(scaleX, scaleY, scaleZ) *
+      (v.Matrix4.identity()..translateByVector3(-pelvis));
+}
 
 /// Restrict the back anchor to ancestors of the actual head. Arms are not a
 /// valid back socket even when their height is close to the desired value.
