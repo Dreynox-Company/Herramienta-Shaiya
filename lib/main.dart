@@ -29,13 +29,14 @@ import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
 import 'ui/excelxml_lab.dart';
+import 'ui/world_authoring.dart';
 import 'ui/spk_archive_browser.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
-const studioVersion = '0.6.22';
+const studioVersion = '0.6.23';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -247,6 +248,24 @@ class _StudioState extends State<StudioPage> {
       MaterialPageRoute(
         builder: (_) =>
             ExcelXmlLabPage(library: library, initialPath: initialPath),
+      ),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openWorldAuthoring({String? initialPath}) async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WorldAuthoringPage(
+          library: library,
+          initialPath: initialPath,
+        ),
       ),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
@@ -2371,6 +2390,19 @@ class _StudioState extends State<StudioPage> {
               note(
                 'Escenario completo · ${scene.game.loaded?.objectCount ?? 0} objetos · ${scene.game.loaded?.triangleCount ?? 0} triángulos. Recursos pendientes: ${scene.game.loaded?.missingObjects ?? 0}. La densidad del terreno depende del nivel de detalle.',
               ),
+              if (catalog!.library.files.keys.any(
+                (path) =>
+                    path.endsWith('.wtr') || path.endsWith('.svmap'),
+              ))
+                OutlinedButton.icon(
+                  onPressed: disabled ? null : () => openWorldAuthoring(),
+                  icon: const Icon(Icons.public_outlined, size: 16),
+                  label: const Text(
+                    'Editor WTR / SVMAP',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+              const SizedBox(height: 4),
               if (catalog!.library.files.containsKey(
                 'excelxml/ymwatershaderparams.xml',
               ))
