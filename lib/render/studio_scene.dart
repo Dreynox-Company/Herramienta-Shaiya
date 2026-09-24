@@ -194,6 +194,7 @@ class StudioScene extends ChangeNotifier {
   ExtraMotionLibrary? extraMotions;
   FlightV3Bundle? flightV3;
   final FlightTransition flightState = FlightTransition();
+  ClipData? _flightBodyTransition;
   bool flightEnabled = false,
       wingAutoMotion = true,
       headTracking = true,
@@ -1331,6 +1332,7 @@ class StudioScene extends ChangeNotifier {
 
     character?.dispose();
     character = null;
+    _flightBodyTransition = null;
     appearance = null;
 
     weapon?.dispose();
@@ -2321,7 +2323,10 @@ class StudioScene extends ChangeNotifier {
         : null;
     setFlightEnabled(enabled);
     if (v3Transition != null && character != null) {
+      _flightBodyTransition = v3Transition.clip;
       character!.play(v3Transition.clip, repeat: false);
+    } else {
+      _flightBodyTransition = null;
     }
     _syncWingMotion(
       walkX.abs() + walkZ.abs() > 1e-8 || game.destination != null,
@@ -2361,9 +2366,21 @@ class StudioScene extends ChangeNotifier {
     game.destinationRing?.visible = false;
   }
 
+  bool get flightBodyTransitionActive {
+    final a = character;
+    final transition = _flightBodyTransition;
+    return a != null &&
+        transition != null &&
+        identical(a.clip, transition) &&
+        !a.loop &&
+        a.playing &&
+        a.time < transition.duration;
+  }
+
   bool get sceneCombatLocked {
     final a = character;
     return busy ||
+        flightBodyTransitionActive ||
         combat.playerHealth <= 0 ||
         (combat.active &&
             a != null &&
@@ -2415,6 +2432,29 @@ class StudioScene extends ChangeNotifier {
       }
       return false;
     }
+    if (flying && flightV3Compatible && !flightBodyTransitionActive) {
+      final shielded = shieldRecord != null;
+      final fromHover = identical(a.clip, a.hover);
+      final fromFlight = identical(a.clip, a.flight);
+      final toFlight = identical(desired, a.flight);
+      final toHover = identical(desired, a.hover);
+      final id = fromHover && toFlight
+          ? (shielded
+                ? 'V3_HOVER_TO_FLIGHT_SHIELD'
+                : 'V3_HOVER_TO_FLIGHT_NEUTRAL')
+          : fromFlight && toHover
+          ? (shielded
+                ? 'V3_FLIGHT_TO_HOVER_SHIELD'
+                : 'V3_FLIGHT_TO_HOVER_NEUTRAL')
+          : null;
+      final airTransition = id == null ? null : flightV3?.transitions[id];
+      if (airTransition != null) {
+        _flightBodyTransition = airTransition.clip;
+        a.play(airTransition.clip, repeat: false);
+        return true;
+      }
+    }
+    _flightBodyTransition = null;
     a.play(desired);
     if (vehicle != null) {
       final key = mode == GroundMotion.idle
