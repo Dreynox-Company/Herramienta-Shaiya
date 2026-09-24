@@ -1,4 +1,4 @@
-# Shaiya Studio 0.6.20 — SPK V13 + alas
+# Shaiya Studio 0.6.22 — SPK V13 + alas + Flight V3 + ExcelXml
 
 ## Alcance
 
@@ -130,12 +130,12 @@ y no se deduce solo porque el visor se vea correcto.
 
 ## Gate de rama
 
-La rama 0.6.20 se normaliza con `dart format` antes de exigir analyze, regresión
+La rama 0.6.22 se normaliza con `dart format` antes de exigir analyze, regresión
 completa, integración nativa y Windows Release. Un fallo de formato no debe
 ocultar errores reales de compilación.
 
 
-## Estado del gate 0.6.20
+## Estado del gate 0.6.22
 
 Los parsers trasladados desde el cliente Flutter se validan primero con fixtures
 sintéticos y luego con la integración Windows de Studio. La compatibilidad con
@@ -145,7 +145,7 @@ reales; una detección de formato no sustituye esa evidencia.
 ## Preview de DATA externa mientras el SPK está bloqueado
 
 Para evitar que el explorador sea solo un listado inútil mientras falta la
-clave de payloads, 0.6.20 permite seleccionar una carpeta DATA de referencia.
+clave de payloads, 0.6.22 permite seleccionar una carpeta DATA de referencia.
 Las rutas candidatas pueden abrirse con doble clic y mostrarse con el mismo
 visor de Studio; 3DC/3DO intentan además resolver su DDS/TGA homóloga.
 
