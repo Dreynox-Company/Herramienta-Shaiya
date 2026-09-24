@@ -57,6 +57,8 @@ class FlightV3Bundle {
   static const int maxEntries = 512;
   static const canonicalSourceSha256 =
       '7f720a9e339d96a6e47cdce11094ecb64663c2f80f102de179f76e7f0b2c8a44';
+  static const canonicalRuntimeSha256 =
+      '6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba';
   static const requiredTransitionIds = <String>{
     'V3_TAKEOFF_NORMAL_NEUTRAL',
     'V3_LAND_NORMAL_NEUTRAL',
@@ -140,10 +142,15 @@ class FlightV3Bundle {
     return true;
   }
 
-  static FlightV3Bundle decode(Uint8List bytes) {
+  static FlightV3Bundle decode(
+    Uint8List bytes, {
+    bool allowSyntheticRuntime = false,
+  }) {
     if (bytes.isEmpty || bytes.length > maxZipBytes) {
       throw const FormatException('Paquete Flight V3 fuera de límite.');
     }
+
+    final archiveSha256 = sha256.convert(bytes).toString().toLowerCase();
 
     final archive = ZipDecoder().decodeBytes(bytes, verify: true);
     if (archive.length > maxEntries) {
@@ -247,6 +254,13 @@ class FlightV3Bundle {
           sourceSha != canonicalSourceSha256) {
         throw const FormatException(
           'Flight V3 Runtime no coincide con el paquete V3 canónico auditado.',
+        );
+      }
+      if (!allowSyntheticRuntime &&
+          archiveSha256 != canonicalRuntimeSha256) {
+        throw FormatException(
+          'Flight V3 Runtime: el ZIP no coincide con el runtime auditado '
+          '($canonicalRuntimeSha256). SHA recibido: $archiveSha256.',
         );
       }
       final tracked = files.keys.where(
@@ -452,6 +466,10 @@ class FlightV3Bundle {
             ?.toString()
             .toLowerCase(),
         'runtimeFiles': (runtimeManifest?['files'] as num?)?.toInt(),
+        'archiveSha256': archiveSha256,
+        'canonicalPackage':
+            archiveSha256 == canonicalSourceSha256 ||
+            archiveSha256 == canonicalRuntimeSha256,
       }),
       characterMap: Map.unmodifiable(characterMap),
     );
