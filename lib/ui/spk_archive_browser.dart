@@ -2841,7 +2841,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     return File(candidate);
   }
 
-  Future<void> inspectReferenceResource(SpkRecord record) => runAction(() async {
+  Future<void> inspectReferenceResource(
+    SpkRecord record,
+  ) => runAction(() async {
     final file = _referenceFileFor(record);
     if (file == null || !await file.exists()) {
       throw const SpkFailure(
