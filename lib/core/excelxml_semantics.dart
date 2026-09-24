@@ -177,6 +177,33 @@ void _numberRange(
   }
 }
 
+void _numberRangeIfPresent(
+  List<ExcelXmlSemanticIssue> out,
+  ExcelXmlSheet sheet,
+  int sheetIndex,
+  int rowIndex,
+  int? column,
+  String label,
+  double min,
+  double max, {
+  ExcelXmlIssueSeverity severity = ExcelXmlIssueSeverity.error,
+}) {
+  if (column == null) return;
+  final raw = sheet.rows[rowIndex].value(column).trim();
+  if (raw.isEmpty) return;
+  _numberRange(
+    out,
+    sheet,
+    sheetIndex,
+    rowIndex,
+    column,
+    label,
+    min,
+    max,
+    severity: severity,
+  );
+}
+
 void _finiteNumberError(
   List<ExcelXmlSemanticIssue> out,
   ExcelXmlSheet sheet,
@@ -706,11 +733,15 @@ List<ExcelXmlSemanticIssue> _fontStyleSet(ExcelXmlDocument document) {
         'textcolor_r',
         'textcolor_g',
         'textcolor_b',
+      ]) {
+        _numberRange(out, sheet, s, r, c[name], name, 0, 255);
+      }
+      for (final name in const [
         'textstrokecolor_r',
         'textstrokecolor_g',
         'textstrokecolor_b',
       ]) {
-        _numberRange(out, sheet, s, r, c[name], name, 0, 255);
+        _numberRangeIfPresent(out, sheet, s, r, c[name], name, 0, 255);
       }
     }
     _duplicateKeys(out, sheet, s, [index], label: 'Index');
