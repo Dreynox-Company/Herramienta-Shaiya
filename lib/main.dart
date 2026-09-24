@@ -1723,6 +1723,83 @@ class _StudioState extends State<StudioPage> {
                       ),
                   ],
                 ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Vehicle.MON · sonido / efectos',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'WAV/OGG y EFT/3DE nativos de la montura',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    for (final slot in scene.mountMonSoundSlots) ...[
+                      field<String>(
+                        'mount-mon-sound/${scene.mountRecord!.source}/'
+                        '${scene.mountRecord!.id}/$slot',
+                        'Sonido · $slot',
+                        scene.mountMonSoundCandidates,
+                        scene.mountMonSoundCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveMountMonSound(slot, p),
+                        detail: (p) => p,
+                        empty: scene.mountMonSound(slot)?.isNotEmpty == true
+                            ? scene.mountMonSound(slot)!
+                            : 'Sin sonido',
+                      ),
+                      if (scene.mountMonSound(slot)?.isNotEmpty == true)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveMountMonSound(slot, ''),
+                                  ),
+                            child: const Text(
+                              'Vaciar sonido',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                    for (final slot in scene.mountMonEffectSlots) ...[
+                      field<String>(
+                        'mount-mon-effect/${scene.mountRecord!.source}/'
+                        '${scene.mountRecord!.id}/$slot',
+                        'Efecto · $slot',
+                        scene.mountMonEffectCandidates,
+                        scene.mountMonEffectCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveMountMonEffect(slot, p),
+                        detail: (p) => p,
+                        empty: scene.mountMonEffect(slot)?.isNotEmpty == true
+                            ? scene.mountMonEffect(slot)!
+                            : 'Sin efecto',
+                      ),
+                      if (scene.mountMonEffect(slot)?.isNotEmpty == true)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveMountMonEffect(slot, ''),
+                                  ),
+                            child: const Text(
+                              'Vaciar efecto',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
                 note(
                   'Studio Bridge ps0032 · ${scene.activeVehiclePositionSection}. '
                   'El game.exe conserva primero su cálculo nativo de hueso/asiento '
