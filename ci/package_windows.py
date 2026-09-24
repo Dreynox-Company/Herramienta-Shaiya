@@ -7,6 +7,7 @@ FLIGHT_RUNTIME_SHA256='6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e70342
 REAL_INDEX_SHA256='a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f'
 WING_POSITION_SHA256='8a2c376c898bb025550b5fe34b92a40dbbbb9e39063619cfee4756006908cd03'
 WING_MON_SHA256='5fb05afe456e158f4343a904d6192efe427b9c764a058bd6be6afc688a3da94b'
+PS0032_GAME_SHA256='509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d'
 VEHICLE_MON_SHA256={
     'Hu':'b280b941076eb7067ed8001fce3b82d12f87eb9eff42778b6a2fd90b51ec7aab',
     'El':'a2ea784c162d11186e49cc4ba82086e02181b33bb0e22bde21a18f14cee85940',
@@ -66,10 +67,15 @@ def load_real_acceptance():
         vehicle.get('monExactInstall') is True and
         real_vehicle_hashes
     )
+    ps0032_game_ok=game_sha==PS0032_GAME_SHA256
     bridge_ok=(
         vehicle.get('bridgeGameExe') is True and
-        _sha256_text(game_sha)
+        ps0032_game_ok
     )
+    wing_position_ok=wing_position_ok and ps0032_game_ok
+    wing_mon_ok=wing_mon_ok and ps0032_game_ok
+    vehicle_mon_ok=vehicle_mon_ok and ps0032_game_ok
+    spk_game_sha=str(spk.get('gameExeSha256') or '').lower()
     spk_index_ok=str(spk.get('indexSha256') or '').lower()==REAL_INDEX_SHA256
     validated_resources=spk.get('validatedResources')
     failures=spk.get('failures')
@@ -94,7 +100,12 @@ def load_real_acceptance():
         'vehicleBridgeGameExe':bridge_ok,
         'spkFullAuditComplete':spk_audit_ok,
         'spkRepackReopened':spk_audit_ok and spk.get('repackReopened') is True,
-        'spkGameExeAccepted':spk_audit_ok and spk.get('gameExeAccepted') is True,
+        'spkGameExeAccepted':(
+            spk_audit_ok and
+            spk.get('gameExeAccepted') is True and
+            _sha256_text(spk_game_sha)
+        ),
+        'spkGameExeSha256':spk_game_sha or None,
     }
 
 def install_flight_runtime(release):
@@ -215,6 +226,7 @@ def main():
             'fullRealAuditComplete':real_acceptance['spkFullAuditComplete'],
             'realRepackReopened':real_acceptance['spkRepackReopened'],
             'gameExeAccepted':real_acceptance['spkGameExeAccepted'],
+            'gameExeSha256':real_acceptance.get('spkGameExeSha256'),
         },
         'realDataQa':{
             'evidenceSource':real_acceptance['source'],
