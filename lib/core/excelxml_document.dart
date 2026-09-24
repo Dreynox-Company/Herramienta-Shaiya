@@ -104,7 +104,11 @@ class ExcelXmlDocument {
       final parsedRows = <Map<int, XmlElement>>[
         for (final row in rows) _dataCells(row),
       ];
-      final header = _headerIndex(parsedRows);
+      final header = _headerIndex(
+        parsedRows,
+        path: path,
+        sheetName: name,
+      );
       if (header < 0) continue;
       final headerCells = parsedRows[header];
       final maxColumn = parsedRows.fold<int>(
@@ -261,7 +265,29 @@ class ExcelXmlDocument {
     return cells;
   }
 
-  static int _headerIndex(List<Map<int, XmlElement>> rows) {
+  static int _headerIndex(
+    List<Map<int, XmlElement>> rows, {
+    required String path,
+    required String sheetName,
+  }) {
+    final file = path.replaceAll('\\', '/').split('/').last.toLowerCase();
+
+    // WingExpItem carries a human-facing title in row 1 and the actual machine
+    // column name ItemID in row 2. Prefer the explicit field name so semantic
+    // validation and editing target the real data column.
+    if (file == 'wingexpitem.xml') {
+      final limit = rows.length < 8 ? rows.length : 8;
+      for (var i = 0; i < limit; i++) {
+        final values = rows[i].values
+            .map((element) => element.innerText.trim().toLowerCase())
+            .toList(growable: false);
+        if (values.contains('itemid')) return i;
+      }
+    }
+
+    // The sheet name is intentionally accepted for future source-confirmed
+    // multi-row headers. Unknown workbooks still use the generic heuristic.
+    final _ = sheetName;
     var bestIndex = -1;
     var bestScore = -1;
     final limit = rows.length < 32 ? rows.length : 32;
