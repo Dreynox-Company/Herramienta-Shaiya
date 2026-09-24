@@ -27,10 +27,7 @@ class WingSwapRule {
   final int oldWingItem;
   final List<WingSwapReward> rewards;
 
-  const WingSwapRule({
-    required this.oldWingItem,
-    required this.rewards,
-  });
+  const WingSwapRule({required this.oldWingItem, required this.rewards});
 }
 
 class WingSystemsCatalog {
@@ -76,14 +73,13 @@ class WingSystemsCatalog {
       swaps.where((rule) => rule.oldWingItem == itemId).firstOrNull;
 
   static List<WingDecomposeRule> _parseDecompose(Uint8List bytes) {
-    final doc = ExcelXmlDocument.parse(
-      bytes,
-      'excelxml/wingdecompose.xml',
-    );
-    final sheet = _sheet(
-      doc,
-      const {'WINGID', 'GRADE', 'OLDWINGITEM', 'MAXLEVEL'},
-    );
+    final doc = ExcelXmlDocument.parse(bytes, 'excelxml/wingdecompose.xml');
+    final sheet = _sheet(doc, const {
+      'WINGID',
+      'GRADE',
+      'OLDWINGITEM',
+      'MAXLEVEL',
+    });
     final columns = _columns(sheet);
     final out = <WingDecomposeRule>[];
     final seen = <String>{};
@@ -92,10 +88,7 @@ class WingSystemsCatalog {
       final grade = _requiredInt(row, columns, 'GRADE');
       final oldWingItem = _requiredInt(row, columns, 'OLDWINGITEM');
       final maxLevel = _requiredInt(row, columns, 'MAXLEVEL');
-      if (wingId <= 0 ||
-          grade < 0 ||
-          oldWingItem <= 0 ||
-          maxLevel <= 0) {
+      if (wingId <= 0 || grade < 0 || oldWingItem <= 0 || maxLevel <= 0) {
         throw const FormatException(
           'WingDecompose.xml contiene una regla fuera de rango.',
         );
@@ -136,7 +129,9 @@ class WingSystemsCatalog {
         );
       }
       if (!seen.add(item)) {
-        throw FormatException('WingExpItem.xml contiene ItemID duplicado $item.');
+        throw FormatException(
+          'WingExpItem.xml contiene ItemID duplicado $item.',
+        );
       }
       out.add(item);
     }
@@ -146,18 +141,15 @@ class WingSystemsCatalog {
 
   static List<WingSwapRule> _parseSwap(Uint8List bytes) {
     final doc = ExcelXmlDocument.parse(bytes, 'excelxml/wingswap.xml');
-    final sheet = _sheet(
-      doc,
-      const {
-        'OLDWINGITEM',
-        'EXCHANGEITEM1',
-        'COUNT1',
-        'EXCHANGEITEM2',
-        'COUNT2',
-        'EXCHANGEITEM3',
-        'COUNT3',
-      },
-    );
+    final sheet = _sheet(doc, const {
+      'OLDWINGITEM',
+      'EXCHANGEITEM1',
+      'COUNT1',
+      'EXCHANGEITEM2',
+      'COUNT2',
+      'EXCHANGEITEM3',
+      'COUNT3',
+    });
     final columns = _columns(sheet);
     final out = <WingSwapRule>[];
     final seen = <int>{};
@@ -181,20 +173,14 @@ class WingSystemsCatalog {
         rewards.add(WingSwapReward(item, count));
       }
       out.add(
-        WingSwapRule(
-          oldWingItem: old,
-          rewards: List.unmodifiable(rewards),
-        ),
+        WingSwapRule(oldWingItem: old, rewards: List.unmodifiable(rewards)),
       );
     }
     out.sort((a, b) => a.oldWingItem.compareTo(b.oldWingItem));
     return out;
   }
 
-  static ExcelXmlSheet _sheet(
-    ExcelXmlDocument document,
-    Set<String> required,
-  ) {
+  static ExcelXmlSheet _sheet(ExcelXmlDocument document, Set<String> required) {
     for (final sheet in document.sheets) {
       final labels = {
         for (final column in sheet.columns) column.label.trim().toUpperCase(),

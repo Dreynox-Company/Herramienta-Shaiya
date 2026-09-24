@@ -256,8 +256,7 @@ class FlightV3Bundle {
           'Flight V3 Runtime no coincide con el paquete V3 canónico auditado.',
         );
       }
-      if (!allowSyntheticRuntime &&
-          archiveSha256 != canonicalRuntimeSha256) {
+      if (!allowSyntheticRuntime && archiveSha256 != canonicalRuntimeSha256) {
         throw FormatException(
           'Flight V3 Runtime: el ZIP no coincide con el runtime auditado '
           '($canonicalRuntimeSha256). SHA recibido: $archiveSha256.',

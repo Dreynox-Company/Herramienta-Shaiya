@@ -27,45 +27,48 @@ Uint8List sheet(List<List<String>> rows) {
 }
 
 void main() {
-  test('wing native system tables are correlated without inventing semantics', () {
-    final catalog = WingSystemsCatalog.parse(
-      decomposeBytes: sheet([
-        ['WingID', 'Grade', 'OldWingItem', 'MaxLevel'],
-        ['1', '0', '121017', '20'],
-        ['1', '1', '121018', '40'],
-        ['2', '0', '121028', '20'],
-      ]),
-      expBytes: sheet([
-        ['ItemID'],
-        ['125001'],
-        ['125002'],
-      ]),
-      swapBytes: sheet([
-        [
-          'OldWingItem',
-          'ExchangeItem1',
-          'Count1',
-          'ExchangeItem2',
-          'Count2',
-          'ExchangeItem3',
-          'Count3',
-        ],
-        ['121017', '124001', '6', '0', '0', '0', '0'],
-        ['121028', '124004', '1', '124005', '2', '0', '0'],
-      ]),
-    );
+  test(
+    'wing native system tables are correlated without inventing semantics',
+    () {
+      final catalog = WingSystemsCatalog.parse(
+        decomposeBytes: sheet([
+          ['WingID', 'Grade', 'OldWingItem', 'MaxLevel'],
+          ['1', '0', '121017', '20'],
+          ['1', '1', '121018', '40'],
+          ['2', '0', '121028', '20'],
+        ]),
+        expBytes: sheet([
+          ['ItemID'],
+          ['125001'],
+          ['125002'],
+        ]),
+        swapBytes: sheet([
+          [
+            'OldWingItem',
+            'ExchangeItem1',
+            'Count1',
+            'ExchangeItem2',
+            'Count2',
+            'ExchangeItem3',
+            'Count3',
+          ],
+          ['121017', '124001', '6', '0', '0', '0', '0'],
+          ['121028', '124004', '1', '124005', '2', '0', '0'],
+        ]),
+      );
 
-    expect(catalog.wingIds, [1, 2]);
-    expect(catalog.progressionFor(1).map((r) => r.grade), [0, 1]);
-    expect(catalog.progressionFor(1).last.maxLevel, 40);
-    expect(catalog.expItems, [125001, 125002]);
+      expect(catalog.wingIds, [1, 2]);
+      expect(catalog.progressionFor(1).map((r) => r.grade), [0, 1]);
+      expect(catalog.progressionFor(1).last.maxLevel, 40);
+      expect(catalog.expItems, [125001, 125002]);
 
-    final swap = catalog.swapForItem(121028);
-    expect(swap, isNotNull);
-    expect(swap!.rewards, hasLength(2));
-    expect(swap.rewards.first.itemId, 124004);
-    expect(swap.rewards.last.count, 2);
-  });
+      final swap = catalog.swapForItem(121028);
+      expect(swap, isNotNull);
+      expect(swap!.rewards, hasLength(2));
+      expect(swap.rewards.first.itemId, 124004);
+      expect(swap.rewards.last.count, 2);
+    },
+  );
 
   test('duplicate wing grade fails closed', () {
     expect(

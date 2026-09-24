@@ -275,9 +275,7 @@ class _StudioState extends State<StudioPage> {
     scene.clearMovement();
     focus.unfocus();
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => WingSystemsLabPage(library: library),
-      ),
+      MaterialPageRoute(builder: (_) => WingSystemsLabPage(library: library)),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();

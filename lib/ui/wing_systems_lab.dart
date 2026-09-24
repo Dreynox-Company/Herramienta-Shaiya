@@ -59,21 +59,14 @@ class _WingSystemsLabPageState extends State<WingSystemsLabPage> {
     if (!widget.library.files.containsKey(path)) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ExcelXmlLabPage(
-          library: widget.library,
-          initialPath: path,
-        ),
+        builder: (_) =>
+            ExcelXmlLabPage(library: widget.library, initialPath: path),
       ),
     );
     if (mounted) await _load();
   }
 
-  Widget _summaryCard(
-    String title,
-    String value,
-    IconData icon,
-    String path,
-  ) =>
+  Widget _summaryCard(String title, String value, IconData icon, String path) =>
       Card(
         child: InkWell(
           onTap: widget.library.files.containsKey(path)
@@ -118,8 +111,7 @@ class _WingSystemsLabPageState extends State<WingSystemsLabPage> {
   Widget build(BuildContext context) {
     final data = catalog;
     final wingId = selectedWingId;
-    final progression =
-        data == null || wingId == null
+    final progression = data == null || wingId == null
         ? const <WingDecomposeRule>[]
         : data.progressionFor(wingId);
 
@@ -304,9 +296,7 @@ class _WingSystemsLabPageState extends State<WingSystemsLabPage> {
                                   widget.library.files.containsKey(
                                     'excelxml/wingdecompose.xml',
                                   )
-                                  ? () => _openXml(
-                                      'excelxml/wingdecompose.xml',
-                                    )
+                                  ? () => _openXml('excelxml/wingdecompose.xml')
                                   : null,
                               icon: const Icon(
                                 Icons.edit_note_outlined,
@@ -324,10 +314,7 @@ class _WingSystemsLabPageState extends State<WingSystemsLabPage> {
                                   )
                                   ? () => _openXml('excelxml/wingswap.xml')
                                   : null,
-                              icon: const Icon(
-                                Icons.swap_horiz,
-                                size: 16,
-                              ),
+                              icon: const Icon(Icons.swap_horiz, size: 16),
                               label: const Text('Editar intercambios'),
                             ),
                           ),
@@ -365,10 +352,7 @@ class _WingSystemsLabPageState extends State<WingSystemsLabPage> {
                               )
                               ? () => _openXml('excelxml/wingexpitem.xml')
                               : null,
-                          icon: const Icon(
-                            Icons.edit_note_outlined,
-                            size: 16,
-                          ),
+                          icon: const Icon(Icons.edit_note_outlined, size: 16),
                           label: const Text('Editar objetos EXP'),
                         ),
                       ),
