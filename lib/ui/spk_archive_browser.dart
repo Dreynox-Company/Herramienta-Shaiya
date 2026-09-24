@@ -1339,6 +1339,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     var staticCandidatesTested = 0;
     var staticDeepCandidatesTested = 0;
     var staticModulesScanned = 0;
+    var staticDeepModulesScanned = 0;
     String? staticMatchSource;
     final staticEvidence = File(p.join(output.path, 'static-key-sweep.json'));
     if (await staticEvidence.exists()) {
@@ -1349,6 +1350,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           staticDeepCandidatesTested =
               (raw['deepTested'] as num?)?.toInt() ?? 0;
           staticModulesScanned = (raw['modules'] as List?)?.length ?? 0;
+          staticDeepModulesScanned =
+              (raw['deepModulesScanned'] as num?)?.toInt() ?? 0;
           final match = raw['match'];
           if (match is Map && match['source'] != null) {
             staticMatchSource = match['source'].toString();
@@ -1403,8 +1406,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         (staticCandidatesTested > 0 || staticDeepCandidatesTested > 0)) {
       reason =
           'El barrido estático V13 probó $staticCandidatesTested candidatas '
-          '($staticDeepCandidatesTested profundas en $staticModulesScanned '
-          'módulos) sin autenticar la clave; el cliente tampoco expuso una '
+          '($staticDeepCandidatesTested profundas en $staticDeepModulesScanned '
+          'módulos PE) sin autenticar la clave; el cliente tampoco expuso una '
           'candidata dinámica válida durante la captura.';
     } else if (rows.isEmpty) {
       reason =
@@ -1446,6 +1449,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       'staticCandidatesTested': staticCandidatesTested,
       'staticDeepCandidatesTested': staticDeepCandidatesTested,
       'staticModulesScanned': staticModulesScanned,
+      'staticDeepModulesScanned': staticDeepModulesScanned,
       'events': eventCodes.toList()..sort(),
       'profileReadyForSimple': profile['readyForSimple'] == true,
       'profileResourceKeys': profile['resourceKeys'],
