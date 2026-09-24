@@ -14,6 +14,7 @@ import '../core/pose_layers.dart';
 import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
 import '../core/wing_motion.dart';
+import '../core/wing_position.dart';
 import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
@@ -193,8 +194,34 @@ class StudioScene extends ChangeNotifier {
       headTracking = true,
       inspectAnyEquipment = false;
   WingMotionPhase? _wingMotionPhase;
-  double hoverOffset = .38, wingYaw = 0;
-  final Map<String, ({double height, double depth, double size, double yaw})>
+  double hoverOffset = .38;
+  double wingOffsetX = 0,
+      wingOffsetY = 1.3,
+      wingOffsetZ = .25,
+      wingRotX = 0,
+      wingRotY = 0,
+      wingRotZ = 0,
+      wingScaleX = 1,
+      wingScaleY = 1,
+      wingScaleZ = 1;
+  bool wingMirrorX = false, wingMirrorY = false, wingMirrorZ = false;
+  final Map<
+    String,
+    ({
+      double x,
+      double y,
+      double z,
+      double rotX,
+      double rotY,
+      double rotZ,
+      double scaleX,
+      double scaleY,
+      double scaleZ,
+      bool mirrorX,
+      bool mirrorY,
+      bool mirrorZ,
+    })
+  >
   _wingSettings = {};
   bool _lastGuard = false;
   CharacterClass get characterClass =>
@@ -208,17 +235,110 @@ class StudioScene extends ChangeNotifier {
   String _wingBindingKey(CreatureRecord record, {Archetype? archetype}) {
     final a = archetype ?? appearance?.archetype;
     final identity = a == null ? 'sin-personaje' : '${a.race}/${a.id}';
-    return '$identity|${record.source}#${record.id}';
+    return '$identity|${characterClass.id}|${record.source}#${record.id}';
+  }
+
+  ({int family, int job, int sex})? _wingIdentity() {
+    final a = appearance?.archetype;
+    if (a == null) return null;
+    final family = switch (a.race.toLowerCase()) {
+      'human' => 0,
+      'elf' => 1,
+      'vile' => 2,
+      'deatheater' => 3,
+      _ => -1,
+    };
+    final job = switch (characterClass.id) {
+      'fighter' || 'warrior' => 0,
+      'defender' || 'guardian' => 1,
+      'ranger' || 'assassin' => 2,
+      'archer' || 'hunter' => 3,
+      'mage' || 'pagan' => 4,
+      'priest' || 'oracle' => 5,
+      _ => -1,
+    };
+    if (family < 0 || job < 0) return null;
+    return (family: family, job: job, sex: a.female ? 1 : 0);
+  }
+
+  WingPositionProfile? _resolveWingPosition({bool verifiedOnly = false}) {
+    final identity = _wingIdentity();
+    if (identity == null) return null;
+    if (!verifiedOnly) {
+      final fromData = catalog?.wingPositions?.resolve(
+        identity.family,
+        identity.job,
+        identity.sex,
+      );
+      if (fromData != null) return fromData;
+    }
+    return WingPositionDocument.verifiedResolve(
+      identity.family,
+      identity.job,
+      identity.sex,
+    );
+  }
+
+  WingPositionProfile? get activeWingPositionProfile => _resolveWingPosition();
+
+  bool get wingPositionFileAvailable => catalog?.wingPositions != null;
+
+  bool get wingPositionUsesMountedData {
+    final identity = _wingIdentity();
+    if (identity == null) return false;
+    return catalog?.wingPositions?.resolve(
+          identity.family,
+          identity.job,
+          identity.sex,
+        ) !=
+        null;
+  }
+
+  String get wingPositionProfileLabel {
+    final identity = _wingIdentity();
+    final profile = activeWingPositionProfile;
+    if (identity == null || profile == null) return 'Sin perfil WingPosition';
+    final source = wingPositionUsesMountedData
+        ? (catalog!.wingPositions!.matchesVerifiedSource
+              ? 'DATA verificada'
+              : 'DATA montada')
+        : 'baseline verificado';
+    return 'Familia ${identity.family} · Job ${identity.job} · '
+        'Sexo ${identity.sex} · hueso ${profile.boneIndex} · $source';
+  }
+
+  void _applyWingProfile(WingPositionProfile profile) {
+    wingOffsetX = profile.leftRight;
+    wingOffsetY = profile.upDown;
+    wingOffsetZ = profile.frontBack;
+    wingRotX = profile.rotX;
+    wingRotY = profile.rotY;
+    wingRotZ = profile.rotZ;
+    final char = character;
+    if (char != null &&
+        profile.boneIndex >= 0 &&
+        profile.boneIndex < char.world.length) {
+      char.wingBone = profile.boneIndex;
+      char.wingReference = v.Matrix4.inverted(char.world[profile.boneIndex]);
+    }
   }
 
   void _rememberWingSettings() {
     final record = wingRecord;
     if (record == null) return;
     _wingSettings[_wingBindingKey(record)] = (
-      height: wingHeight,
-      depth: wingDepth,
-      size: wingSize,
-      yaw: wingYaw,
+      x: wingOffsetX,
+      y: wingOffsetY,
+      z: wingOffsetZ,
+      rotX: wingRotX,
+      rotY: wingRotY,
+      rotZ: wingRotZ,
+      scaleX: wingScaleX,
+      scaleY: wingScaleY,
+      scaleZ: wingScaleZ,
+      mirrorX: wingMirrorX,
+      mirrorY: wingMirrorY,
+      mirrorZ: wingMirrorZ,
     );
   }
 
@@ -226,15 +346,133 @@ class StudioScene extends ChangeNotifier {
     final record = wingRecord, char = character;
     if (record == null || char == null) return;
     final cfg = _wingSettings[_wingBindingKey(record)];
+    final profile = _resolveWingPosition();
+    if (cfg != null) {
+      wingOffsetX = cfg.x;
+      wingOffsetY = cfg.y;
+      wingOffsetZ = cfg.z;
+      wingRotX = cfg.rotX;
+      wingRotY = cfg.rotY;
+      wingRotZ = cfg.rotZ;
+      wingScaleX = cfg.scaleX;
+      wingScaleY = cfg.scaleY;
+      wingScaleZ = cfg.scaleZ;
+      wingMirrorX = cfg.mirrorX;
+      wingMirrorY = cfg.mirrorY;
+      wingMirrorZ = cfg.mirrorZ;
+      if (profile != null &&
+          profile.boneIndex >= 0 &&
+          profile.boneIndex < char.world.length) {
+        char.wingBone = profile.boneIndex;
+        char.wingReference = v.Matrix4.inverted(char.world[profile.boneIndex]);
+      }
+      return;
+    }
+    if (profile != null) {
+      _applyWingProfile(profile);
+      wingScaleX = 1;
+      wingScaleY = 1;
+      wingScaleZ = 1;
+      wingMirrorX = false;
+      wingMirrorY = false;
+      wingMirrorZ = false;
+      return;
+    }
+
     final bone = char.wingBone;
     final reference = char.normal?.pose(0);
     final p = bone != null && reference != null && bone < reference.length
         ? reference[bone].getTranslation()
         : v.Vector3(0, 1.3, 0);
-    wingHeight = cfg?.height ?? p.y;
-    wingDepth = cfg?.depth ?? (p.z + .08);
-    wingSize = cfg?.size ?? 1;
-    wingYaw = cfg?.yaw ?? 0;
+    wingOffsetX = 0;
+    wingOffsetY = p.y;
+    wingOffsetZ = p.z + .08;
+    wingRotX = 0;
+    wingRotY = 0;
+    wingRotZ = 0;
+    wingScaleX = 1;
+    wingScaleY = 1;
+    wingScaleZ = 1;
+    wingMirrorX = false;
+    wingMirrorY = false;
+    wingMirrorZ = false;
+  }
+
+  Future<void> saveActiveWingPositionToData() async {
+    final identity = _wingIdentity();
+    final document = catalog?.wingPositions;
+    if (identity == null || document == null || catalog == null) {
+      throw const FormatException(
+        'WingPosition.xml real no está disponible para escritura.',
+      );
+    }
+    final original = document.resolve(
+      identity.family,
+      identity.job,
+      identity.sex,
+    );
+    if (original == null) {
+      throw const FormatException(
+        'La DATA montada no contiene el perfil WingPosition activo.',
+      );
+    }
+    final char = character;
+    final bone = original.boneWritable &&
+            char?.wingBone != null &&
+            char!.wingBone! >= 0
+        ? char.wingBone!
+        : original.boneIndex;
+    await catalog!.saveWingPosition(
+      original.copyWith(
+        boneIndex: bone,
+        rotX: wingRotX,
+        rotY: wingRotY,
+        rotZ: wingRotZ,
+        upDown: wingOffsetY,
+        frontBack: wingOffsetZ,
+        leftRight: wingOffsetX,
+        provenance: catalog!.wingPositionPath,
+      ),
+    );
+    _wingSettings.remove(_wingBindingKey(wingRecord!));
+    _restoreWingSettings();
+    report(
+      'WingPosition.xml guardado · familia ${identity.family} · '
+      'job ${identity.job} · sexo ${identity.sex}. '
+      'Escala y espejo son solo de previsualización y no se escribieron.',
+    );
+    changed();
+  }
+
+  void resetWingPositionFromData() {
+    final identity = _wingIdentity();
+    final document = catalog?.wingPositions;
+    final record = wingRecord;
+    if (identity == null || document == null || record == null) {
+      throw const FormatException('No hay WingPosition.xml montado para restaurar.');
+    }
+    final profile = document.resolve(identity.family, identity.job, identity.sex);
+    if (profile == null) {
+      throw const FormatException('El perfil activo no existe en WingPosition.xml.');
+    }
+    _wingSettings.remove(_wingBindingKey(record));
+    _applyWingProfile(profile);
+    wingScaleX = wingScaleY = wingScaleZ = 1;
+    wingMirrorX = wingMirrorY = wingMirrorZ = false;
+    changed();
+  }
+
+  void resetWingPositionVerifiedBaseline() {
+    final profile = _resolveWingPosition(verifiedOnly: true);
+    final record = wingRecord;
+    if (profile == null || record == null) {
+      throw const FormatException('No existe baseline WingPosition para este personaje.');
+    }
+    _wingSettings.remove(_wingBindingKey(record));
+    _applyWingProfile(profile);
+    wingScaleX = wingScaleY = wingScaleZ = 1;
+    wingMirrorX = wingMirrorY = wingMirrorZ = false;
+    changed();
   }
 
   Future<void> setWingAutoMotion(bool enabled) async {
@@ -471,11 +709,7 @@ class StudioScene extends ChangeNotifier {
       targetY = 1.05,
       panX = 0,
       panZ = 0;
-  double riderHeight = 1.0,
-      riderForward = 0,
-      wingHeight = 1.3,
-      wingDepth = .25,
-      wingSize = 1;
+  double riderHeight = 1.0, riderForward = 0;
   double originX = 0,
       originZ = 0,
       groundY = 0,
@@ -1240,7 +1474,9 @@ class StudioScene extends ChangeNotifier {
     if (!availableClasses.contains(cls)) {
       throw const FormatException('Clase ajena al arquetipo');
     }
+    _rememberWingSettings();
     selectedClass = cls;
+    _restoreWingSettings();
     if (weaponRecord != null && !compatibilityFor(weaponRecord!).allowed) {
       await equip(null);
     }
@@ -1554,23 +1790,29 @@ class StudioScene extends ChangeNotifier {
     }
     if (wing != null) {
       final bone = a.wingBone;
-      final valid =
-          bone != null && bone < a.world.length && a.wingReference != null;
+      final profile = activeWingPositionProfile;
+      final boneValid = bone != null && bone >= 0 && bone < a.world.length;
       final root = v.Matrix4.compose(
         v.Vector3(x, a.root.position.y, z),
         v.Quaternion.axisAngle(v.Vector3(0, 1, 0), rotation),
         v.Vector3(1, 1, -1),
       );
-      final delta = valid
+      final anchor = profile != null && boneValid
+          ? a.world[bone]
+          : boneValid && a.wingReference != null
           ? a.world[bone] * a.wingReference!
           : v.Matrix4.identity();
-      final local = v.Matrix4.compose(
-        v.Vector3(0, wingHeight, wingDepth),
-        v.Quaternion.axisAngle(v.Vector3(0, 1, 0), wingYaw),
-        v.Vector3.all(wingSize),
-      );
+      final sx = wingScaleX * (wingMirrorX ? -1 : 1);
+      final sy = wingScaleY * (wingMirrorY ? -1 : 1);
+      final sz = wingScaleZ * (wingMirrorZ ? -1 : 1);
+      final local =
+          v.Matrix4.translationValues(wingOffsetX, wingOffsetY, wingOffsetZ) *
+          v.Matrix4.rotationX(wingRotX * math.pi / 180) *
+          v.Matrix4.rotationY(wingRotY * math.pi / 180) *
+          v.Matrix4.rotationZ(wingRotZ * math.pi / 180) *
+          v.Matrix4.diagonal3Values(sx, sy, sz);
       final matrix =
-          root * v.Matrix4.fromList(a.visual.matrix.storage) * delta * local;
+          root * v.Matrix4.fromList(a.visual.matrix.storage) * anchor * local;
       wing!.root.matrix.copyFromArray(matrix.storage);
       wing!.root.matrixWorldNeedsUpdate = true;
     }
