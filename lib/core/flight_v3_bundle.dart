@@ -347,6 +347,7 @@ class FlightV3Bundle {
         'Flight V3: manifiesto de transiciones inválido.',
       );
     }
+
     final transitions = <String, FlightV3Transition>{};
     for (final item in rawTransitions) {
       if (item is! Map) {
@@ -354,19 +355,28 @@ class FlightV3Bundle {
       }
       final row = Map<String, dynamic>.from(item);
       final id = row['id']?.toString() ?? '';
-      final path = row['file']?.toString().replaceAll('\\', '/') ?? '';
+      final transitionPath =
+          row['file']?.toString().replaceAll('\\', '/') ?? '';
       final kind = row['kind']?.toString().toUpperCase() ?? '';
       final duration = (row['duration'] as num?)?.toDouble();
       final destinationPhase =
           (row['destinationPhase'] as num?)?.toDouble() ?? 0;
       final bones = (row['bones'] as num?)?.toInt();
-      if (!RegExp(r'^V3_[A-Z0-9_]+          !duration.isFinite ||
+      final profile = row['profile']?.toString();
+      if (!RegExp(r'^V3_[A-Z0-9_]+$').hasMatch(id) ||
+          transitionPath.isEmpty ||
+          !const {'TAKEOFF', 'LANDING', 'AIR_BLEND', 'BODY_SEQUENCE'}
+              .contains(kind) ||
+          duration == null ||
+          !duration.isFinite ||
           duration <= 0 ||
           bones != 36 ||
+          (profile != null && !const {'on', 'du', 'th', 'sp'}.contains(profile)) ||
           transitions.containsKey(id)) {
         throw FormatException('Flight V3: transición mal formada: $id.');
       }
-      final parsed = clip(path);
+
+      final parsed = clip(transitionPath);
       if (!_sameHierarchy(normal, parsed)) {
         throw FormatException('Flight V3: $id no coincide con el rig humf.');
       }
@@ -375,10 +385,11 @@ class FlightV3Bundle {
           'Flight V3: duración declarada de $id no coincide con el ANI.',
         );
       }
+
       transitions[id] = FlightV3Transition(
         id: id,
         kind: kind,
-        profile: row['profile']?.toString(),
+        profile: profile,
         targetClip: row['targetClip']?.toString(),
         shield: row['shield'] == true,
         duration: duration,
@@ -386,8 +397,10 @@ class FlightV3Bundle {
         clip: parsed,
       );
     }
-    if (transitions.keys.toSet().difference(requiredTransitionIds).isNotEmpty ||
-        requiredTransitionIds.difference(transitions.keys.toSet()).isNotEmpty) {
+
+    final actualTransitionIds = transitions.keys.toSet();
+    if (actualTransitionIds.difference(requiredTransitionIds).isNotEmpty ||
+        requiredTransitionIds.difference(actualTransitionIds).isNotEmpty) {
       throw const FormatException(
         'Flight V3: el inventario de 26 transiciones no coincide con V3 canónico.',
       );
@@ -430,73 +443,6 @@ class FlightV3Bundle {
         'sourceSha256':
             runtimeManifest?['sourceSha256']?.toString().toLowerCase(),
         'runtimeFiles': (runtimeManifest?['files'] as num?)?.toInt(),
-      }),
-      characterMap: Map.unmodifiable(characterMap),
-    );
-  }
-}
-).hasMatch(id) ||
-          path.isEmpty ||
-          !const {'TAKEOFF', 'LANDING', 'AIR_BLEND', 'BODY_SEQUENCE'}
-              .contains(kind) ||
-          duration == null ||
-          !duration.isFinite ||
-          duration <= 0 ||
-          bones != 36 ||
-          transitions.containsKey(id)) {
-        throw FormatException('Flight V3: transición mal formada: $id.');
-      }
-      final parsed = clip(path);
-      if (!_sameHierarchy(normal, parsed)) {
-        throw FormatException('Flight V3: $id no coincide con el rig humf.');
-      }
-      if ((parsed.duration - duration).abs() > 1 / 15) {
-        throw FormatException(
-          'Flight V3: duración declarada de $id no coincide con el ANI.',
-        );
-      }
-      transitions[id] = FlightV3Transition(
-        id: id,
-        kind: kind,
-        profile: row['profile']?.toString(),
-        targetClip: row['targetClip']?.toString(),
-        shield: row['shield'] == true,
-        duration: duration,
-        destinationPhase: destinationPhase,
-        clip: parsed,
-      );
-    }
-    if (transitions.length != 26) {
-      throw FormatException(
-        'Flight V3: se esperaban 26 transiciones y hay ${transitions.length}.',
-      );
-    }
-
-    final characterMap = jsonFile('mapa_combate_Character.json');
-    final characters = characterMap['characters'];
-    if (characters is! Map || !characters.containsKey('humf')) {
-      throw const FormatException('Flight V3: mapa de personajes incompleto.');
-    }
-
-    return FlightV3Bundle(
-      normal: normal,
-      walk: walk,
-      run: run,
-      hover: hover,
-      flight: flight,
-      hoverShield: hoverShield,
-      flightShield: flightShield,
-      combat: Map.unmodifiable(combat),
-      transitions: Map.unmodifiable(transitions),
-      evidence: Map.unmodifiable({
-        'shaEntries': declared.length,
-        'binaryPassed': (binaryQa['passed'] as num?)?.toInt() ?? 0,
-        'binaryFailed': (binaryQa['failed'] as num?)?.toInt() ?? 0,
-        'numericPassed': (numericQa['passed'] as num?)?.toInt() ?? 0,
-        'numericFailed': (numericQa['failed'] as num?)?.toInt() ?? 0,
-        'transitions': transitions.length,
-        'combatProfiles': combat.length,
-        'expandedBytes': expanded,
       }),
       characterMap: Map.unmodifiable(characterMap),
     );
