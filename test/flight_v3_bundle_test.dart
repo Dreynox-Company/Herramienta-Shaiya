@@ -226,7 +226,10 @@ Uint8List package({
 
 void main() {
   test('verified V3 bundle exposes flight combat and 26 transitions', () {
-    final bundle = FlightV3Bundle.decode(package(runtimeManifest: true));
+    final bundle = FlightV3Bundle.decode(
+      package(runtimeManifest: true),
+      allowSyntheticRuntime: true,
+    );
 
     expect(bundle.normal.bones, hasLength(36));
     expect(bundle.hover.bones, hasLength(36));
@@ -255,7 +258,10 @@ void main() {
   });
 
   test('runtime subset binds to the audited complete source', () {
-    final bundle = FlightV3Bundle.decode(package(runtimeManifest: true));
+    final bundle = FlightV3Bundle.decode(
+      package(runtimeManifest: true),
+      allowSyntheticRuntime: true,
+    );
     expect(bundle.evidence['runtimeSubset'], isTrue);
     expect(
       bundle.evidence['sourceSha256'],
@@ -264,7 +270,15 @@ void main() {
     expect(
       () => FlightV3Bundle.decode(
         package(runtimeManifest: true, badRuntimeSource: true),
+        allowSyntheticRuntime: true,
       ),
+      throwsFormatException,
+    );
+  });
+
+  test('runtime subset requires the exact audited ZIP hash in production', () {
+    expect(
+      () => FlightV3Bundle.decode(package(runtimeManifest: true)),
       throwsFormatException,
     );
   });
