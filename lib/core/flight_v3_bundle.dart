@@ -137,10 +137,11 @@ class FlightV3Bundle {
           'Ruta insegura dentro de Flight V3: ${entry.name}',
         );
       }
-      final raw = entry.content;
-      final data = raw is Uint8List
-          ? Uint8List.fromList(raw)
-          : Uint8List.fromList(List<int>.from(raw as List));
+      final raw = entry.readBytes();
+      if (raw == null) {
+        throw FormatException('Flight V3: no se pudo leer ${entry.name}.');
+      }
+      final data = Uint8List.fromList(raw);
       expanded += data.length;
       if (expanded > maxExpandedBytes) {
         throw const FormatException('Flight V3 expandido supera 64 MiB.');
