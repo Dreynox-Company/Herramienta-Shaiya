@@ -28,6 +28,7 @@ def main():
         'EXCELXML_STUDIO_AUDIT.md',
         'GAME_PS0032_VEHICLE_BRIDGE.md',
         'SPK_REAL_READER_STATUS.md',
+        'DATA_CAPABILITY_MATRIX.md',
     ]:
         source=ROOT/'docs'/name
         if source.is_file(): shutil.copy2(source,docs_target/name)
@@ -55,7 +56,8 @@ def main():
         'nativeChecks':len(native.get('checks',[])),'nativeFixture':'synthetic resources only',
         'startupResult':startup,'editor06WorkbenchDelivered':True,'completeOriginalGameRecreation':False,'offlineGameDelivered':False}
     (release/'build-provenance.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    readme=f'''SHAIYA STUDIO {version} - SPK V13 + FLIGHT V3 + EXCELXML LAB
+    readme=f'''SHAIYA STUDIO {version} - DATA.SPK V13
+Flight V3 + Wing/Vehicle MON + ExcelXml Lab
 Version: {version}
 Commit: {commit}
 
