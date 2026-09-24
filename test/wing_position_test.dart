@@ -31,6 +31,60 @@ Uint8List fixture({bool oneBased = false, bool includeIdentity = true}) {
   return Uint8List.fromList(utf8.encode(out.toString()));
 }
 
+Uint8List spreadsheetFixture() {
+  final out = StringBuffer(
+    '<?xml version="1.0"?>'
+    '<?mso-application progid="Excel.Sheet"?>'
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '
+    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+    '<Worksheet ss:Name="Sheet1"><Table>'
+    '<Row><Cell ss:StyleID="blank"><Data ss:Type="String"></Data></Cell></Row>'
+    '<Row>'
+    '<Cell><Data ss:Type="String">FAMILY</Data><Comment><Data>family comment</Data></Comment></Cell>'
+    '<Cell><Data ss:Type="String">JOB</Data></Cell>'
+    '<Cell><Data ss:Type="String">SEX</Data></Cell>'
+    '<Cell><Data ss:Type="String">BONE_IDX</Data></Cell>'
+    '<Cell><Data ss:Type="String">WING_ROT_X</Data></Cell>'
+    '<Cell><Data ss:Type="String">WING_ROT_Y</Data></Cell>'
+    '<Cell><Data ss:Type="String">WING_ROT_Z</Data></Cell>'
+    '<Cell><Data ss:Type="String">WING_UP_DOWN</Data></Cell>'
+    '<Cell><Data ss:Type="String">WING_FRONT_BACK</Data></Cell>'
+    '<Cell><Data ss:Type="String">WING_LEFT_RIGHT</Data></Cell>'
+    '</Row>',
+  );
+  for (var family = 0; family < 4; family++) {
+    for (var job = 0; job < 6; job++) {
+      for (var sex = 0; sex < 2; sex++) {
+        out
+          ..write('<Row ss:AutoFitHeight="0">')
+          ..write('<Cell><Data ss:Type="Number">$family</Data></Cell>')
+          ..write('<Cell><Data ss:Type="Number">$job</Data></Cell>')
+          ..write('<Cell><Data ss:Type="Number">$sex</Data></Cell>')
+          ..write('<Cell><Data ss:Type="Number">4</Data></Cell>')
+          ..write(
+            '<Cell><Data ss:Type="Number">${170 + family}</Data></Cell>',
+          )
+          ..write(
+            '<Cell><Data ss:Type="Number">${job * 2}</Data></Cell>',
+          )
+          ..write('<Cell><Data ss:Type="Number">90</Data></Cell>')
+          ..write(
+            '<Cell><Data ss:Type="Number">${(sex + 1) / 100}</Data></Cell>',
+          )
+          ..write(
+            '<Cell><Data ss:Type="Number">-${(job + 1) / 10}</Data></Cell>',
+          )
+          ..write(
+            '<Cell><Data ss:Type="Number">${family / 20}</Data></Cell>',
+          )
+          ..write('</Row>');
+      }
+    }
+  }
+  out.write('</Table></Worksheet></Workbook>');
+  return Uint8List.fromList(utf8.encode(out.toString()));
+}
+
 void main() {
   test('verified ps0032 baseline contains 48 bone-4 profiles', () {
     final rows = WingPositionDocument.verifiedBaseline;
@@ -89,6 +143,61 @@ void main() {
     );
     expect(doc.resolve(2, 4, 1)?.rotX, 171);
     expect(doc.resolve(2, 4, 1)?.leftRight, .03);
+  });
+
+  test('parses real Excel 2003 SpreadsheetML layout with BONE_IDX', () {
+    final doc = WingPositionDocument.parse(
+      spreadsheetFixture(),
+      'excelxml/wingposition.xml',
+    );
+    expect(doc.profiles, hasLength(48));
+    final p = doc.resolve(3, 3, 1)!;
+    expect(p.boneIndex, 4);
+    expect(p.boneWritable, isTrue);
+    expect(p.rotX, 173);
+    expect(p.rotY, 6);
+    expect(p.rotZ, 90);
+    expect(p.upDown, .02);
+    expect(p.frontBack, -.4);
+    expect(p.leftRight, .15);
+  });
+
+  test('SpreadsheetML editing preserves workbook metadata and round-trips bone', () {
+    final doc = WingPositionDocument.parse(
+      spreadsheetFixture(),
+      'excelxml/wingposition.xml',
+    );
+    final original = doc.resolve(0, 0, 0)!;
+    doc.update(
+      original.copyWith(
+        boneIndex: 7,
+        rotX: -45.25,
+        rotY: 123.5,
+        rotZ: 271.75,
+        upDown: .333,
+        frontBack: -.777,
+        leftRight: .222,
+      ),
+    );
+    final encoded = doc.encode();
+    final xml = utf8.decode(encoded);
+    expect(xml, contains('mso-application'));
+    expect(xml, contains('family comment'));
+    expect(xml, contains('ss:AutoFitHeight="0"'));
+
+    doc.validateEncoded(encoded);
+    final reparsed = WingPositionDocument.parse(
+      encoded,
+      'excelxml/wingposition.xml',
+    );
+    final edited = reparsed.resolve(0, 0, 0)!;
+    expect(edited.boneIndex, 7);
+    expect(edited.rotX, -45.25);
+    expect(edited.rotY, 123.5);
+    expect(edited.rotZ, 271.75);
+    expect(edited.upDown, .333);
+    expect(edited.frontBack, -.777);
+    expect(edited.leftRight, .222);
   });
 
   test('WingPosition XML accepts one-based identity columns', () {
