@@ -348,3 +348,31 @@ String excelXmlPurpose(String path) {
   if (file.contains('pet')) return 'Mascotas · tamaño/efectos';
   return 'ExcelXml · tabla de DATA';
 }
+
+
+/// Exact filename literals found in the audited ps0032 game.exe
+/// (SHA-256 509c4a8f...). Absence from this set is not proof that a table is
+/// unused: it may be server-side or resolved without a literal filename.
+const Set<String> ps0032ClientExcelXmlFiles = {
+  'chaoticsquaretype.xml',
+  'fontstyleset.xml',
+  'functionalpetsize.xml',
+  'gmnoticeinfo.xml',
+  'healskilllist.xml',
+  'itemaddoptiondata.xml',
+  'mainquest.xml',
+  'visiblepartybufskill.xml',
+  'wingposition.xml',
+  'ymeventinfo.xml',
+  'ymwatershaderparams.xml',
+};
+
+bool excelXmlHasPs0032ClientLiteral(String path) {
+  final file = path.replaceAll('\\', '/').split('/').last.toLowerCase();
+  return ps0032ClientExcelXmlFiles.contains(file);
+}
+
+String excelXmlClientEvidence(String path) =>
+    excelXmlHasPs0032ClientLiteral(path)
+    ? 'ps0032: nombre/ruta literal confirmado en game.exe'
+    : 'ps0032: sin literal de nombre; puede ser server-side o resolución dinámica';
