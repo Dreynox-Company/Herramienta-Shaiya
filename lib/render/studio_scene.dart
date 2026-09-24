@@ -2234,7 +2234,8 @@ class StudioScene extends ChangeNotifier {
       return;
     }
     final wasHover = actor.hover != null && identical(actor.clip, actor.hover);
-    final wasFlight = actor.flight != null && identical(actor.clip, actor.flight);
+    final wasFlight =
+        actor.flight != null && identical(actor.clip, actor.flight);
     final shielded = shieldRecord != null;
     actor.hover = shielded ? bundle.hoverShield : bundle.hover;
     actor.flight = shielded ? bundle.flightShield : bundle.flight;
