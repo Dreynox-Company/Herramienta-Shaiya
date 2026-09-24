@@ -324,7 +324,9 @@ extension StudioGameplay on StudioScene {
       hoverHeight: hoverOffset,
     );
     final pending = flightState.pendingTarget;
-    if (pending != null && flightState.grounded) {
+    if (pending != null &&
+        flightState.grounded &&
+        !flightBodyTransitionActive) {
       flightState.cancel();
       final selected = combat.target;
       if (game.opponents.containsKey(pending) &&
@@ -485,7 +487,16 @@ extension StudioGameplay on StudioScene {
     updateSelectionRing();
     combat.step(delta, enemyDistance);
     if (_lastGuard != combat.inGuard) {
+      final wasGuarding = _lastGuard;
       _lastGuard = combat.inGuard;
+      if (wasGuarding &&
+          !combat.inGuard &&
+          flightEnabled &&
+          wing != null &&
+          mount == null &&
+          flightState.grounded) {
+        startFlightV3CombatTakeoff();
+      }
       refreshIdle();
       movementTransitions.invalidate();
       if (!moving &&
