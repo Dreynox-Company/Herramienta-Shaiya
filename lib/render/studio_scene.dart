@@ -101,6 +101,9 @@ class Actor {
   final Map<String, ClipData> mountedAttacks = {};
   final Map<int, ClipData> riderMotions = {};
   final List<RenderPart> parts = [];
+  ClipData? _afterClip;
+  double _afterClipTime = 0;
+  bool _afterClipLoop = true;
   ClipData? clip,
       idle,
       normal,
@@ -140,13 +143,29 @@ class Actor {
     _blendTime += dt;
     if (_blendTime >= .18) _blendFrom = null;
     if (playing) time += dt * speed;
-    if (!loop && clip != null && time > clip!.duration && idle != null) {
-      play(idle!);
+    if (!loop && clip != null && time > clip!.duration) {
+      final next = _afterClip;
+      if (next != null) {
+        final phase = _afterClipTime;
+        final repeat = _afterClipLoop;
+        _afterClip = null;
+        _afterClipTime = 0;
+        _afterClipLoop = true;
+        play(next, repeat: repeat);
+        time = repeat
+            ? phase % next.duration
+            : phase.clamp(0.0, next.duration);
+      } else if (idle != null) {
+        play(idle!);
+      }
     }
     pose();
   }
 
   void play(ClipData c, {bool repeat = true}) {
+    _afterClip = null;
+    _afterClipTime = 0;
+    _afterClipLoop = true;
     if (clip != c && _rawPose.length == c.bones.length) {
       _blendFrom = _rawPose.map((m) => m.clone()).toList();
       _blendTime = 0;
@@ -156,6 +175,18 @@ class Actor {
     loop = repeat;
     playing = true;
     pose();
+  }
+
+  void playTransition(
+    ClipData transition,
+    ClipData destination, {
+    double destinationPhase = 0,
+    bool destinationLoop = true,
+  }) {
+    play(transition, repeat: false);
+    _afterClip = destination;
+    _afterClipTime = destinationPhase.isFinite ? destinationPhase : 0;
+    _afterClipLoop = destinationLoop;
   }
 
   int get requiredBones =>
