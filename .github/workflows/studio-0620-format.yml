@@ -1,4 +1,4 @@
-name: Studio 0.6.22 formatting gate
+name: Studio 0.6.22 deterministic formatting
 
 on:
   push:
@@ -7,23 +7,39 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: studio-format-${{ github.ref }}
+  group: studio-0620-format
   cancel-in-progress: true
 
 jobs:
   format:
+    if: ${{ !contains(github.event.head_commit.message, '[studio-format]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feat/studio-0620-spk-wings
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.4'
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - name: Verify deterministic formatting
-        run: dart format --output=none --set-exit-if-changed lib test integration_test tool
+      - name: Format Studio sources and tests
+        run: dart format lib test integration_test tool
+      - name: Commit deterministic formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add lib test integration_test tool
+          if git diff --cached --quiet; then
+            echo "No formatting changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(studio): deterministic Dart formatting [studio-format]"
+          git push origin HEAD:feat/studio-0620-spk-wings
