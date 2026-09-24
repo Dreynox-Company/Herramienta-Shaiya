@@ -890,6 +890,14 @@ class StudioScene extends ChangeNotifier {
   void _syncWingMotion(bool moving) {
     final actor = wing;
     if (!wingAutoMotion || actor == null || actor.clips.isEmpty) return;
+    if (!actor.loop &&
+        actor.playing &&
+        actor.clip != null &&
+        actor.time < actor.clip!.duration) {
+      // Attack, damage and death are native one-shot MON slots. Do not let
+      // hover/cruise synchronization overwrite them on the following frame.
+      return;
+    }
     final phase = wingMotionPhase(
       flightEnabled: flightEnabled,
       grounded: flightState.grounded,
