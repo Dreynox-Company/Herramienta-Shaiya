@@ -196,7 +196,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       final preview = raw == null
           ? ''
           : utf8.decode(
-              raw.sublist(0, raw.length.clamp(0, 256 * 1024)),
+              raw.sublist(0, raw.length.clamp(0, 256 * 1024).toInt()),
               allowMalformed: true,
             );
       return Padding(
@@ -240,7 +240,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   Widget tablePanel() {
     final doc = document;
     if (doc == null || !doc.tabular) return emptyPanel();
-    final sheet = doc.sheets[sheetIndex.clamp(0, doc.sheets.length - 1)];
+    final sheet = doc.sheets[
+      sheetIndex.clamp(0, doc.sheets.length - 1).toInt()
+    ];
     final rows = visibleRows(sheet);
     final visibleColumns = sheet.columns.take(7).toList(growable: false);
 
