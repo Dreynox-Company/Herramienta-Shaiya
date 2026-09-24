@@ -1876,6 +1876,9 @@ class StudioScene extends ChangeNotifier {
     attackCounter = 0;
     a.guard = prepared.idle;
     a.weaponRun = prepared.run;
+    if (appearance != null) {
+      _applyFlightV3ToActor(a, appearance!);
+    }
     refreshIdle();
     if (mount == null && walkX == 0 && walkZ == 0 && a.loop && a.idle != null) {
       a.play(a.idle!);
