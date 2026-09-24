@@ -254,7 +254,7 @@ class EditDocument {
         final bytes = codec.encode(text);
         if (bytes.length > 255) {
           throw const FormatException(
-            'La cadena fija WTR admite como máximo 255 bytes más NUL.',
+            'La cadena fija DATA admite como máximo 255 bytes más NUL.',
           );
         }
         final out = Uint8List(256);
