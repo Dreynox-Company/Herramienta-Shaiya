@@ -160,14 +160,8 @@ void main() {
     expect(encoded.sublist(20, 32), original.sublist(20, 32));
     expect(encoded.sublist(encoded.length - 4), const [0xde, 0xad, 0xbe, 0xef]);
 
-    expect(
-      containsBytes(encoded, const [0x44, 0x33, 0x22, 0x11]),
-      isTrue,
-    );
-    expect(
-      containsBytes(encoded, const [0x88, 0x77, 0x66, 0x55]),
-      isTrue,
-    );
+    expect(containsBytes(encoded, const [0x44, 0x33, 0x22, 0x11]), isTrue);
+    expect(containsBytes(encoded, const [0x88, 0x77, 0x66, 0x55]), isTrue);
 
     final semantic = SvmapData.parse(encoded, 'world/test.svmap');
     expect(semantic.portals.single.targetMap, 9);
