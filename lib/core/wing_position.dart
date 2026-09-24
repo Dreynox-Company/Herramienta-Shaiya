@@ -120,6 +120,7 @@ class WingPositionDocument {
     'BONE',
     'BONE_ID',
     'BONE_INDEX',
+    'BONE_IDX',
     'WING_BONE',
     'WING_BONE_INDEX',
   };
@@ -221,9 +222,20 @@ class WingPositionDocument {
         .where((e) => !e.childElements.any(hasPose))
         .toList();
     if (rows.length != 48) {
+      final spreadsheet = _spreadsheetBindings(document, path);
+      if (spreadsheet != null) {
+        return WingPositionDocument._(
+          path,
+          sha256.convert(bytes).toString(),
+          document,
+          spreadsheet.bindings,
+          spreadsheet.profiles,
+        );
+      }
       throw FormatException(
-        'WingPosition.xml: se esperaban 48 perfiles y se encontraron '
-        '${rows.length}.',
+        'WingPosition.xml: no se encontró el layout semántico ni la tabla '
+        'SpreadsheetML de 48 perfiles (se detectaron ${rows.length} filas '
+        'semánticas).',
       );
     }
 
