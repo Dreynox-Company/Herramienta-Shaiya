@@ -306,23 +306,58 @@ class WingPositionDocument {
 
   static _XmlValue? _find(XmlElement row, Set<String> names) {
     final wanted = names.map((n) => n.toUpperCase()).toSet();
-    for (final attribute in row.attributes) {
-      if (wanted.contains(attribute.name.local.toUpperCase())) {
-        return _XmlValue.attribute(attribute);
-      }
-    }
-    for (final element in <XmlElement>[
-      row,
-      ...row.descendants.whereType<XmlElement>(),
-    ]) {
-      if (wanted.contains(element.name.local.toUpperCase())) {
-        return _XmlValue.element(element);
-      }
+
+    _XmlValue? inspect(XmlElement element) {
       for (final attribute in element.attributes) {
         if (wanted.contains(attribute.name.local.toUpperCase())) {
           return _XmlValue.attribute(attribute);
         }
       }
+
+      final elementName = element.name.local.toUpperCase();
+      if (wanted.contains(elementName)) {
+        final valueAttribute = element.attributes
+            .where(
+              (a) =>
+                  a.name.local.toLowerCase() == 'value' ||
+                  a.name.local.toLowerCase() == 'val',
+            )
+            .firstOrNull;
+        return valueAttribute == null
+            ? _XmlValue.element(element)
+            : _XmlValue.attribute(valueAttribute);
+      }
+
+      final key = element.attributes
+          .where(
+            (a) =>
+                a.name.local.toLowerCase() == 'name' ||
+                a.name.local.toLowerCase() == 'key' ||
+                a.name.local.toLowerCase() == 'field' ||
+                a.name.local.toLowerCase() == 'column',
+          )
+          .map((a) => a.value.trim().toUpperCase())
+          .where(wanted.contains)
+          .firstOrNull;
+      if (key == null) return null;
+
+      final valueAttribute = element.attributes
+          .where(
+            (a) =>
+                a.name.local.toLowerCase() == 'value' ||
+                a.name.local.toLowerCase() == 'val',
+          )
+          .firstOrNull;
+      return valueAttribute == null
+          ? _XmlValue.element(element)
+          : _XmlValue.attribute(valueAttribute);
+    }
+
+    final direct = inspect(row);
+    if (direct != null) return direct;
+    for (final element in row.descendants.whereType<XmlElement>()) {
+      final found = inspect(element);
+      if (found != null) return found;
     }
     return null;
   }
@@ -352,6 +387,22 @@ class WingPositionDocument {
         'female': 1,
         'femenino': 1,
         'f': 1,
+      }[value];
+    }
+    if (kind == 'job') {
+      return const {
+        'fighter': 0,
+        'warrior': 0,
+        'defender': 1,
+        'guardian': 1,
+        'ranger': 2,
+        'assassin': 2,
+        'archer': 3,
+        'hunter': 3,
+        'mage': 4,
+        'pagan': 4,
+        'priest': 5,
+        'oracle': 5,
       }[value];
     }
     return null;
