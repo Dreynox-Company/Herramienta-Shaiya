@@ -15,6 +15,7 @@ import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
 import '../core/wing_motion.dart';
 import '../core/wing_position.dart';
+import '../core/mon_editor.dart';
 import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
@@ -396,6 +397,31 @@ class StudioScene extends ChangeNotifier {
     wingMirrorX = false;
     wingMirrorY = false;
     wingMirrorZ = false;
+  }
+
+  List<String> get wingMonAnimationSlots => monAnimationSlots;
+
+  List<String> get wingMonAnimationCandidates {
+    final record = wingRecord;
+    final c = catalog;
+    if (record == null || c == null) return const [];
+    return c.wingAnimationCandidates(record);
+  }
+
+  String? wingMonAnimation(String slot) => wingRecord?.animations[slot];
+
+  Future<void> saveWingMonAnimation(String slot, String animationPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingAnimation(record, slot, animationPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · $slot = '
+      '${baseName(animationPath)} · MON guardado y revalidado.',
+    );
   }
 
   Future<void> saveActiveWingPositionToData() async {
