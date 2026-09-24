@@ -323,8 +323,9 @@ class StudioScene extends ChangeNotifier {
               ? 'DATA verificada'
               : 'DATA montada')
         : 'baseline verificado';
-    return 'Familia ${identity.family} · Job ${identity.job} · '
-        'Sexo ${identity.sex} · hueso ${profile.boneIndex} · $source';
+    return '${profile.identityLabel} · '
+        'F${identity.family}/J${identity.job}/S${identity.sex} · '
+        'hueso ${profile.boneIndex} · $source';
   }
 
   int get wingBoneIndex =>
