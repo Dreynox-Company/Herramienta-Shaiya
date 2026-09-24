@@ -16,7 +16,10 @@ V13 conserva CNG/OpenSSL y añade observación de claves en:
 
 - BoringSSL: `EVP_AEAD_CTX_init`;
 - mbedTLS: `mbedtls_gcm_setkey`, `mbedtls_aes_setkey_enc/dec`;
-- wolfSSL: `wc_AesGcmSetKey`, `wc_AesSetKey`.
+- wolfSSL: `wc_AesGcmSetKey`, `wc_AesSetKey`;
+- barrido profundo acotado de secciones PE de datos del cliente y DLLs;
+- escaneo runtime alrededor de copias de la clave del índice en memoria,
+  limitado y validado siempre por el oráculo AES-GCM del SPK.
 
 La evidencia real sigue siendo la autoridad. No se declara descifrado total
 hasta que simples y fragmentados autentiquen, la auditoría integral tenga cero
@@ -67,3 +70,15 @@ Los parsers trasladados desde el cliente Flutter se validan primero con fixtures
 sintéticos y luego con la integración Windows de Studio. La compatibilidad con
 recursos propietarios se declara únicamente después de probar los archivos
 reales; una detección de formato no sustituye esa evidencia.
+
+## Preview de DATA externa mientras el SPK está bloqueado
+
+Para evitar que el explorador sea solo un listado inútil mientras falta la
+clave de payloads, 0.6.20 permite seleccionar una carpeta DATA de referencia.
+Las rutas candidatas pueden abrirse con doble clic y mostrarse con el mismo
+visor de Studio; 3DC/3DO intentan además resolver su DDS/TGA homóloga.
+
+Este modo está etiquetado explícitamente como **referencia**: no confirma el
+payload del SPK, no habilita escritura del contenedor y no relaja el gate
+criptográfico. Sirve únicamente para inspección y trabajo visual mientras
+AutoPerfil obtiene evidencia suficiente.
