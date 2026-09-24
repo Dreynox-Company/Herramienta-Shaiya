@@ -1294,19 +1294,64 @@ class _StudioState extends State<StudioPage> {
               creatureField('mount'),
               if (scene.mount != null) ...[
                 actorAnimation(scene.mount!, 'mount'),
+                note(
+                  'Calibración 6DoF del jinete sobre la superficie animada de la '
+                  'montura. En este momento es previsualización de Studio: todavía '
+                  'no se ha confirmado un archivo DATA equivalente a WingPosition '
+                  'para monturas, por lo que no se escribe al juego.',
+                ),
                 slider(
-                  'Ajuste vertical del asiento',
+                  'Asiento X · izquierda / derecha',
+                  scene.riderLateral,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.riderLateral = v),
+                ),
+                slider(
+                  'Asiento Y · arriba / abajo',
                   scene.riderHeight,
-                  -1,
-                  2,
+                  -3,
+                  3,
                   (v) => setState(() => scene.riderHeight = v),
                 ),
                 slider(
-                  'Avance del asiento',
+                  'Asiento Z · avance / retroceso',
                   scene.riderForward,
                   -3,
                   3,
                   (v) => setState(() => scene.riderForward = v),
+                ),
+                slider(
+                  'Rotación jinete X',
+                  scene.riderRotX,
+                  -180,
+                  180,
+                  (v) => setState(() => scene.riderRotX = v),
+                ),
+                slider(
+                  'Rotación jinete Y',
+                  scene.riderRotY,
+                  -180,
+                  180,
+                  (v) => setState(() => scene.riderRotY = v),
+                ),
+                slider(
+                  'Rotación jinete Z',
+                  scene.riderRotZ,
+                  -180,
+                  180,
+                  (v) => setState(() => scene.riderRotZ = v),
+                ),
+                OutlinedButton(
+                  onPressed: disabled
+                      ? null
+                      : () => act(() async {
+                          scene.resetMountSeatCalibration();
+                        }),
+                  child: const Text(
+                    'Restablecer calibración de montura',
+                    style: TextStyle(fontSize: 10),
+                  ),
                 ),
                 TextButton(
                   onPressed: disabled
@@ -1318,7 +1363,9 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
                 note(
-                  'El asiento sigue una superficie animada de la montura; la pelvis se alinea con ella. Ajuste manual por montura. W: marcha · Shift: carrera.',
+                  'El asiento sigue una superficie animada de la montura y la '
+                  'pelvis se alinea con ella. Los seis ajustes se recuerdan por '
+                  'montura durante la sesión. W: marcha · Shift: carrera.',
                 ),
               ],
             ]),
