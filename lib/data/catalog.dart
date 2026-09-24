@@ -5,6 +5,7 @@ export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
 import '../core/wing_position.dart';
+import '../core/mon_editor.dart';
 import 'library.dart';
 part 'texture_discovery.dart';
 
@@ -362,6 +363,54 @@ class Catalog {
       );
       progress('SPK: ${archetypes.length} arquetipos disponibles para 3D');
     }
+  }
+
+  List<String> wingAnimationCandidates(CreatureRecord record) {
+    final root = directoryName(record.source);
+    final prefix = '$root/ani/';
+    final out = library.files.keys
+        .where((p) => p.startsWith(prefix) && p.endsWith('.ani'))
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  Future<CreatureRecord> saveWingAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath,
+  ) async {
+    if (!record.source.startsWith('character/wing/') ||
+        !record.source.endsWith('.mon')) {
+      throw const FormatException(
+        'El recurso seleccionado no pertenece a Character/Wing/*.MON.',
+      );
+    }
+    final original = await library.read(record.source);
+    final document = EditableMonDocument.parse(original, record.source);
+    if (record.id < 0 || record.id >= document.records.length) {
+      throw FormatException(
+        'El ID ${record.id} no existe en ${record.source}.',
+      );
+    }
+    document.setAnimation(record.id, slot, baseName(animationPath));
+    final encoded = document.encode();
+    document.validateEncoded(encoded);
+
+    final verified = readMon(encoded, record.source);
+    if (verified.length != document.records.length) {
+      throw const FormatException(
+        'La revalidación MON no conserva todos los registros.',
+      );
+    }
+    final updated = verified[record.id];
+    await library.writeResource(record.source, encoded);
+
+    final index = wings.indexWhere(
+      (w) => w.source == record.source && w.id == record.id,
+    );
+    if (index >= 0) wings[index] = updated;
+    return updated;
   }
 
   Future<void> saveWingPosition(WingPositionProfile profile) async {
