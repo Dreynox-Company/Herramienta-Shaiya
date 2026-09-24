@@ -40,9 +40,7 @@ class ExcelXmlSemanticIssue {
 /// Semantic checks are intentionally restricted to fields whose meaning is
 /// explicit in the supplied DATA/ExcelXml source. Unknown tables are not
 /// guessed: SpreadsheetML type validation remains the only gate there.
-List<ExcelXmlSemanticIssue> auditExcelXmlSemantics(
-  ExcelXmlDocument document,
-) {
+List<ExcelXmlSemanticIssue> auditExcelXmlSemantics(ExcelXmlDocument document) {
   final file = document.path
       .replaceAll('\\', '/')
       .split('/')
@@ -159,8 +157,7 @@ void _numberRange(
         rowIndex: rowIndex,
         columnIndex: column,
         code: 'number-range',
-        message:
-            '$label debe estar entre $min y $max; valor actual: "$raw".',
+        message: '$label debe estar entre $min y $max; valor actual: "$raw".',
       ),
     );
   }
@@ -209,7 +206,8 @@ List<ExcelXmlSemanticIssue> _wingDecompose(ExcelXmlDocument document) {
     final grade = c['grade'];
     final oldItem = c['oldwingitem'];
     final maxLevel = c['maxlevel'];
-    if ([wing, grade, oldItem, maxLevel].any((value) => value == null)) continue;
+    if ([wing, grade, oldItem, maxLevel].any((value) => value == null))
+      continue;
     for (var r = 0; r < sheet.rows.length; r++) {
       _integerError(out, sheet, s, r, wing, 'WingID', min: 0);
       _integerError(out, sheet, s, r, grade, 'Grade', min: 0);
@@ -225,13 +223,10 @@ List<ExcelXmlSemanticIssue> _wingDecompose(ExcelXmlDocument document) {
       );
       _integerError(out, sheet, s, r, maxLevel, 'MaxLevel', min: 0);
     }
-    _duplicateKeys(
-      out,
-      sheet,
-      s,
-      [wing!, grade!],
-      label: 'La combinación WingID + Grade',
-    );
+    _duplicateKeys(out, sheet, s, [
+      wing!,
+      grade!,
+    ], label: 'La combinación WingID + Grade');
   }
   return out;
 }
@@ -243,16 +238,7 @@ List<ExcelXmlSemanticIssue> _wingExpItem(ExcelXmlDocument document) {
     final item = _columns(sheet)['itemid'];
     if (item == null) continue;
     for (var r = 0; r < sheet.rows.length; r++) {
-      _integerError(
-        out,
-        sheet,
-        s,
-        r,
-        item,
-        'ItemID',
-        min: 1,
-        allowZero: false,
-      );
+      _integerError(out, sheet, s, r, item, 'ItemID', min: 1, allowZero: false);
     }
     _duplicateKeys(out, sheet, s, [item], label: 'ItemID');
   }
@@ -290,15 +276,7 @@ List<ExcelXmlSemanticIssue> _wingSwap(ExcelXmlDocument document) {
           'ExchangeItem$slot',
           min: 0,
         );
-        _integerError(
-          out,
-          sheet,
-          s,
-          r,
-          countColumn,
-          'Count$slot',
-          min: 0,
-        );
+        _integerError(out, sheet, s, r, countColumn, 'Count$slot', min: 0);
         final item = _intValue(sheet.rows[r], itemColumn);
         final count = _intValue(sheet.rows[r], countColumn);
         if (item == null || count == null) continue;

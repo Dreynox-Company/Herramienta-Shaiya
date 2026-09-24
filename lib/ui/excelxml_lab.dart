@@ -115,9 +115,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   );
 
   void _refreshSemanticIssues(ExcelXmlDocument? value) {
-    semanticIssues = value == null
-        ? const []
-        : auditExcelXmlSemantics(value);
+    semanticIssues = value == null ? const [] : auditExcelXmlSemantics(value);
   }
 
   List<String> get paths {
@@ -321,14 +319,12 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               maxColumns: maxColumns,
               semanticErrors: semantics
                   .where(
-                    (issue) =>
-                        issue.severity == ExcelXmlIssueSeverity.error,
+                    (issue) => issue.severity == ExcelXmlIssueSeverity.error,
                   )
                   .length,
               semanticWarnings: semantics
                   .where(
-                    (issue) =>
-                        issue.severity == ExcelXmlIssueSeverity.warning,
+                    (issue) => issue.severity == ExcelXmlIssueSeverity.warning,
                   )
                   .length,
             ),
@@ -911,8 +907,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         for (final column in sheet.columns)
           Builder(
             builder: (context) {
-              final errorKey =
-                  '$sheetIndex/$rowIndex/${column.index}';
+              final errorKey = '$sheetIndex/$rowIndex/${column.index}';
               final type = row.cellType(column.index);
               final hasCell = row.hasCell(column.index);
               final semantic = _cellSemanticIssues(
@@ -922,15 +917,13 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               );
               final semanticError = semantic
                   .where(
-                    (issue) =>
-                        issue.severity == ExcelXmlIssueSeverity.error,
+                    (issue) => issue.severity == ExcelXmlIssueSeverity.error,
                   )
                   .map((issue) => issue.message)
                   .join('\n');
               final semanticWarning = semantic
                   .where(
-                    (issue) =>
-                        issue.severity == ExcelXmlIssueSeverity.warning,
+                    (issue) => issue.severity == ExcelXmlIssueSeverity.warning,
                   )
                   .map((issue) => issue.message)
                   .join('\n');

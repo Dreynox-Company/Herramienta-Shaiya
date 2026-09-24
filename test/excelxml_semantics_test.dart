@@ -54,9 +54,7 @@ void main() {
         hasLength(1),
       );
       expect(
-        issues.every(
-          (issue) => issue.severity == ExcelXmlIssueSeverity.error,
-        ),
+        issues.every((issue) => issue.severity == ExcelXmlIssueSeverity.error),
         isTrue,
       );
     },
