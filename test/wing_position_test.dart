@@ -61,12 +61,8 @@ Uint8List spreadsheetFixture() {
           ..write('<Cell><Data ss:Type="Number">$job</Data></Cell>')
           ..write('<Cell><Data ss:Type="Number">$sex</Data></Cell>')
           ..write('<Cell><Data ss:Type="Number">4</Data></Cell>')
-          ..write(
-            '<Cell><Data ss:Type="Number">${170 + family}</Data></Cell>',
-          )
-          ..write(
-            '<Cell><Data ss:Type="Number">${job * 2}</Data></Cell>',
-          )
+          ..write('<Cell><Data ss:Type="Number">${170 + family}</Data></Cell>')
+          ..write('<Cell><Data ss:Type="Number">${job * 2}</Data></Cell>')
           ..write('<Cell><Data ss:Type="Number">90</Data></Cell>')
           ..write(
             '<Cell><Data ss:Type="Number">${(sex + 1) / 100}</Data></Cell>',
@@ -74,9 +70,7 @@ Uint8List spreadsheetFixture() {
           ..write(
             '<Cell><Data ss:Type="Number">-${(job + 1) / 10}</Data></Cell>',
           )
-          ..write(
-            '<Cell><Data ss:Type="Number">${family / 20}</Data></Cell>',
-          )
+          ..write('<Cell><Data ss:Type="Number">${family / 20}</Data></Cell>')
           ..write('</Row>');
       }
     }
@@ -162,43 +156,46 @@ void main() {
     expect(p.leftRight, .15);
   });
 
-  test('SpreadsheetML editing preserves workbook metadata and round-trips bone', () {
-    final doc = WingPositionDocument.parse(
-      spreadsheetFixture(),
-      'excelxml/wingposition.xml',
-    );
-    final original = doc.resolve(0, 0, 0)!;
-    doc.update(
-      original.copyWith(
-        boneIndex: 7,
-        rotX: -45.25,
-        rotY: 123.5,
-        rotZ: 271.75,
-        upDown: .333,
-        frontBack: -.777,
-        leftRight: .222,
-      ),
-    );
-    final encoded = doc.encode();
-    final xml = utf8.decode(encoded);
-    expect(xml, contains('mso-application'));
-    expect(xml, contains('family comment'));
-    expect(xml, contains('ss:AutoFitHeight="0"'));
+  test(
+    'SpreadsheetML editing preserves workbook metadata and round-trips bone',
+    () {
+      final doc = WingPositionDocument.parse(
+        spreadsheetFixture(),
+        'excelxml/wingposition.xml',
+      );
+      final original = doc.resolve(0, 0, 0)!;
+      doc.update(
+        original.copyWith(
+          boneIndex: 7,
+          rotX: -45.25,
+          rotY: 123.5,
+          rotZ: 271.75,
+          upDown: .333,
+          frontBack: -.777,
+          leftRight: .222,
+        ),
+      );
+      final encoded = doc.encode();
+      final xml = utf8.decode(encoded);
+      expect(xml, contains('mso-application'));
+      expect(xml, contains('family comment'));
+      expect(xml, contains('ss:AutoFitHeight="0"'));
 
-    doc.validateEncoded(encoded);
-    final reparsed = WingPositionDocument.parse(
-      encoded,
-      'excelxml/wingposition.xml',
-    );
-    final edited = reparsed.resolve(0, 0, 0)!;
-    expect(edited.boneIndex, 7);
-    expect(edited.rotX, -45.25);
-    expect(edited.rotY, 123.5);
-    expect(edited.rotZ, 271.75);
-    expect(edited.upDown, .333);
-    expect(edited.frontBack, -.777);
-    expect(edited.leftRight, .222);
-  });
+      doc.validateEncoded(encoded);
+      final reparsed = WingPositionDocument.parse(
+        encoded,
+        'excelxml/wingposition.xml',
+      );
+      final edited = reparsed.resolve(0, 0, 0)!;
+      expect(edited.boneIndex, 7);
+      expect(edited.rotX, -45.25);
+      expect(edited.rotY, 123.5);
+      expect(edited.rotZ, 271.75);
+      expect(edited.upDown, .333);
+      expect(edited.frontBack, -.777);
+      expect(edited.leftRight, .222);
+    },
+  );
 
   test('WingPosition XML accepts one-based identity columns', () {
     final doc = WingPositionDocument.parse(
