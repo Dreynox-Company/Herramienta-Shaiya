@@ -1062,7 +1062,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (folder == null || !mounted) return;
     final directory = Directory(folder);
     if (!await directory.exists()) {
-      throw const FileSystemException('La carpeta DATA de referencia no existe.');
+      throw const FileSystemException(
+        'La carpeta DATA de referencia no existe.',
+      );
     }
     setState(() => referenceDataDirectory = directory);
     ScaffoldMessenger.of(context).showSnackBar(
