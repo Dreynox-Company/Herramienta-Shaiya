@@ -2,9 +2,46 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/excelxml_document.dart';
 import '../data/library.dart';
+
+class _ExcelXmlAuditResult {
+  final String path;
+  final String purpose;
+  final int bytes;
+  final bool valid;
+  final bool tabular;
+  final int sheets;
+  final int rows;
+  final int maxColumns;
+  final String? error;
+
+  const _ExcelXmlAuditResult({
+    required this.path,
+    required this.purpose,
+    required this.bytes,
+    required this.valid,
+    required this.tabular,
+    required this.sheets,
+    required this.rows,
+    required this.maxColumns,
+    this.error,
+  });
+
+  Map<String, Object?> toJson() => {
+    'path': path,
+    'purpose': purpose,
+    'bytes': bytes,
+    'valid': valid,
+    'tabular': tabular,
+    'sheets': sheets,
+    'rows': rows,
+    'maxColumns': maxColumns,
+    if (error != null) 'error': error,
+  };
+}
 
 class ExcelXmlLabPage extends StatefulWidget {
   final Library library;
@@ -39,6 +76,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   final Map<String, String> cellErrors = {};
   String? loadError;
   bool busy = false;
+  bool auditing = false;
+  int auditDone = 0;
+  int auditTotal = 0;
   int sheetIndex = 0;
   int? selectedRow;
   int revision = 0;
@@ -184,6 +224,183 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       );
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> auditExcelXmlFolder() async {
+    if (auditing || busy) return;
+    final all = widget.library.files.keys
+        .where(
+          (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
+        )
+        .toList()
+      ..sort();
+    setState(() {
+      auditing = true;
+      auditDone = 0;
+      auditTotal = all.length;
+    });
+
+    final results = <_ExcelXmlAuditResult>[];
+    try {
+      for (var i = 0; i < all.length; i++) {
+        final path = all[i];
+        try {
+          final bytes = await widget.library.read(
+            path,
+            limit: ExcelXmlDocument.maxBytes,
+          );
+          final parsed = ExcelXmlDocument.parse(bytes, path);
+          var rows = 0;
+          var maxColumns = 0;
+          for (final sheet in parsed.sheets) {
+            rows += sheet.rows.length;
+            if (sheet.columns.length > maxColumns) {
+              maxColumns = sheet.columns.length;
+            }
+          }
+          results.add(
+            _ExcelXmlAuditResult(
+              path: path,
+              purpose: excelXmlPurpose(path),
+              bytes: bytes.length,
+              valid: true,
+              tabular: parsed.tabular,
+              sheets: parsed.sheets.length,
+              rows: rows,
+              maxColumns: maxColumns,
+            ),
+          );
+        } catch (error) {
+          var bytes = 0;
+          try {
+            bytes = (await widget.library.read(path)).length;
+          } catch (_) {}
+          results.add(
+            _ExcelXmlAuditResult(
+              path: path,
+              purpose: excelXmlPurpose(path),
+              bytes: bytes,
+              valid: false,
+              tabular: false,
+              sheets: 0,
+              rows: 0,
+              maxColumns: 0,
+              error: error.toString(),
+            ),
+          );
+        }
+        if (!mounted) return;
+        setState(() => auditDone = i + 1);
+      }
+
+      if (!mounted) return;
+      final valid = results.where((r) => r.valid).length;
+      final tabular = results.where((r) => r.valid && r.tabular).length;
+      final broken = results.where((r) => !r.valid).length;
+      final json = const JsonEncoder.withIndent('  ').convert({
+        'schema': 1,
+        'source': widget.library.sourceLabel,
+        'files': results.length,
+        'valid': valid,
+        'tabular': tabular,
+        'broken': broken,
+        'entries': results.map((r) => r.toJson()).toList(),
+      });
+
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            'Auditoría ExcelXml · ${results.length} archivos',
+          ),
+          content: SizedBox(
+            width: 880,
+            height: 560,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '$valid válidos · $tabular SpreadsheetML · $broken con error',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: results.length,
+                    itemBuilder: (_, index) {
+                      final row = results[index];
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(
+                          row.valid
+                              ? (row.tabular
+                                    ? Icons.table_view_outlined
+                                    : Icons.code_outlined)
+                              : Icons.error_outline,
+                          size: 17,
+                          color: row.valid
+                              ? const Color(0xff9ad3b2)
+                              : const Color(0xffffa596),
+                        ),
+                        title: Text(
+                          row.path.split('/').last,
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        subtitle: Text(
+                          row.valid
+                              ? '${row.purpose} · ${row.sheets} hojas · '
+                                    '${row.rows} filas · máx. '
+                                    '${row.maxColumns} columnas · '
+                                    '${row.bytes} bytes'
+                              : '${row.purpose} · ${row.error}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 8),
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          openPath(row.path);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: json));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Auditoría ExcelXml copiada como JSON.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_all_outlined, size: 16),
+              label: const Text('Copiar JSON'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          auditing = false;
+          auditDone = 0;
+          auditTotal = 0;
+        });
+      }
     }
   }
 
@@ -670,6 +887,25 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
           ),
         ],
       ),
+      actions: [
+        if (auditing)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+            child: SizedBox(
+              width: 130,
+              child: LinearProgressIndicator(
+                value: auditTotal <= 0 ? null : auditDone / auditTotal,
+              ),
+            ),
+          )
+        else
+          IconButton(
+            tooltip: 'Auditar todos los XML montados',
+            onPressed: busy ? null : auditExcelXmlFolder,
+            icon: const Icon(Icons.fact_check_outlined),
+          ),
+        const SizedBox(width: 6),
+      ],
     ),
     body: Row(
       children: [
