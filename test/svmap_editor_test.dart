@@ -88,6 +88,21 @@ Uint8List fixture() {
   return w.done();
 }
 
+bool containsBytes(Uint8List data, List<int> needle) {
+  if (needle.isEmpty || needle.length > data.length) return false;
+  for (var i = 0; i <= data.length - needle.length; i++) {
+    var match = true;
+    for (var j = 0; j < needle.length; j++) {
+      if (data[i + j] != needle[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
 void main() {
   test('SVMAP fixed-width edits preserve unknown bytes and topology', () {
     final original = fixture();
@@ -145,10 +160,14 @@ void main() {
     expect(encoded.sublist(20, 32), original.sublist(20, 32));
     expect(encoded.sublist(encoded.length - 4), const [0xde, 0xad, 0xbe, 0xef]);
 
-    final unknownA = ByteData.sublistView(
-      encoded,
-    ).getInt32(encoded.indexOf(0x44) - 3, Endian.little);
-    expect(unknownA, 0x11223344);
+    expect(
+      containsBytes(encoded, const [0x44, 0x33, 0x22, 0x11]),
+      isTrue,
+    );
+    expect(
+      containsBytes(encoded, const [0x88, 0x77, 0x66, 0x55]),
+      isTrue,
+    );
 
     final semantic = SvmapData.parse(encoded, 'world/test.svmap');
     expect(semantic.portals.single.targetMap, 9);
