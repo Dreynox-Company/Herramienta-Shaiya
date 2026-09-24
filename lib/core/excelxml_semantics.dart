@@ -49,9 +49,23 @@ List<ExcelXmlSemanticIssue> auditExcelXmlSemantics(ExcelXmlDocument document) {
   if (document.sheets.isEmpty) return const [];
 
   return switch (file) {
+    'wingposition.xml' => _wingPosition(document),
     'wingdecompose.xml' => _wingDecompose(document),
     'wingexpitem.xml' => _wingExpItem(document),
     'wingswap.xml' => _wingSwap(document),
+    'battlefield3prize.xml' => _battleFieldPrize(document),
+    'guildgemitem.xml' => _guildGemItem(document),
+    'infinitedungeonrebirth.xml' => _infiniteDungeonRebirth(document),
+    'renownshop.xml' => _renownShop(document),
+    'functionalpetsize.xml' => _functionalPetSize(document),
+    'healskilllist.xml' => _healSkillList(document),
+    'itemaddoptiondata.xml' => _itemAddOption(document),
+    'fontstyleset.xml' => _fontStyleSet(document),
+    'gmnoticeinfo.xml' => _gmNotice(document),
+    'ymeventinfo.xml' => _ymEventInfo(document),
+    'visiblepartybufskill.xml' => _visiblePartyBuff(document),
+    'npcdisablesystem.xml' => _npcDisable(document),
+    'timenoticesystem.xml' => _timeNotice(document),
     'ymwatershaderparams.xml' => _waterShader(document),
     'mapcountry.xml' => _mapCountry(document),
     'startmapchange.xml' => _startMapChange(document),
@@ -161,6 +175,103 @@ void _numberRange(
       ),
     );
   }
+}
+
+void _finiteNumberError(
+  List<ExcelXmlSemanticIssue> out,
+  ExcelXmlSheet sheet,
+  int sheetIndex,
+  int rowIndex,
+  int? column,
+  String label,
+) {
+  if (column == null) return;
+  final raw = sheet.rows[rowIndex].value(column).trim();
+  final value = double.tryParse(raw);
+  if (value == null || !value.isFinite) {
+    out.add(
+      ExcelXmlSemanticIssue(
+        severity: ExcelXmlIssueSeverity.error,
+        sheetIndex: sheetIndex,
+        rowIndex: rowIndex,
+        columnIndex: column,
+        code: 'number',
+        message: '$label requiere un número finito; valor actual: "$raw".',
+      ),
+    );
+  }
+}
+
+void _itemCountPair(
+  List<ExcelXmlSemanticIssue> out,
+  ExcelXmlSheet sheet,
+  int sheetIndex,
+  int rowIndex,
+  int? itemColumn,
+  int? countColumn,
+  String label,
+) {
+  if (itemColumn == null || countColumn == null) return;
+  final itemRaw = sheet.rows[rowIndex].value(itemColumn).trim();
+  final countRaw = sheet.rows[rowIndex].value(countColumn).trim();
+  if (itemRaw.isEmpty && countRaw.isEmpty) return;
+  final item = _intValue(sheet.rows[rowIndex], itemColumn);
+  final count = _intValue(sheet.rows[rowIndex], countColumn);
+  if (item == null || count == null) {
+    out.add(
+      ExcelXmlSemanticIssue(
+        severity: ExcelXmlIssueSeverity.error,
+        sheetIndex: sheetIndex,
+        rowIndex: rowIndex,
+        columnIndex: item == null ? itemColumn : countColumn,
+        code: 'item-count',
+        message: '$label requiere Item/Count enteros.',
+      ),
+    );
+    return;
+  }
+  final emptyItem = item == 0;
+  final emptyCount = count == 0;
+  if (item < 0 || count < 0 || emptyItem != emptyCount) {
+    out.add(
+      ExcelXmlSemanticIssue(
+        severity: ExcelXmlIssueSeverity.error,
+        sheetIndex: sheetIndex,
+        rowIndex: rowIndex,
+        columnIndex: emptyItem ? countColumn : itemColumn,
+        code: 'item-count',
+        message:
+            '$label debe usar Item=0/Count=0 para vacío o ambos valores '
+            'positivos.',
+      ),
+    );
+  }
+}
+
+void _datePart(
+  List<ExcelXmlSemanticIssue> out,
+  ExcelXmlSheet sheet,
+  int sheetIndex,
+  int rowIndex,
+  int? column,
+  String label,
+  int min,
+  int max, {
+  bool optional = false,
+}) {
+  if (column == null) return;
+  final raw = sheet.rows[rowIndex].value(column).trim();
+  if (optional && raw.isEmpty) return;
+  _integerError(
+    out,
+    sheet,
+    sheetIndex,
+    rowIndex,
+    column,
+    label,
+    min: min,
+    max: max,
+  );
 }
 
 void _duplicateKeys(
