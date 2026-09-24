@@ -51,6 +51,74 @@ def main():
     # raw result; do not invent field names or reinterpret it as gameplay testing.
     version=re.search(r'^version:\s*(\S+)',(ROOT/'pubspec.yaml').read_text(),re.M).group(1)
     commit=git('rev-parse','HEAD')
+
+    debug_crt_names={
+        'msvcp140d.dll','ucrtbased.dll','vccorlib140d.dll',
+        'vcruntime140_1d.dll','vcruntime140d.dll',
+    }
+    debug_crt=sorted(
+        p.name for p in release.iterdir()
+        if p.is_file() and p.name.lower() in debug_crt_names
+    )
+    crypto_profile={}
+    profile_path=ROOT/'profiles'/'spk-crypto-profile.json'
+    if profile_path.is_file():
+        crypto_profile=json.loads(profile_path.read_text(encoding='utf-8'))
+    resource_key_validated=bool(
+        crypto_profile.get('evidence',{}).get('resourceKeyValidated') is True
+    )
+    delivery_status={
+        'schema':1,
+        'version':version,
+        'commit':commit,
+        'windows':{
+            'releaseBuild':True,
+            'nativeIntegration':native.get('native_render') is True,
+            'startupSmoke':bool(
+                startup.get('process_alive') is True and
+                startup.get('native_window') is True
+            ),
+            'debugCrtBundled':debug_crt,
+            'graphicsRuntimeHardeningComplete':not debug_crt,
+        },
+        'flightV3':{
+            'runtimeExpectedSha256':
+                '6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba',
+            'sourceExpectedSha256':
+                '7f720a9e339d96a6e47cdce11094ecb64663c2f80f102de179f76e7f0b2c8a44',
+            'realRuntimeAuditDocumented':(ROOT/'docs'/'FLIGHT_V3_REAL_RUNTIME_AUDIT.md').is_file(),
+            'runtimeBundled':(release/'Extras'/'FlightV3'/'Shaiya_Studio_FlightV3_Runtime.zip').is_file(),
+        },
+        'spk':{
+            'resourceKeyValidated':resource_key_validated,
+            'fullRealAuditComplete':False,
+            'realRepackReopened':False,
+        },
+        'realDataQa':{
+            'wingPositionGameExe':False,
+            'wingMonExactInstall':False,
+            'vehicleMonExactInstall':False,
+            'vehicleBridgeGameExe':False,
+        },
+    }
+    blocking=[]
+    if debug_crt:
+        blocking.append('windows-angle-release-runtime')
+    if not delivery_status['flightV3']['runtimeBundled']:
+        blocking.append('flight-v3-runtime-not-bundled')
+    if not resource_key_validated:
+        blocking.append('spk-payload-key')
+    blocking.extend([
+        'real-data-visual-qa',
+        'spk-50135-full-audit-and-reopen',
+    ])
+    delivery_status['blockingGates']=blocking
+    delivery_status['productionComplete100']=not blocking
+    (release/'distribution-status.json').write_text(
+        json.dumps(delivery_status,ensure_ascii=False,indent=2)+'\n',
+        encoding='utf-8',
+    )
+
     files={p.relative_to(release).as_posix():{'bytes':p.stat().st_size,'sha256':sha(p)} for p in sorted(release.rglob('*')) if p.is_file()}
     result={'schema':1,'version':version,'commit':commit,'tree':git('rev-parse','HEAD^{tree}'),
         'repository':os.environ.get('GITHUB_REPOSITORY'),'run':os.environ.get('GITHUB_RUN_ID'),
