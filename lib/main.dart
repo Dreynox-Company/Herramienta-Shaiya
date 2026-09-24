@@ -775,10 +775,9 @@ class _StudioState extends State<StudioPage> {
     final library = catalog?.library;
     if (world == null || library == null) return null;
     final dir = directoryName(world);
-    final file = baseName(world).replaceFirst(
-      RegExp(r'\.wld$', caseSensitive: false),
-      '.wtr',
-    );
+    final file = baseName(
+      world,
+    ).replaceFirst(RegExp(r'\.wld$', caseSensitive: false), '.wtr');
     final exact = library.resolve(file, [dir], uniqueFallback: false);
     if (exact != null && exact.toLowerCase().endsWith('.wtr')) return exact;
     return library.files.keys
@@ -2411,9 +2410,7 @@ class _StudioState extends State<StudioPage> {
                 OutlinedButton.icon(
                   onPressed: disabled
                       ? null
-                      : () => openDataEditor(
-                          initialPath: activeWorldWtrPath(),
-                        ),
+                      : () => openDataEditor(initialPath: activeWorldWtrPath()),
                   icon: const Icon(Icons.texture_outlined, size: 16),
                   label: const Text(
                     'Capas / texturas WTR',
@@ -3703,8 +3700,7 @@ class _StudioState extends State<StudioPage> {
     timeline: timeline(),
     actions: actionBar(),
     hasLibrary: scene.character != null,
-    onOpenEditor:
-        catalog == null || working ? null : () => openDataEditor(),
+    onOpenEditor: catalog == null || working ? null : () => openDataEditor(),
     onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,

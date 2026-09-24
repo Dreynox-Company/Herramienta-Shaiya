@@ -15,7 +15,7 @@ class WtrDocument extends EditDocument {
          profile: 'wtr',
          warnings: const [
            'WTR real: TileSize + dos enteros de cabecera + tabla de texturas fijas de 256 bytes. '
-           'Solo se editan spans conocidos; el recuento estructural queda protegido.',
+               'Solo se editan spans conocidos; el recuento estructural queda protegido.',
          ],
          parsedBytes: payload.length,
        );
@@ -44,11 +44,7 @@ class WtrDocument extends EditDocument {
           FieldSpan(FieldSpec('TileSize', 'f32'), 0, 4),
           FieldSpan(FieldSpec('Unknown2', 'u32'), 4, 4),
           FieldSpan(FieldSpec('Unknown3', 'i32'), 8, 4),
-          FieldSpan(
-            FieldSpec('TextureCount', 'u32', editable: false),
-            12,
-            4,
-          ),
+          FieldSpan(FieldSpec('TextureCount', 'u32', editable: false), 12, 4),
         ],
       ),
     ];
@@ -63,11 +59,7 @@ class WtrDocument extends EditDocument {
           kind: 'Textura WTR',
           ordinal: i,
           dynamicSpans: [
-            FieldSpan(
-              FieldSpec('Texture', 'text256'),
-              start,
-              256,
-            ),
+            FieldSpan(FieldSpec('Texture', 'text256'), start, 256),
           ],
         ),
       );
@@ -86,10 +78,7 @@ class WtrDocument extends EditDocument {
   Uint8List validate(FieldSpan field, String text) {
     if (field.spec.name == 'TileSize') {
       final value = double.tryParse(text.trim().replaceAll(',', '.'));
-      if (value == null ||
-          !value.isFinite ||
-          value <= 0 ||
-          value > 100000) {
+      if (value == null || !value.isFinite || value <= 0 || value > 100000) {
         throw const FormatException(
           'TileSize WTR debe ser finito, mayor que 0 y menor o igual a 100000.',
         );

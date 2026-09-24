@@ -69,20 +69,29 @@ void main() {
     );
   });
 
-  test('WTR rejects traversal unsupported extensions and invalid tile sizes', () {
-    final doc = WtrDocument.open(
-      fixture(),
-      'world/test.wtr',
-      GameTextEncoding.windows1252,
-    );
-    final texture = doc.fields(1).single;
-    final tile = doc.fields(0).first;
+  test(
+    'WTR rejects traversal unsupported extensions and invalid tile sizes',
+    () {
+      final doc = WtrDocument.open(
+        fixture(),
+        'world/test.wtr',
+        GameTextEncoding.windows1252,
+      );
+      final texture = doc.fields(1).single;
+      final tile = doc.fields(0).first;
 
-    expect(() => doc.edit(1, texture, '../outside.dds'), throwsFormatException);
-    expect(() => doc.edit(1, texture, 'world/terrain.exe'), throwsFormatException);
-    expect(() => doc.edit(0, tile, '0'), throwsFormatException);
-    expect(() => doc.edit(0, tile, '100001'), throwsFormatException);
-  });
+      expect(
+        () => doc.edit(1, texture, '../outside.dds'),
+        throwsFormatException,
+      );
+      expect(
+        () => doc.edit(1, texture, 'world/terrain.exe'),
+        throwsFormatException,
+      );
+      expect(() => doc.edit(0, tile, '0'), throwsFormatException);
+      expect(() => doc.edit(0, tile, '100001'), throwsFormatException);
+    },
+  );
 
   test('WTR fixed text field cannot overflow 256-byte native slot', () {
     final doc = WtrDocument.open(
