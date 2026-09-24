@@ -886,6 +886,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'Autenticación offline válida: ${diagnosis['offlineValid'] ?? 0}',
         'Claves candidatas probadas: ${diagnosis['candidateKeysTested'] ?? 0}',
         'Claves candidatas autenticadas: ${diagnosis['candidateKeysAuthenticated'] ?? 0}',
+        'Barrido estático V13: ${diagnosis['staticCandidatesTested'] ?? 0} '
+            'candidatas · profundas: ${diagnosis['staticDeepCandidatesTested'] ?? 0} '
+            '· módulos: ${diagnosis['staticModulesScanned'] ?? 0}',
+        if (diagnosis['staticMatchSource'] != null)
+          'Coincidencia estática: ${diagnosis['staticMatchSource']}',
         if (diagnosis['events'] is List)
           'Eventos: ${(diagnosis['events'] as List).join(', ')}',
       ],
@@ -1328,6 +1333,27 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       } catch (_) {}
     }
 
+    var staticCandidatesTested = 0;
+    var staticDeepCandidatesTested = 0;
+    var staticModulesScanned = 0;
+    String? staticMatchSource;
+    final staticEvidence = File(p.join(output.path, 'static-key-sweep.json'));
+    if (await staticEvidence.exists()) {
+      try {
+        final raw = await readSpkJsonFile(staticEvidence);
+        if (raw is Map) {
+          staticCandidatesTested = (raw['tested'] as num?)?.toInt() ?? 0;
+          staticDeepCandidatesTested =
+              (raw['deepTested'] as num?)?.toInt() ?? 0;
+          staticModulesScanned = (raw['modules'] as List?)?.length ?? 0;
+          final match = raw['match'];
+          if (match is Map && match['source'] != null) {
+            staticMatchSource = match['source'].toString();
+          }
+        }
+      } catch (_) {}
+    }
+
     var withKey = 0;
     var withAuth = 0;
     var offlineValid = 0;
@@ -1366,8 +1392,17 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'para revisar esta inconsistencia.';
     } else if (rows.isEmpty && candidateKeysTested > 0) {
       reason =
-          'Se observaron $candidateKeysTested claves candidatas de CNG/OpenSSL, '
-          'pero ninguna autenticó los payloads AES-GCM reales del DATA.SPK.';
+          'Se observaron $candidateKeysTested claves candidatas dinámicas, '
+          'pero ninguna autenticó los payloads AES-GCM reales del DATA.SPK. '
+          'El barrido estático probó $staticCandidatesTested candidatas '
+          '($staticDeepCandidatesTested en secciones PE de datos).';
+    } else if (rows.isEmpty &&
+        (staticCandidatesTested > 0 || staticDeepCandidatesTested > 0)) {
+      reason =
+          'El barrido estático V13 probó $staticCandidatesTested candidatas '
+          '($staticDeepCandidatesTested profundas en $staticModulesScanned '
+          'módulos) sin autenticar la clave; el cliente tampoco expuso una '
+          'candidata dinámica válida durante la captura.';
     } else if (rows.isEmpty) {
       reason =
           'El cliente no expuso ninguno de los 55.457 ciphertexts objetivo ni '
@@ -1405,6 +1440,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       'offlineValid': offlineValid,
       'candidateKeysTested': candidateKeysTested,
       'candidateKeysAuthenticated': candidateKeysAuthenticated,
+      'staticCandidatesTested': staticCandidatesTested,
+      'staticDeepCandidatesTested': staticDeepCandidatesTested,
+      'staticModulesScanned': staticModulesScanned,
+      if (staticMatchSource != null) 'staticMatchSource': staticMatchSource,
       'events': eventCodes.toList()..sort(),
       'profileReadyForSimple': profile['readyForSimple'] == true,
       'profileResourceKeys': profile['resourceKeys'],
