@@ -41,9 +41,13 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn("mbedcrypto", text)
         self.assertIn("wolfssl", text)
         self.assertIn("CANDIDATE_HOOK_READY", text)
+        self.assertIn("RUNTIME_INDEX_KEY_SCAN", text)
+        self.assertIn("runtime-near-index-key", text)
+        self.assertIn("CONFIG.indexKeyHex", text)
         probe_text = MODULE.read_text(encoding='utf-8')
         self.assertIn("print('EVENT'", probe_text)
         self.assertIn("'RESUMEN capturas='", probe_text)
+        self.assertIn("'indexKeyHex':index_key.hex()", probe_text)
 
     def test_windows_probe_and_studio_force_utf8_safe_evidence(self):
         probe_text = MODULE.read_text(encoding='utf-8')
