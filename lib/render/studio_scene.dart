@@ -541,6 +541,46 @@ class StudioScene extends ChangeNotifier {
     );
   }
 
+  List<String> get mountMonAnimationSlots => monAnimationSlots;
+
+  List<String> get mountMonAnimationCandidates {
+    final record = mountRecord;
+    final c = catalog;
+    if (record == null || c == null) return const [];
+    final root = directoryName(record.source);
+    final prefix = '$root/ani/';
+    final out = c.library.files.keys
+        .where((path) => path.startsWith(prefix) && path.endsWith('.ani'))
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  String? mountMonAnimation(String slot) => mountRecord?.animations[slot];
+
+  String? mountMonAnimationCandidate(String slot) {
+    final raw = mountMonAnimation(slot);
+    if (raw == null || raw.isEmpty) return null;
+    final name = baseName(raw).toLowerCase();
+    return mountMonAnimationCandidates
+        .where((path) => baseName(path).toLowerCase() == name)
+        .firstOrNull;
+  }
+
+  Future<void> saveMountMonAnimation(String slot, String animationPath) async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura MON seleccionada.');
+    }
+    final updated = await c.saveMountAnimation(record, slot, animationPath);
+    await selectCreature(updated, 'mount');
+    report(
+      '${updated.source} #${updated.id} · $slot = '
+      '${baseName(animationPath)} · Vehicle MON guardado y revalidado.',
+    );
+  }
+
   Future<void> saveActiveWingPositionToData() async {
     final identity = _wingIdentity();
     final document = catalog?.wingPositions;
