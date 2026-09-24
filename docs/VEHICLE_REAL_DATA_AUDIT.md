@@ -35,6 +35,40 @@ Los seis MON activos son MO4 y tienen 120 registros cada uno:
 cada uno. La DATA activa, por tanto, duplicó el catálogo a 120 registros y
 añadió recursos posteriores.
 
+## ANI reales
+
+Se recorrieron los **590 ANI** de `Vehicle/ANI/` aplicando las mismas reglas
+estructurales que usa `ClipData.parse`:
+
+- 590/590 parsearon completos;
+- 0 jerarquías de huesos inválidas;
+- 388 usan cabecera `ANI_V2` y 202 el layout clásico;
+- los rigs reales varían desde 2 hasta 117 huesos;
+- duración observada: 0.1667 s a 9.4667 s;
+- se validaron en conjunto 750,463 claves de rotación y 79,528 claves de
+  traslación;
+- existen clips con frame inicial 0 y casos reales con 1, -1 y -23, por lo que
+  Studio conserva lectura signed de los frames y no los interpreta como uint.
+
+Esto confirma con archivos reales que el parser ANI de Studio cubre todo el
+corpus Vehicle suministrado.
+
+## 3DC reales
+
+También se recorrieron las **168 mallas 3DC** activas con las reglas de
+`MeshData.skinned`:
+
+- 168/168 parsearon hasta EOF;
+- todas son mallas skinned en esta copia;
+- 0 pesos apuntan a huesos inexistentes;
+- 0 matrices de enlace usadas resultaron inválidas;
+- 453,327 vértices y 483,392 triángulos en conjunto;
+- rango de 9 a 11,205 vértices por recurso.
+
+Por tanto el frente pendiente de 3DC ya no es **lectura** de estas monturas: es
+la **autoría/writer binario** necesaria si se quiere hornear escala, espejo o
+cambios geométricos directamente en el recurso.
+
 ## Semántica MON confirmada con los bytes reales
 
 Cada registro MO4 real contiene:
