@@ -27,6 +27,32 @@ class WingPositionProfile {
 
   int get key => family * 100 + job * 10 + sex;
 
+  String get familyLabel => switch (family) {
+    0 => 'Human',
+    1 => 'Elf',
+    2 => 'Vail',
+    3 => 'Nordein / DeathEater',
+    _ => 'Familia $family',
+  };
+
+  String get jobLabel => switch (job) {
+    0 => 'Fighter / Warrior',
+    1 => 'Defender / Guardian',
+    2 => 'Ranger / Assassin',
+    3 => 'Archer / Hunter',
+    4 => 'Mage / Pagan',
+    5 => 'Priest / Oracle',
+    _ => 'Job $job',
+  };
+
+  String get sexLabel => switch (sex) {
+    0 => 'Masculino',
+    1 => 'Femenino',
+    _ => 'Sexo $sex',
+  };
+
+  String get identityLabel => '$familyLabel · $jobLabel · $sexLabel';
+
   WingPositionProfile copyWith({
     int? boneIndex,
     double? rotX,
