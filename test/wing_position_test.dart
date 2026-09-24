@@ -96,6 +96,14 @@ void main() {
     expect(nordeinHunterFemale.frontBack, -.19);
   });
 
+  test('canonical identity labels follow the ExcelXml family/job/sex comments', () {
+    final p = WingPositionDocument.verifiedResolve(3, 3, 1)!;
+    expect(p.familyLabel, 'Nordein / DeathEater');
+    expect(p.jobLabel, 'Archer / Hunter');
+    expect(p.sexLabel, 'Femenino');
+    expect(p.identityLabel, contains('Archer / Hunter'));
+  });
+
   test('WingPosition XML parses explicit zero-based identities', () {
     final doc = WingPositionDocument.parse(
       fixture(),
