@@ -15,6 +15,7 @@ class FieldSpec {
     'u16' || 'i16' => 2,
     'u32' || 'i32' || 'f32' => 4,
     'i64' || 'u64' || 'f64' => 8,
+    'text256' => 256,
     _ => 0,
   };
   bool get text => type.startsWith('text');
@@ -205,6 +206,11 @@ class EditDocument {
   }
 
   String _decode(FieldSpan f, Uint8List b) {
+    if (f.spec.type == 'text256') {
+      final zero = b.indexOf(0);
+      final end = zero < 0 ? b.length : zero;
+      return codec.decode(b.sublist(0, end));
+    }
     if (f.spec.text) {
       final end = b.length - f.terminators;
       return codec.decode(b.sublist(f.prefix, end));
@@ -243,6 +249,17 @@ class EditDocument {
         throw const FormatException(
           'No se admiten terminadores NUL dentro de una cadena.',
         );
+      }
+      if (f.type == 'text256') {
+        final bytes = codec.encode(text);
+        if (bytes.length > 255) {
+          throw const FormatException(
+            'La cadena fija WTR admite como máximo 255 bytes más NUL.',
+          );
+        }
+        final out = Uint8List(256);
+        out.setRange(0, bytes.length, bytes);
+        return out;
       }
       final bytes = codec.encode(text),
           total = bytes.length + field.terminators;
