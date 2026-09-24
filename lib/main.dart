@@ -9,6 +9,7 @@ import 'package:file_selector/file_selector.dart';
 import 'core/extra_motion.dart';
 import 'core/flight_v3_bundle.dart';
 import 'core/equipment_rules.dart';
+import 'core/excelxml_document.dart';
 import 'core/vehicle_position.dart';
 import 'core/textures.dart';
 import 'package:flutter/gestures.dart';
@@ -748,6 +749,70 @@ class _StudioState extends State<StudioPage> {
           ],
         ),
       );
+  String? excelXmlPath(String fileName) {
+    final c = catalog;
+    if (c == null) return null;
+    final wanted = fileName.toLowerCase();
+    return c.library.files.keys
+        .where(
+          (path) =>
+              path.startsWith('excelxml/') &&
+              baseName(path).toLowerCase() == wanted,
+        )
+        .firstOrNull;
+  }
+
+  Widget excelXmlShortcut(
+    String fileName,
+    String label, {
+    IconData icon = Icons.table_view_outlined,
+  }) {
+    final path = excelXmlPath(fileName);
+    return OutlinedButton.icon(
+      onPressed: disabled || path == null
+          ? null
+          : () => openExcelXmlLab(initialPath: path),
+      icon: Icon(icon, size: 15),
+      label: Text(label, style: const TextStyle(fontSize: 9)),
+    );
+  }
+
+  Widget excelXmlShortcutGroup(
+    String title,
+    List<(String, String)> files, {
+    String? subtitle,
+  }) {
+    final available = files
+        .where((entry) => excelXmlPath(entry.$1) != null)
+        .toList(growable: false);
+    if (available.isEmpty) return const SizedBox.shrink();
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: const TextStyle(fontSize: 9)),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final entry in available)
+                excelXmlShortcut(entry.$1, entry.$2),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget note(String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Text(
