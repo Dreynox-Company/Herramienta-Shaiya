@@ -24,6 +24,7 @@ class FlightV3Transition {
   final String id;
   final String kind;
   final String? profile;
+  final String? targetClip;
   final bool shield;
   final double duration;
   final double destinationPhase;
@@ -33,6 +34,7 @@ class FlightV3Transition {
     required this.id,
     required this.kind,
     required this.profile,
+    required this.targetClip,
     required this.shield,
     required this.duration,
     required this.destinationPhase,
@@ -318,6 +320,7 @@ class FlightV3Bundle {
         id: id,
         kind: kind,
         profile: row['profile']?.toString(),
+        targetClip: row['targetClip']?.toString(),
         shield: row['shield'] == true,
         duration: duration,
         destinationPhase: destinationPhase,
