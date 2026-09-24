@@ -237,6 +237,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
     }
     final raw = sourceBytes;
     if (document == null) {
+      final editable = rawText != null;
       final preview = raw == null
           ? ''
           : utf8.decode(
@@ -248,23 +249,72 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    loadError ?? 'XML no tabular.',
+                    style: const TextStyle(
+                      color: Color(0xffffb6a7),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                if (editable)
+                  FilledButton.icon(
+                    onPressed: busy || !rawDirty ? null : saveRawXml,
+                    icon: const Icon(Icons.build_outlined, size: 16),
+                    label: const Text('Validar y guardar reparación'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text(
-              loadError ?? 'XML no tabular.',
-              style: const TextStyle(color: Color(0xffffb6a7), fontSize: 11),
+              editable
+                  ? 'El XML original no parsea. Puedes corregir el texto; '
+                        'Studio solo permitirá guardarlo cuando el documento '
+                        'completo vuelva a ser XML válido.'
+                  : 'Vista de diagnóstico en solo lectura.',
+              style: const TextStyle(fontSize: 9, color: Color(0xff8fa0b8)),
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  preview,
-                  style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
-                ),
-              ),
+              child: editable
+                  ? TextFormField(
+                      key: ValueKey('repair-$revision-$selectedPath'),
+                      initialValue: rawText,
+                      enabled: !busy,
+                      expands: true,
+                      maxLines: null,
+                      minLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      style: const TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 10,
+                      ),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        rawText = value;
+                        if (!rawDirty) setState(() => rawDirty = true);
+                      },
+                    )
+                  : SingleChildScrollView(
+                      child: SelectableText(
+                        preview,
+                        style: const TextStyle(
+                          fontFamily: 'Consolas',
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
             ),
           ],
         ),
       );
     }
+
     if (!document!.tabular) {
       final editable = rawText != null;
       return Padding(
