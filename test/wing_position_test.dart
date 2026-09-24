@@ -65,6 +65,32 @@ void main() {
     expect(p.boneWritable, isTrue);
   });
 
+  test('WingPosition XML accepts generic name/value column layout', () {
+    final out = StringBuffer('<WingPosition>');
+    for (var family = 0; family < 4; family++) {
+      for (var job = 0; job < 6; job++) {
+        for (var sex = 0; sex < 2; sex++) {
+          out
+            ..write('<Row FAMILY="$family" JOB="$job" SEX="$sex">')
+            ..write('<Col name="WING_ROT_X" value="171"/>')
+            ..write('<Col name="WING_ROT_Y" value="2"/>')
+            ..write('<Col name="WING_ROT_Z" value="91"/>')
+            ..write('<Col name="WING_UP_DOWN" value="0.12"/>')
+            ..write('<Col name="WING_FRONT_BACK" value="-0.22"/>')
+            ..write('<Col name="WING_LEFT_RIGHT" value="0.03"/>')
+            ..write('</Row>');
+        }
+      }
+    }
+    out.write('</WingPosition>');
+    final doc = WingPositionDocument.parse(
+      Uint8List.fromList(utf8.encode(out.toString())),
+      'excelxml/wingposition.xml',
+    );
+    expect(doc.resolve(2, 4, 1)?.rotX, 171);
+    expect(doc.resolve(2, 4, 1)?.leftRight, .03);
+  });
+
   test('WingPosition XML accepts one-based identity columns', () {
     final doc = WingPositionDocument.parse(
       fixture(oneBased: true),
