@@ -308,6 +308,286 @@ void _duplicateKeys(
   }
 }
 
+List<ExcelXmlSemanticIssue> _wingPosition(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final family = c['family'];
+    final job = c['job'];
+    final sex = c['sex'];
+    final bone = c['bone_idx'];
+    final required = [
+      family,
+      job,
+      sex,
+      bone,
+      c['wing_rot_x'],
+      c['wing_rot_y'],
+      c['wing_rot_z'],
+      c['wing_up_down'],
+      c['wing_front_back'],
+      c['wing_left_right'],
+    ];
+    if (required.any((value) => value == null)) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, family, 'FAMILY', min: 0, max: 3);
+      _integerError(out, sheet, s, r, job, 'JOB', min: 0, max: 5);
+      _integerError(out, sheet, s, r, sex, 'SEX', min: 0, max: 1);
+      _integerError(out, sheet, s, r, bone, 'BONE_IDX', min: 0);
+      for (final name in const [
+        'wing_rot_x',
+        'wing_rot_y',
+        'wing_rot_z',
+        'wing_up_down',
+        'wing_front_back',
+        'wing_left_right',
+      ]) {
+        _finiteNumberError(out, sheet, s, r, c[name], name.toUpperCase());
+      }
+    }
+    _duplicateKeys(
+      out,
+      sheet,
+      s,
+      [family!, job!, sex!],
+      label: 'La combinación FAMILY + JOB + SEX',
+    );
+    if (sheet.rows.length != 48) {
+      out.add(
+        ExcelXmlSemanticIssue(
+          severity: ExcelXmlIssueSeverity.error,
+          sheetIndex: s,
+          code: 'wing-profile-count',
+          message:
+              'WingPosition requiere 48 perfiles (4 familias × 6 jobs × '
+              '2 sexos); hay ' + sheet.rows.length.toString() + '.',
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _battleFieldPrize(
+  ExcelXmlDocument document,
+) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final minRank = c['rankmin'];
+    final maxRank = c['rankmax'];
+    if (minRank == null || maxRank == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, minRank, 'RankMin', min: 1);
+      _integerError(out, sheet, s, r, maxRank, 'RankMax', min: 1);
+      final a = _intValue(sheet.rows[r], minRank);
+      final b = _intValue(sheet.rows[r], maxRank);
+      if (a != null && b != null && a > b) {
+        out.add(
+          ExcelXmlSemanticIssue(
+            severity: ExcelXmlIssueSeverity.error,
+            sheetIndex: s,
+            rowIndex: r,
+            columnIndex: minRank,
+            code: 'rank-range',
+            message: 'RankMin no puede ser mayor que RankMax.',
+          ),
+        );
+      }
+      for (var slot = 1; slot <= 4; slot++) {
+        _itemCountPair(
+          out,
+          sheet,
+          s,
+          r,
+          c['item' + slot.toString()],
+          c['count' + slot.toString()],
+          'Recompensa ' + slot.toString(),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _guildGemItem(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final item = c['gemitemid'];
+    final count = c['gemitemcnt'];
+    if (item == null || count == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        item,
+        'GEMITEMID',
+        min: 1,
+        allowZero: false,
+      );
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        count,
+        'GEMITEMCNT',
+        min: 1,
+        allowZero: false,
+      );
+    }
+    _duplicateKeys(out, sheet, s, [item], label: 'GEMITEMID');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _infiniteDungeonRebirth(
+  ExcelXmlDocument document,
+) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final map = c['mapid'];
+    final birth = c['isbirth'];
+    if (map == null || birth == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, map, 'MapID', min: 0);
+      _integerError(out, sheet, s, r, birth, 'IsBirth', min: 0, max: 1);
+    }
+    _duplicateKeys(out, sheet, s, [map], label: 'MapID');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _renownShop(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final id = c['id'];
+    if (id == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, id, 'ID', min: 1, allowZero: false);
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        c['itemid'],
+        'ItemID',
+        min: 1,
+        allowZero: false,
+      );
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        c['itemcount'],
+        'ItemCount',
+        min: 1,
+        allowZero: false,
+      );
+      _integerError(out, sheet, s, r, c['renown'], 'Renown', min: 0);
+      _integerError(out, sheet, s, r, c['killlevel'], 'KillLevel', min: 0);
+      _integerError(out, sheet, s, r, c['limittype'], 'LimitType', min: 0);
+      _integerError(out, sheet, s, r, c['limitnum'], 'LimitNum', min: 0);
+    }
+    _duplicateKeys(out, sheet, s, [id], label: 'ID');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _functionalPetSize(
+  ExcelXmlDocument document,
+) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final monster = c['monsterid'];
+    if (monster == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        monster,
+        'MonsterID',
+        min: 1,
+        allowZero: false,
+      );
+      for (final name in const [
+        'dyeingsize',
+        'pointshopsize',
+        'particleeffectsize',
+        '3deffectsize',
+        '3deffectheight',
+      ]) {
+        _finiteNumberError(out, sheet, s, r, c[name], name);
+      }
+    }
+    _duplicateKeys(out, sheet, s, [monster], label: 'MonsterID');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _healSkillList(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final skill = _columns(sheet)['skillid'];
+    if (skill == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        skill,
+        'SKILLID',
+        min: 1,
+        allowZero: false,
+      );
+    }
+    _duplicateKeys(out, sheet, s, [skill], label: 'SKILLID');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _itemAddOption(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final type = c['type'];
+    final typeId = c['typeid'];
+    if (type == null || typeId == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, type, 'Type', min: 0);
+      _integerError(out, sheet, s, r, typeId, 'TypeID', min: 0);
+      _finiteNumberError(
+        out,
+        sheet,
+        s,
+        r,
+        c['criticalhitdamage'],
+        'CriticalHitDamage',
+      );
+    }
+    _duplicateKeys(out, sheet, s, [type, typeId], label: 'Type + TypeID');
+  }
+  return out;
+}
+
 List<ExcelXmlSemanticIssue> _wingDecompose(ExcelXmlDocument document) {
   final out = <ExcelXmlSemanticIssue>[];
   for (var s = 0; s < document.sheets.length; s++) {
