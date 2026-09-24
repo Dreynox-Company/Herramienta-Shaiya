@@ -78,7 +78,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       setState(() {
         sourceBytes = bytes;
         document = parsed;
-        rawText = parsed != null && !parsed.tabular && bytes.length <= 2 * 1024 * 1024
+        rawText =
+            parsed != null && !parsed.tabular && bytes.length <= 2 * 1024 * 1024
             ? utf8.decode(bytes, allowMalformed: false)
             : null;
         rawDirty = false;
