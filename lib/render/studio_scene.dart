@@ -933,6 +933,7 @@ class StudioScene extends ChangeNotifier {
       grounded: flightState.grounded,
       landing: flightState.landing || flightState.combatDescent,
       moving: moving,
+      running: running || touchRun,
     );
     final clip = selectWingMotion(actor.clips, phase);
     _wingMotionPhase = phase;
