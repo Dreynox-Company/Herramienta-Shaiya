@@ -1751,6 +1751,45 @@ class _StudioState extends State<StudioPage> {
               ),
               note(scene.flightV3Status),
               if (scene.flightV3 != null)
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Todas las transiciones Flight V3',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${scene.flightV3TransitionOptions.length} ANI · '
+                    'takeoff, landing, air blend y secuencias',
+                    style: const TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    field<FlightV3Transition>(
+                      'flight-v3-transition',
+                      'Transición / secuencia corporal',
+                      scene.flightV3TransitionOptions,
+                      scene.flightV3TransitionOptions
+                          .where((t) => t.id == scene.flightV3PreviewId)
+                          .firstOrNull,
+                      (t) => t.id,
+                      (t) => t.id.replaceFirst('V3_', ''),
+                      (t) => scene.previewFlightV3Transition(t.id),
+                      detail: (t) =>
+                          '${scene.flightV3TransitionLabel(t)}\n'
+                          'Destino: ${t.targetClip ?? 'secuencia compuesta'} · '
+                          'fase ${t.destinationPhase.toStringAsFixed(3)} s',
+                      empty: 'Selecciona una transición V3',
+                    ),
+                    note(
+                      'Este visor permite revisar las 26 transiciones reales '
+                      'del paquete, incluidas las tres BODY_SEQUENCE. La '
+                      'reproducción termina en el clip/fase de destino declarado '
+                      'por transiciones.json cuando existe.',
+                    ),
+                  ],
+                ),
+              if (scene.flightV3 != null)
                 note(
                   'El paquete V3 se valida por SHA-256, vuelve a parsear todos '
                   'los ANI y solo se activa sobre humf de 36 huesos. Incluye '
