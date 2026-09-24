@@ -35,7 +35,7 @@ import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
-const studioVersion = '0.6.22';
+const studioVersion = '0.6.23';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
