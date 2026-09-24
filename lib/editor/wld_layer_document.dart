@@ -82,11 +82,7 @@ class WldLayerDocument extends EditDocument {
         kind: 'Cabecera WLD',
         ordinal: 0,
         dynamicSpans: [
-          const FieldSpan(
-            FieldSpec('MapSize', 'u32', editable: false),
-            4,
-            4,
-          ),
+          const FieldSpan(FieldSpec('MapSize', 'u32', editable: false), 4, 4),
           FieldSpan(
             const FieldSpec('LayerCount', 'u32', editable: false),
             countOffset,
@@ -121,11 +117,7 @@ class WldLayerDocument extends EditDocument {
         kind: 'Layout WLD',
         ordinal: 0,
         dynamicSpans: [
-          FieldSpan(
-            const FieldSpec('Layout', 'text256'),
-            layoutOffset,
-            256,
-          ),
+          FieldSpan(const FieldSpec('Layout', 'text256'), layoutOffset, 256),
         ],
       ),
     );
@@ -163,10 +155,13 @@ class WldLayerDocument extends EditDocument {
     final reparsed = WorldResource.parse(out, path);
     final originalParsed = WorldResource.parse(original, path);
     if (reparsed.terrain.size != originalParsed.terrain.size ||
-        reparsed.terrain.layers.length != originalParsed.terrain.layers.length ||
-        reparsed.terrain.heights.length != originalParsed.terrain.heights.length ||
+        reparsed.terrain.layers.length !=
+            originalParsed.terrain.layers.length ||
+        reparsed.terrain.heights.length !=
+            originalParsed.terrain.heights.length ||
         reparsed.terrain.types.length != originalParsed.terrain.types.length ||
-        reparsed.terrain.objects.length != originalParsed.terrain.objects.length) {
+        reparsed.terrain.objects.length !=
+            originalParsed.terrain.objects.length) {
       throw FormatException(
         '$path: el WLD editado alteró estructura fuera de las capas permitidas.',
       );
