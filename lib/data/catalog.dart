@@ -376,15 +376,18 @@ class Catalog {
     return out;
   }
 
-  Future<CreatureRecord> saveWingAnimation(
+  Future<CreatureRecord> _saveMonAnimation(
     CreatureRecord record,
     String slot,
-    String animationPath,
-  ) async {
-    if (!record.source.startsWith('character/wing/') ||
+    String animationPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) async {
+    if (!record.source.startsWith(requiredRoot) ||
         !record.source.endsWith('.mon')) {
-      throw const FormatException(
-        'El recurso seleccionado no pertenece a Character/Wing/*.MON.',
+      throw FormatException(
+        'El recurso seleccionado no pertenece a $label.',
       );
     }
     final original = await library.read(record.source);
@@ -407,12 +410,38 @@ class Catalog {
     final updated = verified[record.id];
     await library.writeResource(record.source, encoded);
 
-    final index = wings.indexWhere(
-      (w) => w.source == record.source && w.id == record.id,
+    final index = target.indexWhere(
+      (entry) => entry.source == record.source && entry.id == record.id,
     );
-    if (index >= 0) wings[index] = updated;
+    if (index >= 0) target[index] = updated;
     return updated;
   }
+
+  Future<CreatureRecord> saveWingAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath,
+  ) => _saveMonAnimation(
+    record,
+    slot,
+    animationPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveMountAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath,
+  ) => _saveMonAnimation(
+    record,
+    slot,
+    animationPath,
+    requiredRoot: 'vehicle/',
+    target: mounts,
+    label: 'Vehicle/*.MON',
+  );
 
   Future<void> saveWingPosition(WingPositionProfile profile) async {
     final document = wingPositions;
