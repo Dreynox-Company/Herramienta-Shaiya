@@ -604,6 +604,30 @@ class StudioScene extends ChangeNotifier {
   String? wingMonEffect(String slot) => wingRecord?.effects[slot];
   String? get wingMonAttachedEffect => wingRecord?.effects['Adjunto'];
 
+  String? wingMonSoundCandidate(String slot) =>
+      _candidateByBase(wingMonSound(slot), wingMonSoundCandidates);
+
+  String? wingMonEffectCandidate(String slot) =>
+      _candidateByBase(wingMonEffect(slot), wingMonEffectCandidates);
+
+  String? get wingMonAttachedEffectCandidate =>
+      _candidateByBase(wingMonAttachedEffect, wingMonEffectCandidates);
+
+  List<MaterialRecord> get wingMonParts =>
+      wingRecord?.parts ?? const <MaterialRecord>[];
+
+  String? wingMonMeshCandidate(int partId) {
+    final parts = wingMonParts;
+    if (partId < 0 || partId >= parts.length) return null;
+    return _candidateByBase(parts[partId].mesh, wingMonMeshCandidates);
+  }
+
+  String? wingMonTextureCandidate(int partId) {
+    final parts = wingMonParts;
+    if (partId < 0 || partId >= parts.length) return null;
+    return _candidateByBase(parts[partId].texture, wingMonTextureCandidates);
+  }
+
   String? _candidateByBase(String? raw, List<String> candidates) {
     if (raw == null || raw.isEmpty) return null;
     final name = baseName(raw).toLowerCase();
