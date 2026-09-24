@@ -2170,6 +2170,9 @@ class StudioScene extends ChangeNotifier {
           rotX: riderRotX,
           rotY: riderRotY,
           rotZ: riderRotZ,
+          scaleX: riderScaleX * (riderMirrorX ? -1 : 1),
+          scaleY: riderScaleY * (riderMirrorY ? -1 : 1),
+          scaleZ: riderScaleZ * (riderMirrorZ ? -1 : 1),
         ).storage,
       );
       a.root.position.y = groundY;
