@@ -2244,6 +2244,46 @@ class StudioScene extends ChangeNotifier {
     }
   }
 
+  FlightV3Transition? _flightV3CombatLandingTransition() {
+    if (!flightV3Compatible) return null;
+    final code = _flightV3CombatCode();
+    if (code == null) return null;
+    final actor = character;
+    final fromFlight = actor != null && identical(actor.clip, actor.flight);
+    final shieldSuffix =
+        shieldRecord != null && code == 'on' ? '_SHIELD' : '';
+    final id =
+        'V3_${fromFlight ? 'FLIGHT_LAND' : 'LAND'}_COMBAT_'
+        '${code.toUpperCase()}$shieldSuffix';
+    return flightV3?.transitions[id];
+  }
+
+  FlightV3Transition? _flightV3CombatTakeoffTransition() {
+    if (!flightV3Compatible) return null;
+    final code = _flightV3CombatCode();
+    if (code == null) return null;
+    final shieldSuffix =
+        shieldRecord != null && code == 'on' ? '_SHIELD' : '';
+    return flightV3
+        ?.transitions['V3_TAKEOFF_COMBAT_${code.toUpperCase()}$shieldSuffix'];
+  }
+
+  void startFlightV3CombatLanding() {
+    final actor = character;
+    final transition = _flightV3CombatLandingTransition();
+    if (actor == null || transition == null) return;
+    _flightBodyTransition = transition.clip;
+    actor.play(transition.clip, repeat: false);
+  }
+
+  void startFlightV3CombatTakeoff() {
+    final actor = character;
+    final transition = _flightV3CombatTakeoffTransition();
+    if (actor == null || transition == null) return;
+    _flightBodyTransition = transition.clip;
+    actor.play(transition.clip, repeat: false);
+  }
+
   Future<void> installFlightV3(FlightV3Bundle bundle) async {
     flightV3 = bundle;
     final a = character;
@@ -2763,11 +2803,16 @@ class StudioScene extends ChangeNotifier {
       return;
     }
     if (!flightState.grounded && mount == null) {
+      startFlightV3CombatLanding();
       flightState.queue(combat.target);
       // Preserve held movement and click-to-move routes while touching down.
       refreshIdle();
       movementTransitions.invalidate();
-      say('Descenso rápido de combate…');
+      say(
+        flightV3Compatible
+            ? 'Descenso de combate V3…'
+            : 'Descenso rápido de combate…',
+      );
       return;
     }
     combat.attack(
