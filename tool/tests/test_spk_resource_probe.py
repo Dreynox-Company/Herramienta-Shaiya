@@ -258,6 +258,7 @@ class ResourceProbeContractTest(unittest.TestCase):
             self.assertEqual(key, resource_key)
             self.assertIn('pe-data:.rdata', source)
             self.assertGreater(report['deepTested'], 0)
+            self.assertGreater(report['deepModulesScanned'], 0)
             self.assertEqual(report['match']['secretHex'], resource_key.hex())
 
     def test_static_key_sweep_rejects_every_candidate_when_gcm_oracle_fails(self):
