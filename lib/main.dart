@@ -261,9 +261,7 @@ class _StudioState extends State<StudioPage> {
     scene.clearMovement();
     focus.unfocus();
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => WingPositionLabPage(library: library),
-      ),
+      MaterialPageRoute(builder: (_) => WingPositionLabPage(library: library)),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();
@@ -1518,8 +1516,7 @@ class _StudioState extends State<StudioPage> {
                   ],
                 ),
                 OutlinedButton.icon(
-                  onPressed:
-                      disabled || !scene.wingPositionFileAvailable
+                  onPressed: disabled || !scene.wingPositionFileAvailable
                       ? null
                       : openWingPositionLab,
                   icon: const Icon(Icons.grid_on_outlined, size: 16),

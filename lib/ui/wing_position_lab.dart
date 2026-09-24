@@ -111,16 +111,15 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
   WingPositionProfile _poseFrom(
     WingPositionProfile target,
     WingPositionProfile source,
-  ) =>
-      target.copyWith(
-        boneIndex: source.boneIndex,
-        rotX: source.rotX,
-        rotY: source.rotY,
-        rotZ: source.rotZ,
-        upDown: source.upDown,
-        frontBack: source.frontBack,
-        leftRight: source.leftRight,
-      );
+  ) => target.copyWith(
+    boneIndex: source.boneIndex,
+    rotX: source.rotX,
+    rotY: source.rotY,
+    rotZ: source.rotZ,
+    upDown: source.upDown,
+    frontBack: source.frontBack,
+    leftRight: source.leftRight,
+  );
 
   void _pasteToCurrent() {
     final source = clipboard;
@@ -282,25 +281,24 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
     double? min,
     double? max,
     int decimals = 4,
-  }) =>
-      TextFormField(
-        key: ValueKey('$revision-${selectedKey ?? -1}-$label-$value'),
-        initialValue: value.toStringAsFixed(decimals),
-        enabled: !busy,
-        style: const TextStyle(fontSize: 11),
-        decoration: InputDecoration(labelText: label),
-        keyboardType: const TextInputType.numberWithOptions(
-          decimal: true,
-          signed: true,
-        ),
-        onFieldSubmitted: (raw) {
-          var parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
-          if (parsed == null || !parsed.isFinite) return;
-          if (min != null && parsed < min) parsed = min;
-          if (max != null && parsed > max) parsed = max;
-          apply(parsed);
-        },
-      );
+  }) => TextFormField(
+    key: ValueKey('$revision-${selectedKey ?? -1}-$label-$value'),
+    initialValue: value.toStringAsFixed(decimals),
+    enabled: !busy,
+    style: const TextStyle(fontSize: 11),
+    decoration: InputDecoration(labelText: label),
+    keyboardType: const TextInputType.numberWithOptions(
+      decimal: true,
+      signed: true,
+    ),
+    onFieldSubmitted: (raw) {
+      var parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
+      if (parsed == null || !parsed.isFinite) return;
+      if (min != null && parsed < min) parsed = min;
+      if (max != null && parsed > max) parsed = max;
+      apply(parsed);
+    },
+  );
 
   Widget _profileList() {
     final currentKey = selectedKey;
@@ -354,9 +352,7 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
                   dense: true,
                   selected: p.key == currentKey,
                   leading: Icon(
-                    changed
-                        ? Icons.edit_note_outlined
-                        : Icons.flight_outlined,
+                    changed ? Icons.edit_note_outlined : Icons.flight_outlined,
                     size: 17,
                   ),
                   title: Text(
@@ -390,15 +386,16 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
       return const Center(child: Text('Selecciona un perfil WingPosition.'));
     }
 
-    WingPositionProfile withNumber(String field, double value) => switch (field) {
-      'rotX' => p.copyWith(rotX: value),
-      'rotY' => p.copyWith(rotY: value),
-      'rotZ' => p.copyWith(rotZ: value),
-      'upDown' => p.copyWith(upDown: value),
-      'frontBack' => p.copyWith(frontBack: value),
-      'leftRight' => p.copyWith(leftRight: value),
-      _ => p,
-    };
+    WingPositionProfile withNumber(String field, double value) =>
+        switch (field) {
+          'rotX' => p.copyWith(rotX: value),
+          'rotY' => p.copyWith(rotY: value),
+          'rotZ' => p.copyWith(rotZ: value),
+          'upDown' => p.copyWith(upDown: value),
+          'frontBack' => p.copyWith(frontBack: value),
+          'leftRight' => p.copyWith(leftRight: value),
+          _ => p,
+        };
 
     final baseline = WingPositionDocument.verifiedResolve(
       p.family,
@@ -507,9 +504,7 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
           runSpacing: 8,
           children: [
             OutlinedButton.icon(
-              onPressed: busy
-                  ? null
-                  : () => setState(() => clipboard = p),
+              onPressed: busy ? null : () => setState(() => clipboard = p),
               icon: const Icon(Icons.copy_all_outlined, size: 16),
               label: const Text('Copiar pose'),
             ),
@@ -519,8 +514,7 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
               label: const Text('Pegar aquí'),
             ),
             OutlinedButton.icon(
-              onPressed:
-                  busy || clipboard == null ? null : _pasteToBothSexes,
+              onPressed: busy || clipboard == null ? null : _pasteToBothSexes,
               icon: const Icon(Icons.people_alt_outlined, size: 16),
               label: const Text('Pegar a ambos sexos'),
             ),
