@@ -123,9 +123,14 @@ Existe evidencia local de la clave AES-GCM del índice, ligada al SHA-256 exacto
 anterior. Esa clave no se declara automáticamente como clave de recursos:
 Studio la prueba contra tags GCM reales y la descarta si no autentica.
 
+Mientras ese gate sigue cerrado, 0.6.20 puede montar una DATA externa solo como
+**preview de referencia**: permite inspeccionar rutas candidatas, mallas y
+texturas sin presentar esos bytes como payloads descifrados del SPK ni habilitar
+escritura del contenedor.
+
 Por tanto, el código está preparado para lectura/escritura completa, pero no se
 debe afirmar todavía que los 50.135 payloads del archivo real del usuario han
-sido descifrados. Falta ejecutar 0.6.17 contra el par real
+sido descifrados. Falta ejecutar 0.6.20 / ResourceProbe V13 contra el par real
 `game.exe + data.spk` y obtener la auditoría.
 
 ## Avances consolidados del lector
