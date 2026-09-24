@@ -549,10 +549,11 @@ class StudioScene extends ChangeNotifier {
     if (record == null || c == null) return const [];
     final root = directoryName(record.source);
     final prefix = '$root/ani/';
-    final out = c.library.files.keys
-        .where((path) => path.startsWith(prefix) && path.endsWith('.ani'))
-        .toList()
-      ..sort();
+    final out =
+        c.library.files.keys
+            .where((path) => path.startsWith(prefix) && path.endsWith('.ani'))
+            .toList()
+          ..sort();
     return out;
   }
 

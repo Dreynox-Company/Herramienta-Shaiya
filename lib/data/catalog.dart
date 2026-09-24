@@ -386,9 +386,7 @@ class Catalog {
   }) async {
     if (!record.source.startsWith(requiredRoot) ||
         !record.source.endsWith('.mon')) {
-      throw FormatException(
-        'El recurso seleccionado no pertenece a $label.',
-      );
+      throw FormatException('El recurso seleccionado no pertenece a $label.');
     }
     final original = await library.read(record.source);
     final document = EditableMonDocument.parse(original, record.source);
