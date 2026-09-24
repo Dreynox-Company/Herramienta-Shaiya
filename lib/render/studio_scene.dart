@@ -756,6 +756,12 @@ class StudioScene extends ChangeNotifier {
   String? mountMonSound(String slot) => mountRecord?.sounds[slot];
   String? mountMonEffect(String slot) => mountRecord?.effects[slot];
 
+  String? mountMonSoundCandidate(String slot) =>
+      _candidateByBase(mountMonSound(slot), mountMonSoundCandidates);
+
+  String? mountMonEffectCandidate(String slot) =>
+      _candidateByBase(mountMonEffect(slot), mountMonEffectCandidates);
+
   Future<void> saveMountMonSound(String slot, String soundPath) async {
     final c = catalog;
     final record = mountRecord;
