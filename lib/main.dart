@@ -1497,10 +1497,24 @@ class _StudioState extends State<StudioPage> {
                   ],
                 ),
                 note(
-                  'Calibración 6DoF del jinete sobre la superficie animada de la '
-                  'montura. En este momento es previsualización de Studio: todavía '
-                  'no se ha confirmado un archivo DATA equivalente a WingPosition '
-                  'para monturas, por lo que no se escribe al juego.',
+                  'Studio Bridge ps0032 · ${scene.activeVehiclePositionSection}. '
+                  'El game.exe conserva primero su cálculo nativo de hueso/asiento '
+                  'y después aplica este delta local. Si el INI falta o el perfil '
+                  'está deshabilitado, el comportamiento original no cambia.',
+                ),
+                field<int>(
+                  'mount-rider-profile/${scene.mountRecord!.source}/'
+                  '${scene.mountRecord!.id}',
+                  'Perfil ANI del jinete',
+                  scene.riderProfileOptions,
+                  scene.riderProfile,
+                  (v) => v.toString(),
+                  scene.riderProfileLabel,
+                  (v) async => scene.setRiderProfile(v),
+                  detail: (v) {
+                    final p = riderAnimationProfiles[v]!;
+                    return 'Reposo ANI ${p.idle} · movimiento ANI ${p.moving}';
+                  },
                 ),
                 preciseSlider(
                   'Asiento X · izquierda / derecha',
@@ -1544,14 +1558,91 @@ class _StudioState extends State<StudioPage> {
                   180,
                   (v) => setState(() => scene.riderRotZ = v),
                 ),
+                const Divider(height: 20),
+                preciseSlider(
+                  'Escala X',
+                  scene.riderScaleX,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.riderScaleX = v),
+                ),
+                preciseSlider(
+                  'Escala Y',
+                  scene.riderScaleY,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.riderScaleY = v),
+                ),
+                preciseSlider(
+                  'Escala Z',
+                  scene.riderScaleZ,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.riderScaleZ = v),
+                ),
+                toggle(
+                  'Espejo X',
+                  scene.riderMirrorX,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.riderMirrorX = v),
+                ),
+                toggle(
+                  'Espejo Y',
+                  scene.riderMirrorY,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.riderMirrorY = v),
+                ),
+                toggle(
+                  'Espejo Z',
+                  scene.riderMirrorZ,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.riderMirrorZ = v),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: disabled
+                            ? null
+                            : () => act(scene.saveActiveVehiclePositionToData),
+                        icon: const Icon(Icons.save_outlined, size: 15),
+                        label: const Text(
+                          'Guardar para game.exe',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            disabled ||
+                                scene.activeVehiclePositionProfile == null
+                            ? null
+                            : () => act(() async {
+                                scene.resetActiveVehiclePositionFromData();
+                                setState(() {});
+                              }),
+                        child: const Text(
+                          'Recargar INI',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 OutlinedButton(
                   onPressed: disabled
                       ? null
                       : () => act(() async {
                           scene.resetMountSeatCalibration();
+                          setState(() {});
                         }),
                   child: const Text(
-                    'Restablecer calibración de montura',
+                    'Restablecer delta neutral',
                     style: TextStyle(fontSize: 10),
                   ),
                 ),
@@ -1565,9 +1656,11 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
                 note(
-                  'El asiento sigue una superficie animada de la montura y la '
-                  'pelvis se alinea con ella. Los seis ajustes se recuerdan por '
-                  'montura durante la sesión. W: marcha · Shift: carrera.',
+                  'Vehicle.MON mantiene sus nueve ANI por registro. El perfil ANI '
+                  'del jinete es otro contrato: ps0032 usa modos distintos '
+                  '(21/20, 97/22, 98/98 y variantes del corpus). '
+                  'VehiclePosition.ini guarda el modo elegido junto al delta 6DoF, '
+                  'escala y espejo por familia + ID de montura. W: marcha · Shift: carrera.',
                 ),
               ],
             ]),
