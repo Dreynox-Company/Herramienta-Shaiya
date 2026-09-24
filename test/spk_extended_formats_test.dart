@@ -44,6 +44,16 @@ class Writer {
     _b.add(raw);
   }
 
+  void strFixed(String value, int length) {
+    final raw = latin1.encode(value);
+    if (raw.length > length) {
+      throw ArgumentError.value(value, 'value', 'Cadena fija demasiado larga.');
+    }
+    final out = Uint8List(length);
+    out.setRange(0, raw.length, raw);
+    _b.add(out);
+  }
+
   void zeros(int n) => _b.add(Uint8List(n));
   Uint8List take() => _b.takeBytes();
 }
@@ -79,7 +89,8 @@ Uint8List wtr() {
   w.u32(0);
   w.i32(0);
   w.u32(1);
-  w.str('water.dds');
+  // WTR stores each texture name in a fixed 256-byte legacy field.
+  w.strFixed('water.dds', 256);
   return w.take();
 }
 
