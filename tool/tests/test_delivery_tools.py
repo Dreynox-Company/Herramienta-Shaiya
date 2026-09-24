@@ -1,5 +1,6 @@
 """No-network checks for delivery safety and source preservation."""
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -12,6 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import prepare
 import publish_sources
 import build
+
+PACKAGE_WINDOWS = Path(__file__).resolve().parents[2] / 'ci' / 'package_windows.py'
+PACKAGE_SPEC = importlib.util.spec_from_file_location('package_windows', PACKAGE_WINDOWS)
+package_windows = importlib.util.module_from_spec(PACKAGE_SPEC)
+assert PACKAGE_SPEC.loader is not None
+PACKAGE_SPEC.loader.exec_module(package_windows)
 
 
 class DeliveryToolsTest(unittest.TestCase):
@@ -45,6 +52,51 @@ class DeliveryToolsTest(unittest.TestCase):
         )
         self.assertIn("'FLIGHT_V3_REAL_RUNTIME_AUDIT.md'", text)
         self.assertIn("'WINDOWS_RELEASE_AUDIT.md'", text)
+
+    def test_flight_runtime_bundling_is_hash_locked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release = root / 'release'
+            runtime = root / package_windows.FLIGHT_RUNTIME_NAME
+            release.mkdir()
+            runtime.write_bytes(b'real-runtime-fixture')
+            expected = hashlib.sha256(runtime.read_bytes()).hexdigest()
+            with patch.object(package_windows, 'ROOT', root), \
+                    patch.object(package_windows, 'FLIGHT_RUNTIME_SHA256', expected), \
+                    patch.dict(
+                        package_windows.os.environ,
+                        {'SHAIYA_FLIGHT_V3_RUNTIME': str(runtime)},
+                        clear=False,
+                    ):
+                target = package_windows.install_flight_runtime(release)
+            self.assertIsNotNone(target)
+            self.assertEqual(target.read_bytes(), runtime.read_bytes())
+            self.assertEqual(
+                target,
+                release / 'Extras' / 'FlightV3' /
+                package_windows.FLIGHT_RUNTIME_NAME,
+            )
+
+    def test_flight_runtime_bundling_rejects_wrong_hash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release = root / 'release'
+            runtime = root / package_windows.FLIGHT_RUNTIME_NAME
+            release.mkdir()
+            runtime.write_bytes(b'tampered-runtime')
+            with patch.object(package_windows, 'ROOT', root), \
+                    patch.object(
+                        package_windows,
+                        'FLIGHT_RUNTIME_SHA256',
+                        '0' * 64,
+                    ), \
+                    patch.dict(
+                        package_windows.os.environ,
+                        {'SHAIYA_FLIGHT_V3_RUNTIME': str(runtime)},
+                        clear=False,
+                    ):
+                with self.assertRaisesRegex(RuntimeError, 'hash mismatch'):
+                    package_windows.install_flight_runtime(release)
 
     def test_unknown_platform_is_rejected_before_running_flutter(self):
         with patch.object(prepare.subprocess, 'run') as run:
