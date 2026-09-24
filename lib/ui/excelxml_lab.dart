@@ -391,7 +391,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '$valid válidos · $tabular SpreadsheetML · $broken con error',
+                  '$valid válidos · $tabular SpreadsheetML · $broken con error · '
+                  '$semanticErrors semánticos · $semanticWarnings avisos',
                   style: const TextStyle(fontSize: 11),
                 ),
                 const SizedBox(height: 10),
@@ -422,7 +423,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                               ? '${row.purpose} · ${row.sheets} hojas · '
                                     '${row.rows} filas · máx. '
                                     '${row.maxColumns} columnas · '
-                                    '${row.bytes} bytes'
+                                    '${row.bytes} bytes · '
+                                    '${row.semanticErrors} errores semánticos · '
+                                    '${row.semanticWarnings} avisos'
                               : '${row.purpose} · ${row.error}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -748,8 +751,30 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                   ),
                 ),
               const SizedBox(width: 8),
+              if (semanticErrorCount > 0 || semanticWarningCount > 0)
+                Tooltip(
+                  message:
+                      '$semanticErrorCount errores semánticos · '
+                      '$semanticWarningCount avisos',
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      semanticErrorCount > 0
+                          ? Icons.error_outline
+                          : Icons.warning_amber_outlined,
+                      size: 18,
+                      color: semanticErrorCount > 0
+                          ? const Color(0xffffa596)
+                          : const Color(0xffffd38a),
+                    ),
+                  ),
+                ),
               FilledButton.icon(
-                onPressed: busy || !structuredDirty || cellErrors.isNotEmpty
+                onPressed:
+                    busy ||
+                        !structuredDirty ||
+                        cellErrors.isNotEmpty ||
+                        semanticErrorCount > 0
                     ? null
                     : save,
                 icon: const Icon(Icons.save_outlined, size: 16),
@@ -812,7 +837,11 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               return InkWell(
                 onTap: () => setState(() => selectedRow = rowIndex),
                 child: Container(
-                  color: active ? const Color(0xff29384f) : null,
+                  color: active
+                      ? const Color(0xff29384f)
+                      : _rowHasSemanticIssue(sheetIndex, rowIndex)
+                      ? const Color(0xff2a2420)
+                      : null,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Row(
                     children: [
@@ -882,9 +911,29 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         for (final column in sheet.columns)
           Builder(
             builder: (context) {
-              final errorKey = '$sheetIndex/$rowIndex/${column.index}';
+              final errorKey =
+                  '$sheetIndex/$rowIndex/${column.index}';
               final type = row.cellType(column.index);
               final hasCell = row.hasCell(column.index);
+              final semantic = _cellSemanticIssues(
+                sheetIndex,
+                rowIndex,
+                column.index,
+              );
+              final semanticError = semantic
+                  .where(
+                    (issue) =>
+                        issue.severity == ExcelXmlIssueSeverity.error,
+                  )
+                  .map((issue) => issue.message)
+                  .join('\n');
+              final semanticWarning = semantic
+                  .where(
+                    (issue) =>
+                        issue.severity == ExcelXmlIssueSeverity.warning,
+                  )
+                  .map((issue) => issue.message)
+                  .join('\n');
               return Padding(
                 padding: const EdgeInsets.only(bottom: 9),
                 child: TextFormField(
@@ -905,10 +954,17 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                   decoration: InputDecoration(
                     labelText: column.label,
                     helperText: hasCell
-                        ? 'C${column.index} · ${type ?? 'tipo no declarado'}'
+                        ? [
+                            'C${column.index} · '
+                                '${type ?? 'tipo no declarado'}',
+                            if (semanticWarning.isNotEmpty)
+                              'Aviso: $semanticWarning',
+                          ].join('\n')
                         : 'Celda ausente · no se inventa',
                     helperStyle: const TextStyle(fontSize: 8),
-                    errorText: cellErrors[errorKey],
+                    errorText:
+                        cellErrors[errorKey] ??
+                        (semanticError.isEmpty ? null : semanticError),
                     errorMaxLines: 3,
                   ),
                   onChanged: hasCell
@@ -923,6 +979,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                             setState(() {
                               structuredDirty = true;
                               cellErrors.remove(errorKey);
+                              _refreshSemanticIssues(doc);
                             });
                           } catch (error) {
                             setState(() {
