@@ -26,7 +26,7 @@ class DeliveryToolsTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         text = (root / 'ci' / 'package_windows.py').read_text(encoding='utf-8')
         self.assertIn("distribution-status.json", text)
-        self.assertIn("'productionComplete100':not blocking", text)
+        self.assertIn("delivery_status['productionComplete100']=not blocking", text)
         self.assertIn("'spk-payload-key'", text)
         self.assertIn("'real-data-visual-qa'", text)
         self.assertIn("'spk-50135-full-audit-and-reopen'", text)
