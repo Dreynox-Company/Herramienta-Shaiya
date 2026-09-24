@@ -88,11 +88,7 @@ class FlightV3Bundle {
 
   FlightV3CombatProfile? combatFor(String code) => combat[code];
 
-  FlightV3Transition? transition(
-    String id, {
-    String? profile,
-    bool? shield,
-  }) {
+  FlightV3Transition? transition(String id, {String? profile, bool? shield}) {
     final exact = transitions[id];
     if (exact != null) return exact;
     for (final value in transitions.values) {
@@ -119,7 +115,9 @@ class FlightV3Bundle {
 
     final archive = ZipDecoder().decodeBytes(bytes, verify: true);
     if (archive.length > maxEntries) {
-      throw const FormatException('Paquete Flight V3 contiene demasiadas entradas.');
+      throw const FormatException(
+        'Paquete Flight V3 contiene demasiadas entradas.',
+      );
     }
 
     final files = <String, Uint8List>{};
@@ -135,7 +133,9 @@ class FlightV3Bundle {
           relative.startsWith('/') ||
           relative.contains('../') ||
           relative.contains(':')) {
-        throw FormatException('Ruta insegura dentro de Flight V3: ${entry.name}');
+        throw FormatException(
+          'Ruta insegura dentro de Flight V3: ${entry.name}',
+        );
       }
       final raw = entry.content;
       final data = raw is Uint8List
@@ -161,12 +161,15 @@ class FlightV3Bundle {
     for (final line in const LineSplitter().convert(sumsText)) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
-      final match = RegExp(r'^([0-9a-fA-F]{64})\s+\*?(.+)$').firstMatch(trimmed);
+      final match = RegExp(
+        r'^([0-9a-fA-F]{64})\s+\*?(.+)$',
+      ).firstMatch(trimmed);
       if (match == null) {
         throw const FormatException('SHA256SUMS.txt de Flight V3 es inválido.');
       }
-      declared[match.group(2)!.replaceAll('\\', '/')] =
-          match.group(1)!.toLowerCase();
+      declared[match.group(2)!.replaceAll('\\', '/')] = match
+          .group(1)!
+          .toLowerCase();
     }
     if (declared.isEmpty) {
       throw const FormatException('Flight V3 no contiene hashes verificables.');
@@ -174,7 +177,9 @@ class FlightV3Bundle {
     for (final entry in declared.entries) {
       final data = files[entry.key];
       if (data == null) {
-        throw FormatException('Flight V3: falta archivo listado en SHA256SUMS: ${entry.key}.');
+        throw FormatException(
+          'Flight V3: falta archivo listado en SHA256SUMS: ${entry.key}.',
+        );
       }
       if (sha256.convert(data).toString().toLowerCase() != entry.value) {
         throw FormatException('Flight V3: SHA-256 incorrecto: ${entry.key}.');
@@ -217,7 +222,14 @@ class FlightV3Bundle {
     final hoverShield = clip('ANI/Vuelo/PLAYER_STOP_FLY_SHIELD.ani');
     final flightShield = clip('ANI/Vuelo/PLAYER_FLY_SHIELD.ani');
 
-    for (final candidate in [walk, run, hover, flight, hoverShield, flightShield]) {
+    for (final candidate in [
+      walk,
+      run,
+      hover,
+      flight,
+      hoverShield,
+      flightShield,
+    ]) {
       if (!_sameHierarchy(normal, candidate)) {
         throw const FormatException(
           'Flight V3 contiene ANI con jerarquias corporales incompatibles.',
@@ -242,7 +254,9 @@ class FlightV3Bundle {
       final runClip = clip(file(running, '${prefix}run'));
       for (final candidate in [guard, ...attackClips, runClip]) {
         if (!_sameHierarchy(normal, candidate)) {
-          throw FormatException('Flight V3: perfil $code usa una jerarquia incompatible.');
+          throw FormatException(
+            'Flight V3: perfil $code usa una jerarquia incompatible.',
+          );
         }
       }
       return FlightV3CombatProfile(
@@ -263,7 +277,9 @@ class FlightV3Bundle {
     final transitionManifest = jsonFile('transiciones.json');
     final rawTransitions = transitionManifest['transitions'];
     if (rawTransitions is! List || rawTransitions.length > 64) {
-      throw const FormatException('Flight V3: manifiesto de transiciones inválido.');
+      throw const FormatException(
+        'Flight V3: manifiesto de transiciones inválido.',
+      );
     }
     final transitions = <String, FlightV3Transition>{};
     for (final item in rawTransitions) {

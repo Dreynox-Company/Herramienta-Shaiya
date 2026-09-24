@@ -2115,15 +2115,13 @@ class StudioScene extends ChangeNotifier {
       }
     }
     final v3Transition = flightV3Compatible
-        ? flightV3?.transitions[
-              enabled
-                  ? (shieldRecord != null
-                        ? 'V3_TAKEOFF_NORMAL_SHIELD'
-                        : 'V3_TAKEOFF_NORMAL_NEUTRAL')
-                  : (shieldRecord != null
-                        ? 'V3_LAND_NORMAL_SHIELD'
-                        : 'V3_LAND_NORMAL_NEUTRAL')
-            ]
+        ? flightV3?.transitions[enabled
+              ? (shieldRecord != null
+                    ? 'V3_TAKEOFF_NORMAL_SHIELD'
+                    : 'V3_TAKEOFF_NORMAL_NEUTRAL')
+              : (shieldRecord != null
+                    ? 'V3_LAND_NORMAL_SHIELD'
+                    : 'V3_LAND_NORMAL_NEUTRAL')]
         : null;
     setFlightEnabled(enabled);
     if (v3Transition != null && character != null) {
