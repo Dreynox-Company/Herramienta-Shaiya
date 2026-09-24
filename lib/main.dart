@@ -30,6 +30,7 @@ import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
 import 'ui/excelxml_lab.dart';
 import 'ui/wing_position_lab.dart';
+import 'ui/wing_systems_lab.dart';
 import 'ui/spk_archive_browser.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
@@ -262,6 +263,21 @@ class _StudioState extends State<StudioPage> {
     focus.unfocus();
     await Navigator.of(context).push<void>(
       MaterialPageRoute(builder: (_) => WingPositionLabPage(library: library)),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openWingSystemsLab() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WingSystemsLabPage(library: library),
+      ),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();
@@ -1770,6 +1786,21 @@ class _StudioState extends State<StudioPage> {
                 'real está disponible (baseline canónico: hueso 4). Solo si no hay '
                 'perfil compatible se recurre al anclaje anatómico inferido del torso.',
               ),
+              if (catalog!.library.files.containsKey(
+                    'excelxml/wingdecompose.xml',
+                  ) ||
+                  catalog!.library.files.containsKey(
+                    'excelxml/wingexpitem.xml',
+                  ) ||
+                  catalog!.library.files.containsKey('excelxml/wingswap.xml'))
+                OutlinedButton.icon(
+                  onPressed: disabled ? null : openWingSystemsLab,
+                  icon: const Icon(Icons.account_tree_outlined, size: 16),
+                  label: const Text(
+                    'Abrir Wing Systems Lab',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
               if (catalog!.library.files.containsKey(
                     'excelxml/wingdecompose.xml',
                   ) ||
