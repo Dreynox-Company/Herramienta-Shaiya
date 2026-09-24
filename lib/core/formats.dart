@@ -836,7 +836,7 @@ class ManiData {
     r.end();
     if (out.version != 0x21) {
       throw FormatException(
-        source + ' · versión MAni inesperada: ' + out.version.toString() + '.',
+        '$source · versión MAni inesperada: ${out.version}.',
       );
     }
     return out;
@@ -1055,14 +1055,17 @@ class DgData {
       if (collisionType == 1) {
         final vertexCount = r.count(2000000);
         final vertices = <v.Vector3>[];
-        for (var i = 0; i < vertexCount; i++) vertices.add(r.vec());
+        for (var i = 0; i < vertexCount; i++) {
+          vertices.add(r.vec());
+        }
         final faceCount = r.count(2000000);
         r.need(faceCount * 6);
         final indices = Uint16List(faceCount * 3);
         for (var i = 0; i < indices.length; i++) {
           final index = r.u16();
-          if (index >= vertexCount)
+          if (index >= vertexCount) {
             r.fail('Triángulo de colisión DG fuera de la malla.');
+          }
           indices[i] = index;
         }
         collisions.add(SmodCollisionMesh(List.unmodifiable(vertices), indices));
@@ -1157,8 +1160,9 @@ class SvmapData {
   static SvmapData parse(Uint8List bytes, String source) {
     final r = Bin(bytes, source);
     final mapSize = r.i32();
-    if (mapSize <= 0 || mapSize > 16384)
+    if (mapSize <= 0 || mapSize > 16384) {
       r.fail('Tamaño SVMAP inválido: $mapSize.');
+    }
     final mask = (mapSize * mapSize) ~/ 8;
     r.skip(mask);
     final cellSize = r.i32();
@@ -1184,8 +1188,9 @@ class SvmapData {
       for (var j = 0; j < n; j++) {
         route.add(SvmapNpcWaypoint(r.vec(), r.f32()));
       }
-      if (route.isNotEmpty)
+      if (route.isNotEmpty) {
         npcs.add(SvmapNpcPlacement(type, id, List.unmodifiable(route)));
+      }
     }
     final portals = <SvmapPortal>[];
     final portalCount = r.count(100000);
@@ -1293,11 +1298,14 @@ class VaniData {
       final faceCount = r.count(2000000);
       r.need(faceCount * 6);
       final rawIndices = Uint16List(faceCount * 3);
-      for (var i = 0; i < rawIndices.length; i++) rawIndices[i] = r.u16();
+      for (var i = 0; i < rawIndices.length; i++) {
+        rawIndices[i] = r.u16();
+      }
       final vertexCount = r.count(65535);
       final total = vertexCount * frameCount;
-      if (total > 50000000)
+      if (total > 50000000) {
         r.fail('VAni excede el límite de vertices animados: $total.');
+      }
       final positions = List.generate(
         frameCount,
         (_) => Float32List(vertexCount * 3),
@@ -1398,14 +1406,17 @@ SmodData readSmodData(Uint8List bytes, String source) {
   for (var i = 0; i < collisionCount; i++) {
     final vertexCount = r.count(1000000);
     final vertices = <v.Vector3>[];
-    for (var j = 0; j < vertexCount; j++) vertices.add(r.vec());
+    for (var j = 0; j < vertexCount; j++) {
+      vertices.add(r.vec());
+    }
     final faceCount = r.count(2000000);
     r.need(faceCount * 6);
     final indices = Uint16List(faceCount * 3);
     for (var j = 0; j < indices.length; j++) {
       final index = r.u16();
-      if (index >= vertexCount)
+      if (index >= vertexCount) {
         r.fail('Triángulo de colisión SMOD fuera de la malla.');
+      }
       indices[j] = index;
     }
     collisions.add(SmodCollisionMesh(List.unmodifiable(vertices), indices));
