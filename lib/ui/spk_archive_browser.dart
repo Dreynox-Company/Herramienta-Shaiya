@@ -345,6 +345,38 @@ Future<dynamic> readSpkJsonFile(File file) async {
   return jsonDecode(utf8.decode(bytes, allowMalformed: true));
 }
 
+String spkFriendlyErrorMessage(Object error) {
+  if (error is SpkFailure) {
+    final output = error.report['output']?.toString();
+    final consoleLog = error.report['consoleLog']?.toString();
+    final diagnosisFile = error.report['diagnosisFile']?.toString();
+    final failure = error.report['failure']?.toString();
+    final details = <String>[
+      if (failure != null && failure.isNotEmpty) failure,
+      if (diagnosisFile != null && diagnosisFile.isNotEmpty)
+        'Diagnóstico: $diagnosisFile',
+      if (consoleLog != null && consoleLog.isNotEmpty)
+        'Log: $consoleLog'
+      else if (output != null && output.isNotEmpty)
+        'Diagnóstico: $output',
+    ];
+    return '${error.code}: ${error.message}'
+        '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
+  }
+  if (error is FormatException) {
+    final message = error.message.toString();
+    if (message.contains('Missing extension byte') ||
+        message.contains('Unexpected extension byte')) {
+      return 'SPK_TEXT_ENCODING_INVALID: un decodificador de texto recibió '
+          'bytes incompletos o una codificación distinta de UTF-8. Studio '
+          'detuvo la operación y no modificó DATA.SPK. Si ocurrió al '
+          'inspeccionar un recurso, usa HEX/ASCII o la codificación legacy.';
+    }
+    return message;
+  }
+  return error.toString();
+}
+
 class _SpkMeshPreview extends StatefulWidget {
   final MeshData mesh;
   final String label;
@@ -640,7 +672,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
         Navigator.of(context, rootNavigator: true).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString()),
+            content: Text(spkFriendlyErrorMessage(error)),
             duration: const Duration(seconds: 7),
           ),
         );
@@ -908,36 +940,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   }
 
-  String _friendlyError(Object error) {
-    if (error is SpkFailure) {
-      final output = error.report['output']?.toString();
-      final consoleLog = error.report['consoleLog']?.toString();
-      final diagnosisFile = error.report['diagnosisFile']?.toString();
-      final failure = error.report['failure']?.toString();
-      final details = <String>[
-        if (failure != null && failure.isNotEmpty) failure,
-        if (diagnosisFile != null && diagnosisFile.isNotEmpty)
-          'Diagnóstico: $diagnosisFile',
-        if (consoleLog != null && consoleLog.isNotEmpty)
-          'Log: $consoleLog'
-        else if (output != null && output.isNotEmpty)
-          'Diagnóstico: $output',
-      ];
-      return '${error.code}: ${error.message}'
-          '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
-    }
-    if (error is FormatException) {
-      final message = error.message.toString();
-      if (message.contains('Missing extension byte') ||
-          message.contains('Unexpected extension byte')) {
-        return 'SPK_TEXT_ENCODING_INVALID: se intentó interpretar como UTF-8 '
-            'un recurso que no contiene UTF-8 válido. Studio no modificó el '
-            'payload; usa la codificación legacy correcta o la vista binaria.';
-      }
-      return message;
-    }
-    return error.toString();
-  }
+  String _friendlyError(Object error) => spkFriendlyErrorMessage(error);
 
   Future<void> runAction(Future<void> Function() action) async {
     if (busy) return;
@@ -1510,7 +1513,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           width: 520,
           child: Text(
             'Shaiya Studio abrirá game.exe de esa instalación e instrumentará '
-            'solo ese proceso. ResourceProbe V12 observa CNG/OpenSSL y valida '
+            'solo ese proceso. ResourceProbe V13 observa CNG/OpenSSL y valida '
             'cualquier clave candidata exclusivamente contra ciphertexts AES-GCM '
             'reales del DATA.SPK ya indexado.\n\n'
             'Desconecta Internet antes de continuar. No inicies sesión ni '
@@ -1541,7 +1544,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         DateTime.now().millisecondsSinceEpoch.toString(),
       ),
     );
-    operation = 'Preparando ResourceProbe V12…';
+    operation = 'Preparando ResourceProbe V13…';
     if (mounted) setState(() {});
 
     final process = await Process.start(
@@ -1592,7 +1595,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     await File(p.join(output.path, 'probe-console.log')).writeAsString(
       [
-        'Shaiya Studio ResourceProbe V12',
+        'Shaiya Studio ResourceProbe V13',
         'exitCode=$exitCode',
         'game=${game.path}',
         'data=${source.file.path}',
