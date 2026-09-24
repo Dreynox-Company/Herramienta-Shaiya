@@ -1067,35 +1067,145 @@ class _StudioState extends State<StudioPage> {
                 note(
                   'La selección automática usa únicamente los slots ANI declarados por el MON original del ala. Elegir una animación manual desactiva temporalmente la sincronización automática.',
                 ),
+                note(
+                  'WingPosition.xml · ${scene.wingPositionProfileLabel}. '
+                  'Estos seis controles son los campos que consume el cliente clásico. '
+                  'El perfil es por familia/job/sexo: guardarlo afecta a todas las alas '
+                  'que usen ese perfil, no solo al modelo actualmente visible.',
+                ),
                 slider(
-                  'Rotación horizontal',
-                  scene.wingYaw * 180 / 3.141592653589793,
-                  -180,
-                  180,
-                  (v) => setState(
-                    () => scene.wingYaw = v * 3.141592653589793 / 180,
+                  'Posición X · izquierda / derecha',
+                  scene.wingOffsetX,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.wingOffsetX = v),
+                ),
+                slider(
+                  'Posición Y · arriba / abajo',
+                  scene.wingOffsetY,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.wingOffsetY = v),
+                ),
+                slider(
+                  'Posición Z · frente / espalda',
+                  scene.wingOffsetZ,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.wingOffsetZ = v),
+                ),
+                slider(
+                  'Rotación X',
+                  scene.wingRotX,
+                  -360,
+                  360,
+                  (v) => setState(() => scene.wingRotX = v),
+                ),
+                slider(
+                  'Rotación Y',
+                  scene.wingRotY,
+                  -360,
+                  360,
+                  (v) => setState(() => scene.wingRotY = v),
+                ),
+                slider(
+                  'Rotación Z',
+                  scene.wingRotZ,
+                  -360,
+                  360,
+                  (v) => setState(() => scene.wingRotZ = v),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: disabled || !scene.wingPositionFileAvailable
+                            ? null
+                            : () => act(scene.saveActiveWingPositionToData),
+                        icon: const Icon(Icons.save_outlined, size: 16),
+                        label: Text(
+                          catalog!.library.isSpkWorkspace
+                              ? 'Guardar en overlay SPK'
+                              : 'Guardar en DATA',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: disabled || !scene.wingPositionFileAvailable
+                            ? null
+                            : () => act(() async {
+                                scene.resetWingPositionFromData();
+                              }),
+                        child: const Text(
+                          'Recargar XML',
+                          style: TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                OutlinedButton(
+                  onPressed: disabled
+                      ? null
+                      : () => act(() async {
+                          scene.resetWingPositionVerifiedBaseline();
+                        }),
+                  child: const Text(
+                    'Restaurar baseline verificado ps0032',
+                    style: TextStyle(fontSize: 10),
                   ),
                 ),
-                slider(
-                  'Altura del anclaje',
-                  scene.wingHeight,
-                  -2,
-                  4,
-                  (v) => setState(() => scene.wingHeight = v),
+                const Divider(height: 20),
+                note(
+                  'Transformación de previsualización de Studio: escala y espejo '
+                  'no existen entre los seis campos WingPosition confirmados, por '
+                  'eso nunca se escriben al juego hasta identificar un campo nativo '
+                  'equivalente.',
                 ),
                 slider(
-                  'Separación de espalda',
-                  scene.wingDepth,
-                  -2,
-                  2,
-                  (v) => setState(() => scene.wingDepth = v),
+                  'Escala X',
+                  scene.wingScaleX,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.wingScaleX = v),
                 ),
                 slider(
-                  'Escala',
-                  scene.wingSize,
-                  .1,
-                  3,
-                  (v) => setState(() => scene.wingSize = v),
+                  'Escala Y',
+                  scene.wingScaleY,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.wingScaleY = v),
+                ),
+                slider(
+                  'Escala Z',
+                  scene.wingScaleZ,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.wingScaleZ = v),
+                ),
+                toggle(
+                  'Espejo X',
+                  scene.wingMirrorX,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.wingMirrorX = v),
+                ),
+                toggle(
+                  'Espejo Y',
+                  scene.wingMirrorY,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.wingMirrorY = v),
+                ),
+                toggle(
+                  'Espejo Z',
+                  scene.wingMirrorZ,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.wingMirrorZ = v),
                 ),
                 TextButton(
                   onPressed: disabled
@@ -1111,7 +1221,9 @@ class _StudioState extends State<StudioPage> {
                 'Equipamiento original: slot 16. DBItemData ItemType 121 usa Image como ID visual del registro Character/Wing/*.MON. Studio muestra esa relación cuando la metadata real está disponible.',
               ),
               note(
-                'Anclaje calculado sobre la cadena real del torso. La calibración se separa por ala + raza/arquetipo para no reutilizar offsets de otro esqueleto.',
+                'El anclaje usa el hueso indicado por WingPosition cuando el perfil '
+                'real está disponible (baseline canónico: hueso 4). Solo si no hay '
+                'perfil compatible se recurre al anclaje anatómico inferido del torso.',
               ),
             ]),
             section('Vuelo suplementario', [
