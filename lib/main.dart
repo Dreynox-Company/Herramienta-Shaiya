@@ -503,6 +503,10 @@ class _StudioState extends State<StudioPage> {
         'Shaiya_Vuelo_Combate_V3_Completo.zip',
       ),
       File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/FlightV3/'
+        'Shaiya_Studio_FlightV3_Runtime.zip',
+      ),
+      File(
         '${File(Platform.resolvedExecutable).parent.path}/Extras/'
         'Shaiya_Studio_FlightV3_Runtime.zip',
       ),
