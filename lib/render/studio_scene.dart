@@ -410,6 +410,16 @@ class StudioScene extends ChangeNotifier {
 
   String? wingMonAnimation(String slot) => wingRecord?.animations[slot];
 
+  String? wingMonAnimationCandidate(String slot) {
+    final raw = wingMonAnimation(slot);
+    if (raw == null || raw.isEmpty) return null;
+    final name = baseName(raw).toLowerCase();
+    return wingMonAnimationCandidates
+        .where((p) => baseName(p).toLowerCase() == name)
+        .firstOrNull;
+  }
+
+
   Future<void> saveWingMonAnimation(String slot, String animationPath) async {
     final c = catalog;
     final record = wingRecord;
