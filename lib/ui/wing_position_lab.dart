@@ -19,6 +19,8 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
   int? selectedKey;
   String filter = '';
   final Set<int> dirty = <int>{};
+  final Map<int, WingPositionProfile> loadedProfiles =
+      <int, WingPositionProfile>{};
   WingPositionProfile? clipboard;
   int revision = 0;
 
@@ -49,6 +51,9 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
       setState(() {
         document = parsed;
         selectedKey ??= parsed.profiles.firstOrNull?.key;
+        loadedProfiles
+          ..clear()
+          ..addEntries(parsed.profiles.map((p) => MapEntry(p.key, p)));
         dirty.clear();
         revision++;
       });
@@ -92,13 +97,9 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
     final doc = document;
     if (doc == null) return;
     doc.update(profile);
-    final baseline = WingPositionDocument.verifiedResolve(
-      profile.family,
-      profile.job,
-      profile.sex,
-    );
+    final loaded = loadedProfiles[profile.key];
     setState(() {
-      if (baseline != null && !_different(profile, baseline)) {
+      if (loaded != null && !_different(profile, loaded)) {
         dirty.remove(profile.key);
       } else {
         dirty.add(profile.key);
@@ -136,8 +137,14 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
     for (final sex in const [0, 1]) {
       final target = doc.resolve(current.family, current.job, sex);
       if (target != null) {
-        doc.update(_poseFrom(target, source));
-        dirty.add(target.key);
+        final updated = _poseFrom(target, source);
+        doc.update(updated);
+        final loaded = loadedProfiles[target.key];
+        if (loaded != null && !_different(updated, loaded)) {
+          dirty.remove(target.key);
+        } else {
+          dirty.add(target.key);
+        }
       }
     }
     setState(() => revision++);
@@ -222,10 +229,14 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
         ),
       );
     }
-    setState(() {
-      dirty.clear();
-      revision++;
-    });
+    dirty.clear();
+    for (final profile in doc.profiles) {
+      final loaded = loadedProfiles[profile.key];
+      if (loaded == null || _different(profile, loaded)) {
+        dirty.add(profile.key);
+      }
+    }
+    setState(() => revision++);
   }
 
   Future<void> _save() async {
@@ -246,6 +257,9 @@ class _WingPositionLabPageState extends State<WingPositionLabPage> {
       if (!mounted) return;
       setState(() {
         document = reparsed;
+        loadedProfiles
+          ..clear()
+          ..addEntries(reparsed.profiles.map((p) => MapEntry(p.key, p)));
         dirty.clear();
         revision++;
       });
