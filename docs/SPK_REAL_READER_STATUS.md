@@ -150,9 +150,9 @@ sido descifrados. Falta ejecutar 0.6.17 contra el par real
 10. Evidencia de auditoría solo se restaura si coinciden índice, hash de la clave
     de recursos, regla de chunks y cobertura total de Entry IDs.
 
-## AutoPerfil / ResourceProbe V11
+## AutoPerfil / ResourceProbe V13
 
-Antes de instrumentar `game.exe`, V11 ejecuta un barrido estático acotado y fail-closed: prueba derivaciones de la clave del índice y constantes próximas a evidencia AES/GCM dentro del cliente y DLLs. Ninguna candidata se acepta por semejanza: debe autenticar tres ciphertexts simples reales con sus tags GCM. Si ninguna coincide, continúa automáticamente con instrumentación dinámica x86/x64.
+Antes de instrumentar `game.exe`, V13 ejecuta un barrido estático acotado y fail-closed: prueba derivaciones de la clave del índice, constantes próximas a evidencia AES/GCM y, como segunda etapa, material literal de 16/32 bytes en secciones PE de datos inicializadas y no ejecutables. La etapa profunda usa primero un recurso simple pequeño como prefiltro para contener el coste; una candidata solo se acepta si después autentica tres recursos simples distribuidos del SPK con sus tags GCM reales. Si ninguna coincide, continúa automáticamente con instrumentación dinámica x86/x64.
 
 
 AutoPerfil sigue este orden:
@@ -160,7 +160,7 @@ AutoPerfil sigue este orden:
 1. intenta offline si la clave autenticada del índice también autentica
    payloads;
 2. si falla, no reutiliza esa clave;
-3. en Windows ejecuta ResourceProbe V11 contra el `game.exe` de la misma
+3. en Windows ejecuta ResourceProbe V13 contra el `game.exe` de la misma
    instalación y sin red;
 4. ResourceProbe observa únicamente operaciones cuyo ciphertext coincide con un
    recurso/chunk real del índice;
@@ -312,7 +312,7 @@ con el cliente real.
 
 ## Próxima ejecución requerida
 
-Usar el build Windows 0.6.17 sobre la instalación real, preferiblemente offline:
+Usar el build Windows 0.6.20/V13 sobre la instalación real, preferiblemente offline:
 
 1. abrir el `data.spk`;
 2. pulsar **AutoPerfil SPK**;
