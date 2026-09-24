@@ -2298,6 +2298,39 @@ class StudioScene extends ChangeNotifier {
     }
   }
 
+  ClipData? _flightV3Destination(FlightV3Transition transition) {
+    final bundle = flightV3;
+    final actor = character;
+    if (bundle == null || actor == null) return null;
+    final target = transition.targetClip?.toLowerCase() ?? '';
+    if (target.contains('player_stop_fly_shield')) return bundle.hoverShield;
+    if (target.contains('player_fly_shield')) return bundle.flightShield;
+    if (target.contains('player_stop_fly')) return bundle.hover;
+    if (target.contains('player_fly')) return bundle.flight;
+    if (target.contains('_000_normal')) return actor.normal;
+    if (target.contains('ready')) {
+      final code = transition.profile ?? _flightV3CombatCode();
+      return code == null ? actor.guard : bundle.combatFor(code)?.guard;
+    }
+    return null;
+  }
+
+  void _playFlightV3Transition(FlightV3Transition transition) {
+    final actor = character;
+    if (actor == null) return;
+    final destination = _flightV3Destination(transition) ?? actor.idle;
+    _flightBodyTransition = transition.clip;
+    if (destination != null) {
+      actor.playTransition(
+        transition.clip,
+        destination,
+        destinationPhase: transition.destinationPhase,
+      );
+    } else {
+      actor.play(transition.clip, repeat: false);
+    }
+  }
+
   FlightV3Transition? _flightV3CombatLandingTransition() {
     if (!flightV3Compatible) return null;
     final code = _flightV3CombatCode();
@@ -2324,8 +2357,7 @@ class StudioScene extends ChangeNotifier {
     final actor = character;
     final transition = _flightV3CombatLandingTransition();
     if (actor == null || transition == null) return;
-    _flightBodyTransition = transition.clip;
-    actor.play(transition.clip, repeat: false);
+    _playFlightV3Transition(transition);
   }
 
   void startFlightV3CombatTakeoff() {
@@ -2421,8 +2453,7 @@ class StudioScene extends ChangeNotifier {
         : null;
     setFlightEnabled(enabled);
     if (v3Transition != null && character != null) {
-      _flightBodyTransition = v3Transition.clip;
-      character!.play(v3Transition.clip, repeat: false);
+      _playFlightV3Transition(v3Transition);
     } else {
       _flightBodyTransition = null;
     }
@@ -2547,8 +2578,7 @@ class StudioScene extends ChangeNotifier {
           : null;
       final airTransition = id == null ? null : flightV3?.transitions[id];
       if (airTransition != null) {
-        _flightBodyTransition = airTransition.clip;
-        a.play(airTransition.clip, repeat: false);
+        _playFlightV3Transition(airTransition);
         return true;
       }
     }
