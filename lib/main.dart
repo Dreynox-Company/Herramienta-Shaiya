@@ -29,6 +29,7 @@ import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
 import 'ui/excelxml_lab.dart';
+import 'ui/wing_position_lab.dart';
 import 'ui/spk_archive_browser.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
@@ -247,6 +248,21 @@ class _StudioState extends State<StudioPage> {
       MaterialPageRoute(
         builder: (_) =>
             ExcelXmlLabPage(library: library, initialPath: initialPath),
+      ),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openWingPositionLab() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WingPositionLabPage(library: library),
       ),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
@@ -1500,6 +1516,17 @@ class _StudioState extends State<StudioPage> {
                       ),
                     ],
                   ],
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      disabled || !scene.wingPositionFileAvailable
+                      ? null
+                      : openWingPositionLab,
+                  icon: const Icon(Icons.grid_on_outlined, size: 16),
+                  label: const Text(
+                    'Abrir matriz WingPosition 48 perfiles',
+                    style: TextStyle(fontSize: 10),
+                  ),
                 ),
                 note(
                   'ExcelXml/WingPosition.xml · ${scene.wingPositionProfileLabel}. '
