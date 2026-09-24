@@ -368,6 +368,115 @@ class Catalog {
     }
   }
 
+  void _auditMonReferences(
+    String source,
+    List<CreatureRecord> records,
+  ) {
+    final root = directoryName(source);
+    var loadSentinels = 0;
+    var missingAnimations = 0;
+    var missingSounds = 0;
+    var missingEffects = 0;
+    var missingMeshes = 0;
+    var missingTextures = 0;
+    final examples = <String>{};
+
+    String? resolve(
+      String raw,
+      List<String> roots,
+      String kind,
+    ) {
+      if (raw.isEmpty) return null;
+      if (isMonLoadSentinel(raw)) {
+        loadSentinels++;
+        return null;
+      }
+      final found = library.resolve(raw, roots, uniqueFallback: true);
+      if (found == null && examples.length < 8) {
+        examples.add('$kind: $raw');
+      }
+      return found;
+    }
+
+    for (final record in records) {
+      for (final raw in record.animations.values) {
+        if (raw.isEmpty || isMonLoadSentinel(raw)) {
+          if (isMonLoadSentinel(raw)) loadSentinels++;
+          continue;
+        }
+        if (resolve(raw, ['$root/ani', root], 'ANI') == null) {
+          missingAnimations++;
+        }
+      }
+      for (final raw in record.sounds.values) {
+        if (raw.isEmpty || isMonLoadSentinel(raw)) {
+          if (isMonLoadSentinel(raw)) loadSentinels++;
+          continue;
+        }
+        if (resolve(
+              raw,
+              ['$root/sound', '$root/snd', 'sound', root],
+              'audio',
+            ) ==
+            null) {
+          missingSounds++;
+        }
+      }
+      for (final raw in record.effects.values) {
+        if (raw.isEmpty || isMonLoadSentinel(raw)) {
+          if (isMonLoadSentinel(raw)) loadSentinels++;
+          continue;
+        }
+        if (resolve(
+              raw,
+              ['$root/effect', 'effect', '$root/3de', root],
+              'efecto',
+            ) ==
+            null) {
+          missingEffects++;
+        }
+      }
+      for (final part in record.parts) {
+        if (!part.mesh.toLowerCase().startsWith('null.') &&
+            resolve(part.mesh, ['$root/3dc', '$root/3do', root], 'malla') ==
+                null) {
+          missingMeshes++;
+        }
+        if (!part.texture.toLowerCase().startsWith('null.') &&
+            resolve(
+                  part.texture,
+                  ['$root/dds', '$root/tga', root],
+                  'textura',
+                ) ==
+                null) {
+          missingTextures++;
+        }
+      }
+    }
+
+    final missing =
+        missingAnimations +
+        missingSounds +
+        missingEffects +
+        missingMeshes +
+        missingTextures;
+    if (loadSentinels > 0) {
+      warnings.add(
+        '$source · MON: $loadSentinels slots LOAD nativos preservados; '
+        '${records.length} registros.',
+      );
+    }
+    if (missing > 0) {
+      warnings.add(
+        '$source · referencias ausentes en la DATA montada: '
+        '$missingAnimations ANI, $missingSounds audio, '
+        '$missingEffects efectos, $missingMeshes mallas, '
+        '$missingTextures texturas.'
+        '${examples.isEmpty ? '' : ' Ejemplos: ${examples.join(' · ')}'}',
+      );
+    }
+  }
+
   List<String> wingAnimationCandidates(CreatureRecord record) {
     final root = directoryName(record.source);
     final prefix = '$root/ani/';
@@ -772,7 +881,8 @@ class Catalog {
         final entries = readMon(
           await library.read(p),
           p,
-        ).where((c) => c.parts.any((p) => !p.isNull));
+        ).where((c) => c.parts.any((p) => !p.isNull)).toList(growable: false);
+        _auditMonReferences(p, entries);
         if (p.startsWith('vehicle/')) {
           mounts.addAll(entries);
         } else if (p.startsWith('character/wing/')) {
