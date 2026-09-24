@@ -278,6 +278,7 @@ class StudioScene extends ChangeNotifier {
   >
   _wingSettings = {};
   bool _lastGuard = false;
+  double _flightV3CombatReturnRemaining = 0;
   CharacterClass get characterClass =>
       selectedClass ?? classesFor(appearance?.archetype.id ?? 'humf').first;
   List<CharacterClass> get availableClasses =>
@@ -975,9 +976,15 @@ class StudioScene extends ChangeNotifier {
             isShield(w) && (inspectAnyEquipment || compatibilityFor(w).allowed),
       )
       .toList();
+  bool get flightV3CombatLock =>
+      flightV3Compatible && _flightV3CombatReturnRemaining > 0;
+
+  bool get flightCombatLock =>
+      flightV3Compatible ? flightV3CombatLock : combat.inGuard;
+
   bool get flying =>
       flightAvailable &&
-      !combat.inGuard &&
+      !flightCombatLock &&
       flightState.pendingTarget == null &&
       !flightState.combatDescent;
   bool get flightAvailable =>
@@ -1398,6 +1405,7 @@ class StudioScene extends ChangeNotifier {
     game.jumpClip = null;
     combat.reset();
     _lastGuard = false;
+    _flightV3CombatReturnRemaining = 0;
     clearMovement();
     if (!disposed) notifyListeners();
   }
@@ -1588,6 +1596,7 @@ class StudioScene extends ChangeNotifier {
       committed = true;
       combat.reset();
       _lastGuard = false;
+      _flightV3CombatReturnRemaining = 0;
       refreshIdle();
       applyLocomotion(GroundMotion.idle);
       if (attackClips.isNotEmpty) {
@@ -2786,9 +2795,21 @@ class StudioScene extends ChangeNotifier {
     }
   }
 
+  void _armFlightV3CombatReturn({double tail = 0}) {
+    if (!flightV3Compatible) return;
+    final safeTail = tail.isFinite ? math.max(0.0, tail) : 0.0;
+    _flightV3CombatReturnRemaining = math.max(
+      _flightV3CombatReturnRemaining,
+      5.0 + safeTail,
+    );
+  }
+
   Future<void> _combatEvent(String who, String event) async {
     try {
       final a = who == 'enemy' ? enemy : character;
+      if (event == 'attack' || event == 'hit' || event == 'death') {
+        _armFlightV3CombatReturn();
+      }
       if (a == null) return;
       if (who == 'enemy') {
         final key = event == 'attack'
@@ -2825,7 +2846,10 @@ class StudioScene extends ChangeNotifier {
               ? null
               : await firstCompatible(a, candidates);
         }
-        if (c != null && a == character) a.play(c, repeat: false);
+        if (c != null && a == character) {
+          a.play(c, repeat: false);
+          _armFlightV3CombatReturn(tail: c.duration);
+        }
         await _playWingCombatEvent(event);
       }
       if (event == 'death') a.idle = null;
