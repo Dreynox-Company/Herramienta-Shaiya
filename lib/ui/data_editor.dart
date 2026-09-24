@@ -18,6 +18,7 @@ import '../editor/csv_document.dart';
 import '../editor/catalog_document.dart';
 import '../editor/text_document.dart';
 import '../editor/wtr_document.dart';
+import '../editor/wld_layer_document.dart';
 import '../editor/field_semantics.dart';
 import '../core/client_locale.dart';
 import '../editor/workbench_model.dart';
@@ -41,6 +42,9 @@ EditDocument parseEditorDocument(Map<String, Object?> args) {
   }
   if (path.toLowerCase().endsWith('.wtr')) {
     return WtrDocument.open(bytes, path, encoding);
+  }
+  if (path.toLowerCase().endsWith('.wld')) {
+    return WldLayerDocument.open(bytes, path, encoding);
   }
   if (RegExp(r'\.(ini|cfg|txt|xml)$', caseSensitive: false).hasMatch(path)) {
     return TextDocument.open(bytes, path, encoding);
@@ -195,6 +199,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
               '.itm',
               '.mon',
               '.wtr',
+              '.wld',
               '.ini',
               '.cfg',
               '.txt',
@@ -1366,7 +1371,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
                       ? p.toLowerCase().contains('skill')
                       : fileCategory == 'Mapas'
                       ? p.toLowerCase().endsWith('.svmap') ||
-                            p.toLowerCase().endsWith('.wtr')
+                            p.toLowerCase().endsWith('.wtr') ||
+                            p.toLowerCase().endsWith('.wld')
                       : fileCategory == 'NPC'
                       ? p.toLowerCase().contains('npc')
                       : fileCategory == 'Tiendas'
@@ -1429,6 +1435,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
                         ? Icons.map_outlined
                         : p.endsWith('.wtr')
                         ? Icons.texture_outlined
+                        : p.endsWith('.wld')
+                        ? Icons.landscape_outlined
                         : Icons.table_chart_outlined,
                     size: 18,
                   ),
