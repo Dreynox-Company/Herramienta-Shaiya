@@ -1185,10 +1185,11 @@ class _StudioState extends State<StudioPage> {
                   ],
                 ),
                 note(
-                  'WingPosition.xml · ${scene.wingPositionProfileLabel}. '
-                  'Estos seis controles son los campos que consume el cliente clásico. '
-                  'El perfil es por familia/job/sexo: guardarlo afecta a todas las alas '
-                  'que usen ese perfil, no solo al modelo actualmente visible.',
+                  'ExcelXml/WingPosition.xml · ${scene.wingPositionProfileLabel}. '
+                  'La fuente real es SpreadsheetML y expone BONE_IDX + posición '
+                  'XYZ + rotación XYZ. Guardar modifica ese perfil nativo por '
+                  'familia/job/sexo, por lo que afecta a todas las alas que lo '
+                  'usen, no solo al modelo visible.',
                 ),
                 preciseSlider(
                   'Posición X · izquierda / derecha',
