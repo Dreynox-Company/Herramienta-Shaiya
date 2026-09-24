@@ -90,22 +90,111 @@ class EditableMonDocument {
 
   bool get isMo4 => signature == 'MO4';
 
+  EditableMonRecord _record(int recordId) {
+    if (recordId < 0 || recordId >= records.length) {
+      throw FormatException('Registro MON fuera de rango: $recordId');
+    }
+    return records[recordId];
+  }
+
+  String _resourcePath(
+    String value, {
+    required String label,
+    required Set<String> extensions,
+    bool allowEmpty = false,
+  }) {
+    final normalized = value.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty && allowEmpty) return '';
+    if (normalized.isEmpty ||
+        normalized.contains('..') ||
+        normalized.startsWith('/') ||
+        normalized.contains(':')) {
+      throw FormatException('Ruta $label inválida para MON: $value');
+    }
+    final lower = normalized.toLowerCase();
+    if (!extensions.any(lower.endsWith)) {
+      throw FormatException(
+        'Extensión no admitida para $label MON: $value',
+      );
+    }
+    return normalized;
+  }
+
   void setAnimation(int recordId, String slot, String animation) {
     if (!monAnimationSlots.contains(slot)) {
       throw FormatException('Slot ANI MON no soportado: $slot');
     }
-    if (recordId < 0 || recordId >= records.length) {
-      throw FormatException('Registro MON fuera de rango: $recordId');
+    _record(recordId).animations[slot]!.value = _resourcePath(
+      animation,
+      label: 'ANI',
+      extensions: const {'.ani'},
+    );
+  }
+
+  void setSound(int recordId, String slot, String sound) {
+    if (!monSoundSlots.contains(slot)) {
+      throw FormatException('Slot WAV MON no soportado: $slot');
     }
-    final normalized = animation.trim().replaceAll('\\', '/');
-    if (normalized.isEmpty ||
-        normalized.contains('..') ||
-        normalized.startsWith('/') ||
-        normalized.contains(':') ||
-        !normalized.toLowerCase().endsWith('.ani')) {
-      throw FormatException('Ruta ANI inválida para MON: $animation');
+    _record(recordId).sounds[slot]!.value = _resourcePath(
+      sound,
+      label: 'sonido',
+      extensions: const {'.wav', '.ogg'},
+      allowEmpty: true,
+    );
+  }
+
+  void setEffect(int recordId, String slot, String effect) {
+    if (!monEffectSlots.contains(slot)) {
+      throw FormatException('Slot EFT MON no soportado: $slot');
     }
-    records[recordId].animations[slot]!.value = normalized;
+    _record(recordId).effects[slot]!.value = _resourcePath(
+      effect,
+      label: 'efecto',
+      extensions: const {'.eft', '.3de'},
+      allowEmpty: true,
+    );
+  }
+
+  void setAttachedEffect(int recordId, String effect) {
+    final attached = _record(recordId).attached;
+    if (attached == null) {
+      throw const FormatException(
+        'Este MON es MO2 y no contiene Effect.Attached.',
+      );
+    }
+    attached.value = _resourcePath(
+      effect,
+      label: 'efecto adjunto',
+      extensions: const {'.eft', '.3de'},
+      allowEmpty: true,
+    );
+  }
+
+  void setPart(
+    int recordId,
+    int partId, {
+    String? mesh,
+    String? texture,
+  }) {
+    final record = _record(recordId);
+    if (partId < 0 || partId >= record.parts.length) {
+      throw FormatException('Parte MON fuera de rango: $partId');
+    }
+    final part = record.parts[partId];
+    if (mesh != null) {
+      part.mesh.value = _resourcePath(
+        mesh,
+        label: 'malla',
+        extensions: const {'.3dc', '.3do'},
+      );
+    }
+    if (texture != null) {
+      part.texture.value = _resourcePath(
+        texture,
+        label: 'textura',
+        extensions: const {'.dds', '.tga', '.png', '.bmp'},
+      );
+    }
   }
 
   Uint8List encode() {
@@ -152,7 +241,36 @@ class EditableMonDocument {
       for (final slot in monAnimationSlots) {
         if (parsed.records[i].animations[slot]!.value !=
             records[i].animations[slot]!.value) {
-          throw FormatException('MON no revalidó $slot en registro $i.');
+          throw FormatException('MON no revalidó ANI $slot en registro $i.');
+        }
+      }
+      for (final slot in monSoundSlots) {
+        if (parsed.records[i].sounds[slot]!.value !=
+            records[i].sounds[slot]!.value) {
+          throw FormatException('MON no revalidó WAV $slot en registro $i.');
+        }
+      }
+      for (final slot in monEffectSlots) {
+        if (parsed.records[i].effects[slot]!.value !=
+            records[i].effects[slot]!.value) {
+          throw FormatException('MON no revalidó EFT $slot en registro $i.');
+        }
+      }
+      if (isMo4 &&
+          parsed.records[i].attached!.value != records[i].attached!.value) {
+        throw FormatException(
+          'MON no revalidó el efecto adjunto del registro $i.',
+        );
+      }
+      if (parsed.records[i].parts.length != records[i].parts.length) {
+        throw FormatException('MON alteró las partes del registro $i.');
+      }
+      for (var p = 0; p < records[i].parts.length; p++) {
+        if (parsed.records[i].parts[p].mesh.value !=
+                records[i].parts[p].mesh.value ||
+            parsed.records[i].parts[p].texture.value !=
+                records[i].parts[p].texture.value) {
+          throw FormatException('MON no revalidó la parte $p del registro $i.');
         }
       }
       if (parsed.records[i].tailCount != records[i].tailCount ||
