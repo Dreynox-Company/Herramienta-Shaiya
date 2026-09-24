@@ -95,6 +95,28 @@ void main() {
     },
   );
 
+  test('WingExpItem uses the actual ItemID row as machine header', () {
+    final bytes = Uint8List.fromList(
+      utf8.encode(
+        '<?xml version="1.0"?>'
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '
+        'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+        '<Worksheet ss:Name="Sheet1"><Table>'
+        '<Row><Cell><Data ss:Type="String">经验道具ID</Data></Cell></Row>'
+        '<Row><Cell><Data ss:Type="String">ItemID</Data></Cell></Row>'
+        '<Row><Cell><Data ss:Type="Number">125001</Data></Cell></Row>'
+        '<Row><Cell><Data ss:Type="Number">125002</Data></Cell></Row>'
+        '</Table></Worksheet></Workbook>',
+      ),
+    );
+
+    final doc = ExcelXmlDocument.parse(bytes, 'excelxml/WingExpItem.xml');
+    final sheet = doc.sheets.single;
+    expect(sheet.headerRow, 2);
+    expect(sheet.columns.single.label, 'ItemID');
+    expect(sheet.rows.map((row) => row.value(1)), ['125001', '125002']);
+  });
+
   test('purpose catalogue classifies high-value Studio tables', () {
     expect(excelXmlPurpose('excelxml/wingposition.xml'), contains('Alas'));
     expect(
