@@ -237,14 +237,19 @@ class _StudioState extends State<StudioPage> {
     if (mounted) focus.requestFocus();
   }
 
-  Future<void> openExcelXmlLab() async {
+  Future<void> openExcelXmlLab({String? initialPath}) async {
     final library = catalog?.library;
     if (library == null || working) return;
     final beforeRevision = library.revision;
     scene.clearMovement();
     focus.unfocus();
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => ExcelXmlLabPage(library: library)),
+      MaterialPageRoute(
+        builder: (_) => ExcelXmlLabPage(
+          library: library,
+          initialPath: initialPath,
+        ),
+      ),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();
@@ -1662,6 +1667,52 @@ class _StudioState extends State<StudioPage> {
                 'real está disponible (baseline canónico: hueso 4). Solo si no hay '
                 'perfil compatible se recurre al anclaje anatómico inferido del torso.',
               ),
+              if (catalog!.library.files.containsKey(
+                    'excelxml/wingdecompose.xml',
+                  ) ||
+                  catalog!.library.files.containsKey(
+                    'excelxml/wingexpitem.xml',
+                  ) ||
+                  catalog!.library.files.containsKey('excelxml/wingswap.xml'))
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Sistemas XML de alas',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Descomposición · experiencia · intercambio',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    for (final entry in const [
+                      ('excelxml/wingdecompose.xml', 'WingDecompose'),
+                      ('excelxml/wingexpitem.xml', 'WingExpItem'),
+                      ('excelxml/wingswap.xml', 'WingSwap'),
+                    ])
+                      if (catalog!.library.files.containsKey(entry.$1))
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: disabled
+                                ? null
+                                : () => openExcelXmlLab(
+                                    initialPath: entry.$1,
+                                  ),
+                            icon: const Icon(
+                              Icons.table_view_outlined,
+                              size: 15,
+                            ),
+                            label: Text(
+                              entry.$2,
+                              style: const TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
             ]),
             section('Vuelo suplementario', [
               SwitchListTile(
@@ -2204,6 +2255,21 @@ class _StudioState extends State<StudioPage> {
               note(
                 'Escenario completo · ${scene.game.loaded?.objectCount ?? 0} objetos · ${scene.game.loaded?.triangleCount ?? 0} triángulos. Recursos pendientes: ${scene.game.loaded?.missingObjects ?? 0}. La densidad del terreno depende del nivel de detalle.',
               ),
+              if (catalog!.library.files.containsKey(
+                'excelxml/ymwatershaderparams.xml',
+              ))
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => openExcelXmlLab(
+                          initialPath: 'excelxml/ymwatershaderparams.xml',
+                        ),
+                  icon: const Icon(Icons.water_outlined, size: 16),
+                  label: const Text(
+                    'Shader / agua por MapID',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
             ]),
             worldOptions(),
             section('Visualización', [
@@ -3395,7 +3461,8 @@ class _StudioState extends State<StudioPage> {
     actions: actionBar(),
     hasLibrary: scene.character != null,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
-    onOpenExcelXml: catalog == null || working ? null : openExcelXmlLab,
+    onOpenExcelXml:
+        catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,
     onOpenSpk: disabled ? null : openSpkArchive,
