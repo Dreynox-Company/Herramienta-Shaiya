@@ -53,25 +53,28 @@ void main() {
     expect(doc.encode(), orderedEquals(original));
   });
 
-  test('WTR edits tile size and one texture without touching unknown fields', () {
-    final doc = WtrEditorDocument.parse(fixture(), 'world/test.wtr');
-    doc.setTileSize(48.5);
-    doc.setTexture(1, 'terrain/rock_new.dds');
+  test(
+    'WTR edits tile size and one texture without touching unknown fields',
+    () {
+      final doc = WtrEditorDocument.parse(fixture(), 'world/test.wtr');
+      doc.setTileSize(48.5);
+      doc.setTexture(1, 'terrain/rock_new.dds');
 
-    final encoded = doc.encode();
-    doc.validateEncoded(encoded);
+      final encoded = doc.encode();
+      doc.validateEncoded(encoded);
 
-    final parsed = WtrEditorDocument.parse(encoded, 'world/test.wtr');
-    expect(parsed.tileSize, closeTo(48.5, 1e-6));
-    expect(parsed.unknown2, 0x11223344);
-    expect(parsed.unknown3, -123);
-    expect(parsed.textures[0].value, 'grass.dds');
-    expect(parsed.textures[1].value, 'terrain/rock_new.dds');
-    expect(parsed.textures[2].value, 'road.bmp');
+      final parsed = WtrEditorDocument.parse(encoded, 'world/test.wtr');
+      expect(parsed.tileSize, closeTo(48.5, 1e-6));
+      expect(parsed.unknown2, 0x11223344);
+      expect(parsed.unknown3, -123);
+      expect(parsed.textures[0].value, 'grass.dds');
+      expect(parsed.textures[1].value, 'terrain/rock_new.dds');
+      expect(parsed.textures[2].value, 'road.bmp');
 
-    final semantic = WtrData.parse(encoded, 'world/test.wtr');
-    expect(semantic.textures[1], 'terrain/rock_new.dds');
-  });
+      final semantic = WtrData.parse(encoded, 'world/test.wtr');
+      expect(semantic.textures[1], 'terrain/rock_new.dds');
+    },
+  );
 
   test('WTR path editing fails closed on unsafe or unsupported values', () {
     final doc = WtrEditorDocument.parse(fixture(), 'world/test.wtr');

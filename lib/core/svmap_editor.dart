@@ -41,21 +41,12 @@ class SvmapNpcEdit {
   final int typeOffset, idOffset;
   int type, id;
   final List<SvmapNpcWaypointEdit> route;
-  SvmapNpcEdit(
-    this.typeOffset,
-    this.idOffset,
-    this.type,
-    this.id,
-    this.route,
-  );
+  SvmapNpcEdit(this.typeOffset, this.idOffset, this.type, this.id, this.route);
 }
 
 class SvmapPortalEdit {
   final SvmapVectorField position, target;
-  final int factionOrIdOffset,
-      minLevelOffset,
-      maxLevelOffset,
-      targetMapOffset;
+  final int factionOrIdOffset, minLevelOffset, maxLevelOffset, targetMapOffset;
   int factionOrId, minLevel, maxLevel, targetMap;
 
   SvmapPortalEdit(
@@ -293,22 +284,13 @@ class SvmapEditorDocument {
     }
   }
 
-  void setMobAreaBounds(
-    int area, {
-    List<double>? lower,
-    List<double>? upper,
-  }) {
+  void setMobAreaBounds(int area, {List<double>? lower, List<double>? upper}) {
     final value = _at(mobAreas, area, 'área de mobs');
     if (lower != null) _setVector(value.lower, lower);
     if (upper != null) _setVector(value.upper, upper);
   }
 
-  void setMobSpawn(
-    int area,
-    int mob, {
-    int? id,
-    int? count,
-  }) {
+  void setMobSpawn(int area, int mob, {int? id, int? count}) {
     final value = _at(_at(mobAreas, area, 'área de mobs').mobs, mob, 'mob');
     if (id != null) {
       _u32(value.idOffset, id, 'MonsterID');

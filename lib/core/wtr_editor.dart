@@ -46,23 +46,13 @@ class WtrEditorDocument {
     for (var i = 0; i < count; i++) {
       final raw = r.rawString(65536);
       final end = raw.indexOf(0);
-      final decoded = LegacyText.decode(
-        end < 0 ? raw : raw.sublist(0, end),
-      );
-      textures.add(
-        WtrTextureEdit(decoded, Uint8List.fromList(raw), decoded),
-      );
+      final decoded = LegacyText.decode(end < 0 ? raw : raw.sublist(0, end));
+      textures.add(WtrTextureEdit(decoded, Uint8List.fromList(raw), decoded));
     }
     r.end();
 
     WtrData.parse(bytes, path);
-    return WtrEditorDocument._(
-      path,
-      tileSize,
-      unknown2,
-      unknown3,
-      textures,
-    );
+    return WtrEditorDocument._(path, tileSize, unknown2, unknown3, textures);
   }
 
   void setTileSize(double value) {

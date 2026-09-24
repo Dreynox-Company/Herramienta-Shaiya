@@ -262,10 +262,8 @@ class _StudioState extends State<StudioPage> {
     focus.unfocus();
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => WorldAuthoringPage(
-          library: library,
-          initialPath: initialPath,
-        ),
+        builder: (_) =>
+            WorldAuthoringPage(library: library, initialPath: initialPath),
       ),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
@@ -2391,8 +2389,7 @@ class _StudioState extends State<StudioPage> {
                 'Escenario completo · ${scene.game.loaded?.objectCount ?? 0} objetos · ${scene.game.loaded?.triangleCount ?? 0} triángulos. Recursos pendientes: ${scene.game.loaded?.missingObjects ?? 0}. La densidad del terreno depende del nivel de detalle.',
               ),
               if (catalog!.library.files.keys.any(
-                (path) =>
-                    path.endsWith('.wtr') || path.endsWith('.svmap'),
+                (path) => path.endsWith('.wtr') || path.endsWith('.svmap'),
               ))
                 OutlinedButton.icon(
                   onPressed: disabled ? null : () => openWorldAuthoring(),

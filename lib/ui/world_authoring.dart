@@ -44,15 +44,16 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
 
   List<String> get resources {
     final q = filter.trim().toLowerCase();
-    final out = widget.library.files.keys
-        .where(
-          (p) =>
-              p.toLowerCase().endsWith('.svmap') ||
-              p.toLowerCase().endsWith('.wtr'),
-        )
-        .where((p) => q.isEmpty || p.toLowerCase().contains(q))
-        .toList()
-      ..sort();
+    final out =
+        widget.library.files.keys
+            .where(
+              (p) =>
+                  p.toLowerCase().endsWith('.svmap') ||
+                  p.toLowerCase().endsWith('.wtr'),
+            )
+            .where((p) => q.isEmpty || p.toLowerCase().contains(q))
+            .toList()
+          ..sort();
     return out;
   }
 
@@ -110,9 +111,7 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${resource.split('/').last} guardado y revalidado.',
-          ),
+          content: Text('${resource.split('/').last} guardado y revalidado.'),
         ),
       );
     } finally {
@@ -125,28 +124,27 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
     num value,
     void Function(String) apply, {
     bool integer = false,
-  }) =>
-      TextFormField(
-        key: ValueKey('$revision-$path-$label-$value'),
-        initialValue: integer ? value.toInt().toString() : value.toString(),
-        enabled: !busy,
-        keyboardType: TextInputType.numberWithOptions(
-          decimal: !integer,
-          signed: true,
-        ),
-        decoration: InputDecoration(labelText: label),
-        style: const TextStyle(fontSize: 10),
-        onFieldSubmitted: (raw) {
-          try {
-            apply(raw);
-            setState(() => dirty = true);
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(e.toString())),
-            );
-          }
-        },
-      );
+  }) => TextFormField(
+    key: ValueKey('$revision-$path-$label-$value'),
+    initialValue: integer ? value.toInt().toString() : value.toString(),
+    enabled: !busy,
+    keyboardType: TextInputType.numberWithOptions(
+      decimal: !integer,
+      signed: true,
+    ),
+    decoration: InputDecoration(labelText: label),
+    style: const TextStyle(fontSize: 10),
+    onFieldSubmitted: (raw) {
+      try {
+        apply(raw);
+        setState(() => dirty = true);
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    },
+  );
 
   Widget _vectorEditor(
     String label,
@@ -167,15 +165,11 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
             for (var i = 0; i < 3; i++) ...[
               if (i > 0) const SizedBox(width: 6),
               Expanded(
-                child: _numberField(
-                  ['X', 'Y', 'Z'][i],
-                  values[i],
-                  (raw) {
-                    final parsed = double.parse(raw.replaceAll(',', '.'));
-                    final next = List<double>.from(values)..[i] = parsed;
-                    apply(next);
-                  },
-                ),
+                child: _numberField(['X', 'Y', 'Z'][i], values[i], (raw) {
+                  final parsed = double.parse(raw.replaceAll(',', '.'));
+                  final next = List<double>.from(values)..[i] = parsed;
+                  apply(next);
+                }),
               ),
             ],
           ],
@@ -185,111 +179,103 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
   }
 
   Widget _sidebar() => Material(
-        color: const Color(0xff131b26),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Buscar SVMAP / WTR…',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                ),
-                onChanged: (v) => setState(() => filter = v),
-              ),
+    color: const Color(0xff131b26),
+    child: Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(10),
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Buscar SVMAP / WTR…',
+              prefixIcon: Icon(Icons.search, size: 18),
             ),
-            Expanded(
-              child: resources.isEmpty
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                          'No hay .svmap/.wtr en la DATA montada.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xff8fa0b8),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: resources.length,
-                      itemBuilder: (_, index) {
-                        final resource = resources[index];
-                        final active = resource == path;
-                        return ListTile(
-                          dense: true,
-                          selected: active,
-                          leading: Icon(
-                            resource.endsWith('.wtr')
-                                ? Icons.layers_outlined
-                                : Icons.map_outlined,
-                            size: 17,
-                          ),
-                          title: Text(
-                            resource.split('/').last,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                          subtitle: Text(
-                            resource,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 8),
-                          ),
-                          onTap: busy ? null : () => open(resource),
-                        );
-                      },
-                    ),
-            ),
-          ],
+            onChanged: (v) => setState(() => filter = v),
+          ),
         ),
-      );
+        Expanded(
+          child: resources.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'No hay .svmap/.wtr en la DATA montada.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xff8fa0b8), fontSize: 10),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: resources.length,
+                  itemBuilder: (_, index) {
+                    final resource = resources[index];
+                    final active = resource == path;
+                    return ListTile(
+                      dense: true,
+                      selected: active,
+                      leading: Icon(
+                        resource.endsWith('.wtr')
+                            ? Icons.layers_outlined
+                            : Icons.map_outlined,
+                        size: 17,
+                      ),
+                      title: Text(
+                        resource.split('/').last,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      subtitle: Text(
+                        resource,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 8),
+                      ),
+                      onTap: busy ? null : () => open(resource),
+                    );
+                  },
+                ),
+        ),
+      ],
+    ),
+  );
 
   Widget _header(String title, String subtitle) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: const Color(0xff172131),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: Color(0xff8fa0b8),
-                    ),
-                  ),
-                ],
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    color: const Color(0xff172131),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            OutlinedButton.icon(
-              onPressed: busy || path == null ? null : () => open(path!),
-              icon: const Icon(Icons.refresh, size: 15),
-              label: const Text('Recargar'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: busy || !dirty ? null : save,
-              icon: const Icon(Icons.save_outlined, size: 15),
-              label: Text(
-                widget.library.isSpkWorkspace
-                    ? 'Guardar overlay'
-                    : 'Guardar DATA',
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 9, color: Color(0xff8fa0b8)),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      );
+        OutlinedButton.icon(
+          onPressed: busy || path == null ? null : () => open(path!),
+          icon: const Icon(Icons.refresh, size: 15),
+          label: const Text('Recargar'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: busy || !dirty ? null : save,
+          icon: const Icon(Icons.save_outlined, size: 15),
+          label: Text(
+            widget.library.isSpkWorkspace ? 'Guardar overlay' : 'Guardar DATA',
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _wtr() {
     final doc = wtr!;
@@ -307,9 +293,8 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
               _numberField(
                 'Tamaño de celda / tileSize',
                 doc.tileSize,
-                (raw) => doc.setTileSize(
-                  double.parse(raw.replaceAll(',', '.')),
-                ),
+                (raw) =>
+                    doc.setTileSize(double.parse(raw.replaceAll(',', '.'))),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -321,16 +306,13 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: TextFormField(
-                    key: ValueKey(
-                      '$revision-wtr-$i-${doc.textures[i].value}',
-                    ),
+                    key: ValueKey('$revision-wtr-$i-${doc.textures[i].value}'),
                     initialValue: doc.textures[i].value,
                     enabled: !busy,
                     style: const TextStyle(fontSize: 10),
                     decoration: InputDecoration(
                       labelText: 'Capa $i',
-                      helperText:
-                          'DDS/TGA/BMP/PNG · ruta ASCII segura',
+                      helperText: 'DDS/TGA/BMP/PNG · ruta ASCII segura',
                       helperStyle: const TextStyle(fontSize: 8),
                     ),
                     onFieldSubmitted: (value) {
@@ -338,9 +320,9 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
                         doc.setTexture(i, value);
                         setState(() => dirty = true);
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.toString())),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
                       }
                     },
                   ),
@@ -353,35 +335,33 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
   }
 
   List<Object> _itemsFor(SvmapEditorDocument doc) => switch (section) {
-        _SvSection.portals => doc.portals,
-        _SvSection.npcs => doc.npcs,
-        _SvSection.mobs => doc.mobAreas,
-        _SvSection.spawns => doc.spawns,
-        _SvSection.named => doc.namedAreas,
-      };
+    _SvSection.portals => doc.portals,
+    _SvSection.npcs => doc.npcs,
+    _SvSection.mobs => doc.mobAreas,
+    _SvSection.spawns => doc.spawns,
+    _SvSection.named => doc.namedAreas,
+  };
 
   String _sectionLabel(_SvSection value) => switch (value) {
-        _SvSection.portals => 'Portales',
-        _SvSection.npcs => 'NPC',
-        _SvSection.mobs => 'Áreas de mobs',
-        _SvSection.spawns => 'Spawns',
-        _SvSection.named => 'Áreas con nombre',
-      };
+    _SvSection.portals => 'Portales',
+    _SvSection.npcs => 'NPC',
+    _SvSection.mobs => 'Áreas de mobs',
+    _SvSection.spawns => 'Spawns',
+    _SvSection.named => 'Áreas con nombre',
+  };
 
   String _itemTitle(Object item, int index) => switch (item) {
-        SvmapPortalEdit() =>
-          '#$index · mapa ${item.targetMap} · '
-              'Lv ${item.minLevel}-${item.maxLevel}',
-        SvmapNpcEdit() =>
-          '#$index · NPC ${item.id} · tipo ${item.type} · '
-              '${item.route.length} puntos',
-        SvmapMobAreaEdit() =>
-          '#$index · ${item.mobs.length} tipos de mob',
-        SvmapSpawnEdit() => '#$index · facción ${item.faction}',
-        SvmapNamedAreaEdit() =>
-          '#$index · nombres ${item.name1}/${item.name2}',
-        _ => '#$index',
-      };
+    SvmapPortalEdit() =>
+      '#$index · mapa ${item.targetMap} · '
+          'Lv ${item.minLevel}-${item.maxLevel}',
+    SvmapNpcEdit() =>
+      '#$index · NPC ${item.id} · tipo ${item.type} · '
+          '${item.route.length} puntos',
+    SvmapMobAreaEdit() => '#$index · ${item.mobs.length} tipos de mob',
+    SvmapSpawnEdit() => '#$index · facción ${item.faction}',
+    SvmapNamedAreaEdit() => '#$index · nombres ${item.name1}/${item.name2}',
+    _ => '#$index',
+  };
 
   Widget _svmapEditor(SvmapEditorDocument doc, Object item, int index) {
     if (item is SvmapPortalEdit) {
@@ -447,10 +427,7 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
           for (var i = 0; i < item.route.length; i++)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: Text(
-                'Waypoint $i',
-                style: const TextStyle(fontSize: 10),
-              ),
+              title: Text('Waypoint $i', style: const TextStyle(fontSize: 10)),
               children: [
                 _vectorEditor(
                   'Posición',
@@ -496,21 +473,13 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
                     _numberField(
                       'Monster ID #$i',
                       item.mobs[i].id,
-                      (v) => doc.setMobSpawn(
-                        index,
-                        i,
-                        id: int.parse(v),
-                      ),
+                      (v) => doc.setMobSpawn(index, i, id: int.parse(v)),
                       integer: true,
                     ),
                     _numberField(
                       'Cantidad',
                       item.mobs[i].count,
-                      (v) => doc.setMobSpawn(
-                        index,
-                        i,
-                        count: int.parse(v),
-                      ),
+                      (v) => doc.setMobSpawn(index, i, count: int.parse(v)),
                       integer: true,
                     ),
                   ],
@@ -677,25 +646,25 @@ class _WorldAuthoringPageState extends State<WorldAuthoringPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: const Color(0xff101722),
-        appBar: AppBar(
-          title: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('World Authoring', style: TextStyle(fontSize: 14)),
-              Text(
-                'WTR + SVMAP · edición lossless/fail-closed',
-                style: TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
-              ),
-            ],
+    backgroundColor: const Color(0xff101722),
+    appBar: AppBar(
+      title: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('World Authoring', style: TextStyle(fontSize: 14)),
+          Text(
+            'WTR + SVMAP · edición lossless/fail-closed',
+            style: TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
           ),
-        ),
-        body: Row(
-          children: [
-            SizedBox(width: 300, child: _sidebar()),
-            const VerticalDivider(width: 1),
-            Expanded(child: _content()),
-          ],
-        ),
-      );
+        ],
+      ),
+    ),
+    body: Row(
+      children: [
+        SizedBox(width: 300, child: _sidebar()),
+        const VerticalDivider(width: 1),
+        Expanded(child: _content()),
+      ],
+    ),
+  );
 }

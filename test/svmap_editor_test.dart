@@ -145,10 +145,9 @@ void main() {
     expect(encoded.sublist(20, 32), original.sublist(20, 32));
     expect(encoded.sublist(encoded.length - 4), const [0xde, 0xad, 0xbe, 0xef]);
 
-    final unknownA = ByteData.sublistView(encoded).getInt32(
-      encoded.indexOf(0x44) - 3,
-      Endian.little,
-    );
+    final unknownA = ByteData.sublistView(
+      encoded,
+    ).getInt32(encoded.indexOf(0x44) - 3, Endian.little);
     expect(unknownA, 0x11223344);
 
     final semantic = SvmapData.parse(encoded, 'world/test.svmap');
@@ -158,14 +157,8 @@ void main() {
 
   test('SVMAP authoring is fail-closed on numeric overflow', () {
     final doc = SvmapEditorDocument.parse(fixture(), 'world/test.svmap');
-    expect(
-      () => doc.setPortal(0, minLevel: 70000),
-      throwsFormatException,
-    );
-    expect(
-      () => doc.setMobSpawn(0, 0, id: -1),
-      throwsFormatException,
-    );
+    expect(() => doc.setPortal(0, minLevel: 70000), throwsFormatException);
+    expect(() => doc.setMobSpawn(0, 0, id: -1), throwsFormatException);
     expect(
       () => doc.setNpcWaypoint(0, 0, yaw: double.nan),
       throwsFormatException,
