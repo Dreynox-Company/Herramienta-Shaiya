@@ -2283,9 +2283,14 @@ class StudioScene extends ChangeNotifier {
   String get flightV3Status {
     final bundle = flightV3;
     if (bundle == null) return 'Flight V3 no instalado';
+    final canonical = bundle.evidence['canonicalPackage'] == true;
     final runtime = bundle.evidence['runtimeSubset'] == true
-        ? 'runtime compacto autenticado'
-        : 'paquete completo autenticado';
+        ? (canonical
+              ? 'runtime compacto auditado por SHA-256'
+              : 'runtime compacto verificado estructuralmente')
+        : (canonical
+              ? 'paquete completo auditado por SHA-256'
+              : 'paquete completo verificado estructuralmente');
     if (!flightV3Compatible) {
       return 'Flight V3 · $runtime · mapa de '
           '$flightV3MappedArchetypes arquetipos; runtime corporal actual '
