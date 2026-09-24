@@ -2609,17 +2609,13 @@ class StudioScene extends ChangeNotifier {
     final rawSound = record.sounds[slot] ?? '';
     if (rawSound.isNotEmpty) {
       final root = directoryName(record.source);
-      final resolved = lib.resolve(
-        rawSound,
-        [
-          '$root/sound',
-          '$root/snd',
-          'sound/wing',
-          'sound',
-          root,
-        ],
-        uniqueFallback: true,
-      );
+      final resolved = lib.resolve(rawSound, [
+        '$root/sound',
+        '$root/snd',
+        'sound/wing',
+        'sound',
+        root,
+      ], uniqueFallback: true);
       if (resolved != null) {
         unawaited(pooledSound(resolved));
       }
