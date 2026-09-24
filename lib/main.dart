@@ -857,10 +857,7 @@ class _StudioState extends State<StudioPage> {
         if (hasValue)
           TextButton(
             onPressed: disabled ? null : () => act(clear),
-            child: const Text(
-              'Vaciar',
-              style: TextStyle(fontSize: 9),
-            ),
+            child: const Text('Vaciar', style: TextStyle(fontSize: 9)),
           ),
         if (!usesLoad)
           TextButton(
@@ -1521,8 +1518,7 @@ class _StudioState extends State<StudioPage> {
                         hasValue:
                             scene.wingMonAttachedEffect?.isNotEmpty == true,
                         clear: () => scene.saveWingMonAttachedEffect(''),
-                        useLoad: () =>
-                            scene.saveWingMonAttachedEffect('LOAD'),
+                        useLoad: () => scene.saveWingMonAttachedEffect('LOAD'),
                       ),
                     ],
                     const Divider(height: 18),
@@ -2047,11 +2043,9 @@ class _StudioState extends State<StudioPage> {
                       ),
                       monOptionalActions(
                         usesLoad: scene.mountMonSoundUsesLoad(slot),
-                        hasValue:
-                            scene.mountMonSound(slot)?.isNotEmpty == true,
+                        hasValue: scene.mountMonSound(slot)?.isNotEmpty == true,
                         clear: () => scene.saveMountMonSound(slot, ''),
-                        useLoad: () =>
-                            scene.saveMountMonSound(slot, 'LOAD'),
+                        useLoad: () => scene.saveMountMonSound(slot, 'LOAD'),
                       ),
                     ],
                     for (final slot in scene.mountMonEffectSlots) ...[
@@ -2076,8 +2070,7 @@ class _StudioState extends State<StudioPage> {
                         hasValue:
                             scene.mountMonEffect(slot)?.isNotEmpty == true,
                         clear: () => scene.saveMountMonEffect(slot, ''),
-                        useLoad: () =>
-                            scene.saveMountMonEffect(slot, 'LOAD'),
+                        useLoad: () => scene.saveMountMonEffect(slot, 'LOAD'),
                       ),
                     ],
                   ],
