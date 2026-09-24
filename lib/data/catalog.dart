@@ -4,6 +4,7 @@ import 'game_names.dart';
 export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
+import '../core/wing_position.dart';
 import 'library.dart';
 part 'texture_discovery.dart';
 
@@ -182,6 +183,8 @@ class Catalog {
   final List<Archetype> archetypes = [];
   final List<WeaponRecord> weapons = [];
   final List<CreatureRecord> creatures = [], mounts = [], wings = [];
+  WingPositionDocument? wingPositions;
+  String? wingPositionPath;
   final List<String> worlds = [],
       sounds = [],
       effects = [],
@@ -361,8 +364,49 @@ class Catalog {
     }
   }
 
+  Future<void> saveWingPosition(WingPositionProfile profile) async {
+    final document = wingPositions;
+    final path = wingPositionPath;
+    if (document == null || path == null) {
+      throw const FormatException(
+        'WingPosition.xml no está montado; no hay destino real que editar.',
+      );
+    }
+    document.update(profile);
+    final bytes = document.encode();
+    document.validateEncoded(bytes);
+    await library.writeResource(path, bytes);
+    wingPositions = WingPositionDocument.parse(bytes, path);
+  }
+
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
+
+    wingPositionPath = paths.where((p) =>
+      p == WingPositionDocument.canonicalPath ||
+      p.endsWith('/wingposition.xml')
+    ).firstOrNull;
+    if (wingPositionPath != null) {
+      try {
+        wingPositions = WingPositionDocument.parse(
+          await library.read(wingPositionPath!),
+          wingPositionPath!,
+        );
+        final verified = wingPositions!.matchesVerifiedSource
+            ? ' · fuente canónica verificada'
+            : ' · archivo editable de esta DATA';
+        progress('WingPosition.xml · 48 perfiles$verified');
+      } catch (e) {
+        warnings.add('WingPosition.xml: $e');
+        wingPositions = null;
+      }
+    } else {
+      warnings.add(
+        'WingPosition.xml no está presente en la biblioteca montada. '
+        'Studio puede previsualizar el baseline verificado, pero no escribir '
+        'posicionamiento al juego sin el XML real.',
+      );
+    }
     for (final p in paths.where(
       (p) => RegExp(r'^character/[^/]+/[^/]+_upper\.mlt$').hasMatch(p),
     )) {
