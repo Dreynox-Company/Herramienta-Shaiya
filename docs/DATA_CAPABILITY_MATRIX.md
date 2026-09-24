@@ -72,6 +72,10 @@ El inventario real contiene nombres **inferidos** en familias útiles para Studi
 
 Estas rutas sirven para priorizar parsers, asociación visual y AutoPerfil, pero **no prueban que el payload de esos IDs haya sido descifrado**.
 
+### Freeze 0.6.22
+
+El código funcional 0.6.22 queda congelado después del commit de formato determinista. A partir de este punto solo se corrigen fallos demostrados por el gate; no se añaden capacidades nuevas antes de obtener el artifact Windows auditado.
+
 ## Prioridad de cierre
 
 1. Congelar 0.6.22 y pasar format/analyze/tests.
