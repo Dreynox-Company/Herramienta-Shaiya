@@ -844,6 +844,36 @@ class _StudioState extends State<StudioPage> {
     );
   }
 
+  Widget monOptionalActions({
+    required bool usesLoad,
+    required bool hasValue,
+    required Future<void> Function() clear,
+    required Future<void> Function() useLoad,
+  }) => Align(
+    alignment: Alignment.centerRight,
+    child: Wrap(
+      spacing: 4,
+      children: [
+        if (hasValue)
+          TextButton(
+            onPressed: disabled ? null : () => act(clear),
+            child: const Text(
+              'Vaciar',
+              style: TextStyle(fontSize: 9),
+            ),
+          ),
+        if (!usesLoad)
+          TextButton(
+            onPressed: disabled ? null : () => act(useLoad),
+            child: const Text(
+              'Usar LOAD nativo',
+              style: TextStyle(fontSize: 9),
+            ),
+          ),
+      ],
+    ),
+  );
+
   Widget note(String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Text(
@@ -1438,21 +1468,12 @@ class _StudioState extends State<StudioPage> {
                             ? scene.wingMonSound(slot)!
                             : 'Sin sonido',
                       ),
-                      if (!scene.wingMonSoundUsesLoad(slot))
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: disabled
-                                ? null
-                                : () => act(
-                                    () => scene.saveWingMonSound(slot, 'LOAD'),
-                                  ),
-                            child: const Text(
-                              'Usar LOAD nativo',
-                              style: TextStyle(fontSize: 9),
-                            ),
-                          ),
-                        ),
+                      monOptionalActions(
+                        usesLoad: scene.wingMonSoundUsesLoad(slot),
+                        hasValue: scene.wingMonSound(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveWingMonSound(slot, ''),
+                        useLoad: () => scene.saveWingMonSound(slot, 'LOAD'),
+                      ),
                     ],
                     for (final slot in scene.wingMonEffectSlots) ...[
                       field<String>(
@@ -1471,21 +1492,12 @@ class _StudioState extends State<StudioPage> {
                             ? scene.wingMonEffect(slot)!
                             : 'Sin efecto',
                       ),
-                      if (!scene.wingMonEffectUsesLoad(slot))
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: disabled
-                                ? null
-                                : () => act(
-                                    () => scene.saveWingMonEffect(slot, 'LOAD'),
-                                  ),
-                            child: const Text(
-                              'Usar LOAD nativo',
-                              style: TextStyle(fontSize: 9),
-                            ),
-                          ),
-                        ),
+                      monOptionalActions(
+                        usesLoad: scene.wingMonEffectUsesLoad(slot),
+                        hasValue: scene.wingMonEffect(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveWingMonEffect(slot, ''),
+                        useLoad: () => scene.saveWingMonEffect(slot, 'LOAD'),
+                      ),
                     ],
                     if (scene.wingMonAttachedEffect != null) ...[
                       field<String>(
@@ -1504,22 +1516,14 @@ class _StudioState extends State<StudioPage> {
                             ? scene.wingMonAttachedEffect!
                             : 'Sin efecto adjunto',
                       ),
-                      if (!scene.wingMonAttachedEffectUsesLoad)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: disabled
-                                ? null
-                                : () => act(
-                                    () =>
-                                        scene.saveWingMonAttachedEffect('LOAD'),
-                                  ),
-                            child: const Text(
-                              'Usar LOAD nativo',
-                              style: TextStyle(fontSize: 9),
-                            ),
-                          ),
-                        ),
+                      monOptionalActions(
+                        usesLoad: scene.wingMonAttachedEffectUsesLoad,
+                        hasValue:
+                            scene.wingMonAttachedEffect?.isNotEmpty == true,
+                        clear: () => scene.saveWingMonAttachedEffect(''),
+                        useLoad: () =>
+                            scene.saveWingMonAttachedEffect('LOAD'),
+                      ),
                     ],
                     const Divider(height: 18),
                     for (final part in scene.wingMonParts) ...[
@@ -2041,21 +2045,14 @@ class _StudioState extends State<StudioPage> {
                             ? scene.mountMonSound(slot)!
                             : 'Sin sonido',
                       ),
-                      if (!scene.mountMonSoundUsesLoad(slot))
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: disabled
-                                ? null
-                                : () => act(
-                                    () => scene.saveMountMonSound(slot, 'LOAD'),
-                                  ),
-                            child: const Text(
-                              'Vaciar sonido',
-                              style: TextStyle(fontSize: 9),
-                            ),
-                          ),
-                        ),
+                      monOptionalActions(
+                        usesLoad: scene.mountMonSoundUsesLoad(slot),
+                        hasValue:
+                            scene.mountMonSound(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveMountMonSound(slot, ''),
+                        useLoad: () =>
+                            scene.saveMountMonSound(slot, 'LOAD'),
+                      ),
                     ],
                     for (final slot in scene.mountMonEffectSlots) ...[
                       field<String>(
@@ -2074,22 +2071,14 @@ class _StudioState extends State<StudioPage> {
                             ? scene.mountMonEffect(slot)!
                             : 'Sin efecto',
                       ),
-                      if (!scene.mountMonEffectUsesLoad(slot))
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: disabled
-                                ? null
-                                : () => act(
-                                    () =>
-                                        scene.saveMountMonEffect(slot, 'LOAD'),
-                                  ),
-                            child: const Text(
-                              'Vaciar efecto',
-                              style: TextStyle(fontSize: 9),
-                            ),
-                          ),
-                        ),
+                      monOptionalActions(
+                        usesLoad: scene.mountMonEffectUsesLoad(slot),
+                        hasValue:
+                            scene.mountMonEffect(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveMountMonEffect(slot, ''),
+                        useLoad: () =>
+                            scene.saveMountMonEffect(slot, 'LOAD'),
+                      ),
                     ],
                   ],
                 ),
