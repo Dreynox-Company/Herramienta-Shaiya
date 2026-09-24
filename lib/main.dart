@@ -1511,9 +1511,8 @@ class _StudioState extends State<StudioPage> {
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveWingMonAttachedEffect(
-                                      'LOAD',
-                                    ),
+                                    () =>
+                                        scene.saveWingMonAttachedEffect('LOAD'),
                                   ),
                             child: const Text(
                               'Usar LOAD nativo',
@@ -2082,7 +2081,8 @@ class _StudioState extends State<StudioPage> {
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveMountMonEffect(slot, 'LOAD'),
+                                    () =>
+                                        scene.saveMountMonEffect(slot, 'LOAD'),
                                   ),
                             child: const Text(
                               'Vaciar efecto',

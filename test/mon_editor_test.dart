@@ -151,7 +151,10 @@ void main() {
       encoded,
       'Vehicle/Vehicle_Hu_01.MON',
     );
-    expect(parsed.records.single.animations['Ataque 2']!.value, monLoadSentinel);
+    expect(
+      parsed.records.single.animations['Ataque 2']!.value,
+      monLoadSentinel,
+    );
     expect(parsed.records.single.sounds['Ataque 1']!.value, monLoadSentinel);
     expect(parsed.records.single.effects['Ataque 3']!.value, monLoadSentinel);
     expect(parsed.records.single.attached!.value, monLoadSentinel);

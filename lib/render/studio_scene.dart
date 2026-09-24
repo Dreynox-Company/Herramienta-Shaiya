@@ -641,7 +641,8 @@ class StudioScene extends ChangeNotifier {
   String? wingMonSound(String slot) => wingRecord?.sounds[slot];
   String? wingMonEffect(String slot) => wingRecord?.effects[slot];
   String? get wingMonAttachedEffect => wingRecord?.effects['Adjunto'];
-  bool wingMonSoundUsesLoad(String slot) => isMonLoadSentinel(wingMonSound(slot));
+  bool wingMonSoundUsesLoad(String slot) =>
+      isMonLoadSentinel(wingMonSound(slot));
   bool wingMonEffectUsesLoad(String slot) =>
       isMonLoadSentinel(wingMonEffect(slot));
   bool get wingMonAttachedEffectUsesLoad =>
@@ -689,7 +690,11 @@ class StudioScene extends ChangeNotifier {
     await selectCreature(updated, 'wing');
     report(
       '${updated.source} #${updated.id} · sonido $slot = '
-      '${soundPath.isEmpty ? 'vacío' : isMonLoadSentinel(soundPath) ? 'LOAD (nativo)' : baseName(soundPath)} · MON revalidado.',
+      '${soundPath.isEmpty
+          ? 'vacío'
+          : isMonLoadSentinel(soundPath)
+          ? 'LOAD (nativo)'
+          : baseName(soundPath)} · MON revalidado.',
     );
   }
 
@@ -703,7 +708,11 @@ class StudioScene extends ChangeNotifier {
     await selectCreature(updated, 'wing');
     report(
       '${updated.source} #${updated.id} · efecto $slot = '
-      '${effectPath.isEmpty ? 'vacío' : isMonLoadSentinel(effectPath) ? 'LOAD (nativo)' : baseName(effectPath)} · MON revalidado.',
+      '${effectPath.isEmpty
+          ? 'vacío'
+          : isMonLoadSentinel(effectPath)
+          ? 'LOAD (nativo)'
+          : baseName(effectPath)} · MON revalidado.',
     );
   }
 
@@ -717,7 +726,11 @@ class StudioScene extends ChangeNotifier {
     await selectCreature(updated, 'wing');
     report(
       '${updated.source} #${updated.id} · efecto adjunto = '
-      '${effectPath.isEmpty ? 'vacío' : isMonLoadSentinel(effectPath) ? 'LOAD (nativo)' : baseName(effectPath)} · MON revalidado.',
+      '${effectPath.isEmpty
+          ? 'vacío'
+          : isMonLoadSentinel(effectPath)
+          ? 'LOAD (nativo)'
+          : baseName(effectPath)} · MON revalidado.',
     );
   }
 

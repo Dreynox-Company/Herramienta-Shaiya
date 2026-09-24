@@ -368,10 +368,7 @@ class Catalog {
     }
   }
 
-  void _auditMonReferences(
-    String source,
-    List<CreatureRecord> records,
-  ) {
+  void _auditMonReferences(String source, List<CreatureRecord> records) {
     final root = directoryName(source);
     var loadSentinels = 0;
     var missingAnimations = 0;
@@ -381,11 +378,7 @@ class Catalog {
     var missingTextures = 0;
     final examples = <String>{};
 
-    String? resolve(
-      String raw,
-      List<String> roots,
-      String kind,
-    ) {
+    String? resolve(String raw, List<String> roots, String kind) {
       if (raw.isEmpty) return null;
       if (isMonLoadSentinel(raw)) {
         loadSentinels++;
@@ -413,11 +406,12 @@ class Catalog {
           if (isMonLoadSentinel(raw)) loadSentinels++;
           continue;
         }
-        if (resolve(
-              raw,
-              ['$root/sound', '$root/snd', 'sound', root],
-              'audio',
-            ) ==
+        if (resolve(raw, [
+              '$root/sound',
+              '$root/snd',
+              'sound',
+              root,
+            ], 'audio') ==
             null) {
           missingSounds++;
         }
@@ -427,11 +421,12 @@ class Catalog {
           if (isMonLoadSentinel(raw)) loadSentinels++;
           continue;
         }
-        if (resolve(
-              raw,
-              ['$root/effect', 'effect', '$root/3de', root],
-              'efecto',
-            ) ==
+        if (resolve(raw, [
+              '$root/effect',
+              'effect',
+              '$root/3de',
+              root,
+            ], 'efecto') ==
             null) {
           missingEffects++;
         }
@@ -443,11 +438,11 @@ class Catalog {
           missingMeshes++;
         }
         if (!part.texture.toLowerCase().startsWith('null.') &&
-            resolve(
-                  part.texture,
-                  ['$root/dds', '$root/tga', root],
-                  'textura',
-                ) ==
+            resolve(part.texture, [
+                  '$root/dds',
+                  '$root/tga',
+                  root,
+                ], 'textura') ==
                 null) {
           missingTextures++;
         }
