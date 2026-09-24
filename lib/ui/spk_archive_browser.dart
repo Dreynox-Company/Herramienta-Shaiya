@@ -1443,13 +1443,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       'staticCandidatesTested': staticCandidatesTested,
       'staticDeepCandidatesTested': staticDeepCandidatesTested,
       'staticModulesScanned': staticModulesScanned,
-      if (staticMatchSource != null) 'staticMatchSource': staticMatchSource,
       'events': eventCodes.toList()..sort(),
       'profileReadyForSimple': profile['readyForSimple'] == true,
       'profileResourceKeys': profile['resourceKeys'],
       'profileModes': profile['modes'],
       'profileAadRule': profile['aadRule'],
     };
+    if (staticMatchSource != null) {
+      diagnosis['staticMatchSource'] = staticMatchSource;
+    }
     await File(p.join(output.path, 'probe-diagnosis.json')).writeAsString(
       const JsonEncoder.withIndent('  ').convert(diagnosis),
       flush: true,
