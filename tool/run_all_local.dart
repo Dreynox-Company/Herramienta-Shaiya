@@ -39,8 +39,9 @@ import '../test/vehicle_position_test.dart' as suite36;
 import '../test/wing_item_mapping_test.dart' as suite37;
 import '../test/wing_motion_test.dart' as suite38;
 import '../test/wing_position_test.dart' as suite39;
-import '../test/workspace_interaction_test.dart' as suite40;
-import '../test/workspace_material_test.dart' as suite41;
+import '../test/wing_systems_test.dart' as suite40;
+import '../test/workspace_interaction_test.dart' as suite41;
+import '../test/workspace_material_test.dart' as suite42;
 
 void main() {
   suite0.main();
@@ -85,4 +86,5 @@ void main() {
   suite39.main();
   suite40.main();
   suite41.main();
+  suite42.main();
 }
