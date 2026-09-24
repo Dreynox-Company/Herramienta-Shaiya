@@ -179,6 +179,8 @@ DIAGNÓSTICO:
   Extras/SPK/Shaiya_SPK_ResourceProbe.exe genera evidencia reproducible.
   Revisa probe-console.log, probe-diagnosis.json, resource-observations.json,
   candidate-keys.json y static-key-sweep.json cuando AutoPerfil no cierre.
+  distribution-status.json documenta de forma automática qué gates de
+  producción siguen abiertos en este ZIP concreto.
 
 La integración Windows usa fixtures sintéticos para regresión. La aceptación
 final del cliente original exige probar este build contra el par exacto
