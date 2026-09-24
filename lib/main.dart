@@ -495,7 +495,15 @@ class _StudioState extends State<StudioPage> {
     final choices = [
       File(
         '${docs.path}/HerramientaShaiya/'
+        'Shaiya_Studio_FlightV3_Runtime.zip',
+      ),
+      File(
+        '${docs.path}/HerramientaShaiya/'
         'Shaiya_Vuelo_Combate_V3_Completo.zip',
+      ),
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/'
+        'Shaiya_Studio_FlightV3_Runtime.zip',
       ),
       File(
         '${File(Platform.resolvedExecutable).parent.path}/Extras/'
@@ -539,14 +547,19 @@ class _StudioState extends State<StudioPage> {
     final docs = await getApplicationDocumentsDirectory();
     final folder = Directory('${docs.path}/HerramientaShaiya');
     await folder.create(recursive: true);
+    final runtimeSubset = bundle.evidence['runtimeSubset'] == true;
+    final installedName = runtimeSubset
+        ? 'Shaiya_Studio_FlightV3_Runtime.zip'
+        : 'Shaiya_Vuelo_Combate_V3_Completo.zip';
     await File(
-      '${folder.path}/Shaiya_Vuelo_Combate_V3_Completo.zip',
+      '${folder.path}/$installedName',
     ).writeAsBytes(bytes, flush: true);
     await scene.installFlightV3(bundle);
     scene.say(
       'Flight V3 instalado: ${bundle.transitions.length} transiciones, '
       '${bundle.combat.length} perfiles de combate y variantes de vuelo '
-      'neutral/escudo verificadas.',
+      'neutral/escudo verificadas. '
+      '${runtimeSubset ? 'Runtime compacto autenticado.' : 'Paquete completo autenticado.'}',
     );
     if (mounted) setState(() {});
   }
