@@ -1460,6 +1460,41 @@ class _StudioState extends State<StudioPage> {
               creatureField('mount'),
               if (scene.mount != null) ...[
                 actorAnimation(scene.mount!, 'mount'),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Vehicle.MON · slots ANI',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Persistencia nativa de animaciones de la montura',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    note(
+                      'Edita los slots ANI declarados por el MON original de la '
+                      'montura, reserializa MO2/MO4 y revalida antes de escribir. '
+                      'Esto sí modifica el recurso DATA que consume el cliente.',
+                    ),
+                    for (final slot in scene.mountMonAnimationSlots)
+                      field<String>(
+                        'mount-mon/${scene.mountRecord!.source}/'
+                        '${scene.mountRecord!.id}/$slot',
+                        slot,
+                        scene.mountMonAnimationCandidates,
+                        scene.mountMonAnimationCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveMountMonAnimation(slot, p),
+                        detail: (p) => p,
+                        empty: scene.mountMonAnimation(slot)?.isNotEmpty == true
+                            ? scene.mountMonAnimation(slot)!
+                            : 'Sin ANI asignado',
+                      ),
+                  ],
+                ),
                 note(
                   'Calibración 6DoF del jinete sobre la superficie animada de la '
                   'montura. En este momento es previsualización de Studio: todavía '
