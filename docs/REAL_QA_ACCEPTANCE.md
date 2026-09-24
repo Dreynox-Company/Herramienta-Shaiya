@@ -22,7 +22,7 @@ permanecen en `false`.
 ```json
 {
   "schema": 1,
-  "gameExeSha256": "<64 hex>",
+  "gameExeSha256": "509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d",
   "wing": {
     "positionGameExe": true,
     "positionSha256": "8a2c376c898bb025550b5fe34b92a40dbbbb9e39063619cfee4756006908cd03",
@@ -47,7 +47,8 @@ permanecen en `false`.
     "validatedResources": 50135,
     "failures": 0,
     "repackReopened": true,
-    "gameExeAccepted": true
+    "gameExeAccepted": true,
+    "gameExeSha256": "<SHA-256 del cliente usado para aceptar el SPK reconstruido>"
   }
 }
 ```
@@ -61,13 +62,16 @@ Studio no acepta un booleano aislado como prueba suficiente.
 - Wing.MON solo cierra si el hash coincide con el MO4 real de 81 registros
   auditado.
 - Vehicle.MON exige los cuatro hashes activos Hu/El/Vi/De auditados.
-- El bridge de montura exige además un SHA-256 de `game.exe` sintácticamente
-  válido para ligar la prueba a un binario concreto.
+- WingPosition, Wing.MON, Vehicle.MON y el bridge de montura cierran únicamente
+  contra el `game.exe` ps0032 exacto auditado:
+  `509c4a8fbe4d5292961fdfb6d1045795a7bb5970fcf2560fd1070aee18273c2d`.
 - El SPK solo cierra la auditoría si el índice es exactamente el perfil real,
   simples y fragmentados están habilitados, `canExtractAll=true`,
   `validatedResources=50135` y `failures=0`.
 - `repackReopened` y `gameExeAccepted` solo cuentan después de que la
-  auditoría integral anterior sea válida.
+  auditoría integral anterior sea válida; la aceptación del SPK exige además
+  el SHA-256 del ejecutable realmente usado, porque ese cliente puede ser un
+  perfil distinto del ps0032 empleado para Wing/Vehicle.
 - La clave de payloads sigue siendo autoridad del perfil criptográfico
   autenticado de ResourceProbe/Studio; este JSON no puede fingir
   `resourceKeyValidated`.
