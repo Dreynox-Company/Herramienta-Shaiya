@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../core/wing_systems.dart';
@@ -32,7 +34,7 @@ class _WingSystemsLabPageState extends State<WingSystemsLabPage> {
       error = null;
     });
     try {
-      Future<List<int>?> readOptional(String path) async {
+      Future<Uint8List?> readOptional(String path) async {
         if (!widget.library.files.containsKey(path)) return null;
         return widget.library.read(path, limit: 4 * 1024 * 1024);
       }
