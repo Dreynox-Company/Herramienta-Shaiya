@@ -71,13 +71,19 @@ def load_real_acceptance():
         _sha256_text(game_sha)
     )
     spk_index_ok=str(spk.get('indexSha256') or '').lower()==REAL_INDEX_SHA256
+    validated_resources=spk.get('validatedResources')
+    failures=spk.get('failures')
     spk_audit_ok=(
         spk_index_ok and
         spk.get('canReadSimpleResources') is True and
         spk.get('canReadFragmentedResources') is True and
         spk.get('canExtractAll') is True and
-        int(spk.get('validatedResources') or -1)==50135 and
-        int(spk.get('failures') or -1)==0
+        isinstance(validated_resources,int) and
+        not isinstance(validated_resources,bool) and
+        validated_resources==50135 and
+        isinstance(failures,int) and
+        not isinstance(failures,bool) and
+        failures==0
     )
     return {
         'source':str(source),
