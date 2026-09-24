@@ -28,6 +28,7 @@ import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
+import 'ui/excelxml_lab.dart';
 import 'ui/spk_archive_browser.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
@@ -170,6 +171,52 @@ class _StudioState extends State<StudioPage> {
     }
   }
 
+  Future<void> _refreshAfterDataMutation(
+    Library library,
+    int beforeRevision,
+  ) async {
+    if (!mounted || library.revision == beforeRevision) return;
+    await act(() async {
+      final look = scene.appearance;
+      final refreshed = Catalog(library);
+      await refreshed.load((s) {
+        if (mounted) setState(() => progress = s);
+      });
+      if (!mounted) return;
+      final archetype = refreshed.archetypes
+          .where(
+            (a) =>
+                a.id == look?.archetype.id && a.race == look?.archetype.race,
+          )
+          .firstOrNull;
+      scene.catalog = refreshed;
+      catalog = refreshed;
+      _memories.clear();
+      if (archetype != null && look != null) {
+        final slots = <Slot, PartRecord?>{};
+        for (final slot in Slot.values) {
+          final prior = look.selected[slot];
+          slots[slot] = prior == null
+              ? null
+              : (archetype.parts[slot] ?? [])
+                    .where(
+                      (part) =>
+                          part.raw.id == prior.raw.id &&
+                          part.tablePath == prior.tablePath,
+                    )
+                    .firstOrNull;
+        }
+        await scene.setAppearance(
+          Appearance(archetype, slots, preset: look.preset),
+        );
+      }
+      scene.say(
+        'DATA guardada y catálogo recargado. XML, referencias y texturas '
+        'actualizadas ya están disponibles en Studio.',
+      );
+    });
+  }
+
   Future<void> openDataEditor() async {
     final library = catalog?.library;
     if (library == null || working) return;
@@ -187,45 +234,22 @@ class _StudioState extends State<StudioPage> {
         ),
       ),
     );
-    if (!mounted) return;
-    if (library.revision != beforeRevision) {
-      await act(() async {
-        final look = scene.appearance;
-        final refreshed = Catalog(library);
-        await refreshed.load((s) {
-          if (mounted) setState(() => progress = s);
-        });
-        if (!mounted) return;
-        final a = refreshed.archetypes
-            .where(
-              (a) =>
-                  a.id == look?.archetype.id && a.race == look?.archetype.race,
-            )
-            .firstOrNull;
-        scene.catalog = refreshed;
-        catalog = refreshed;
-        _memories.clear();
-        if (a != null && look != null) {
-          final slots = <Slot, PartRecord?>{};
-          for (final slot in Slot.values) {
-            final prior = look.selected[slot];
-            slots[slot] = prior == null
-                ? null
-                : (a.parts[slot] ?? [])
-                      .where(
-                        (p) =>
-                            p.raw.id == prior.raw.id &&
-                            p.tablePath == prior.tablePath,
-                      )
-                      .firstOrNull;
-          }
-          await scene.setAppearance(Appearance(a, slots, preset: look.preset));
-        }
-        scene.say(
-          'Datos guardados y catálogo recargado. Las referencias y texturas nuevas están disponibles en el laboratorio.',
-        );
-      });
-    }
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openExcelXmlLab() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ExcelXmlLabPage(library: library),
+      ),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();
   }
 
@@ -3374,6 +3398,7 @@ class _StudioState extends State<StudioPage> {
     actions: actionBar(),
     hasLibrary: scene.character != null,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
+    onOpenExcelXml: catalog == null || working ? null : openExcelXmlLab,
     onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,
     onOpenSpk: disabled ? null : openSpkArchive,
