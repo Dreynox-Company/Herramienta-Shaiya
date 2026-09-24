@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:file_selector/file_selector.dart';
 import 'core/extra_motion.dart';
+import 'core/flight_v3_bundle.dart';
 import 'core/equipment_rules.dart';
 import 'core/vehicle_position.dart';
 import 'core/textures.dart';
@@ -33,7 +34,7 @@ import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
-const studioVersion = '0.6.21';
+const studioVersion = '0.6.22';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -464,6 +465,68 @@ class _StudioState extends State<StudioPage> {
     }
   }
 
+  Future<void> loadBundledFlightV3() async {
+    if (scene.flightV3 != null) return;
+    final docs = await getApplicationDocumentsDirectory();
+    final choices = [
+      File(
+        '${docs.path}/HerramientaShaiya/'
+        'Shaiya_Vuelo_Combate_V3_Completo.zip',
+      ),
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/'
+        'Shaiya_Vuelo_Combate_V3_Completo.zip',
+      ),
+    ];
+    for (final file in choices) {
+      if (!await file.exists()) continue;
+      try {
+        if (await file.length() > FlightV3Bundle.maxZipBytes) {
+          throw const FormatException('Paquete Flight V3 fuera de limite.');
+        }
+        final bundle = await compute(
+          FlightV3Bundle.decode,
+          await file.readAsBytes(),
+        );
+        await scene.installFlightV3(bundle);
+        return;
+      } catch (e) {
+        log('Flight V3: $e');
+      }
+    }
+  }
+
+  Future<void> importFlightV3() async {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        const XTypeGroup(
+          label: 'Shaiya Vuelo y Combate V3',
+          extensions: ['zip'],
+        ),
+      ],
+      confirmButtonText: 'Importar Flight V3',
+    );
+    if (file == null) return;
+    if (await file.length() > FlightV3Bundle.maxZipBytes) {
+      throw const FormatException('Paquete Flight V3 fuera de limite.');
+    }
+    final bytes = await file.readAsBytes();
+    final bundle = await compute(FlightV3Bundle.decode, bytes);
+    final docs = await getApplicationDocumentsDirectory();
+    final folder = Directory('${docs.path}/HerramientaShaiya');
+    await folder.create(recursive: true);
+    await File(
+      '${folder.path}/Shaiya_Vuelo_Combate_V3_Completo.zip',
+    ).writeAsBytes(bytes, flush: true);
+    await scene.installFlightV3(bundle);
+    scene.say(
+      'Flight V3 instalado: ${bundle.transitions.length} transiciones, '
+      '${bundle.combat.length} perfiles de combate y variantes de vuelo '
+      'neutral/escudo verificadas.',
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> importExtras() async {
     final file = await openFile(
       acceptedTypeGroups: [
@@ -528,6 +591,7 @@ class _StudioState extends State<StudioPage> {
       if (lib == null) return;
       candidate = lib;
       await loadBundledExtras();
+      await loadBundledFlightV3();
       final next = Catalog(lib);
       await next.load(report);
       if (!mounted) return;
@@ -1451,6 +1515,19 @@ class _StudioState extends State<StudioPage> {
                   onPressed: disabled ? null : () => act(importExtras),
                   icon: const Icon(Icons.upload_file, size: 16),
                   label: const Text('Importar flight.json.gz'),
+                ),
+              OutlinedButton.icon(
+                onPressed: disabled ? null : () => act(importFlightV3),
+                icon: const Icon(Icons.flight_takeoff_outlined, size: 16),
+                label: const Text('Importar Vuelo + Combate V3 (.zip)'),
+              ),
+              note(scene.flightV3Status),
+              if (scene.flightV3 != null)
+                note(
+                  'El paquete V3 se valida por SHA-256, vuelve a parsear todos '
+                  'los ANI y solo se activa sobre humf de 36 huesos. Incluye '
+                  'vuelo neutral/escudo, 26 transiciones y perfiles ON/DU/TH/SP. '
+                  'Los scripts HTML/JS/BAT del ZIP nunca se ejecutan.',
                 ),
               note(
                 scene.extraMotions == null
