@@ -19,7 +19,7 @@ Nunca se convierte una ruta inferida del SPK en evidencia de contenido.
 | WingDecompose.xml | **Archivo real confirmado** | ExcelXml Lab | Celdas tipadas | Tabla DATA | Validación funcional in-game por sistema |
 | WingExpItem.xml | **Archivo real confirmado** | ExcelXml Lab | Celdas tipadas | Tabla DATA | Validación funcional in-game por sistema |
 | WingSwap.xml | **Archivo real confirmado** | ExcelXml Lab | Celdas tipadas | Tabla DATA | Validación funcional in-game por sistema |
-| Vehicle MON MO2/MO4 | Parser/regresión | Montura 3D + ANI | ANI, sonidos, efectos | **Sí, MON DATA** | Probar MON exactos Hu/El/Vi/De |
+| Vehicle MON MO2/MO4 | **Archivo real confirmado** · 6 MO4 activos × 120 registros | Montura 3D + ANI + auditoría de referencias/LOAD | ANI, sonidos, efectos, sentinel LOAD | **Sí, MON DATA** | QA in-game Hu/El/Vi/De y bridge |
 | Asiento de montura | game.exe + Studio Bridge documentado | Calibración 6DoF, escala, espejo, perfiles ANI | VehiclePosition.ini | **Bridge ps0032**, no tabla original | Certificación in-game del bridge |
 | LookAndEquipment.xml | **Archivo real confirmado** | ExcelXml Lab | Celdas tipadas | Tabla DATA | No confundir VEHICLE/PET con pose de asiento |
 | functionalpetsize.xml | **Archivo real confirmado** | ExcelXml Lab | Tamaños/efectos | Tabla DATA | QA visual de pets |
@@ -85,3 +85,15 @@ El código funcional 0.6.22 queda congelado después del commit de formato deter
 5. Ejecutar ResourceProbe contra el par exacto game.exe + DATA.SPK.
 6. Solo después de autenticación: auditoría 50.135/50.135, repack, reapertura.
 7. En una siguiente versión, priorizar editores especializados para WLD/WTR/SVMAP/SMOD/VANI y un writer 3DC/3DO antes de permitir baking de escala/espejo directamente en geometría.
+
+
+### Vehicle real audit
+
+La fuente `DATA (1).zip` real (SHA-256
+`c5b6eb7510c55f49198e4527495a9f5e86fcc80886f88e77a5454649f025870a`)
+confirma 168 3DC, 590 ANI, 187 DDS y 6 MON activos bajo `Vehicle/`.
+Cada MON activo es MO4 con 120 registros. El valor `LOAD` aparece como sentinel
+nativo en ANI/sonido/efecto/adjunto y ya no se trata como una ruta faltante.
+Studio conserva además las colas opacas y reporta por separado referencias
+concretas que sí faltan en la DATA suministrada. Véase
+`VEHICLE_REAL_DATA_AUDIT.md`.
