@@ -46,16 +46,8 @@ class WtrDocument extends EditDocument {
         ordinal: 0,
         dynamicSpans: const [
           FieldSpan(FieldSpec('TileSize', 'f32'), 0, 4),
-          FieldSpan(
-            FieldSpec('Unknown2', 'u32', editable: false),
-            4,
-            4,
-          ),
-          FieldSpan(
-            FieldSpec('Unknown3', 'i32', editable: false),
-            8,
-            4,
-          ),
+          FieldSpan(FieldSpec('Unknown2', 'u32', editable: false), 4, 4),
+          FieldSpan(FieldSpec('Unknown3', 'i32', editable: false), 8, 4),
           FieldSpan(FieldSpec('TextureCount', 'u32', editable: false), 12, 4),
         ],
       ),
