@@ -379,13 +379,12 @@ class Catalog {
     return out;
   }
 
-  Future<CreatureRecord> _saveMonAnimation(
-    CreatureRecord record,
-    String slot,
-    String animationPath, {
+  Future<CreatureRecord> _saveMonMutation(
+    CreatureRecord record, {
     required String requiredRoot,
     required List<CreatureRecord> target,
     required String label,
+    required void Function(EditableMonDocument document) mutate,
   }) async {
     if (!record.source.startsWith(requiredRoot) ||
         !record.source.endsWith('.mon')) {
@@ -398,7 +397,7 @@ class Catalog {
         'El ID ${record.id} no existe en ${record.source}.',
       );
     }
-    document.setAnimation(record.id, slot, baseName(animationPath));
+    mutate(document);
     final encoded = document.encode();
     document.validateEncoded(encoded);
 
@@ -418,6 +417,98 @@ class Catalog {
     return updated;
   }
 
+  Future<CreatureRecord> _saveMonAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) =>
+        document.setAnimation(record.id, slot, baseName(animationPath)),
+  );
+
+  Future<CreatureRecord> _saveMonSound(
+    CreatureRecord record,
+    String slot,
+    String soundPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setSound(
+      record.id,
+      slot,
+      soundPath.isEmpty ? '' : baseName(soundPath),
+    ),
+  );
+
+  Future<CreatureRecord> _saveMonEffect(
+    CreatureRecord record,
+    String slot,
+    String effectPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setEffect(
+      record.id,
+      slot,
+      effectPath.isEmpty ? '' : baseName(effectPath),
+    ),
+  );
+
+  Future<CreatureRecord> _saveMonAttachedEffect(
+    CreatureRecord record,
+    String effectPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setAttachedEffect(
+      record.id,
+      effectPath.isEmpty ? '' : baseName(effectPath),
+    ),
+  );
+
+  Future<CreatureRecord> _saveMonPart(
+    CreatureRecord record,
+    int partId, {
+    String? meshPath,
+    String? texturePath,
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setPart(
+      record.id,
+      partId,
+      mesh: meshPath == null ? null : baseName(meshPath),
+      texture: texturePath == null ? null : baseName(texturePath),
+    ),
+  );
+
   Future<CreatureRecord> saveWingAnimation(
     CreatureRecord record,
     String slot,
@@ -431,6 +522,58 @@ class Catalog {
     label: 'Character/Wing/*.MON',
   );
 
+  Future<CreatureRecord> saveWingSound(
+    CreatureRecord record,
+    String slot,
+    String soundPath,
+  ) => _saveMonSound(
+    record,
+    slot,
+    soundPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingEffect(
+    CreatureRecord record,
+    String slot,
+    String effectPath,
+  ) => _saveMonEffect(
+    record,
+    slot,
+    effectPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingAttachedEffect(
+    CreatureRecord record,
+    String effectPath,
+  ) => _saveMonAttachedEffect(
+    record,
+    effectPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingPart(
+    CreatureRecord record,
+    int partId, {
+    String? meshPath,
+    String? texturePath,
+  }) => _saveMonPart(
+    record,
+    partId,
+    meshPath: meshPath,
+    texturePath: texturePath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
   Future<CreatureRecord> saveMountAnimation(
     CreatureRecord record,
     String slot,
@@ -439,6 +582,32 @@ class Catalog {
     record,
     slot,
     animationPath,
+    requiredRoot: 'vehicle/',
+    target: mounts,
+    label: 'Vehicle/*.MON',
+  );
+
+  Future<CreatureRecord> saveMountSound(
+    CreatureRecord record,
+    String slot,
+    String soundPath,
+  ) => _saveMonSound(
+    record,
+    slot,
+    soundPath,
+    requiredRoot: 'vehicle/',
+    target: mounts,
+    label: 'Vehicle/*.MON',
+  );
+
+  Future<CreatureRecord> saveMountEffect(
+    CreatureRecord record,
+    String slot,
+    String effectPath,
+  ) => _saveMonEffect(
+    record,
+    slot,
+    effectPath,
     requiredRoot: 'vehicle/',
     target: mounts,
     label: 'Vehicle/*.MON',
