@@ -57,7 +57,92 @@ List<String> combatFiles() => [
   'ANI/Combate_Humano/humf_054_sprun.ani',
 ];
 
-Uint8List package({bool tamperHash = false, int transitions = 26}) {
+List<Map<String, Object?>> transitionRows() {
+  const ids = <String>[
+    'V3_TAKEOFF_NORMAL_NEUTRAL',
+    'V3_LAND_NORMAL_NEUTRAL',
+    'V3_HOVER_TO_FLIGHT_NEUTRAL',
+    'V3_FLIGHT_TO_HOVER_NEUTRAL',
+    'V3_TAKEOFF_NORMAL_SHIELD',
+    'V3_LAND_NORMAL_SHIELD',
+    'V3_HOVER_TO_FLIGHT_SHIELD',
+    'V3_FLIGHT_TO_HOVER_SHIELD',
+    'V3_LAND_COMBAT_ON',
+    'V3_FLIGHT_LAND_COMBAT_ON',
+    'V3_TAKEOFF_COMBAT_ON',
+    'V3_LAND_COMBAT_ON_SHIELD',
+    'V3_FLIGHT_LAND_COMBAT_ON_SHIELD',
+    'V3_TAKEOFF_COMBAT_ON_SHIELD',
+    'V3_LAND_COMBAT_DU',
+    'V3_FLIGHT_LAND_COMBAT_DU',
+    'V3_TAKEOFF_COMBAT_DU',
+    'V3_LAND_COMBAT_TH',
+    'V3_FLIGHT_LAND_COMBAT_TH',
+    'V3_TAKEOFF_COMBAT_TH',
+    'V3_LAND_COMBAT_SP',
+    'V3_FLIGHT_LAND_COMBAT_SP',
+    'V3_TAKEOFF_COMBAT_SP',
+    'V3_SEQUENCE_ON_NEUTRAL',
+    'V3_SEQUENCE_ON_SHIELD',
+    'V3_SEQUENCE_DU_NEUTRAL',
+  ];
+
+  String? profile(String id) {
+    if (id.contains('_DU')) return 'du';
+    if (id.contains('_TH')) return 'th';
+    if (id.contains('_SP')) return 'sp';
+    if (id.contains('_ON') || id.contains('NORMAL_')) return 'on';
+    return null;
+  }
+
+  String kind(String id) {
+    if (id.contains('TAKEOFF')) return 'TAKEOFF';
+    if (id.contains('LAND')) return 'LANDING';
+    if (id.contains('HOVER_TO_FLIGHT') || id.contains('FLIGHT_TO_HOVER')) {
+      return 'AIR_BLEND';
+    }
+    return 'BODY_SEQUENCE';
+  }
+
+  String? target(String id) {
+    if (id.contains('SEQUENCE')) return null;
+    if (id.contains('HOVER_TO_FLIGHT')) {
+      return id.endsWith('SHIELD') ? 'PLAYER_FLY_SHIELD' : 'PLAYER_FLY';
+    }
+    if (id.contains('FLIGHT_TO_HOVER') || id.contains('TAKEOFF')) {
+      return id.endsWith('SHIELD')
+          ? 'PLAYER_STOP_FLY_SHIELD'
+          : 'PLAYER_STOP_FLY';
+    }
+    if (id.contains('COMBAT_ON')) return 'SRC_humf_034_onready';
+    if (id.contains('COMBAT_DU')) return 'SRC_humf_041_duready';
+    if (id.contains('COMBAT_TH')) return 'SRC_humf_023_thready';
+    if (id.contains('COMBAT_SP')) return 'SRC_humf_048_spready';
+    return 'SRC_humf_000_normal';
+  }
+
+  return [
+    for (final id in ids)
+      {
+        'id': id,
+        'file': 'ANI/Transiciones/$id.ani',
+        'kind': kind(id),
+        'profile': profile(id),
+        'shield': id.endsWith('SHIELD'),
+        'duration': 1.0,
+        'destinationPhase': kind(id) == 'AIR_BLEND' ? .5 : 0.0,
+        'targetClip': target(id),
+        'bones': 36,
+      },
+  ];
+}
+
+Uint8List package({
+  bool tamperHash = false,
+  String? omitTransition,
+  bool runtimeManifest = false,
+  bool badRuntimeSource = false,
+}) {
   final clip = ani36();
   final files = <String, Uint8List>{};
 
@@ -73,43 +158,23 @@ Uint8List package({bool tamperHash = false, int transitions = 26}) {
     files[path] = clip;
   }
 
-  final transitionRows = <Map<String, Object?>>[];
-  final required = [
-    'V3_TAKEOFF_NORMAL_NEUTRAL',
-    'V3_TAKEOFF_NORMAL_SHIELD',
-    'V3_LAND_NORMAL_NEUTRAL',
-    'V3_LAND_NORMAL_SHIELD',
-  ];
-  for (var i = 0; i < transitions; i++) {
-    final id = i < required.length
-        ? required[i]
-        : 'V3_TEST_${i.toString().padLeft(2, '0')}';
-    final path = 'ANI/Transiciones/$id.ani';
-    files[path] = clip;
-    transitionRows.add({
-      'id': id,
-      'file': path,
-      'kind': id.contains('TAKEOFF')
-          ? 'takeoff'
-          : id.contains('LAND')
-          ? 'land'
-          : 'blend',
-      'profile': null,
-      'shield': id.endsWith('SHIELD'),
-      'duration': 1.0,
-      'destinationPhase': 0.0,
-      'bones': 36,
-    });
+  final rows = transitionRows()
+      .where((row) => row['id'] != omitTransition)
+      .toList(growable: false);
+  for (final row in rows) {
+    files[row['file']! as String] = clip;
   }
 
   files['transiciones.json'] = Uint8List.fromList(
-    utf8.encode(jsonEncode({'transitions': transitionRows})),
+    utf8.encode(jsonEncode({'transitions': rows})),
   );
   files['mapa_combate_Character.json'] = Uint8List.fromList(
     utf8.encode(
       jsonEncode({
         'characters': {
-          'humf': {'bones': 36},
+          'humf': {
+            'bones': [36, 38],
+          },
         },
       }),
     ),
@@ -129,6 +194,23 @@ Uint8List package({bool tamperHash = false, int transitions = 26}) {
     }
     lines.add('$digest  ${entry.key}');
   }
+
+  if (runtimeManifest) {
+    files['RUNTIME_MANIFEST.json'] = Uint8List.fromList(
+      utf8.encode(
+        jsonEncode({
+          'schema': 1,
+          'source': 'Shaiya_Vuelo_Combate_V3_Completo.zip',
+          'purpose': 'Shaiya Studio bundled Flight V3 runtime subset',
+          'files': files.length + 1,
+          'sourceSha256': badRuntimeSource
+              ? '0' * 64
+              : FlightV3Bundle.canonicalSourceSha256,
+        }),
+      ),
+    );
+  }
+
   files['SHA256SUMS.txt'] = Uint8List.fromList(
     utf8.encode('${lines.join('\n')}\n'),
   );
@@ -144,7 +226,7 @@ Uint8List package({bool tamperHash = false, int transitions = 26}) {
 
 void main() {
   test('verified V3 bundle exposes flight combat and 26 transitions', () {
-    final bundle = FlightV3Bundle.decode(package());
+    final bundle = FlightV3Bundle.decode(package(runtimeManifest: true));
 
     expect(bundle.normal.bones, hasLength(36));
     expect(bundle.hover.bones, hasLength(36));
@@ -172,9 +254,26 @@ void main() {
     );
   });
 
+  test('runtime subset binds to the audited complete source', () {
+    final bundle = FlightV3Bundle.decode(package(runtimeManifest: true));
+    expect(bundle.evidence['runtimeSubset'], isTrue);
+    expect(
+      bundle.evidence['sourceSha256'],
+      FlightV3Bundle.canonicalSourceSha256,
+    );
+    expect(
+      () => FlightV3Bundle.decode(
+        package(runtimeManifest: true, badRuntimeSource: true),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('transition inventory must remain complete', () {
     expect(
-      () => FlightV3Bundle.decode(package(transitions: 25)),
+      () => FlightV3Bundle.decode(
+        package(omitTransition: 'V3_SEQUENCE_DU_NEUTRAL'),
+      ),
       throwsFormatException,
     );
   });
