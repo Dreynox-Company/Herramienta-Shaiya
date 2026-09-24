@@ -212,6 +212,7 @@ class WingPositionDocument {
         expected.sex,
       );
       if (actual == null ||
+          (expected.boneWritable && actual.boneIndex != expected.boneIndex) ||
           !_close(actual.rotX, expected.rotX) ||
           !_close(actual.rotY, expected.rotY) ||
           !_close(actual.rotZ, expected.rotZ) ||
