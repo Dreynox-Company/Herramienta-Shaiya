@@ -419,7 +419,6 @@ class StudioScene extends ChangeNotifier {
         .firstOrNull;
   }
 
-
   Future<void> saveWingMonAnimation(String slot, String animationPath) async {
     final c = catalog;
     final record = wingRecord;

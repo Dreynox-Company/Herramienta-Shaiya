@@ -14,19 +14,9 @@ const monAnimationSlots = <String>[
   'Reposo',
 ];
 
-const monSoundSlots = <String>[
-  'Ataque 1',
-  'Ataque 2',
-  'Ataque 3',
-  'Caída',
-];
+const monSoundSlots = <String>['Ataque 1', 'Ataque 2', 'Ataque 3', 'Caída'];
 
-const monEffectSlots = <String>[
-  'Ataque 1',
-  'Ataque 2',
-  'Ataque 3',
-  'Caída',
-];
+const monEffectSlots = <String>['Ataque 1', 'Ataque 2', 'Ataque 3', 'Caída'];
 
 class EditableMonString {
   final Uint8List originalBytes;
@@ -154,7 +144,8 @@ class EditableMonDocument {
 
   void validateEncoded(Uint8List bytes) {
     final parsed = EditableMonDocument.parse(bytes, source);
-    if (parsed.signature != signature || parsed.records.length != records.length) {
+    if (parsed.signature != signature ||
+        parsed.records.length != records.length) {
       throw const FormatException('MON perdió registros al serializar.');
     }
     for (var i = 0; i < records.length; i++) {
@@ -223,12 +214,7 @@ class EditableMonDocument {
       );
     }
     r.end();
-    return EditableMonDocument._(
-      source,
-      signature,
-      signatureRaw,
-      rows,
-    );
+    return EditableMonDocument._(source, signature, signatureRaw, rows);
   }
 
   static void _u32(BytesBuilder out, int value) {

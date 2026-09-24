@@ -44,16 +44,25 @@ void main() {
   for (final signature in ['MO2', 'MO4']) {
     test('$signature unchanged MON round-trips byte-for-byte', () {
       final original = fixture(signature);
-      final doc = EditableMonDocument.parse(original, 'Character/Wing/Wing.MON');
+      final doc = EditableMonDocument.parse(
+        original,
+        'Character/Wing/Wing.MON',
+      );
       expect(doc.signature, signature);
       expect(doc.records, hasLength(1));
-      expect(doc.records.single.animations['Respirar']!.value, 'wing_anim_6.ani');
+      expect(
+        doc.records.single.animations['Respirar']!.value,
+        'wing_anim_6.ani',
+      );
       expect(doc.encode(), orderedEquals(original));
     });
 
     test('$signature edits one ANI slot and preserves opaque tail', () {
       final original = fixture(signature);
-      final doc = EditableMonDocument.parse(original, 'Character/Wing/Wing.MON');
+      final doc = EditableMonDocument.parse(
+        original,
+        'Character/Wing/Wing.MON',
+      );
       final beforeTail = Uint8List.fromList(doc.records.single.tailRaw);
       doc.setAnimation(0, 'Ataque 2', 'custom_attack.ani');
       final encoded = doc.encode();

@@ -368,10 +368,11 @@ class Catalog {
   List<String> wingAnimationCandidates(CreatureRecord record) {
     final root = directoryName(record.source);
     final prefix = '$root/ani/';
-    final out = library.files.keys
-        .where((p) => p.startsWith(prefix) && p.endsWith('.ani'))
-        .toList()
-      ..sort();
+    final out =
+        library.files.keys
+            .where((p) => p.startsWith(prefix) && p.endsWith('.ani'))
+            .toList()
+          ..sort();
     return out;
   }
 

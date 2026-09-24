@@ -1097,8 +1097,7 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveWingMonAnimation(slot, p),
                         detail: (p) => p,
-                        empty:
-                            scene.wingMonAnimation(slot)?.isNotEmpty == true
+                        empty: scene.wingMonAnimation(slot)?.isNotEmpty == true
                             ? scene.wingMonAnimation(slot)!
                             : 'Sin ANI asignado',
                       ),
