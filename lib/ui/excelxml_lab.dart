@@ -35,6 +35,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   Uint8List? sourceBytes;
   String? rawText;
   bool rawDirty = false;
+  bool structuredDirty = false;
+  final Map<String, String> cellErrors = {};
   String? loadError;
   bool busy = false;
   int sheetIndex = 0;
@@ -69,6 +71,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       sourceBytes = null;
       rawText = null;
       rawDirty = false;
+      structuredDirty = false;
+      cellErrors.clear();
       loadError = null;
       selectedRow = null;
       sheetIndex = 0;
@@ -168,6 +172,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       setState(() {
         document = reparsed;
         sourceBytes = encoded;
+        structuredDirty = false;
+        cellErrors.clear();
         revision++;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -460,7 +466,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                 ),
               const SizedBox(width: 8),
               FilledButton.icon(
-                onPressed: busy ? null : save,
+                onPressed: busy || !structuredDirty || cellErrors.isNotEmpty
+                    ? null
+                    : save,
                 icon: const Icon(Icons.save_outlined, size: 16),
                 label: Text(
                   widget.library.isSpkWorkspace
@@ -589,30 +597,62 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         ),
         const Divider(height: 20),
         for (final column in sheet.columns)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 9),
-            child: TextFormField(
-              key: ValueKey(
-                '$revision-$sheetIndex-$rowIndex-${column.index}-'
-                '${row.value(column.index)}',
-              ),
-              initialValue: row.value(column.index),
-              enabled: row.hasCell(column.index) && !busy,
-              maxLines: null,
-              style: const TextStyle(fontSize: 10),
-              decoration: InputDecoration(
-                labelText: column.label,
-                helperText: row.hasCell(column.index)
-                    ? 'C${column.index}'
-                    : 'Celda ausente · no se inventa',
-                helperStyle: const TextStyle(fontSize: 8),
-              ),
-              onChanged: row.hasCell(column.index)
-                  ? (value) {
-                      doc.setCell(sheetIndex, rowIndex, column.index, value);
-                    }
-                  : null,
-            ),
+          Builder(
+            builder: (context) {
+              final errorKey = '$sheetIndex/$rowIndex/${column.index}';
+              final type = row.cellType(column.index);
+              final hasCell = row.hasCell(column.index);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: TextFormField(
+                  key: ValueKey(
+                    '$revision-$sheetIndex-$rowIndex-${column.index}-'
+                    '${row.value(column.index)}',
+                  ),
+                  initialValue: row.value(column.index),
+                  enabled: hasCell && !busy,
+                  maxLines: null,
+                  keyboardType: type?.toLowerCase() == 'number'
+                      ? const TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: true,
+                        )
+                      : TextInputType.text,
+                  style: const TextStyle(fontSize: 10),
+                  decoration: InputDecoration(
+                    labelText: column.label,
+                    helperText: hasCell
+                        ? 'C${column.index} · ${type ?? 'tipo no declarado'}'
+                        : 'Celda ausente · no se inventa',
+                    helperStyle: const TextStyle(fontSize: 8),
+                    errorText: cellErrors[errorKey],
+                    errorMaxLines: 3,
+                  ),
+                  onChanged: hasCell
+                      ? (value) {
+                          try {
+                            doc.setCell(
+                              sheetIndex,
+                              rowIndex,
+                              column.index,
+                              value,
+                            );
+                            setState(() {
+                              structuredDirty = true;
+                              cellErrors.remove(errorKey);
+                            });
+                          } catch (error) {
+                            setState(() {
+                              cellErrors[errorKey] = error
+                                  .toString()
+                                  .replaceFirst('FormatException: ', '');
+                            });
+                          }
+                        }
+                      : null,
+                ),
+              );
+            },
           ),
       ],
     );
