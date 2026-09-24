@@ -240,9 +240,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   Widget tablePanel() {
     final doc = document;
     if (doc == null || !doc.tabular) return emptyPanel();
-    final sheet = doc.sheets[
-      sheetIndex.clamp(0, doc.sheets.length - 1).toInt()
-    ];
+    final sheet =
+        doc.sheets[sheetIndex.clamp(0, doc.sheets.length - 1).toInt()];
     final rows = visibleRows(sheet);
     final visibleColumns = sheet.columns.take(7).toList(growable: false);
 
