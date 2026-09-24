@@ -4,17 +4,13 @@ on:
   push:
     branches:
       - feat/studio-0620-spk-wings
-  pull_request:
-    branches:
-      - main
-      - feat/studio-0612-spk-workspace
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: studio-format-${{ github.event.pull_request.number || github.ref }}
+  group: studio-format-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
