@@ -1365,7 +1365,7 @@ class _StudioState extends State<StudioPage> {
                       'antes de guardar. Los campos y colas opacas no editados se '
                       'conservan byte por byte.',
                     ),
-                    for (final slot in scene.wingMonAnimationSlots)
+                    for (final slot in scene.wingMonAnimationSlots) ...[
                       field<String>(
                         'wing-mon/${scene.wingRecord!.source}/'
                         '${scene.wingRecord!.id}/$slot',
@@ -1376,10 +1376,31 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveWingMonAnimation(slot, p),
                         detail: (p) => p,
-                        empty: scene.wingMonAnimation(slot)?.isNotEmpty == true
+                        empty: scene.wingMonAnimationUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonAnimation(slot)?.isNotEmpty == true
                             ? scene.wingMonAnimation(slot)!
                             : 'Sin ANI asignado',
                       ),
+                      if (!scene.wingMonAnimationUsesLoad(slot))
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveWingMonAnimation(
+                                      slot,
+                                      'LOAD',
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Usar LOAD nativo',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
                 ExpansionTile(
@@ -1411,21 +1432,23 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveWingMonSound(slot, p),
                         detail: (p) => p,
-                        empty: scene.wingMonSound(slot)?.isNotEmpty == true
+                        empty: scene.wingMonSoundUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonSound(slot)?.isNotEmpty == true
                             ? scene.wingMonSound(slot)!
                             : 'Sin sonido',
                       ),
-                      if (scene.wingMonSound(slot)?.isNotEmpty == true)
+                      if (!scene.wingMonSoundUsesLoad(slot))
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveWingMonSound(slot, ''),
+                                    () => scene.saveWingMonSound(slot, 'LOAD'),
                                   ),
                             child: const Text(
-                              'Vaciar sonido',
+                              'Usar LOAD nativo',
                               style: TextStyle(fontSize: 9),
                             ),
                           ),
@@ -1442,21 +1465,23 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveWingMonEffect(slot, p),
                         detail: (p) => p,
-                        empty: scene.wingMonEffect(slot)?.isNotEmpty == true
+                        empty: scene.wingMonEffectUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonEffect(slot)?.isNotEmpty == true
                             ? scene.wingMonEffect(slot)!
                             : 'Sin efecto',
                       ),
-                      if (scene.wingMonEffect(slot)?.isNotEmpty == true)
+                      if (!scene.wingMonEffectUsesLoad(slot))
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveWingMonEffect(slot, ''),
+                                    () => scene.saveWingMonEffect(slot, 'LOAD'),
                                   ),
                             child: const Text(
-                              'Vaciar efecto',
+                              'Usar LOAD nativo',
                               style: TextStyle(fontSize: 9),
                             ),
                           ),
@@ -1473,21 +1498,25 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         scene.saveWingMonAttachedEffect,
                         detail: (p) => p,
-                        empty: scene.wingMonAttachedEffect?.isNotEmpty == true
+                        empty: scene.wingMonAttachedEffectUsesLoad
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonAttachedEffect?.isNotEmpty == true
                             ? scene.wingMonAttachedEffect!
                             : 'Sin efecto adjunto',
                       ),
-                      if (scene.wingMonAttachedEffect?.isNotEmpty == true)
+                      if (!scene.wingMonAttachedEffectUsesLoad)
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveWingMonAttachedEffect(''),
+                                    () => scene.saveWingMonAttachedEffect(
+                                      'LOAD',
+                                    ),
                                   ),
                             child: const Text(
-                              'Vaciar efecto adjunto',
+                              'Usar LOAD nativo',
                               style: TextStyle(fontSize: 9),
                             ),
                           ),
@@ -1945,7 +1974,7 @@ class _StudioState extends State<StudioPage> {
                       'montura, reserializa MO2/MO4 y revalida antes de escribir. '
                       'Esto sí modifica el recurso DATA que consume el cliente.',
                     ),
-                    for (final slot in scene.mountMonAnimationSlots)
+                    for (final slot in scene.mountMonAnimationSlots) ...[
                       field<String>(
                         'mount-mon/${scene.mountRecord!.source}/'
                         '${scene.mountRecord!.id}/$slot',
@@ -1956,10 +1985,31 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveMountMonAnimation(slot, p),
                         detail: (p) => p,
-                        empty: scene.mountMonAnimation(slot)?.isNotEmpty == true
+                        empty: scene.mountMonAnimationUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.mountMonAnimation(slot)?.isNotEmpty == true
                             ? scene.mountMonAnimation(slot)!
                             : 'Sin ANI asignado',
                       ),
+                      if (!scene.mountMonAnimationUsesLoad(slot))
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveMountMonAnimation(
+                                      slot,
+                                      'LOAD',
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Usar LOAD nativo',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
                 ExpansionTile(
@@ -1986,18 +2036,20 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveMountMonSound(slot, p),
                         detail: (p) => p,
-                        empty: scene.mountMonSound(slot)?.isNotEmpty == true
+                        empty: scene.mountMonSoundUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.mountMonSound(slot)?.isNotEmpty == true
                             ? scene.mountMonSound(slot)!
                             : 'Sin sonido',
                       ),
-                      if (scene.mountMonSound(slot)?.isNotEmpty == true)
+                      if (!scene.mountMonSoundUsesLoad(slot))
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveMountMonSound(slot, ''),
+                                    () => scene.saveMountMonSound(slot, 'LOAD'),
                                   ),
                             child: const Text(
                               'Vaciar sonido',
@@ -2017,18 +2069,20 @@ class _StudioState extends State<StudioPage> {
                         baseName,
                         (p) => scene.saveMountMonEffect(slot, p),
                         detail: (p) => p,
-                        empty: scene.mountMonEffect(slot)?.isNotEmpty == true
+                        empty: scene.mountMonEffectUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.mountMonEffect(slot)?.isNotEmpty == true
                             ? scene.mountMonEffect(slot)!
                             : 'Sin efecto',
                       ),
-                      if (scene.mountMonEffect(slot)?.isNotEmpty == true)
+                      if (!scene.mountMonEffectUsesLoad(slot))
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: disabled
                                 ? null
                                 : () => act(
-                                    () => scene.saveMountMonEffect(slot, ''),
+                                    () => scene.saveMountMonEffect(slot, 'LOAD'),
                                   ),
                             child: const Text(
                               'Vaciar efecto',
