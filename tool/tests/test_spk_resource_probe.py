@@ -62,6 +62,9 @@ class ResourceProbeContractTest(unittest.TestCase):
         self.assertIn('Utf8Decoder(allowMalformed: true)', browser)
         self.assertIn('!source.canReadRecord(record)', browser)
         self.assertIn('CONTENIDO CIFRADO:', browser)
+        self.assertIn('spkFriendlyErrorMessage(error)', browser)
+        self.assertIn('SPK_TEXT_ENCODING_INVALID', browser)
+        self.assertIn('ResourceProbe V13', browser)
 
     def test_pe_arch_detects_x86_and_x64_clients(self):
         for machine, expected in ((0x014c, 'x86'), (0x8664, 'x64')):
@@ -124,6 +127,68 @@ class ResourceProbeContractTest(unittest.TestCase):
             self.assertGreater(report['tested'], 0)
             self.assertIsNotNone(report['match'])
             self.assertTrue((out / 'static-key-sweep.json').is_file())
+
+    def test_v13_deep_pe_data_sweep_finds_key_without_nearby_anchor(self):
+        index_key = bytes.fromhex('9a1f9c1bd3e9488dba7aa4543a466a5f')
+        resource_key = bytes.fromhex('102132435465768798a9bacbdcedfe0f')
+        with tempfile.TemporaryDirectory() as td:
+            root = pathlib.Path(td)
+            spk = root / 'data.spk'
+            game = root / 'game.exe'
+            out = root / 'probe'
+            out.mkdir()
+            spk.write_bytes(b'fixture')
+
+            blob = bytearray(0x600)
+            blob[:2] = b'MZ'
+            blob[0x3c:0x40] = (0x80).to_bytes(4, 'little')
+            blob[0x80:0x84] = b'PE\0\0'
+            blob[0x86:0x88] = (1).to_bytes(2, 'little')
+            blob[0x94:0x96] = (0xE0).to_bytes(2, 'little')
+            section = 0x80 + 24 + 0xE0
+            blob[section:section + 8] = b'.rdata\0\0'
+            blob[section + 16:section + 20] = (0x200).to_bytes(4, 'little')
+            blob[section + 20:section + 24] = (0x200).to_bytes(4, 'little')
+            blob[section + 36:section + 40] = (0x40000040).to_bytes(
+                4, 'little'
+            )
+            for i in range(0x200, 0x400):
+                blob[i] = (i * 37 + 19) & 0xff
+            blob[0x280:0x290] = resource_key
+            game.write_bytes(blob)
+
+            records = [
+                {
+                    'ordinal': n,
+                    'entryId': f'{0x3000+n:016x}',
+                    'dataOffset': 0,
+                    'storedBytes': n + 1,
+                    'decodedBytes': 1,
+                    'recordType': 1,
+                    'auxStart': 0xffffffff,
+                    'chunkCount': 0,
+                    'metadataHex': '00' * 32,
+                }
+                for n in range(3)
+            ]
+            with patch.object(
+                probe,
+                '_key_authenticates_samples',
+                side_effect=lambda _spk, _rows, key: key == resource_key,
+            ):
+                key, source, report = probe.discover_static_resource_key(
+                    game,
+                    spk,
+                    {'records': records, 'aux': []},
+                    index_key,
+                    probe.EXPECTED_INDEX,
+                    out,
+                )
+            self.assertEqual(key, resource_key)
+            self.assertIn(':pe-data:.rdata:', source)
+            self.assertGreater(report['deepTested'], 0)
+            self.assertEqual(report['schema'], 2)
+            self.assertIsNotNone(report['match'])
 
     def test_static_key_sweep_rejects_every_candidate_when_gcm_oracle_fails(self):
         index_key = bytes.fromhex('9a1f9c1bd3e9488dba7aa4543a466a5f')
