@@ -693,6 +693,255 @@ List<ExcelXmlSemanticIssue> _wingSwap(ExcelXmlDocument document) {
   return out;
 }
 
+List<ExcelXmlSemanticIssue> _fontStyleSet(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final index = c['index'];
+    if (index == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, index, 'Index', min: 0);
+      for (final name in const [
+        'textcolor_r',
+        'textcolor_g',
+        'textcolor_b',
+        'textstrokecolor_r',
+        'textstrokecolor_g',
+        'textstrokecolor_b',
+      ]) {
+        _numberRange(out, sheet, s, r, c[name], name, 0, 255);
+      }
+    }
+    _duplicateKeys(out, sheet, s, [index], label: 'Index');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _gmNotice(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final type = c['type'];
+    final legacy = c['textcolor_r1'] != null;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      if (type != null) {
+        _integerError(
+          out,
+          sheet,
+          s,
+          r,
+          type,
+          'Type',
+          min: 1,
+          allowZero: false,
+        );
+      }
+      final colors = legacy
+          ? const [
+              'textcolor_r1',
+              'textcolor_g1',
+              'textcolor_b1',
+              'textcolor_r2',
+              'textcolor_g2',
+              'textcolor_b2',
+              'bgalpha',
+            ]
+          : const ['textcolor_r', 'textcolor_g', 'textcolor_b'];
+      for (final name in colors) {
+        _numberRange(out, sheet, s, r, c[name], name, 0, 255);
+      }
+    }
+    if (type != null) {
+      _duplicateKeys(out, sheet, s, [type], label: 'Type');
+    }
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _ymEventInfo(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final id = c['id'];
+    if (id == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, id, 'ID', min: 1, allowZero: false);
+      _integerError(out, sheet, s, r, c['flagnew'], 'FlagNew', min: 0, max: 1);
+    }
+    _duplicateKeys(out, sheet, s, [id], label: 'ID');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _visiblePartyBuff(
+  ExcelXmlDocument document,
+) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    final id = c['id'];
+    final level = c['skilllevel'];
+    if (id == null || level == null) continue;
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, id, 'id', min: 1, allowZero: false);
+      _integerError(
+        out,
+        sheet,
+        s,
+        r,
+        level,
+        'skilllevel',
+        min: 1,
+        allowZero: false,
+      );
+    }
+    _duplicateKeys(out, sheet, s, [id, level], label: 'id + skilllevel');
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _npcDisable(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    for (var r = 0; r < sheet.rows.length; r++) {
+      for (final prefix in const ['start_', 'end_']) {
+        _datePart(
+          out,
+          sheet,
+          s,
+          r,
+          c[prefix + 'year'],
+          prefix.toUpperCase() + 'YEAR',
+          0,
+          9999,
+        );
+        _datePart(
+          out,
+          sheet,
+          s,
+          r,
+          c[prefix + 'month'],
+          prefix.toUpperCase() + 'MONTH',
+          1,
+          12,
+        );
+        _datePart(
+          out,
+          sheet,
+          s,
+          r,
+          c[prefix + 'day'],
+          prefix.toUpperCase() + 'DAY',
+          1,
+          31,
+        );
+        _datePart(
+          out,
+          sheet,
+          s,
+          r,
+          c[prefix + 'time'],
+          prefix.toUpperCase() + 'TIME',
+          0,
+          23,
+        );
+        _datePart(
+          out,
+          sheet,
+          s,
+          r,
+          c[prefix + 'minute'],
+          prefix.toUpperCase() + 'MINUTE',
+          0,
+          59,
+        );
+      }
+      _integerError(out, sheet, s, r, c['npc_type'], 'NPC_TYPE', min: 0);
+      _integerError(out, sheet, s, r, c['npc_typeid'], 'NPC_TYPEID', min: 0);
+    }
+  }
+  return out;
+}
+
+List<ExcelXmlSemanticIssue> _timeNotice(ExcelXmlDocument document) {
+  final out = <ExcelXmlSemanticIssue>[];
+  for (var s = 0; s < document.sheets.length; s++) {
+    final sheet = document.sheets[s];
+    final c = _columns(sheet);
+    for (var r = 0; r < sheet.rows.length; r++) {
+      _integerError(out, sheet, s, r, c['who'], 'WHO', min: 0);
+      _integerError(out, sheet, s, r, c['sysmsgindex'], 'SYSMSGINDEX', min: 0);
+      _datePart(out, sheet, s, r, c['year'], 'YEAR', 0, 9999);
+      _datePart(out, sheet, s, r, c['month'], 'MONTH', 1, 12);
+      _datePart(out, sheet, s, r, c['day'], 'DAY', 1, 31);
+      _datePart(out, sheet, s, r, c['hour'], 'HOUR', 0, 23);
+      _datePart(out, sheet, s, r, c['minute'], 'MINUTE', 0, 59);
+      _datePart(
+        out,
+        sheet,
+        s,
+        r,
+        c['end_year'],
+        'END_YEAR',
+        0,
+        9999,
+        optional: true,
+      );
+      _datePart(
+        out,
+        sheet,
+        s,
+        r,
+        c['end_month'],
+        'END_MONTH',
+        1,
+        12,
+        optional: true,
+      );
+      _datePart(
+        out,
+        sheet,
+        s,
+        r,
+        c['end_day'],
+        'END_DAY',
+        1,
+        31,
+        optional: true,
+      );
+      _datePart(
+        out,
+        sheet,
+        s,
+        r,
+        c['end_hour'],
+        'END_HOUR',
+        0,
+        23,
+        optional: true,
+      );
+      _datePart(
+        out,
+        sheet,
+        s,
+        r,
+        c['end_minute'],
+        'END_MINUTE',
+        0,
+        59,
+        optional: true,
+      );
+    }
+  }
+  return out;
+}
+
 List<ExcelXmlSemanticIssue> _waterShader(ExcelXmlDocument document) {
   final out = <ExcelXmlSemanticIssue>[];
   for (var s = 0; s < document.sheets.length; s++) {
