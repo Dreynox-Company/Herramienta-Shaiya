@@ -546,6 +546,137 @@ class StudioScene extends ChangeNotifier {
     );
   }
 
+  List<String> get wingMonSoundSlots => monSoundSlots;
+  List<String> get wingMonEffectSlots => monEffectSlots;
+
+  List<String> get wingMonSoundCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out = c.library.files.keys
+        .where((path) => path.endsWith('.wav') || path.endsWith('.ogg'))
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  List<String> get wingMonEffectCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out = c.library.files.keys
+        .where((path) => path.endsWith('.eft') || path.endsWith('.3de'))
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  List<String> get wingMonMeshCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out = c.library.files.keys
+        .where(
+          (path) =>
+              path.startsWith('character/wing/') &&
+              (path.endsWith('.3dc') || path.endsWith('.3do')),
+        )
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  List<String> get wingMonTextureCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out = c.library.files.keys
+        .where(
+          (path) =>
+              path.startsWith('character/wing/') &&
+              (path.endsWith('.dds') ||
+                  path.endsWith('.tga') ||
+                  path.endsWith('.png') ||
+                  path.endsWith('.bmp')),
+        )
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  String? wingMonSound(String slot) => wingRecord?.sounds[slot];
+  String? wingMonEffect(String slot) => wingRecord?.effects[slot];
+  String? get wingMonAttachedEffect => wingRecord?.effects['Adjunto'];
+
+  String? _candidateByBase(String? raw, List<String> candidates) {
+    if (raw == null || raw.isEmpty) return null;
+    final name = baseName(raw).toLowerCase();
+    return candidates
+        .where((path) => baseName(path).toLowerCase() == name)
+        .firstOrNull;
+  }
+
+  Future<void> saveWingMonSound(String slot, String soundPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingSound(record, slot, soundPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · sonido $slot = '
+      '${soundPath.isEmpty ? 'vacío' : baseName(soundPath)} · MON revalidado.',
+    );
+  }
+
+  Future<void> saveWingMonEffect(String slot, String effectPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingEffect(record, slot, effectPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · efecto $slot = '
+      '${effectPath.isEmpty ? 'vacío' : baseName(effectPath)} · MON revalidado.',
+    );
+  }
+
+  Future<void> saveWingMonAttachedEffect(String effectPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingAttachedEffect(record, effectPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · efecto adjunto = '
+      '${effectPath.isEmpty ? 'vacío' : baseName(effectPath)} · MON revalidado.',
+    );
+  }
+
+  Future<void> saveWingMonPart(
+    int partId, {
+    String? meshPath,
+    String? texturePath,
+  }) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingPart(
+      record,
+      partId,
+      meshPath: meshPath,
+      texturePath: texturePath,
+    );
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · parte $partId actualizada y '
+      'revalidada.',
+    );
+  }
+
   List<String> get mountMonAnimationSlots => monAnimationSlots;
 
   List<String> get mountMonAnimationCandidates {
@@ -584,6 +715,43 @@ class StudioScene extends ChangeNotifier {
     report(
       '${updated.source} #${updated.id} · $slot = '
       '${baseName(animationPath)} · Vehicle MON guardado y revalidado.',
+    );
+  }
+
+  List<String> get mountMonSoundSlots => monSoundSlots;
+  List<String> get mountMonEffectSlots => monEffectSlots;
+
+  List<String> get mountMonSoundCandidates => wingMonSoundCandidates;
+  List<String> get mountMonEffectCandidates => wingMonEffectCandidates;
+
+  String? mountMonSound(String slot) => mountRecord?.sounds[slot];
+  String? mountMonEffect(String slot) => mountRecord?.effects[slot];
+
+  Future<void> saveMountMonSound(String slot, String soundPath) async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura MON seleccionada.');
+    }
+    final updated = await c.saveMountSound(record, slot, soundPath);
+    await selectCreature(updated, 'mount');
+    report(
+      '${updated.source} #${updated.id} · sonido $slot actualizado y '
+      'Vehicle MON revalidado.',
+    );
+  }
+
+  Future<void> saveMountMonEffect(String slot, String effectPath) async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura MON seleccionada.');
+    }
+    final updated = await c.saveMountEffect(record, slot, effectPath);
+    await selectCreature(updated, 'mount');
+    report(
+      '${updated.source} #${updated.id} · efecto $slot actualizado y '
+      'Vehicle MON revalidado.',
     );
   }
 
