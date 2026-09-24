@@ -22,6 +22,30 @@ class DeliveryToolsTest(unittest.TestCase):
         self.assertNotIn("SHAIYA STUDIO 0.6.17 - DATA.SPK V11", text)
         self.assertNotIn("SHAIYA STUDIO 0.6.18 - DATA.SPK V11", text)
 
+    def test_windows_package_emits_completion_gate_manifest(self):
+        root = Path(__file__).resolve().parents[2]
+        text = (root / 'ci' / 'package_windows.py').read_text(encoding='utf-8')
+        self.assertIn("distribution-status.json", text)
+        self.assertIn("'productionComplete100':not blocking", text)
+        self.assertIn("'spk-payload-key'", text)
+        self.assertIn("'real-data-visual-qa'", text)
+        self.assertIn("'spk-50135-full-audit-and-reopen'", text)
+        self.assertIn("'windows-angle-release-runtime'", text)
+
+    def test_windows_package_tracks_real_flight_v3_runtime_hashes(self):
+        root = Path(__file__).resolve().parents[2]
+        text = (root / 'ci' / 'package_windows.py').read_text(encoding='utf-8')
+        self.assertIn(
+            '6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba',
+            text,
+        )
+        self.assertIn(
+            '7f720a9e339d96a6e47cdce11094ecb64663c2f80f102de179f76e7f0b2c8a44',
+            text,
+        )
+        self.assertIn("'FLIGHT_V3_REAL_RUNTIME_AUDIT.md'", text)
+        self.assertIn("'WINDOWS_RELEASE_AUDIT.md'", text)
+
     def test_unknown_platform_is_rejected_before_running_flutter(self):
         with patch.object(prepare.subprocess, 'run') as run:
             with self.assertRaises(ValueError):
