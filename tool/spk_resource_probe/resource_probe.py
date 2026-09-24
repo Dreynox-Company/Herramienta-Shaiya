@@ -586,7 +586,7 @@ def main():
     if not a.noninteractive:
       print('Escribe CAPTURAR para continuar:',flush=True)
       if input().strip()!='CAPTURAR':print('Cancelado');return 2
-    cfg={'prefixes':prefix};agent=AGENT_FILE.read_text(encoding='utf-8').replace('__CONFIG__',json.dumps(cfg,separators=(',',':')))
+    cfg={'prefixes':prefix,'indexKeyHex':index_key.hex()};agent=AGENT_FILE.read_text(encoding='utf-8').replace('__CONFIG__',json.dumps(cfg,separators=(',',':')))
     sink=Sink(out,spk,details,cat);dev=frida.get_local_device();pid=None;sess=None;script=None;done=threading.Event();failure=None;grace_started=False
     def onmsg(m,d):
       nonlocal failure,grace_started
