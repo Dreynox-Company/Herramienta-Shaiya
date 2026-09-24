@@ -12,6 +12,7 @@ import '../test/editor_ui_test.dart' as suite9;
 import '../test/editor_workbench_test.dart' as suite10;
 import '../test/equipment_slot_mapping_test.dart' as suite11;
 import '../test/excelxml_document_test.dart' as suite12;
+import '../test/excelxml_semantics_test.dart' as suite43;
 import '../test/extra_motion_test.dart' as suite13;
 import '../test/flight_key_input_test.dart' as suite14;
 import '../test/flight_v3_bundle_test.dart' as suite15;
@@ -42,6 +43,7 @@ import '../test/wing_position_test.dart' as suite39;
 import '../test/wing_systems_test.dart' as suite40;
 import '../test/workspace_interaction_test.dart' as suite41;
 import '../test/workspace_material_test.dart' as suite42;
+import '../test/xml_tree_document_test.dart' as suite44;
 
 void main() {
   suite0.main();
@@ -87,4 +89,6 @@ void main() {
   suite40.main();
   suite41.main();
   suite42.main();
+  suite43.main();
+  suite44.main();
 }
