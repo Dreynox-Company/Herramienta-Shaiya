@@ -1238,13 +1238,9 @@ class _StudioState extends State<StudioPage> {
                       'Hueso de anclaje WingPosition',
                       scene.wingBoneIndex.toDouble(),
                       0,
-                      (scene.wingBoneCount > 0
-                              ? scene.wingBoneCount - 1
-                              : 0)
+                      (scene.wingBoneCount > 0 ? scene.wingBoneCount - 1 : 0)
                           .toDouble(),
-                      (v) => setState(
-                        () => scene.setWingBoneIndex(v.round()),
-                      ),
+                      (v) => setState(() => scene.setWingBoneIndex(v.round())),
                       step: 1,
                       decimals: 0,
                     )

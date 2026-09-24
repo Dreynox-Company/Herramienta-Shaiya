@@ -339,7 +339,9 @@ class StudioScene extends ChangeNotifier {
   void setWingBoneIndex(int value) {
     final char = character;
     if (char == null) {
-      throw const FormatException('Carga un personaje antes de cambiar el hueso.');
+      throw const FormatException(
+        'Carga un personaje antes de cambiar el hueso.',
+      );
     }
     if (!wingBoneWritable) {
       throw const FormatException(
@@ -359,26 +361,10 @@ class StudioScene extends ChangeNotifier {
   Map<String, Object> get wingTransformSnapshot => {
     'schema': 1,
     'kind': 'shaiya-studio-wing-transform',
-    'position': {
-      'x': wingOffsetX,
-      'y': wingOffsetY,
-      'z': wingOffsetZ,
-    },
-    'rotationDegrees': {
-      'x': wingRotX,
-      'y': wingRotY,
-      'z': wingRotZ,
-    },
-    'scale': {
-      'x': wingScaleX,
-      'y': wingScaleY,
-      'z': wingScaleZ,
-    },
-    'mirror': {
-      'x': wingMirrorX,
-      'y': wingMirrorY,
-      'z': wingMirrorZ,
-    },
+    'position': {'x': wingOffsetX, 'y': wingOffsetY, 'z': wingOffsetZ},
+    'rotationDegrees': {'x': wingRotX, 'y': wingRotY, 'z': wingRotZ},
+    'scale': {'x': wingScaleX, 'y': wingScaleY, 'z': wingScaleZ},
+    'mirror': {'x': wingMirrorX, 'y': wingMirrorY, 'z': wingMirrorZ},
     'boneIndex': wingBoneIndex,
     'nativeWritable': {
       'positionRotation': wingPositionFileAvailable,
@@ -400,8 +386,9 @@ class StudioScene extends ChangeNotifier {
     }
 
     final position = raw['position'] is Map ? raw['position'] as Map : null;
-    final rotation =
-        raw['rotationDegrees'] is Map ? raw['rotationDegrees'] as Map : null;
+    final rotation = raw['rotationDegrees'] is Map
+        ? raw['rotationDegrees'] as Map
+        : null;
     final scale = raw['scale'] is Map ? raw['scale'] as Map : null;
     final mirror = raw['mirror'] is Map ? raw['mirror'] as Map : null;
     wingOffsetX = number(position, 'x', wingOffsetX).clamp(-100.0, 100.0);
