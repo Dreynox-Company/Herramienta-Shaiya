@@ -1066,6 +1066,82 @@ class Library {
     }
   }
 
+  /// Writes a Studio-owned loose DATA resource, creating it when absent.
+  ///
+  /// This is intentionally unavailable for SAH/SAF, Android SAF and DATA.SPK:
+  /// VehiclePosition.ini is an external contract consumed by the patched
+  /// ps0032 client and must remain directly visible under DATA/ExcelXml.
+  Future<void> writeOrCreateLooseResource(
+    String path,
+    Uint8List bytes, {
+    bool keepBackup = true,
+  }) async {
+    final canonical = canon(path);
+    if (spk != null) {
+      throw const FormatException(
+        'Este recurso del puente debe guardarse como archivo suelto en DATA, '
+        'no dentro del overlay DATA.SPK.',
+      );
+    }
+    if (archive != null) {
+      throw const FormatException(
+        'El par SAH/SAF está montado en solo lectura. Abre la carpeta DATA '
+        'descomprimida para guardar el recurso del puente.',
+      );
+    }
+    if (saf) {
+      throw const FormatException(
+        'La carpeta DATA de Android está montada en solo lectura.',
+      );
+    }
+
+    final existing = files[canonical];
+    final relative = canonical.replaceAll('/', Platform.pathSeparator);
+    final target = existing == null
+        ? File('${Directory(location).path}${Platform.pathSeparator}$relative')
+        : File(existing);
+    await target.parent.create(recursive: true);
+
+    if (keepBackup && await target.exists()) {
+      final backup = File('${target.path}.shaiya-studio.bak');
+      if (!await backup.exists()) await target.copy(backup.path);
+    }
+
+    final temp = File('${target.path}.shaiya-studio.tmp');
+    await temp.writeAsBytes(bytes, flush: true);
+    final expected = sha256.convert(bytes).toString();
+    final staged = sha256.convert(await temp.readAsBytes()).toString();
+    if (staged != expected) {
+      await temp.delete();
+      throw FormatException(
+        'La verificación previa de escritura falló: $canonical',
+      );
+    }
+
+    try {
+      if (await target.exists()) await target.delete();
+      await temp.rename(target.path);
+      final actual = sha256.convert(await target.readAsBytes()).toString();
+      if (actual != expected) {
+        throw FormatException(
+          'La verificación posterior de escritura falló: $canonical',
+        );
+      }
+      if (existing == null) {
+        files[canonical] = target.path;
+        _names.putIfAbsent(baseName(canonical), () => []).add(canonical);
+      }
+      revision++;
+    } catch (_) {
+      if (await temp.exists()) await temp.delete();
+      final backup = File('${target.path}.shaiya-studio.bak');
+      if (!await target.exists() && await backup.exists()) {
+        await backup.copy(target.path);
+      }
+      rethrow;
+    }
+  }
+
   Future<Uint8List> read(String path, {int limit = 64 * 1024 * 1024}) async {
     final canonical = canon(path);
     final id = files[canonical];
