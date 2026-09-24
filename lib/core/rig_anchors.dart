@@ -147,14 +147,21 @@ v.Matrix4 seatedTransform(
   v.Vector3 saddle,
   v.Quaternion rotation,
   v.Vector3 pelvis, {
+  double lateral = 0,
   double height = 0,
   double forward = 0,
+  double rotX = 0,
+  double rotY = 0,
+  double rotZ = 0,
 }) =>
     v.Matrix4.compose(
-      saddle + v.Vector3(0, height, forward),
+      saddle + v.Vector3(lateral, height, forward),
       rotation,
       v.Vector3.all(1),
     ) *
+    v.Matrix4.rotationX(rotX * math.pi / 180) *
+    v.Matrix4.rotationY(rotY * math.pi / 180) *
+    v.Matrix4.rotationZ(rotZ * math.pi / 180) *
     (v.Matrix4.identity()..translateByVector3(-pelvis));
 
 /// Restrict the back anchor to ancestors of the actual head. Arms are not a
