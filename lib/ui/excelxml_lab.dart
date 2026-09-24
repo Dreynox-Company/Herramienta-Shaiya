@@ -8,14 +8,30 @@ import '../data/library.dart';
 
 class ExcelXmlLabPage extends StatefulWidget {
   final Library library;
+  final String? initialPath;
 
-  const ExcelXmlLabPage({super.key, required this.library});
+  const ExcelXmlLabPage({
+    super.key,
+    required this.library,
+    this.initialPath,
+  });
 
   @override
   State<ExcelXmlLabPage> createState() => _ExcelXmlLabPageState();
 }
 
 class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialPath;
+    if (initial != null && widget.library.files.containsKey(initial)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openPath(initial);
+      });
+    }
+  }
+
   String filter = '';
   String rowFilter = '';
   String? selectedPath;
