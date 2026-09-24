@@ -2361,11 +2361,9 @@ class StudioScene extends ChangeNotifier {
   }
 
   void startFlightV3CombatTakeoff() {
-    final actor = character;
     final transition = _flightV3CombatTakeoffTransition();
-    if (actor == null || transition == null) return;
-    _flightBodyTransition = transition.clip;
-    actor.play(transition.clip, repeat: false);
+    if (character == null || transition == null) return;
+    _playFlightV3Transition(transition);
   }
 
   Future<void> installFlightV3(FlightV3Bundle bundle) async {
