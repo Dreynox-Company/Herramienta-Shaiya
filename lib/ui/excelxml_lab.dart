@@ -221,6 +221,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         rawDirty = false;
         structuredDirty = false;
         cellErrors.clear();
+        _refreshSemanticIssues(parsed);
         revision++;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -241,6 +242,13 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
     if (doc == null || path == null) return;
     setState(() => busy = true);
     try {
+      _refreshSemanticIssues(doc);
+      if (semanticErrorCount > 0) {
+        throw FormatException(
+          'ExcelXml contiene $semanticErrorCount errores semánticos en campos '
+          'cuya regla está confirmada por DATA.',
+        );
+      }
       final encoded = doc.encode();
       doc.validateEncoded(encoded);
       await widget.library.writeResource(path, encoded);
@@ -251,6 +259,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         sourceBytes = encoded;
         structuredDirty = false;
         cellErrors.clear();
+        _refreshSemanticIssues(reparsed);
         revision++;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -299,6 +308,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               maxColumns = sheet.columns.length;
             }
           }
+          final semantics = auditExcelXmlSemantics(parsed);
           results.add(
             _ExcelXmlAuditResult(
               path: path,
@@ -309,6 +319,18 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               sheets: parsed.sheets.length,
               rows: rows,
               maxColumns: maxColumns,
+              semanticErrors: semantics
+                  .where(
+                    (issue) =>
+                        issue.severity == ExcelXmlIssueSeverity.error,
+                  )
+                  .length,
+              semanticWarnings: semantics
+                  .where(
+                    (issue) =>
+                        issue.severity == ExcelXmlIssueSeverity.warning,
+                  )
+                  .length,
             ),
           );
         } catch (error) {
@@ -338,6 +360,14 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       final valid = results.where((r) => r.valid).length;
       final tabular = results.where((r) => r.valid && r.tabular).length;
       final broken = results.where((r) => !r.valid).length;
+      final semanticErrors = results.fold<int>(
+        0,
+        (sum, row) => sum + row.semanticErrors,
+      );
+      final semanticWarnings = results.fold<int>(
+        0,
+        (sum, row) => sum + row.semanticWarnings,
+      );
       final json = const JsonEncoder.withIndent('  ').convert({
         'schema': 1,
         'source': widget.library.sourceLabel,
@@ -345,6 +375,8 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
         'valid': valid,
         'tabular': tabular,
         'broken': broken,
+        'semanticErrors': semanticErrors,
+        'semanticWarnings': semanticWarnings,
         'entries': results.map((r) => r.toJson()).toList(),
       });
 
