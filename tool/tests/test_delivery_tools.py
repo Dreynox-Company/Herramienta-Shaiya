@@ -103,7 +103,7 @@ class DeliveryToolsTest(unittest.TestCase):
             root = Path(folder)
             qa = root / 'qa-real'
             qa.mkdir()
-            game_sha = 'ab' * 32
+            game_sha = package_windows.PS0032_GAME_SHA256
             payload = {
                 'schema': 1,
                 'gameExeSha256': game_sha,
@@ -127,6 +127,7 @@ class DeliveryToolsTest(unittest.TestCase):
                     'failures': 0,
                     'repackReopened': True,
                     'gameExeAccepted': True,
+                    'gameExeSha256': 'ef' * 32,
                 },
             }
             (qa / 'acceptance.json').write_text(
@@ -144,6 +145,7 @@ class DeliveryToolsTest(unittest.TestCase):
             self.assertTrue(result['spkRepackReopened'])
             self.assertTrue(result['spkGameExeAccepted'])
             self.assertEqual(result['gameExeSha256'], game_sha)
+            self.assertEqual(result['spkGameExeSha256'], 'ef' * 32)
 
     def test_real_acceptance_rejects_mismatched_real_resource_hashes(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -176,6 +178,7 @@ class DeliveryToolsTest(unittest.TestCase):
                     'failures': 0,
                     'repackReopened': True,
                     'gameExeAccepted': True,
+                    'gameExeSha256': 'ef' * 32,
                 },
             }
             (qa / 'acceptance.json').write_text(
@@ -188,7 +191,7 @@ class DeliveryToolsTest(unittest.TestCase):
             self.assertFalse(result['wingPositionGameExe'])
             self.assertFalse(result['wingMonExactInstall'])
             self.assertFalse(result['vehicleMonExactInstall'])
-            self.assertTrue(result['vehicleBridgeGameExe'])
+            self.assertFalse(result['vehicleBridgeGameExe'])
             self.assertFalse(result['spkFullAuditComplete'])
             self.assertFalse(result['spkRepackReopened'])
             self.assertFalse(result['spkGameExeAccepted'])
