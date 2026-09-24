@@ -1066,6 +1066,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'La carpeta DATA de referencia no existe.',
       );
     }
+    if (!mounted) return;
     setState(() => referenceDataDirectory = directory);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
