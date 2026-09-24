@@ -30,6 +30,7 @@ def main():
         'GAME_PS0032_VEHICLE_BRIDGE.md',
         'SPK_REAL_READER_STATUS.md',
         'DATA_CAPABILITY_MATRIX.md',
+        'WINDOWS_RELEASE_AUDIT.md',
     ]:
         source=ROOT/'docs'/name
         if source.is_file(): shutil.copy2(source,docs_target/name)
