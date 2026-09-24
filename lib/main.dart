@@ -245,10 +245,8 @@ class _StudioState extends State<StudioPage> {
     focus.unfocus();
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ExcelXmlLabPage(
-          library: library,
-          initialPath: initialPath,
-        ),
+        builder: (_) =>
+            ExcelXmlLabPage(library: library, initialPath: initialPath),
       ),
     );
     await _refreshAfterDataMutation(library, beforeRevision);
@@ -1698,9 +1696,7 @@ class _StudioState extends State<StudioPage> {
                           child: OutlinedButton.icon(
                             onPressed: disabled
                                 ? null
-                                : () => openExcelXmlLab(
-                                    initialPath: entry.$1,
-                                  ),
+                                : () => openExcelXmlLab(initialPath: entry.$1),
                             icon: const Icon(
                               Icons.table_view_outlined,
                               size: 15,
@@ -3461,8 +3457,7 @@ class _StudioState extends State<StudioPage> {
     actions: actionBar(),
     hasLibrary: scene.character != null,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
-    onOpenExcelXml:
-        catalog == null || working ? null : () => openExcelXmlLab(),
+    onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,
     onOpenSpk: disabled ? null : openSpkArchive,

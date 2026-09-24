@@ -10,11 +10,7 @@ class ExcelXmlLabPage extends StatefulWidget {
   final Library library;
   final String? initialPath;
 
-  const ExcelXmlLabPage({
-    super.key,
-    required this.library,
-    this.initialPath,
-  });
+  const ExcelXmlLabPage({super.key, required this.library, this.initialPath});
 
   @override
   State<ExcelXmlLabPage> createState() => _ExcelXmlLabPageState();

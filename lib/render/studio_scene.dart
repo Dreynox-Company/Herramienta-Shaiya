@@ -152,9 +152,7 @@ class Actor {
         _afterClipTime = 0;
         _afterClipLoop = true;
         play(next, repeat: repeat);
-        time = repeat
-            ? phase % next.duration
-            : phase.clamp(0.0, next.duration);
+        time = repeat ? phase % next.duration : phase.clamp(0.0, next.duration);
       } else if (idle != null) {
         play(idle!);
       }
