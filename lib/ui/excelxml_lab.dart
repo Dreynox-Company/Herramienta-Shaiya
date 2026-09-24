@@ -229,12 +229,13 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
 
   Future<void> auditExcelXmlFolder() async {
     if (auditing || busy) return;
-    final all = widget.library.files.keys
-        .where(
-          (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
-        )
-        .toList()
-      ..sort();
+    final all =
+        widget.library.files.keys
+            .where(
+              (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
+            )
+            .toList()
+          ..sort();
     setState(() {
       auditing = true;
       auditDone = 0;
@@ -311,9 +312,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(
-            'Auditoría ExcelXml · ${results.length} archivos',
-          ),
+          title: Text('Auditoría ExcelXml · ${results.length} archivos'),
           content: SizedBox(
             width: 880,
             height: 560,
@@ -376,9 +375,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text(
-                        'Auditoría ExcelXml copiada como JSON.',
-                      ),
+                      content: Text('Auditoría ExcelXml copiada como JSON.'),
                     ),
                   );
                 }
