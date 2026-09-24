@@ -40,6 +40,23 @@ distintos y complementarios:
 
 ### WingPosition.xml
 
+La copia real `excelxml.zip` auditada el 24-09-2026 confirma que el archivo no es
+un XML semántico simple: es **Excel 2003 SpreadsheetML** (`Workbook/Worksheet/
+Table/Row/Cell/Data`). La tabla útil contiene una fila de cabeceras y exactamente
+48 filas de datos. Sus columnas reales son:
+
+`FAMILY, JOB, SEX, BONE_IDX, WING_ROT_X, WING_ROT_Y, WING_ROT_Z,
+WING_UP_DOWN, WING_FRONT_BACK, WING_LEFT_RIGHT`.
+
+Su SHA-256 coincide exactamente con la fuente canónica ya registrada en Studio:
+`8a2c376c898bb025550b5fe34b92a40dbbbb9e39063619cfee4756006908cd03`.
+
+Esto corrigió un punto importante: el parser anterior podía manejar fixtures
+semánticos, pero no podía enlazar las celdas reales de SpreadsheetML para
+editar el archivo original. El parser actual soporta ambos layouts, reconoce
+`BONE_IDX`, conserva Workbook/estilos/comentarios y vuelve a parsear las 48
+filas después de guardar.
+
 El cliente clásico usa seis campos de transformación confirmados:
 
 - `WING_LEFT_RIGHT` → posición X;
@@ -76,6 +93,14 @@ declarados por el MON activo. Así, editar Wing.MON cambia tanto la configuraci�
 persistente como el comportamiento que Studio vuelve a cargar.
 
 ### Monturas
+
+También se auditó el contenido completo del `excelxml.zip` suministrado: 47
+entradas, incluyendo `LookAndEquipment.xml`, `functionalpetsize.xml` y el resto
+de tablas ExcelXml. **No aparece una segunda tabla de transformación de montura**
+con campos equivalentes a `BONE_IDX + ROT_X/Y/Z + OFFSET/POSITION_X/Y/Z`.
+`LookAndEquipment.xml` contiene las categorías VEHICLE/PET, pero no una pose de
+asiento; `functionalpetsize.xml` parametriza mascotas, no el anclaje del jinete.
+Por tanto la herramienta no atribuye a esos archivos una semántica que no tienen.
 
 Las monturas ya disponen de calibración visual **6DoF** por montura: asiento X/Y/Z
 y rotación X/Y/Z sobre una superficie animada detectada en la geometría. Este
