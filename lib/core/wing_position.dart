@@ -311,10 +311,11 @@ class WingPositionDocument {
   static ({
     Map<int, _WingRowBinding> bindings,
     Map<int, WingPositionProfile> profiles,
-  })? _spreadsheetBindings(XmlDocument document, String path) {
-    final tables = document.descendants
-        .whereType<XmlElement>()
-        .where((e) => e.name.local.toLowerCase() == 'table');
+  })?
+  _spreadsheetBindings(XmlDocument document, String path) {
+    final tables = document.descendants.whereType<XmlElement>().where(
+      (e) => e.name.local.toLowerCase() == 'table',
+    );
 
     for (final table in tables) {
       final rows = table.childElements
@@ -371,14 +372,8 @@ class WingPositionDocument {
         continue;
       }
 
-      final rawRows = <
-        ({
-          Map<int, XmlElement> cells,
-          int? family,
-          int? job,
-          int? sex,
-        })
-      >[];
+      final rawRows =
+          <({Map<int, XmlElement> cells, int? family, int? job, int? sex})>[];
       for (var i = headerIndex + 1; i < rows.length; i++) {
         final cells = _spreadsheetDataCells(rows[i]);
         String value(int? column) =>
@@ -431,10 +426,10 @@ class WingPositionDocument {
 
       for (var i = 0; i < rawRows.length; i++) {
         final raw = rawRows[i];
-        final family =
-            raw.family == null ? i ~/ 12 : raw.family! - (f1 ? 1 : 0);
-        final job =
-            raw.job == null ? (i % 12) ~/ 2 : raw.job! - (j1 ? 1 : 0);
+        final family = raw.family == null
+            ? i ~/ 12
+            : raw.family! - (f1 ? 1 : 0);
+        final job = raw.job == null ? (i % 12) ~/ 2 : raw.job! - (j1 ? 1 : 0);
         final sex = raw.sex == null ? i % 2 : raw.sex! - (s1 ? 1 : 0);
         if (family < 0 ||
             family > 3 ||
