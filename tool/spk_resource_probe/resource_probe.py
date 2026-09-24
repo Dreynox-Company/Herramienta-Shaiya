@@ -247,6 +247,7 @@ def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,ind
       'modules':[],
       'tested':0,
       'deepTested':0,
+      'deepModulesScanned':0,
       'match':None,
     }
     tested_keys=set()
@@ -292,12 +293,17 @@ def discover_static_resource_key(game:Path,spk:Path,cat:dict,index_key:bytes,ind
     # PE data even when it is not close to an AES/GCM/index string. A cheap
     # one-record GCM oracle filters candidates, then three distributed samples
     # must authenticate before the key is accepted.
-    for label,key in _pe_initialized_data_candidates(game):
-      report['deepTested']+=1
-      found=test(label,key,oracle)
-      if found:
-        (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
-        return found,label,report
+    deep_budget=160000
+    for module in modules[:24]:
+      remaining=deep_budget-report['deepTested']
+      if remaining<=0:break
+      report['deepModulesScanned']+=1
+      for label,key in _pe_initialized_data_candidates(module,max_candidates=remaining):
+        report['deepTested']+=1
+        found=test(label,key,oracle)
+        if found:
+          (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+          return found,label,report
 
     (out/'static-key-sweep.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return None,None,report
