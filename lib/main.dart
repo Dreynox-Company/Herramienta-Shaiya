@@ -9,7 +9,6 @@ import 'package:file_selector/file_selector.dart';
 import 'core/extra_motion.dart';
 import 'core/flight_v3_bundle.dart';
 import 'core/equipment_rules.dart';
-import 'core/excelxml_document.dart';
 import 'core/vehicle_position.dart';
 import 'core/textures.dart';
 import 'package:flutter/gestures.dart';
