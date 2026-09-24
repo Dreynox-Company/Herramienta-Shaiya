@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/excelxml_document.dart';
+import '../core/excelxml_semantics.dart';
 import '../data/library.dart';
 
 class _ExcelXmlAuditResult {
@@ -14,6 +15,8 @@ class _ExcelXmlAuditResult {
   final int sheets;
   final int rows;
   final int maxColumns;
+  final int semanticErrors;
+  final int semanticWarnings;
   final String? error;
 
   const _ExcelXmlAuditResult({
@@ -25,6 +28,8 @@ class _ExcelXmlAuditResult {
     required this.sheets,
     required this.rows,
     required this.maxColumns,
+    this.semanticErrors = 0,
+    this.semanticWarnings = 0,
     this.error,
   });
 
@@ -37,6 +42,8 @@ class _ExcelXmlAuditResult {
     'sheets': sheets,
     'rows': rows,
     'maxColumns': maxColumns,
+    'semanticErrors': semanticErrors,
+    'semanticWarnings': semanticWarnings,
     if (error != null) 'error': error,
   };
 }
@@ -72,6 +79,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   bool rawDirty = false;
   bool structuredDirty = false;
   final Map<String, String> cellErrors = {};
+  List<ExcelXmlSemanticIssue> semanticIssues = const [];
   String? loadError;
   bool busy = false;
   bool auditing = false;
@@ -80,6 +88,37 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
   int sheetIndex = 0;
   int? selectedRow;
   int revision = 0;
+
+  int get semanticErrorCount => semanticIssues
+      .where((issue) => issue.severity == ExcelXmlIssueSeverity.error)
+      .length;
+
+  int get semanticWarningCount => semanticIssues
+      .where((issue) => issue.severity == ExcelXmlIssueSeverity.warning)
+      .length;
+
+  List<ExcelXmlSemanticIssue> _cellSemanticIssues(
+    int sheet,
+    int row,
+    int column,
+  ) => semanticIssues
+      .where(
+        (issue) =>
+            issue.sheetIndex == sheet &&
+            issue.rowIndex == row &&
+            issue.columnIndex == column,
+      )
+      .toList(growable: false);
+
+  bool _rowHasSemanticIssue(int sheet, int row) => semanticIssues.any(
+    (issue) => issue.sheetIndex == sheet && issue.rowIndex == row,
+  );
+
+  void _refreshSemanticIssues(ExcelXmlDocument? value) {
+    semanticIssues = value == null
+        ? const []
+        : auditExcelXmlSemantics(value);
+  }
 
   List<String> get paths {
     final values =
@@ -111,6 +150,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       rawDirty = false;
       structuredDirty = false;
       cellErrors.clear();
+      semanticIssues = const [];
       loadError = null;
       selectedRow = null;
       sheetIndex = 0;
@@ -132,6 +172,7 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
       setState(() {
         sourceBytes = bytes;
         document = parsed;
+        _refreshSemanticIssues(parsed);
         rawText =
             (parsed == null || !parsed.tabular) &&
                 bytes.length <= 2 * 1024 * 1024
