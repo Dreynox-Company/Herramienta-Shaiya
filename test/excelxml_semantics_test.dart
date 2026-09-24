@@ -163,6 +163,155 @@ void main() {
     );
   });
 
+  test('WingPosition accepts exactly the canonical 48 identity profiles', () {
+    final rows = <List<num>>[];
+    for (var family = 0; family < 4; family++) {
+      for (var job = 0; job < 6; job++) {
+        for (var sex = 0; sex < 2; sex++) {
+          rows.add([family, job, sex, 4, 0, 0, 90, .05, -.18, 0]);
+        }
+      }
+    }
+    final doc = ExcelXmlDocument.parse(
+      workbook(
+        const [
+          'FAMILY',
+          'JOB',
+          'SEX',
+          'BONE_IDX',
+          'WING_ROT_X',
+          'WING_ROT_Y',
+          'WING_ROT_Z',
+          'WING_UP_DOWN',
+          'WING_FRONT_BACK',
+          'WING_LEFT_RIGHT',
+        ],
+        rows,
+      ),
+      'excelxml/wingposition.xml',
+    );
+    expect(auditExcelXmlSemantics(doc), isEmpty);
+  });
+
+  test('WingPosition blocks duplicate identities and incomplete profile matrix', () {
+    final doc = ExcelXmlDocument.parse(
+      workbook(
+        const [
+          'FAMILY',
+          'JOB',
+          'SEX',
+          'BONE_IDX',
+          'WING_ROT_X',
+          'WING_ROT_Y',
+          'WING_ROT_Z',
+          'WING_UP_DOWN',
+          'WING_FRONT_BACK',
+          'WING_LEFT_RIGHT',
+        ],
+        const [
+          [0, 0, 0, 4, 170, 0, 90, .05, -.18, 0],
+          [0, 0, 0, 4, 170, 0, 90, .05, -.18, 0],
+        ],
+      ),
+      'excelxml/wingposition.xml',
+    );
+    final issues = auditExcelXmlSemantics(doc);
+    expect(issues.any((issue) => issue.code == 'duplicate-key'), isTrue);
+    expect(issues.any((issue) => issue.code == 'wing-profile-count'), isTrue);
+  });
+
+  test('BattleField prizes validate rank range and Item/Count pairs', () {
+    final doc = ExcelXmlDocument.parse(
+      workbook(
+        const [
+          'RankMin',
+          'RankMax',
+          'Item1',
+          'Count1',
+          'Item2',
+          'Count2',
+          'Item3',
+          'Count3',
+          'Item4',
+          'Count4',
+        ],
+        const [
+          [3, 1, 118236, 1, 0, 0, 0, 0, 0, 0],
+          [4, 10, 95011, 0, 0, 0, 0, 0, 0, 0],
+        ],
+      ),
+      'excelxml/BattleField3Prize.xml',
+    );
+    final issues = auditExcelXmlSemantics(doc);
+    expect(issues.any((issue) => issue.code == 'rank-range'), isTrue);
+    expect(issues.any((issue) => issue.code == 'item-count'), isTrue);
+  });
+
+  test('RenownShop rejects invalid IDs/counts but permits zero optional limits', () {
+    final doc = ExcelXmlDocument.parse(
+      workbook(
+        const [
+          'ID',
+          'ItemID',
+          'ItemCount',
+          'Renown',
+          'KillLevel',
+          'LimitType',
+          'LimitNum',
+        ],
+        const [
+          [1, 125002, 10, 100, 0, 0, 0],
+          [1, 0, 0, -1, 0, 0, 0],
+        ],
+      ),
+      'excelxml/RenownShop.xml',
+    );
+    final issues = auditExcelXmlSemantics(doc);
+    expect(issues.any((issue) => issue.code == 'duplicate-key'), isTrue);
+    expect(
+      issues.any((issue) => issue.message.contains('ItemID')),
+      isTrue,
+    );
+    expect(
+      issues.any((issue) => issue.message.contains('Renown')),
+      isTrue,
+    );
+  });
+
+  test('time notices validate calendar field ranges when fields are present', () {
+    final doc = ExcelXmlDocument.parse(
+      workbook(
+        const [
+          'WHO',
+          'SYSMSGINDEX',
+          'YEAR',
+          'MONTH',
+          'DAY',
+          'HOUR',
+          'MINUTE',
+          'END_YEAR',
+          'END_MONTH',
+          'END_DAY',
+          'END_HOUR',
+          'END_MINUTE',
+        ],
+        const [
+          [999, 13850, 2020, 13, 6, 25, 0, 2020, 7, 6, 1, 0],
+        ],
+      ),
+      'excelxml/timenoticesystem.xml',
+    );
+    final issues = auditExcelXmlSemantics(doc);
+    expect(
+      issues.where((issue) => issue.message.contains('MONTH')),
+      isNotEmpty,
+    );
+    expect(
+      issues.where((issue) => issue.message.contains('HOUR')),
+      isNotEmpty,
+    );
+  });
+
   test('unknown ExcelXml tables stay fail-open semantically, not guessed', () {
     final doc = ExcelXmlDocument.parse(
       workbook(
