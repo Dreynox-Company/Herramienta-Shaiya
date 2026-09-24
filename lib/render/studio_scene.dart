@@ -279,6 +279,7 @@ class StudioScene extends ChangeNotifier {
   _wingSettings = {};
   bool _lastGuard = false;
   double _flightV3CombatReturnRemaining = 0;
+  String? flightV3PreviewId;
   CharacterClass get characterClass =>
       selectedClass ?? classesFor(appearance?.archetype.id ?? 'humf').first;
   List<CharacterClass> get availableClasses =>
@@ -2254,14 +2255,72 @@ class StudioScene extends ChangeNotifier {
         bundle.compatibleWith(look.archetype.id, a.normal!);
   }
 
+  int get flightV3MappedArchetypes {
+    final characters = flightV3?.characterMap['characters'];
+    return characters is Map ? characters.length : 0;
+  }
+
+  List<FlightV3Transition> get flightV3TransitionOptions {
+    final values = flightV3?.transitions.values.toList() ??
+        const <FlightV3Transition>[];
+    final out = List<FlightV3Transition>.from(values);
+    out.sort((a, b) {
+      final kind = a.kind.compareTo(b.kind);
+      return kind != 0 ? kind : a.id.compareTo(b.id);
+    });
+    return out;
+  }
+
+  String flightV3TransitionLabel(FlightV3Transition transition) {
+    final profile = transition.profile == null
+        ? ''
+        : ' · ${transition.profile!.toUpperCase()}';
+    final shield = transition.shield ? ' · escudo' : '';
+    return '${transition.kind}$profile$shield · '
+        '${transition.duration.toStringAsFixed(2)} s';
+  }
+
   String get flightV3Status {
     final bundle = flightV3;
     if (bundle == null) return 'Flight V3 no instalado';
+    final runtime = bundle.evidence['runtimeSubset'] == true
+        ? 'runtime compacto autenticado'
+        : 'paquete completo autenticado';
     if (!flightV3Compatible) {
-      return 'Flight V3 verificado, pero el personaje actual no es humf de 36 huesos';
+      return 'Flight V3 · $runtime · mapa de '
+          '$flightV3MappedArchetypes arquetipos; runtime corporal actual '
+          'solo humf de 36 huesos.';
     }
-    return 'Flight V3 activo · ${bundle.transitions.length} transiciones · '
-        '${bundle.combat.length} perfiles de combate';
+    return 'Flight V3 activo · $runtime · ${bundle.transitions.length} '
+        'transiciones · ${bundle.combat.length} perfiles · mapa de '
+        '$flightV3MappedArchetypes arquetipos.';
+  }
+
+  Future<void> previewFlightV3Transition(String id) async {
+    final bundle = flightV3;
+    final actor = character;
+    if (bundle == null || actor == null || !flightV3Compatible) {
+      throw const FormatException(
+        'Flight V3 requiere el personaje humf compatible cargado.',
+      );
+    }
+    if (mount != null) {
+      throw const FormatException(
+        'Desmonta antes de previsualizar transiciones corporales Flight V3.',
+      );
+    }
+    final transition = bundle.transitions[id];
+    if (transition == null) {
+      throw FormatException('Transición Flight V3 desconocida: $id');
+    }
+    combat.cancelActions();
+    flightV3PreviewId = id;
+    _playFlightV3Transition(transition);
+    report(
+      'Flight V3 preview · $id · '
+      '${flightV3TransitionLabel(transition)}',
+    );
+    changed();
   }
 
   void _applyFlightV3ToActor(Actor actor, Appearance look) {
@@ -2376,6 +2435,7 @@ class StudioScene extends ChangeNotifier {
 
   Future<void> installFlightV3(FlightV3Bundle bundle) async {
     flightV3 = bundle;
+    flightV3PreviewId = null;
     final a = character;
     final look = appearance;
     if (a != null && look != null) {
