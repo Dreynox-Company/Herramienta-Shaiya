@@ -4,10 +4,92 @@ import hashlib, json, os, re, shutil, struct, subprocess, zipfile
 ROOT=Path(__file__).resolve().parents[1]
 FLIGHT_RUNTIME_NAME='Shaiya_Studio_FlightV3_Runtime.zip'
 FLIGHT_RUNTIME_SHA256='6d0422c69a0e5c4b7f2a42061e30a91a6c6b452afaacac53af1e7034267cb5ba'
+REAL_INDEX_SHA256='a3ea7e3b6d6fa0012956dab15f0c8e02198d7a4fa6d40f2f39428af13e3bd20f'
+WING_POSITION_SHA256='8a2c376c898bb025550b5fe34b92a40dbbbb9e39063619cfee4756006908cd03'
+WING_MON_SHA256='5fb05afe456e158f4343a904d6192efe427b9c764a058bd6be6afc688a3da94b'
+VEHICLE_MON_SHA256={
+    'Hu':'b280b941076eb7067ed8001fce3b82d12f87eb9eff42778b6a2fd90b51ec7aab',
+    'El':'a2ea784c162d11186e49cc4ba82086e02181b33bb0e22bde21a18f14cee85940',
+    'Vi':'893a7c4a7c70aa93de01cd28415c164e6ea23dbe6ce5296bceab45c7afc1801b',
+    'De':'ba23e03028aa99ef804402d2d0ee3dc975a45debf6e1a75e63e5fdef4e9aabf7',
+}
 
 def sha(p):
     with p.open('rb') as stream: return hashlib.file_digest(stream,'sha256').hexdigest()
 def git(*args): return subprocess.check_output(['git',*args],cwd=ROOT,text=True).strip()
+
+def _sha256_text(value):
+    return isinstance(value,str) and bool(re.fullmatch(r'[0-9a-fA-F]{64}',value))
+
+def load_real_acceptance():
+    configured=os.environ.get('SHAIYA_REAL_QA_ACCEPTANCE')
+    candidates=[]
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.append(ROOT/'qa-real'/'acceptance.json')
+    source=next((p for p in candidates if p.is_file()),None)
+    empty={
+        'source':None,
+        'wingPositionGameExe':False,
+        'wingMonExactInstall':False,
+        'vehicleMonExactInstall':False,
+        'vehicleBridgeGameExe':False,
+        'spkFullAuditComplete':False,
+        'spkRepackReopened':False,
+        'spkGameExeAccepted':False,
+    }
+    if source is None:
+        return empty
+    data=json.loads(source.read_text(encoding='utf-8'))
+    if data.get('schema')!=1:
+        raise RuntimeError('qa-real acceptance schema must be 1')
+    wing=data.get('wing') or {}
+    vehicle=data.get('vehicle') or {}
+    spk=data.get('spk') or {}
+    game_sha=str(data.get('gameExeSha256') or '').lower()
+    if game_sha and not _sha256_text(game_sha):
+        raise RuntimeError('qa-real gameExeSha256 is invalid')
+    vehicle_hashes=vehicle.get('monSha256') or {}
+    real_vehicle_hashes=all(
+        str(vehicle_hashes.get(key) or '').lower()==expected
+        for key,expected in VEHICLE_MON_SHA256.items()
+    )
+    wing_position_ok=(
+        wing.get('positionGameExe') is True and
+        str(wing.get('positionSha256') or '').lower()==WING_POSITION_SHA256
+    )
+    wing_mon_ok=(
+        wing.get('monExactInstall') is True and
+        str(wing.get('monSha256') or '').lower()==WING_MON_SHA256
+    )
+    vehicle_mon_ok=(
+        vehicle.get('monExactInstall') is True and
+        real_vehicle_hashes
+    )
+    bridge_ok=(
+        vehicle.get('bridgeGameExe') is True and
+        _sha256_text(game_sha)
+    )
+    spk_index_ok=str(spk.get('indexSha256') or '').lower()==REAL_INDEX_SHA256
+    spk_audit_ok=(
+        spk_index_ok and
+        spk.get('canReadSimpleResources') is True and
+        spk.get('canReadFragmentedResources') is True and
+        spk.get('canExtractAll') is True and
+        int(spk.get('validatedResources') or -1)==50135 and
+        int(spk.get('failures') or -1)==0
+    )
+    return {
+        'source':str(source),
+        'gameExeSha256':game_sha or None,
+        'wingPositionGameExe':wing_position_ok,
+        'wingMonExactInstall':wing_mon_ok,
+        'vehicleMonExactInstall':vehicle_mon_ok,
+        'vehicleBridgeGameExe':bridge_ok,
+        'spkFullAuditComplete':spk_audit_ok,
+        'spkRepackReopened':spk_audit_ok and spk.get('repackReopened') is True,
+        'spkGameExeAccepted':spk_audit_ok and spk.get('gameExeAccepted') is True,
+    }
 
 def install_flight_runtime(release):
     candidates=[]
@@ -60,7 +142,9 @@ def main():
         'SPK_REAL_READER_STATUS.md',
         'DATA_CAPABILITY_MATRIX.md',
         'WINDOWS_RELEASE_AUDIT.md',
+        'WING_REAL_DATA_AUDIT.md',
         'VEHICLE_REAL_DATA_AUDIT.md',
+        'REAL_QA_ACCEPTANCE.md',
     ]:
         source=ROOT/'docs'/name
         if source.is_file(): shutil.copy2(source,docs_target/name)
@@ -98,6 +182,7 @@ def main():
     resource_key_validated=bool(
         crypto_profile.get('evidence',{}).get('resourceKeyValidated') is True
     )
+    real_acceptance=load_real_acceptance()
     delivery_status={
         'schema':1,
         'version':version,
@@ -121,14 +206,17 @@ def main():
         },
         'spk':{
             'resourceKeyValidated':resource_key_validated,
-            'fullRealAuditComplete':False,
-            'realRepackReopened':False,
+            'fullRealAuditComplete':real_acceptance['spkFullAuditComplete'],
+            'realRepackReopened':real_acceptance['spkRepackReopened'],
+            'gameExeAccepted':real_acceptance['spkGameExeAccepted'],
         },
         'realDataQa':{
-            'wingPositionGameExe':False,
-            'wingMonExactInstall':False,
-            'vehicleMonExactInstall':False,
-            'vehicleBridgeGameExe':False,
+            'evidenceSource':real_acceptance['source'],
+            'gameExeSha256':real_acceptance.get('gameExeSha256'),
+            'wingPositionGameExe':real_acceptance['wingPositionGameExe'],
+            'wingMonExactInstall':real_acceptance['wingMonExactInstall'],
+            'vehicleMonExactInstall':real_acceptance['vehicleMonExactInstall'],
+            'vehicleBridgeGameExe':real_acceptance['vehicleBridgeGameExe'],
         },
     }
     blocking=[]
@@ -138,10 +226,23 @@ def main():
         blocking.append('flight-v3-runtime-not-bundled')
     if not resource_key_validated:
         blocking.append('spk-payload-key')
-    blocking.extend([
-        'real-data-visual-qa',
-        'spk-50135-full-audit-and-reopen',
-    ])
+    real_data_complete=all(
+        delivery_status['realDataQa'][key] is True
+        for key in [
+            'wingPositionGameExe',
+            'wingMonExactInstall',
+            'vehicleMonExactInstall',
+            'vehicleBridgeGameExe',
+        ]
+    )
+    if not real_data_complete:
+        blocking.append('real-data-visual-qa')
+    if not (
+        delivery_status['spk']['fullRealAuditComplete'] and
+        delivery_status['spk']['realRepackReopened'] and
+        delivery_status['spk']['gameExeAccepted']
+    ):
+        blocking.append('spk-50135-full-audit-and-reopen')
     delivery_status['blockingGates']=blocking
     delivery_status['productionComplete100']=not blocking
     (release/'distribution-status.json').write_text(
