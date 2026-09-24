@@ -3621,15 +3621,48 @@ class _StudioState extends State<StudioPage> {
   }
 
   Future<void> exportDiagnostics() async {
+    final c = catalog;
+    final vehicle = scene.activeVehiclePositionProfile;
+    final excelXml = c?.library.files.keys
+            .where(
+              (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
+            )
+            .toList() ??
+        const <String>[];
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
         'version': studioVersion,
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
-        'resources': catalog?.library.files.length,
-        'source': catalog?.library.sourceDiagnostics,
+        'resources': c?.library.files.length,
+        'source': c?.library.sourceDiagnostics,
         'archiveAttempt': Library.lastArchiveReport,
+        'excelXml': {
+          'count': excelXml.length,
+          'wingPositionPath': c?.wingPositionPath,
+          'wingPositionProfile': scene.wingPositionProfileLabel,
+          'wingBone': scene.wingBoneIndex,
+        },
+        'flightV3': scene.flightV3 == null
+            ? null
+            : {
+                'status': scene.flightV3Status,
+                'compatible': scene.flightV3Compatible,
+                'mappedArchetypes': scene.flightV3MappedArchetypes,
+                'preview': scene.flightV3PreviewId,
+                'evidence': scene.flightV3!.evidence,
+              },
+        'vehicleBridge': vehicle == null
+            ? null
+            : {
+                'section': vehicle.section,
+                'enabled': vehicle.enabled,
+                'position': [vehicle.posX, vehicle.posY, vehicle.posZ],
+                'rotation': [vehicle.rotX, vehicle.rotY, vehicle.rotZ],
+                'scale': [vehicle.scaleX, vehicle.scaleY, vehicle.scaleZ],
+                'riderProfile': vehicle.riderProfile,
+              },
         'streaming': scene.game.loaded?.streamingStats,
         'messages': diagnostics,
       }),
