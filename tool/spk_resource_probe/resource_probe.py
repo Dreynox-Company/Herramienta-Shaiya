@@ -188,6 +188,8 @@ def _pe_initialized_data_candidates(path:Path,max_candidates:int=160000):
     accepting anything.
     """
     try:
+      size=path.stat().st_size
+      if size<=0 or size>256*1024*1024:return
       blob=path.read_bytes()
     except OSError:
       return
