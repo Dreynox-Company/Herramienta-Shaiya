@@ -1,7 +1,7 @@
 {
   "name": "shaiya-studio-angle-runtime",
   "version-string": "0.6.23",
-  "builtin-baseline": "cbe29d6909eff8e2cc61054feaf3fc9fc8d9d9f8",
+  "builtin-baseline": "5f96cd15fd745122cf27e0524606d6c1efc5fd07",
   "dependencies": [
     {
       "name": "angle",
