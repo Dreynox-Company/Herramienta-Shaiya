@@ -794,18 +794,23 @@ void main() {
       final doc = EditorReader.open(sourceTable.bytes, tableEntry.path!);
       expect(doc.complete, isTrue);
       // Two actual commits to the authenticated Entry ID, then reopen and reparse.
+      final materialRow = List.generate(
+        doc.rows.length,
+        (i) => i,
+      ).firstWhere((row) => doc.fields(row).any((f) => f.spec.name == 'Alpha'));
       final numeric = doc
-          .fields(0)
-          .where((f) => f.spec.name.toLowerCase().contains('alpha'))
-          .first;
+          .fields(materialRow)
+          .firstWhere((f) => f.spec.name == 'Alpha');
       final initial = doc.read(numeric);
-      doc.edit(0, numeric, initial == '0' ? '1' : '0');
+      doc.edit(materialRow, numeric, initial == '0' ? '1' : '0');
       await index.replace(sourceTable, doc.exportBytes());
       final reread = await index.read(tableEntry);
       final doc2 = EditorReader.open(reread.bytes, tableEntry.path!);
       doc2.edit(
-        0,
-        doc2.fields(0).firstWhere((f) => f.spec.name == numeric.spec.name),
+        materialRow,
+        doc2
+            .fields(materialRow)
+            .firstWhere((f) => f.spec.name == numeric.spec.name),
         initial,
       );
       await index.replace(reread, doc2.exportBytes());

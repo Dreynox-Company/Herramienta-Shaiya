@@ -72,16 +72,30 @@ void main() {
       final doc = EditorReader.open(modelMlt(), path);
       expect(doc, isA<CatalogDocument>());
       expect(doc.complete, isTrue);
-      expect(doc.rows, hasLength(2));
+      // Two mesh definitions + two textures + two actual material records.
+      expect(doc.rows, hasLength(6));
+      final catalog = doc as CatalogDocument;
+      final materials = List.generate(
+        doc.rows.length,
+        (i) => i,
+      ).where((i) => catalog.materials(i).isNotEmpty).toList();
+      expect(materials, hasLength(2));
+      expect(catalog.materials(materials.first), [
+        ('upper015.3dc', 'upper016.dds', 0),
+      ]);
+      expect(catalog.materials(materials.last), [
+        ('upper016.3dc', 'upper015.dds', 1),
+      ]);
       final encoded = doc.exportBytes();
-      expect(
-        CatalogDocument.open(
-          encoded,
-          path,
-          GameTextEncoding.automatic,
-        ).materials(0),
-        (doc as CatalogDocument).materials(0),
+      final restored = CatalogDocument.open(
+        encoded,
+        path,
+        GameTextEncoding.automatic,
       );
+      for (final row in materials) {
+        expect(restored.materials(row), catalog.materials(row));
+      }
+      expect(encoded, modelMlt());
     },
   );
 
@@ -104,9 +118,13 @@ void main() {
       await index.replace(read, first);
       final reopened = await Library.fromSpkEditable(source);
       final second = Uint8List.fromList(first);
+      // Second edit changes the texture reference to another valid entry.
+      // Do not restore the original payload here: its hash would not be stale.
       ByteData.sublistView(
         second,
-      ).setUint32(second.length - 4, 1, Endian.little);
+      ).setUint32(second.length - 8, 1, Endian.little);
+      expect(FileSave.hash(second), isNot(read.hash));
+      expect(FileSave.hash(second), isNot(FileSave.hash(first)));
       final path = reopened.files.entries
           .firstWhere((e) => e.value == entry.key)
           .key;
