@@ -117,7 +117,7 @@ jobs:
         if: ${{ inputs.harden_angle }}
         with:
           path: build/vcpkg-binary-cache
-          key: angle-vcpkg-cbe29d6909ef-x64-windows-v1
+          key: angle-vcpkg-5f96cd15fd74-x64-windows-v1
       - name: Harden ANGLE Release runtime
         if: ${{ inputs.harden_angle }}
         run: ./ci/harden_angle_windows.ps1
