@@ -37,12 +37,14 @@ jobs:
         run: |
           python ci/refine_r26_selectors.py
           python -c "from pathlib import Path; p=Path('integration_test/native_studio_test.dart'); t=p.read_text(); p.write_text(t.replace('scene.appearance!.slots[Slot.upper]', 'scene.appearance!.selected[Slot.upper]'))"
+      - name: Preserve per-resource authentication and register every suite
+        run: python ci/refine_r26_readable_resources.py
       - name: Resolve pinned dependency graph
         run: flutter pub get --enforce-lockfile
       - name: Format source before mechanical lint fixes
         run: dart format lib test integration_test tool
       - name: Apply mechanical lints only
-        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import,unused_import,use_null_aware_elements,unnecessary_brace_in_string_interps
+        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import,unused_import,use_null_aware_elements,unnecessary_brace_in_string_interps,sort_child_properties_last
       - name: Deterministic formatting
         run: dart format lib test integration_test tool
       - name: Commit exact readable sources on feature branch
@@ -52,11 +54,11 @@ jobs:
           set -euo pipefail
           test "$(git branch --show-current)" = 'feat/studio-0626-compact-model-picker'
           git diff --check
-          git add lib test integration_test tool pubspec.yaml .studio-r26-ui-applied .studio-r26-selectors-applied
+          git add lib test integration_test tool pubspec.yaml .studio-r26-ui-applied .studio-r26-selectors-applied .studio-r26-readable-applied
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'feat(studio): materialize native model selectors and compact docks [skip ci]'
+            git commit -m 'feat(studio): compact visual model workflow with authenticated partial SPK [skip ci]'
             git push origin HEAD:refs/heads/feat/studio-0626-compact-model-picker
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
