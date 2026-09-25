@@ -30,7 +30,9 @@ jobs:
       - name: Verify and recover the interrupted source changes
         run: python ci/apply_r27.py
       - name: Apply reviewed contract and preview corrections
-        run: python ci/refine_r27_review.py
+        run: |
+          python ci/refine_r27_review.py
+          python ci/refine_r27_material_tests.py
       - name: Generate exact provided icon assets
         run: python tool/prepare_branding.py
       - name: Register every regression in the local runner
@@ -56,11 +58,11 @@ jobs:
           set -euo pipefail
           test "$(git branch --show-current)" = 'fix/studio-0627-spk-navigation-orbit-brand'
           git diff --check
-          git add lib test integration_test tool docs platform assets pubspec.yaml ci .studio-r27-applied .studio-r27-review-applied
+          git add lib test integration_test tool docs platform assets pubspec.yaml ci .studio-r27-applied .studio-r27-review-applied .studio-r27-material-tests-applied
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'fix(studio): reviewed resource selection, textures and overlay version validation [skip ci]'
+            git commit -m 'test(studio): exact material rows, texture pairing and distinct SPK overlay revisions [skip ci]'
             git push origin HEAD:refs/heads/fix/studio-0627-spk-navigation-orbit-brand
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
