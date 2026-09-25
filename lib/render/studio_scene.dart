@@ -1135,8 +1135,9 @@ class StudioScene extends ChangeNotifier {
           rgba[i + 3] = ((1 - d).clamp(0.0, 1.0) * 230).round();
         }
       }
-      texture = await t.TextureLoader(flipY: false)
-          .fromBytes(Pixels(16, 16, rgba).png());
+      texture = await t.TextureLoader(
+        flipY: false,
+      ).fromBytes(Pixels(16, 16, rgba).png());
       if (texture == null) return;
       if (disposed || rev != _effectRevision) {
         texture.dispose();

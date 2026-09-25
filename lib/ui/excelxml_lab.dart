@@ -137,9 +137,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               (path) =>
                   filter.isEmpty ||
                   path.toLowerCase().contains(filter.toLowerCase()) ||
-                  excelXmlPurpose(path)
-                      .toLowerCase()
-                      .contains(filter.toLowerCase()),
+                  excelXmlPurpose(
+                    path,
+                  ).toLowerCase().contains(filter.toLowerCase()),
             )
             .toList()
           ..sort();

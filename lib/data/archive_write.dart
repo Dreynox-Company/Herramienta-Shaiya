@@ -291,7 +291,8 @@ class ArchiveWriter {
         );
         await h.truncate(j['oldLength']);
         await h.flush();
-        outcome = 'Se conservó el archivo anterior; los cambios incompletos no se aplicaron.';
+        outcome =
+            'Se conservó el archivo anterior; los cambios incompletos no se aplicaron.';
       } else if (current == j['newIndex'] && size == j['newLength']) {
         ArchiveIndex.decode(
           await sah.readAsBytes(),

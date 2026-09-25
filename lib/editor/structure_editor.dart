@@ -73,8 +73,9 @@ class StructureEditor {
       ..add(Uint8List.sublistView(changed.payload, record.offset, record.end))
       ..add(Uint8List.sublistView(original.payload, end));
     final bytes = out.takeBytes();
-    ByteData.sublistView(bytes)
-        .setUint32(countOffset(bytes), original.rows.length + 1, Endian.little);
+    ByteData.sublistView(
+      bytes,
+    ).setUint32(countOffset(bytes), original.rows.length + 1, Endian.little);
     final parsed = EditorReader.open(
       bytes,
       document.path,
@@ -98,8 +99,9 @@ class StructureEditor {
       ..add(Uint8List.sublistView(original.payload, 0, r.offset))
       ..add(Uint8List.sublistView(original.payload, r.end));
     final bytes = out.takeBytes();
-    ByteData.sublistView(bytes)
-        .setUint32(countOffset(bytes), original.rows.length - 1, Endian.little);
+    ByteData.sublistView(
+      bytes,
+    ).setUint32(countOffset(bytes), original.rows.length - 1, Endian.little);
     final parsed = EditorReader.open(
       bytes,
       document.path,

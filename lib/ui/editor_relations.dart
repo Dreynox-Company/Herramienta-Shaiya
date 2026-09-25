@@ -190,8 +190,9 @@ class _RelationsDialogState extends State<_RelationsDialog> {
             .where(
               (r) =>
                   q.isEmpty ||
-                  foldedSearch('${r.summary.id} ${r.summary.name} ${r.path}')
-                      .contains(q),
+                  foldedSearch(
+                    '${r.summary.id} ${r.summary.name} ${r.path}',
+                  ).contains(q),
             )
             .toList();
     return AlertDialog(

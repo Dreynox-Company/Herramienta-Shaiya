@@ -451,8 +451,9 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
     geometry.setIndex(mesh.indices.toList());
 
     if (widget.texturePng != null) {
-      previewTexture = await t.TextureLoader(flipY: false)
-          .fromBytes(widget.texturePng!);
+      previewTexture = await t.TextureLoader(
+        flipY: false,
+      ).fromBytes(widget.texturePng!);
       if (previewTexture != null) {
         previewTexture!.colorSpace = t.SRGBColorSpace;
         previewTexture!.wrapS = t.RepeatWrapping;
@@ -645,7 +646,8 @@ class SpkArchiveBrowserPage extends StatefulWidget {
             'Autenticando perfil de payloads contra muestras reales…';
         await source.validateSimpleResourceProfile();
       } else {
-        progress.value = 'Probando de forma autenticada si el índice comparte clave con payloads…';
+        progress.value =
+            'Probando de forma autenticada si el índice comparte clave con payloads…';
         source = await source.tryIndexKeyAsResourceProfile() ?? source;
       }
       progress.value = 'Buscando perfil validado de recursos…';
@@ -685,9 +687,9 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     BuildContext context,
     String spkPath,
   ) async {
-    final candidates = spkProfileCandidatePaths(spkPath)
-        .map(File.new)
-        .toList(growable: false);
+    final candidates = spkProfileCandidatePaths(
+      spkPath,
+    ).map(File.new).toList(growable: false);
     for (final file in candidates) {
       if (!await file.exists()) continue;
       try {
@@ -1532,7 +1534,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         );
         if (offline.canExtractAll) {
           await loadAutomaticSpkNameMap(offline, source.file.path);
-          operation = 'La clave compartida autenticó el SPK. Auditando todos los recursos…';
+          operation =
+              'La clave compartida autenticó el SPK. Auditando todos los recursos…';
           if (mounted) setState(() {});
           final audit = await _auditAllResources(offline);
           operation = 'Identificando tablas y rutas estructurales…';
@@ -1736,8 +1739,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!next.canExtractAll) {
       final persistent = File('${source.file.path}.resources.json');
       await persistent.writeAsString(
-        const JsonEncoder.withIndent('  ')
-            .convert({...data, 'studioValidation': simpleValidation}),
+        const JsonEncoder.withIndent(
+          '  ',
+        ).convert({...data, 'studioValidation': simpleValidation}),
         flush: true,
       );
     }

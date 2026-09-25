@@ -91,6 +91,7 @@ void main(List<String> args) async {
       stdout.writeln('ERROR $name $e');
     }
   }
-  File(args.length > 1 ? args[1] : 'audit_editor.json')
-      .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
+  File(
+    args.length > 1 ? args[1] : 'audit_editor.json',
+  ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
 }

@@ -410,7 +410,8 @@ class SpkArchiveSource {
       'ambiguousRemoved': ambiguousRemoved,
       'confirmed': names.paths.length,
       'unresolved': resources.length - names.paths.length - names.hints.length,
-      'method': 'one-to-one decoded-size+zstd3-size, fallback one-to-one decoded-size',
+      'method':
+          'one-to-one decoded-size+zstd3-size, fallback one-to-one decoded-size',
     };
   }
 

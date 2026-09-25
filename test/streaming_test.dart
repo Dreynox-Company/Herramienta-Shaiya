@@ -39,72 +39,78 @@ WorldResource terrain(int size) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('real chunk lifecycle loads only proximity and releases resources after travel', () async {
-    var created = 0, released = 0;
-    Future<RenderPart> factory(
-      MeshData mesh,
-      String path, {
-      bool opaque = false,
-    }) async {
-      created++;
-      final geo = t.BufferGeometry(),
-          pos = t.Float32BufferAttribute.fromList(mesh.positions.toList(), 3),
-          texture = t.Texture();
-      geo.setAttributeFromString('position', pos);
-      geo.setIndex(mesh.indices.toList());
-      return RenderPart(
-        mesh,
-        t.Mesh(geo, t.MeshBasicMaterial()),
-        pos,
-        texture,
-        releaseTexture: () {
-          released++;
-          texture.dispose();
-        },
-      );
-    }
+  test(
+    'real chunk lifecycle loads only proximity and releases resources after travel',
+    () async {
+      var created = 0, released = 0;
+      Future<RenderPart> factory(
+        MeshData mesh,
+        String path, {
+        bool opaque = false,
+      }) async {
+        created++;
+        final geo = t.BufferGeometry(),
+            pos = t.Float32BufferAttribute.fromList(mesh.positions.toList(), 3),
+            texture = t.Texture();
+        geo.setAttributeFromString('position', pos);
+        geo.setIndex(mesh.indices.toList());
+        return RenderPart(
+          mesh,
+          t.Mesh(geo, t.MeshBasicMaterial()),
+          pos,
+          texture,
+          releaseTexture: () {
+            released++;
+            texture.dispose();
+          },
+        );
+      }
 
-    final lib = Library('', false, {'terrain/ground.dds': 'unused'}),
-        builder = WorldBuilder(lib, factory, (_) {}, () => false);
-    final world = await builder.build(terrain(2048), quality: 0);
-    await world.settle();
-    expect(world.residentChunks, lessThan(35));
-    expect(world.residentChunks, greaterThan(4));
-    expect(created, world.parts.length);
-    expect(world.floorAt(world.spawn.x, world.spawn.z, 0), 0);
-    final firstCreated = created;
-    await world.ensureAt(1850, 1850);
-    await world.settle();
-    expect(world.releasedChunks, greaterThan(0));
-    expect(released, greaterThan(0));
-    expect(world.floorAt(1850, 1850, 0), 0);
-    expect(world.floorAt(world.spawn.x, world.spawn.z, 0), isNull);
-    expect(created, greaterThan(firstCreated));
-    expect(created - released, world.parts.length);
-    final resident = world.residentChunks;
-    await expectLater(world.ensureAt(-100, -100), throwsFormatException);
-    expect(world.residentChunks, resident);
-    expect(world.floorAt(1850, 1850, 0), 0);
-    await world.ensureAt(1851, 1850);
-    await world.settle();
-    expect(world.residentChunks, resident);
-    world.dispose();
-    world.dispose();
-    expect(released, created);
-    expect(world.parts, isEmpty);
-    expect(world.instances, isEmpty);
-    expect(world.floors.ownedGroups, 0);
-  });
-  test('stream load failure keeps diagnostics and never treats missing floor as traversable', () async {
-    final builder = WorldBuilder(
-      Library('', false, {'terrain/ground.dds': 'unused'}),
-      (mesh, path, {opaque = false}) async =>
-          throw const FormatException('missing material'),
-      (_) {},
-      () => false,
-    );
-    await expectLater(builder.build(terrain(128)), throwsFormatException);
-  });
+      final lib = Library('', false, {'terrain/ground.dds': 'unused'}),
+          builder = WorldBuilder(lib, factory, (_) {}, () => false);
+      final world = await builder.build(terrain(2048), quality: 0);
+      await world.settle();
+      expect(world.residentChunks, lessThan(35));
+      expect(world.residentChunks, greaterThan(4));
+      expect(created, world.parts.length);
+      expect(world.floorAt(world.spawn.x, world.spawn.z, 0), 0);
+      final firstCreated = created;
+      await world.ensureAt(1850, 1850);
+      await world.settle();
+      expect(world.releasedChunks, greaterThan(0));
+      expect(released, greaterThan(0));
+      expect(world.floorAt(1850, 1850, 0), 0);
+      expect(world.floorAt(world.spawn.x, world.spawn.z, 0), isNull);
+      expect(created, greaterThan(firstCreated));
+      expect(created - released, world.parts.length);
+      final resident = world.residentChunks;
+      await expectLater(world.ensureAt(-100, -100), throwsFormatException);
+      expect(world.residentChunks, resident);
+      expect(world.floorAt(1850, 1850, 0), 0);
+      await world.ensureAt(1851, 1850);
+      await world.settle();
+      expect(world.residentChunks, resident);
+      world.dispose();
+      world.dispose();
+      expect(released, created);
+      expect(world.parts, isEmpty);
+      expect(world.instances, isEmpty);
+      expect(world.floors.ownedGroups, 0);
+    },
+  );
+  test(
+    'stream load failure keeps diagnostics and never treats missing floor as traversable',
+    () async {
+      final builder = WorldBuilder(
+        Library('', false, {'terrain/ground.dds': 'unused'}),
+        (mesh, path, {opaque = false}) async =>
+            throw const FormatException('missing material'),
+        (_) {},
+        () => false,
+      );
+      await expectLater(builder.build(terrain(128)), throwsFormatException);
+    },
+  );
   test(
     'cancellation releases in-flight geometry and cannot publish a later scene',
     () async {

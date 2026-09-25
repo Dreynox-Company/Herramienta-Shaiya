@@ -248,7 +248,8 @@ void main(List<String> args) {
           .toList(),
     });
   }
-  pack['mountedOrigin'] = 'Upper-body original local rotations over original seated translations and lower-body; smoothstep entry/exit; missing compatible families are not fabricated.';
+  pack['mountedOrigin'] =
+      'Upper-body original local rotations over original seated translations and lower-body; smoothstep entry/exit; missing compatible families are not fabricated.';
   final raw = utf8.encode(jsonEncode(pack));
   if (raw.length > 8 * 1024 * 1024) {
     throw StateError('Suplemento expandido demasiado grande');
@@ -263,7 +264,8 @@ void main(List<String> args) {
       'outputSupplementSha256': sha256.convert(bytes).toString(),
       'expandedBytes': raw.length,
       'compressedBytes': bytes.length,
-      'scope': 'Numeric compatibility, preserved lower-body and smooth endpoints; not a visual certification of every character/mount/weapon combination or online game installation.',
+      'scope':
+          'Numeric compatibility, preserved lower-body and smooth endpoints; not a visual certification of every character/mount/weapon combination or online game installation.',
       'profiles': report,
     }),
     flush: true,

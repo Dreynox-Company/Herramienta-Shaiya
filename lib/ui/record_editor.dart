@@ -413,8 +413,9 @@ class _RecordEditorWindowState extends State<RecordEditorWindow> {
                             draft.before[f.spec.name] !=
                                 draft.values[f.spec.name]) &&
                         (q.isEmpty ||
-                            foldedSearch('${m.label} ${f.spec.name}')
-                                .contains(q));
+                            foldedSearch(
+                              '${m.label} ${f.spec.name}',
+                            ).contains(q));
                   }).toList();
                   final narrow = box.maxWidth < 620;
                   final menu = narrow

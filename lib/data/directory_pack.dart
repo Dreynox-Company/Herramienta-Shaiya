@@ -30,9 +30,9 @@ class DirectoryPack {
         stats = <FileStat>[],
         names = <String>{};
     int offset = 0;
-    final discovered = await Directory(root)
-        .list(recursive: true, followLinks: false)
-        .toList();
+    final discovered = await Directory(
+      root,
+    ).list(recursive: true, followLinks: false).toList();
     discovered.sort((a, b) => a.path.compareTo(b.path));
     for (final entity in discovered) {
       control.check();

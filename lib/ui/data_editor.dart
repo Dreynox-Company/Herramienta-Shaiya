@@ -1295,7 +1295,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
       'version': '0.6.1',
       'source': widget.library.sourceDiagnostics,
       'tables': _cache.values.map((d) => d.report()).toList(),
-      'privacy': 'Sin contenido de tablas ni credenciales. No se envía automáticamente.',
+      'privacy':
+          'Sin contenido de tablas ni credenciales. No se envía automáticamente.',
       'status': status,
     };
     final p = await _save(
@@ -2267,7 +2268,8 @@ class _DataEditorPageState extends State<DataEditorPage> {
                               _buildDirectory,
                             ),
                           Tooltip(
-                            message: 'Respaldo opcional; el guardado utiliza una transacción temporal incluso sin esta opción.',
+                            message:
+                                'Respaldo opcional; el guardado utiliza una transacción temporal incluso sin esta opción.',
                             child: FilterChip(
                               label: const Text(
                                 'Respaldo',

@@ -146,8 +146,9 @@ class ArchiveExport {
     RandomAccessFile? saf;
     try {
       if (pack) {
-        saf = await File('${staging.path}/data.saf')
-            .open(mode: FileMode.writeOnly);
+        saf = await File(
+          '${staging.path}/data.saf',
+        ).open(mode: FileMode.writeOnly);
       }
       final newEntries = <ArchiveEntry>[];
       for (var i = 0; i < list.length; i++) {

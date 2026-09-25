@@ -78,12 +78,14 @@ Future<void> main() async {
     'sets_resolved': sets,
     'identity_checks': protected,
     'missing_lower_restored': restored,
-    'method': 'Lectura y resolución de la selección con las mallas originales. No es homologación visual de todos los trajes.',
+    'method':
+        'Lectura y resolución de la selección con las mallas originales. No es homologación visual de todos los trajes.',
     'rows': rows,
     'rejected_resources': errors,
   };
-  await File(output)
-      .writeAsString(const JsonEncoder.withIndent('  ').convert(report));
+  await File(
+    output,
+  ).writeAsString(const JsonEncoder.withIndent('  ').convert(report));
   stdout.writeln(
     'AUDITORIA: ${rows.length} arquetipos, $sets conjuntos resueltos, ${errors.length} rechazados con diagnóstico.',
   );

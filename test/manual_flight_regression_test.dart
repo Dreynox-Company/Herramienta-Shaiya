@@ -207,77 +207,83 @@ void main() {
       s.dispose();
     },
   );
-  test('a new attack during final contact waits for the ground state, not height alone', () async {
-    final s = flyingFixture();
-    final target = Actor()..root.position.z = -1;
-    s.game.selectionRing = t.Line(t.BufferGeometry(), t.LineBasicMaterial());
-    s.enemy = target;
-    s.attackClips = [motion('original-weapon-attack', 0)];
-    final record = CreatureRecord(
-      0,
-      'Fixture',
-      'fixture.mon',
-      {},
-      {},
-      {},
-      [],
-      1,
-    );
-    s.game.opponents['fixture'] = Opponent('fixture', record, target);
-    s.combat.addTarget('fixture');
-    s.combat.selectTarget('fixture');
-    await s.toggleFlight();
-    s.flightState.height = .003;
-    s.flightState.velocity = -.1;
-    expect(s.flightState.grounded, false);
-    await s.attack();
-    expect(s.combat.active, false);
-    expect(s.flightState.pendingTarget, 'fixture');
-    for (var i = 0; i < 5 && !s.combat.active; i++) {
-      s.tick(1 / 30);
-      if (s.combat.active) expect(s.flightState.grounded, true);
-    }
-    expect(s.flightState.grounded, true);
-    expect(s.combat.active, true);
-    s.dispose();
-  });
-  test('compressed descent does not invent an early hit or alter the weapon cooldown', () async {
-    final s = flyingFixture();
-    final target = Actor()..root.position.z = -1;
-    s.game.selectionRing = t.Line(t.BufferGeometry(), t.LineBasicMaterial());
-    s.enemy = target;
-    final attack = motion('original-weapon-attack', 0);
-    s.attackClips = [attack];
-    final record = CreatureRecord(
-      0,
-      'Fixture',
-      'fixture.mon',
-      {},
-      {},
-      {},
-      [],
-      1,
-    );
-    s.game.opponents['fixture'] = Opponent('fixture', record, target);
-    s.combat.addTarget('fixture');
-    s.combat.selectTarget('fixture');
-    await s.toggleFlight();
-    s.flightState.height = .38;
-    await s.attack();
-    for (var i = 0; i < 6; i++) {
-      s.tick(1 / 30);
-    }
-    expect(s.combat.active, true);
-    expect(s.flightState.grounded, true);
-    expect(s.combat.health['fixture'], s.combat.maxHealth);
-    expect(attack.duration, 1);
-    expect(s.combat.cooldown, 1.1);
-    for (var i = 0; i < 17; i++) {
-      s.tick(1 / 30);
-    }
-    expect(s.combat.health['fixture'], s.combat.maxHealth - s.combat.damage);
-    s.dispose();
-  });
+  test(
+    'a new attack during final contact waits for the ground state, not height alone',
+    () async {
+      final s = flyingFixture();
+      final target = Actor()..root.position.z = -1;
+      s.game.selectionRing = t.Line(t.BufferGeometry(), t.LineBasicMaterial());
+      s.enemy = target;
+      s.attackClips = [motion('original-weapon-attack', 0)];
+      final record = CreatureRecord(
+        0,
+        'Fixture',
+        'fixture.mon',
+        {},
+        {},
+        {},
+        [],
+        1,
+      );
+      s.game.opponents['fixture'] = Opponent('fixture', record, target);
+      s.combat.addTarget('fixture');
+      s.combat.selectTarget('fixture');
+      await s.toggleFlight();
+      s.flightState.height = .003;
+      s.flightState.velocity = -.1;
+      expect(s.flightState.grounded, false);
+      await s.attack();
+      expect(s.combat.active, false);
+      expect(s.flightState.pendingTarget, 'fixture');
+      for (var i = 0; i < 5 && !s.combat.active; i++) {
+        s.tick(1 / 30);
+        if (s.combat.active) expect(s.flightState.grounded, true);
+      }
+      expect(s.flightState.grounded, true);
+      expect(s.combat.active, true);
+      s.dispose();
+    },
+  );
+  test(
+    'compressed descent does not invent an early hit or alter the weapon cooldown',
+    () async {
+      final s = flyingFixture();
+      final target = Actor()..root.position.z = -1;
+      s.game.selectionRing = t.Line(t.BufferGeometry(), t.LineBasicMaterial());
+      s.enemy = target;
+      final attack = motion('original-weapon-attack', 0);
+      s.attackClips = [attack];
+      final record = CreatureRecord(
+        0,
+        'Fixture',
+        'fixture.mon',
+        {},
+        {},
+        {},
+        [],
+        1,
+      );
+      s.game.opponents['fixture'] = Opponent('fixture', record, target);
+      s.combat.addTarget('fixture');
+      s.combat.selectTarget('fixture');
+      await s.toggleFlight();
+      s.flightState.height = .38;
+      await s.attack();
+      for (var i = 0; i < 6; i++) {
+        s.tick(1 / 30);
+      }
+      expect(s.combat.active, true);
+      expect(s.flightState.grounded, true);
+      expect(s.combat.health['fixture'], s.combat.maxHealth);
+      expect(attack.duration, 1);
+      expect(s.combat.cooldown, 1.1);
+      for (var i = 0; i < 17; i++) {
+        s.tick(1 / 30);
+      }
+      expect(s.combat.health['fixture'], s.combat.maxHealth - s.combat.damage);
+      s.dispose();
+    },
+  );
   for (final shift in [
     LogicalKeyboardKey.shiftLeft,
     LogicalKeyboardKey.shiftRight,

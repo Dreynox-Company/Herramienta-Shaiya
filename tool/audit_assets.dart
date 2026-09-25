@@ -58,8 +58,9 @@ void main(List<String> args) async {
     files++;
     if (files % 1000 == 0) stderr.writeln('$files recursos comprobados');
   }
-  final report = const JsonEncoder.withIndent('  ')
-      .convert({'files': files, 'verified': verified, 'errors': errors});
+  final report = const JsonEncoder.withIndent(
+    '  ',
+  ).convert({'files': files, 'verified': verified, 'errors': errors});
   if (args.length > 1) {
     await File(args[1]).writeAsString(report);
   } else {

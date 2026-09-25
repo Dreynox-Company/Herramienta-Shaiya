@@ -68,6 +68,7 @@ void main(List<String> args) {
       }
     }
   }
-  File(args[1])
-      .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(rows));
+  File(
+    args[1],
+  ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(rows));
 }

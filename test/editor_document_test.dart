@@ -93,9 +93,9 @@ void main() {
         throwsFormatException,
       );
       expect(
-        () =>
-            const GameTextCodec(GameTextEncoding.utf8)
-                .encode(String.fromCharCode(0xd800)),
+        () => const GameTextCodec(
+          GameTextEncoding.utf8,
+        ).encode(String.fromCharCode(0xd800)),
         throwsFormatException,
       );
     });

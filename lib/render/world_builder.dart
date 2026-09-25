@@ -13,11 +13,8 @@ import '../core/spatial_window.dart';
 import 'studio_scene.dart' show RenderPart;
 part 'world_stream.dart';
 
-typedef PartFactory = Future<RenderPart> Function(
-  MeshData mesh,
-  String texture, {
-  bool opaque,
-});
+typedef PartFactory =
+    Future<RenderPart> Function(MeshData mesh, String texture, {bool opaque});
 
 class LoadedWorld {
   final t.Group root = t.Group();

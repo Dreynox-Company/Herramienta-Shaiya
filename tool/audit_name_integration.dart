@@ -45,8 +45,9 @@ Future<void> main() async {
           .toList(),
       'source_modified': false,
     };
-    await File(output)
-        .writeAsString(const JsonEncoder.withIndent('  ').convert(report));
+    await File(
+      output,
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(report));
     if (!names.localeSources['items']!.endsWith('_spn.sdata') ||
         names.skills.length != 12060 ||
         names.npcSkills.length != 774 ||
@@ -57,8 +58,9 @@ Future<void> main() async {
         'Los nombres no se integraron conforme a este cliente auditado.',
       );
     }
-    await File(output)
-        .writeAsString(const JsonEncoder.withIndent('  ').convert(report));
+    await File(
+      output,
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(report));
     library.dispose();
     stdout.writeln('NAME_INTEGRATION_PASSED');
     exit(0);

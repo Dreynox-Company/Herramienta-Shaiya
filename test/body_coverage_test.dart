@@ -184,8 +184,9 @@ void main() {
       expect(initial.effective.any((p) => p.slot == Slot.lower), true);
     });
     test('selección y cobertura resueltas no se mutan desde fuera', () {
-      final look = Appearance.base(old.archetype())
-          .withResolvedCoverage({Slot.hand});
+      final look = Appearance.base(
+        old.archetype(),
+      ).withResolvedCoverage({Slot.hand});
       expect(() => look.embeddedSlots.add(Slot.lower), throwsUnsupportedError);
       expect(() => look.selected[Slot.lower] = null, throwsUnsupportedError);
     });

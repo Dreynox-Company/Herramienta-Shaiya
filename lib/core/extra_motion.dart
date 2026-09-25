@@ -27,8 +27,9 @@ class ExtraMotionProfile {
       id == archetype &&
       sex == (female ? 'Femenino' : 'Masculino') &&
       parents.length == original.bones.length &&
-      Iterable<int>.generate(parents.length)
-          .every((i) => parents[i] == original.bones[i].parent);
+      Iterable<int>.generate(
+        parents.length,
+      ).every((i) => parents[i] == original.bones[i].parent);
 }
 
 class ExtraMotionLibrary {

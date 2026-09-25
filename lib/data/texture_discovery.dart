@@ -119,9 +119,9 @@ extension TextureDiscovery on Catalog {
                 .where((p) => recolorOf(stem, _stem(p.raw.texture)))
                 .toList()
               ..sort(
-                (p, q) =>
-                    _stem(q.raw.texture).length
-                        .compareTo(_stem(p.raw.texture).length),
+                (p, q) => _stem(
+                  q.raw.texture,
+                ).length.compareTo(_stem(p.raw.texture).length),
               );
         PartRecord? parent = candidates.firstOrNull;
         String? model;

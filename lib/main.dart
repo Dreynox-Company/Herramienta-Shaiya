@@ -297,8 +297,9 @@ class _StudioState extends State<StudioPage> {
     await act(() async {
       final bytes = Uint8List.fromList(
         utf8.encode(
-          const JsonEncoder.withIndent('  ')
-              .convert(SceneProfile.capture(scene)),
+          const JsonEncoder.withIndent(
+            '  ',
+          ).convert(SceneProfile.capture(scene)),
         ),
       );
       final file = File(selected.path);
@@ -587,8 +588,9 @@ class _StudioState extends State<StudioPage> {
     final installedName = runtimeSubset
         ? 'Shaiya_Studio_FlightV3_Runtime.zip'
         : 'Shaiya_Vuelo_Combate_V3_Completo.zip';
-    await File('${folder.path}/$installedName')
-        .writeAsBytes(bytes, flush: true);
+    await File(
+      '${folder.path}/$installedName',
+    ).writeAsBytes(bytes, flush: true);
     await scene.installFlightV3(bundle);
     scene.say(
       'Flight V3 instalado: ${bundle.transitions.length} transiciones, '
@@ -614,8 +616,9 @@ class _StudioState extends State<StudioPage> {
     final d = await getApplicationDocumentsDirectory();
     final folder = Directory('${d.path}/HerramientaShaiya');
     await folder.create(recursive: true);
-    await File('${folder.path}/flight.json.gz')
-        .writeAsBytes(bytes, flush: true);
+    await File(
+      '${folder.path}/flight.json.gz',
+    ).writeAsBytes(bytes, flush: true);
     await scene.installExtras(extras);
     scene.say(
       '${extras.profiles.length} perfiles suplementarios de vuelo verificados; los ANI originales se conservan.',
@@ -1257,7 +1260,8 @@ class _StudioState extends State<StudioPage> {
                       a.sets[s]!.values.map((p) => p.raw.texture).join(' · '),
                 ),
               ],
-              help: 'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
+              help:
+                  'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
             ),
             note(
               'El conjunto conserva cara y cabello y equipa su casco correspondiente. El cabello se oculta al llevar casco y reaparece al retirarlo.',
@@ -1297,7 +1301,8 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
               ],
-              help: 'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
+              help:
+                  'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
             ),
             section('Mano secundaria', [
               if (permitsShield(scene.weaponRecord))
@@ -1687,8 +1692,9 @@ class _StudioState extends State<StudioPage> {
                             : () => act(() async {
                                 await Clipboard.setData(
                                   ClipboardData(
-                                    text: const JsonEncoder.withIndent('  ')
-                                        .convert(scene.wingTransformSnapshot),
+                                    text: const JsonEncoder.withIndent(
+                                      '  ',
+                                    ).convert(scene.wingTransformSnapshot),
                                   ),
                                 );
                               }),
@@ -3631,7 +3637,8 @@ class _StudioState extends State<StudioPage> {
                                           );
                                           if (ctx.mounted) {
                                             setDialog(
-                                              () => status = 'Asociación manual aplicada. Comprueba la distribución UV en el visor.',
+                                              () => status =
+                                                  'Asociación manual aplicada. Comprueba la distribución UV en el visor.',
                                             );
                                           }
                                         } catch (e) {

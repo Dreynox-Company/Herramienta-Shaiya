@@ -148,7 +148,8 @@ void main(List<String> args) async {
     const JsonEncoder.withIndent('  ').convert({
       'mounts': report,
       'extras': extraReport,
-      'scope': 'Numeric animation/geometry verification; not a visual certification of all mount combinations.',
+      'scope':
+          'Numeric animation/geometry verification; not a visual certification of all mount combinations.',
     }),
   );
   stdout.writeln(

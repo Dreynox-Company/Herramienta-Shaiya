@@ -19,8 +19,9 @@ class DataTable {
       final count = r.u8();
       r.need(count * 2);
       fields.add(
-        LegacyText.unicode(r.bytes.sublist(r.offset, r.offset + count * 2))
-            .toLowerCase(),
+        LegacyText.unicode(
+          r.bytes.sublist(r.offset, r.offset + count * 2),
+        ).toLowerCase(),
       );
       r.skip(count * 2);
     }
