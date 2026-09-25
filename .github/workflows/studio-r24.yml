@@ -41,9 +41,13 @@ jobs:
         run: python ci/finish_studio_r25_items.py
       - name: Resolve pinned package language version
         run: flutter pub get --enforce-lockfile
-      - name: Apply reported brace and redundant-import fixes only
-        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import
+      - name: Normalize new suite prefix
+        run: python -c "from pathlib import Path; p=Path('tool/run_all_local.dart'); p.write_text(p.read_text().replace('itemsR25','items_r25'))"
       - name: Deterministic source format
+        run: dart format lib test integration_test tool
+      - name: Apply reported formatted-source diagnostics only
+        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import,use_null_aware_elements
+      - name: Final deterministic source format
         run: dart format lib test integration_test tool
       - name: Commit readable sources on isolated branch
         id: commit
@@ -56,7 +60,7 @@ jobs:
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'feat(studio): integrated contextual item workbench and native icons'
+            git commit -m 'fix(studio): strict formatting and analysis for item workbench'
             git push origin HEAD:refs/heads/fix/studio-0624-flight-appearance-native
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
