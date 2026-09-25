@@ -38,6 +38,7 @@ class DeliveryToolsTest(unittest.TestCase):
         self.assertIn("'real-data-visual-qa'", text)
         self.assertIn("'spk-50135-full-audit-and-reopen'", text)
         self.assertIn("'windows-angle-release-runtime'", text)
+        self.assertIn("graphicsRuntimeHardeningEvidence", text)
 
     def test_windows_package_tracks_real_flight_v3_runtime_hashes(self):
         root = Path(__file__).resolve().parents[2]
@@ -97,6 +98,71 @@ class DeliveryToolsTest(unittest.TestCase):
                     ):
                 with self.assertRaisesRegex(RuntimeError, 'hash mismatch'):
                     package_windows.install_flight_runtime(release)
+
+    def test_angle_hardening_evidence_is_bound_to_release_dll_hashes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release = root / 'release'
+            qa = root / 'qa-windows'
+            release.mkdir()
+            qa.mkdir()
+            egl = release / 'libEGL.dll'
+            gles = release / 'libGLESv2.dll'
+            egl.write_bytes(b'egl-release')
+            gles.write_bytes(b'gles-release')
+            payload = {
+                'schema': 1,
+                'provider': 'comfy-angle',
+                'providerVersion': '0.1.1',
+                'releaseDllSha256': {
+                    'libEGL.dll': hashlib.sha256(egl.read_bytes()).hexdigest(),
+                    'libGLESv2.dll': hashlib.sha256(gles.read_bytes()).hexdigest(),
+                },
+                'debugCrtImports': {},
+                'hardened': True,
+            }
+            (qa / 'angle-runtime.json').write_text(
+                json.dumps(payload),
+                encoding='utf-8',
+            )
+            with patch.object(package_windows, 'ROOT', root):
+                result = package_windows.load_angle_hardening(release)
+            self.assertTrue(result['hardened'])
+            self.assertEqual(result['provider'], 'comfy-angle')
+            self.assertEqual(result['providerVersion'], '0.1.1')
+
+    def test_angle_hardening_rejects_evidence_for_other_binaries(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release = root / 'release'
+            qa = root / 'qa-windows'
+            release.mkdir()
+            qa.mkdir()
+            (release / 'libEGL.dll').write_bytes(b'egl-release')
+            (release / 'libGLESv2.dll').write_bytes(b'gles-release')
+            payload = {
+                'schema': 1,
+                'provider': 'comfy-angle',
+                'providerVersion': '0.1.1',
+                'releaseDllSha256': {
+                    'libEGL.dll': '0' * 64,
+                    'libGLESv2.dll': hashlib.sha256(
+                        (release / 'libGLESv2.dll').read_bytes()
+                    ).hexdigest(),
+                },
+                'debugCrtImports': {},
+                'hardened': True,
+            }
+            (qa / 'angle-runtime.json').write_text(
+                json.dumps(payload),
+                encoding='utf-8',
+            )
+            with patch.object(package_windows, 'ROOT', root):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    'does not match libEGL.dll',
+                ):
+                    package_windows.load_angle_hardening(release)
 
     def test_real_acceptance_is_hash_bound_and_can_close_gates(self):
         with tempfile.TemporaryDirectory() as folder:
