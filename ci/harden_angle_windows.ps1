@@ -177,6 +177,22 @@ if (Test-Path $plugin) {
     $pluginDependencies = @()
 }
 
+$licenseTarget = Join-Path $ReleasePath 'Licenses/vcpkg'
+New-Item -ItemType Directory -Force -Path $licenseTarget | Out-Null
+$copiedLicenses = @()
+$shareRoot = Join-Path $InstallRoot 'x64-windows/share'
+if (Test-Path $shareRoot) {
+    foreach ($copyright in Get-ChildItem $shareRoot -Filter 'copyright' -File -Recurse) {
+        $packageName = Split-Path $copyright.DirectoryName -Leaf
+        $target = Join-Path $licenseTarget ($packageName + '.txt')
+        Copy-Item $copyright.FullName $target -Force
+        $copiedLicenses += (Split-Path $target -Leaf)
+    }
+}
+if (!($copiedLicenses -contains 'angle.txt')) {
+    throw 'ANGLE BSD license was not produced by the pinned vcpkg package.'
+}
+
 $packageList = (& $vcpkg list "--x-install-root=$InstallRoot" 2>&1 | Out-String).Trim()
 $manifest = Get-Content (Join-Path $ManifestRoot 'vcpkg.json') -Raw | ConvertFrom-Json
 $angleHashes = @{}
@@ -199,6 +215,7 @@ $evidence = [ordered]@{
     sha256 = $angleHashes
     dependencies = $angleDependencies
     flutterAnglePluginDependencies = $pluginDependencies
+    copiedLicenses = @($copiedLicenses | Sort-Object -Unique)
     debugCrtRemaining = $remainingDebug
     amd64 = $true
 }
