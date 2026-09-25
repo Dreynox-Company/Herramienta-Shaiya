@@ -227,7 +227,7 @@ class _ItemsPageState extends State<ItemsPage> {
                                                   asset,
                                                 );
                                               } catch (e) {
-                                                if (ctx.mounted)
+                                                if (ctx.mounted) {
                                                   ScaffoldMessenger.of(
                                                     ctx,
                                                   ).showSnackBar(
@@ -235,6 +235,7 @@ class _ItemsPageState extends State<ItemsPage> {
                                                       content: Text('$e'),
                                                     ),
                                                   );
+                                                }
                                               }
                                             },
                                           ),
@@ -268,12 +269,13 @@ class _ItemsPageState extends State<ItemsPage> {
                                                 animation.value,
                                               );
                                             } catch (e) {
-                                              if (ctx.mounted)
+                                              if (ctx.mounted) {
                                                 ScaffoldMessenger.of(
                                                   ctx,
                                                 ).showSnackBar(
                                                   SnackBar(content: Text('$e')),
                                                 );
+                                              }
                                             }
                                           },
                                         ),
@@ -343,12 +345,13 @@ class _ItemsPageState extends State<ItemsPage> {
                                           );
                                           if (ctx.mounted) Navigator.pop(ctx);
                                         } catch (e) {
-                                          if (ctx.mounted)
+                                          if (ctx.mounted) {
                                             ScaffoldMessenger.of(
                                               ctx,
                                             ).showSnackBar(
                                               SnackBar(content: Text('$e')),
                                             );
+                                          }
                                         }
                                       },
                                     ),
@@ -453,8 +456,9 @@ class _ItemsPageState extends State<ItemsPage> {
             ),
             FilledButton(
               onPressed: () {
-                if (BigInt.tryParse(value.text.trim()) != null)
+                if (BigInt.tryParse(value.text.trim()) != null) {
                   Navigator.pop(ctx, '$field$op${value.text.trim()}');
+                }
               },
               child: const Text('Añadir condición'),
             ),

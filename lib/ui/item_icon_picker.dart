@@ -195,8 +195,9 @@ Future<void> replaceItemThumbnail(
 ) async {
   final files = workspace.preview.files.keys.toSet();
   final target = NativeItemIcons.resolve(item.type, item.icon, files);
-  if (target == null)
+  if (target == null) {
     throw const FormatException('Selecciona primero un Icon nativo resoluble.');
+  }
   final users = workspace.items.where((other) {
     final ref = NativeItemIcons.resolve(other.type, other.icon, files);
     return ref != null && _overlap(target, ref);
@@ -210,8 +211,9 @@ Future<void> replaceItemThumbnail(
     ],
   );
   if (input == null) return;
-  if (await input.length() > 8 * 1024 * 1024)
+  if (await input.length() > 8 * 1024 * 1024) {
     throw const FormatException('Miniatura mayor de 8 MiB.');
+  }
   final data = await input.readAsBytes(),
       original = await workspace.preview.read(target.path);
   final expectedHash = FileSave.hash(original);
@@ -254,7 +256,7 @@ Future<void> replaceItemThumbnail(
                   ),
                 ),
                 SelectableText(
-                  '\n${target.path}\nIcon ${target.nativeValue} · ${width}×$height px\n\n'
+                  '\n${target.path}\nIcon ${target.nativeValue} · $width×$height px\n\n'
                   '${users.length} ítems usan una celda que se verá afectada.\n'
                   '${users.take(20).map((u) => '${u.key} · ${u.displayName}').join('\n')}'
                   '${users.length > 20 ? '\n… y ${users.length - 20} más' : ''}\n\n'
@@ -306,8 +308,9 @@ Future<void> replaceItemThumbnail(
       format: ui.ImageByteFormat.rawStraightRgba,
     );
     tile.dispose();
-    if (tileData == null)
+    if (tileData == null) {
       throw const FormatException('No se pudo rasterizar la miniatura.');
+    }
     final rgba = ItemAtlas.replaceCell(
       pixels.rgba,
       pixels.width,

@@ -26,8 +26,9 @@ Future<void> importItemAsset(
     ],
   );
   if (file == null) return;
-  if (await file.length() > 32 * 1024 * 1024)
+  if (await file.length() > 32 * 1024 * 1024) {
     throw const FormatException('Recurso mayor de 32 MiB.');
+  }
   final original = await workspace.preview.read(path);
   final replacement = await compute(ItemAssetReplacement.validate, (
     path,

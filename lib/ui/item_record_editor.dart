@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/formats.dart';
+import '../data/library.dart';
 import '../data/item_workspace.dart';
 import '../editor/catalog_document.dart';
 import '../editor/document.dart';
@@ -306,8 +306,9 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
                     widget.entry!.type,
                     int.tryParse(f.controller.text) ?? 0,
                   );
-                  if (value != null && mounted)
+                  if (value != null && mounted) {
                     setState(() => f.controller.text = '$value');
+                  }
                 },
               ),
             if (f.writable && isAssetField(name))
@@ -418,8 +419,9 @@ Future<void> editItemResource(
   int ordinal,
 ) async {
   final document = await workspace.openDocument(path);
-  if (document is! CatalogDocument)
+  if (document is! CatalogDocument) {
     throw const FormatException('La referencia no es un catálogo MLT/ITM/MON.');
+  }
   final candidates = [
     for (var row = 0; row < document.rows.length; row++)
       if (document.rows[row].ordinal == ordinal &&
@@ -430,10 +432,11 @@ Future<void> editItemResource(
           }.contains(document.rows[row].kind))
         row,
   ];
-  if (candidates.length != 1)
+  if (candidates.length != 1) {
     throw const FormatException(
       'No hay una entrada única para el ordinal seleccionado.',
     );
+  }
   if (!context.mounted) return;
   await showDialog<bool>(
     context: context,

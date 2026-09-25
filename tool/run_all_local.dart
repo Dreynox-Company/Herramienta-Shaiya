@@ -1,3 +1,4 @@
+import '../test/native_wing_profile_test.dart' as nativeWingProfileSuite;
 // Complete local regression runner. Keep synchronized with test/*_test.dart.
 import '../test/archive_export_test.dart' as suite0;
 import '../test/archive_test.dart' as suite1;
@@ -62,6 +63,7 @@ import '../test/item_atlas_test.dart' as suite63;
 import '../test/item_record_editor_test.dart' as suite64;
 
 void main() {
+  nativeWingProfileSuite.main();
   suite64.main();
   suite63.main();
   suite62.main();

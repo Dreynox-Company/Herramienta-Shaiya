@@ -237,8 +237,9 @@ class ItemWorkspace extends ChangeNotifier {
           );
         }
         _requireCurrentSource();
-        if (generation != _generation)
+        if (generation != _generation) {
           throw StateError('La sesión se recargó durante la lectura.');
+        }
         documents[path] = doc;
         return doc;
       } finally {
@@ -305,18 +306,22 @@ class ItemWorkspace extends ChangeNotifier {
     final seen = <String>{};
     for (final edit in edits) {
       final doc = documents[edit.path];
-      if (doc == null || !doc.complete)
+      if (doc == null || !doc.complete) {
         throw StateError('Documento no abierto: ${edit.path}');
-      if (edit.row < 0 || edit.row >= doc.rows.length)
+      }
+      if (edit.row < 0 || edit.row >= doc.rows.length) {
         throw const FormatException('Registro inexistente.');
+      }
       final field = doc
           .fields(edit.row)
           .where((f) => f.spec.name == edit.field)
           .firstOrNull;
-      if (field == null)
+      if (field == null) {
         throw FormatException('Campo inexistente: ${edit.field}');
-      if (!seen.add('${edit.path}:${field.start}'))
+      }
+      if (!seen.add('${edit.path}:${field.start}')) {
         throw const FormatException('Edición duplicada.');
+      }
       if (doc.read(field) != edit.before) {
         throw FormatException(
           '${edit.field} cambió en otra vista. Reabre el borrador.',
@@ -384,20 +389,23 @@ class ItemWorkspace extends ChangeNotifier {
     if (_exporting) throw StateError('La exportación está en curso.');
     _requireCurrentSource();
     _safePath(path);
-    if (!source.files.containsKey(path))
+    if (!source.files.containsKey(path)) {
       throw const FormatException('No se inventa una ruta nativa.');
+    }
     if (bytes.isEmpty || bytes.length > 32 * 1024 * 1024) {
       throw const FormatException(
         'El recurso debe tener entre 1 byte y 32 MiB.',
       );
     }
-    if (documents.containsKey(path))
+    if (documents.containsKey(path)) {
       throw const FormatException(
         'Este recurso ya tiene un editor estructurado.',
       );
+    }
     final current = await preview.read(path);
-    if (FileSave.hash(current) != expectedHash)
+    if (FileSave.hash(current) != expectedHash) {
       throw const FormatException('La textura cambió mientras se editaba.');
+    }
     final original = await source.read(path);
     if (_exporting) throw StateError('La exportación está en curso.');
     // Recheck after the async reads: another view may have staged this sheet.
@@ -484,15 +492,17 @@ class ItemWorkspace extends ChangeNotifier {
   /// Export one new, verified patch directory. There is no partial installation
   /// into active DATA: all files are re-read and the manifest commits last.
   Future<Directory> exportPatch(Directory destination) async {
-    if (_exporting || !dirty)
+    if (_exporting || !dirty) {
       throw StateError('No hay cambios exportables o ya se exporta.');
+    }
     _requireCurrentSource();
     _exporting = true;
     notifyListeners();
     Directory? scratch;
     try {
-      if (await destination.exists())
+      if (await destination.exists()) {
         throw const FormatException('El destino debe ser nuevo.');
+      }
       final parent = destination.parent;
       // Resolve the existing ancestor before creating any directory. Reject
       // exports inside active DATA even when the destination parents are new.
@@ -501,10 +511,11 @@ class ItemWorkspace extends ChangeNotifier {
       while (!await ancestor.exists()) {
         missing.insert(0, p.basename(ancestor.path));
         final up = ancestor.parent;
-        if (p.equals(up.path, ancestor.path))
+        if (p.equals(up.path, ancestor.path)) {
           throw const FormatException(
             'No se encuentra un directorio de destino válido.',
           );
+        }
         ancestor = up;
       }
       final parentCandidate = p.normalize(
@@ -578,8 +589,9 @@ class ItemWorkspace extends ChangeNotifier {
         await file.parent.create(recursive: true);
         await file.writeAsBytes(entry.value, flush: true);
         final hash = FileSave.hash(entry.value);
-        if (FileSave.hash(await file.readAsBytes()) != hash)
+        if (FileSave.hash(await file.readAsBytes()) != hash) {
           throw StateError('Falló la verificación de ${entry.key}.');
+        }
         manifest.add({
           'path': entry.key,
           'bytes': entry.value.length,
@@ -613,18 +625,20 @@ class ItemWorkspace extends ChangeNotifier {
         }),
         flush: true,
       );
-      if (await destination.exists())
+      if (await destination.exists()) {
         throw const FormatException(
           'El destino apareció durante la exportación.',
         );
+      }
       _requireCurrentSource();
       return await scratch.rename(
         p.join(parentReal, p.basename(destination.path)),
       );
     } finally {
       try {
-        if (scratch != null && await scratch.exists())
+        if (scratch != null && await scratch.exists()) {
           await scratch.delete(recursive: true);
+        }
       } finally {
         _exporting = false;
         notifyListeners();
@@ -640,8 +654,9 @@ class ItemWorkspace extends ChangeNotifier {
     }
     for (var row = 0; row < before.rows.length; row++) {
       final a = before.fields(row), b = after.fields(row);
-      if (a.length != b.length)
+      if (a.length != b.length) {
         throw const FormatException('Número de campos distinto.');
+      }
       for (var i = 0; i < a.length; i++) {
         if (a[i].spec.name != b[i].spec.name ||
             a[i].spec.type != b[i].spec.type ||
@@ -780,8 +795,9 @@ _ParsedItems _parseItems(Map<String, Object?> args) {
         throw FormatException('${d.path}: falta Type:TypeId.');
       }
       final key = '${d.read(fs['itemtype']!)}:${d.read(fs['itemtypeid']!)}';
-      if (index.containsKey(key))
+      if (index.containsKey(key)) {
         throw FormatException('${d.path}: identidad duplicada $key.');
+      }
       index[key] = row;
     }
     return index;
@@ -800,21 +816,23 @@ _ParsedItems _parseItems(Map<String, Object?> args) {
   final warnings = [...data.warnings, ...?text?.warnings];
   final missing = rows.keys.where((k) => !names.containsKey(k)).length;
   final orphan = names.keys.where((k) => !rows.containsKey(k)).length;
-  if (missing != 0)
+  if (missing != 0) {
     warnings.add(
       '$missing objetos no tienen fila localizada. No se ocultan ni se inventan nombres.',
     );
-  if (orphan != 0)
+  }
+  if (orphan != 0) {
     warnings.add(
       '$orphan filas de texto no tienen objeto numérico correspondiente.',
     );
+  }
   if (textPath != null && ClientLocale.languageOf(textPath) != 'es') {
     warnings.add(
       'No hay tabla española activa; se muestra el idioma real de $textPath.',
     );
   }
   return _ParsedItems(
-    {dataPath: data, if (text != null) textPath!: text},
+    {dataPath: data, textPath!: ?text},
     {
       for (final e in rows.entries)
         e.key: ItemEntry(e.key, e.value, names[e.key], data, text),
@@ -847,8 +865,9 @@ class _ItemPreviewLibrary extends Library {
     } else {
       return workspace.source.read(path, limit: limit);
     }
-    if (bytes.length > limit)
+    if (bytes.length > limit) {
       throw const FormatException('Recurso supera el límite solicitado.');
+    }
     return Uint8List.fromList(bytes);
   }
 

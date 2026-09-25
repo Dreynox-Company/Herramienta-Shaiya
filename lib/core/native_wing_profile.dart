@@ -29,7 +29,9 @@ void validateNativeWingProfile(WingPositionProfile profile) {
   };
   for (final entry in offsets.entries) {
     if (!entry.value.isFinite || entry.value.abs() > 3.4028234663852886e38) {
-      throw FormatException('${entry.key}: desplazamiento no representable como float32.');
+      throw FormatException(
+        '${entry.key}: desplazamiento no representable como float32.',
+      );
     }
   }
   if (profile.boneIndex < 0 || profile.boneIndex > 2147483647) {

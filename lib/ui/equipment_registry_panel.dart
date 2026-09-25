@@ -529,7 +529,9 @@ class _ItemPickerState extends State<_ItemPicker> {
                         );
                         // The original candidate list is stale after changing Image,
                         // class requirements, or stats. Reopen with a fresh registry.
-                        if (mounted && result == true) Navigator.pop(context);
+                        if (context.mounted && result == true) {
+                          Navigator.pop(context);
+                        }
                       },
                     ),
                     subtitle: Text('Image ${item.image} · Icon ${item.icon}'),

@@ -21,8 +21,9 @@ class ItemAtlas {
       maxSize >>= 1;
       maximum++;
     }
-    if (mipLevels > maximum)
+    if (mipLevels > maximum) {
       throw const FormatException('Cadena mip fuera de rango.');
+    }
     final out = BytesBuilder(copy: false),
         header = Uint8List(128),
         d = ByteData(128);
@@ -109,10 +110,11 @@ class ItemAtlas {
       );
     }
     final tw = width ~/ columns, th = height ~/ rows;
-    if (tile.length != tw * th * 4)
+    if (tile.length != tw * th * 4) {
       throw const FormatException(
         'La miniatura no tiene el tamaño de la celda.',
       );
+    }
     final output = Uint8List.fromList(atlas),
         sx = (index % columns) * tw,
         sy = (index ~/ columns) * th;

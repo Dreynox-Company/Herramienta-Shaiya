@@ -91,10 +91,11 @@ class ItemAssetReplacement {
         final dds =
             b.length >= 128 && d.getUint32(0, Endian.little) == 0x20534444;
         final tga = b.length >= 18 && const {1, 2, 3, 9, 10, 11}.contains(b[2]);
-        if (!dds && !tga)
+        if (!dds && !tga) {
           throw const FormatException(
             'Importa una textura nativa DDS o TGA, no un archivo renombrado.',
           );
+        }
         final w = dds
             ? d.getUint32(16, Endian.little)
             : d.getUint16(12, Endian.little);
@@ -131,8 +132,9 @@ class ItemAssetReplacement {
           mipLevels: levels < 1 ? 1 : levels,
         );
         final check = Pixels.decode(encoded, path);
-        if (!_same(check.rgba, next.rgba))
+        if (!_same(check.rgba, next.rgba)) {
           throw const FormatException('La relectura DDS no coincide.');
+        }
         return ItemAssetReplacement(
           encoded,
           '${next.width}×${next.height} · DDS RGBA verificado',
