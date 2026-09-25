@@ -12,7 +12,11 @@ class RefusingWingLibrary extends Library {
   int writes = 0;
   RefusingWingLibrary() : super('/not-written', false, {});
   @override
-  Future<void> writeResource(String path, Uint8List bytes) async {
+  Future<void> writeResource(
+    String path,
+    Uint8List bytes, {
+    bool keepBackup = true,
+  }) async {
     writes++;
     throw StateError('fixture refuses write');
   }
