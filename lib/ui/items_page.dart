@@ -9,6 +9,7 @@ import '../data/library.dart';
 import '../editor/item_query.dart';
 import '../editor/item_semantics.dart';
 import '../editor/model_reference.dart';
+import '../editor/item_model_catalog.dart';
 import '../editor/workbench_model.dart';
 import 'editor_icons.dart';
 import 'item_asset_import.dart';
@@ -474,7 +475,7 @@ class _ItemsPageState extends State<ItemsPage> {
   }
 
   Widget details(ItemEntry item) => ListView(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(10),
     children: [
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,7 +485,7 @@ class _ItemsPageState extends State<ItemsPage> {
             images: images!,
             path: workspace!.dataPath,
             summary: item.summary,
-            size: 64,
+            size: 44,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -523,6 +524,22 @@ class _ItemsPageState extends State<ItemsPage> {
             icon: const Icon(Icons.tune),
             label: const Text('Editar todas las propiedades'),
           ),
+          if (ItemModelCatalog.supports(item.type))
+            OutlinedButton.icon(
+              key: const ValueKey('change-selected-item-model'),
+              onPressed: busy
+                  ? null
+                  : () => run(() async {
+                      await showItemRecordEditor(
+                        context,
+                        workspace!,
+                        item,
+                        chooseModel: true,
+                      );
+                    }),
+              icon: const Icon(Icons.view_in_ar_outlined),
+              label: const Text('Cambiar modelo 3D'),
+            ),
           OutlinedButton.icon(
             onPressed: busy ? null : () => resources(item),
             icon: const Icon(Icons.view_in_ar),
@@ -764,7 +781,7 @@ class _ItemsPageState extends State<ItemsPage> {
                       final compact = constraints.maxWidth < 850;
                       final list = ListView.builder(
                         key: const ValueKey('items-list'),
-                        itemExtent: 76,
+                        itemExtent: 60,
                         itemCount: visible.length,
                         itemBuilder: (_, i) {
                           final item = visible[i];
@@ -776,7 +793,7 @@ class _ItemsPageState extends State<ItemsPage> {
                               images: images!,
                               path: session.dataPath,
                               summary: item.summary,
-                              size: 38,
+                              size: 30,
                             ),
                             title: Text(
                               item.displayName,
@@ -837,7 +854,7 @@ class _ItemsPageState extends State<ItemsPage> {
                       final item = session.byKey[selected];
                       return Row(
                         children: [
-                          SizedBox(width: 380, child: list),
+                          SizedBox(width: 310, child: list),
                           const VerticalDivider(width: 1),
                           Expanded(
                             child: item == null

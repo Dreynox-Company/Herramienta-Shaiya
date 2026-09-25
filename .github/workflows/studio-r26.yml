@@ -1,0 +1,86 @@
+name: Studio R26 compact UI and native model picker
+
+on:
+  push:
+    branches: [feat/studio-0626-compact-model-picker]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-r26-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    if: github.ref == 'refs/heads/feat/studio-0626-compact-model-picker'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/studio-0626-compact-model-picker
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Integrate compact UI and selective SPK mount
+        run: python ci/refine_r26_ui.py
+      - name: Connect live resource selector and native render acceptance
+        run: |
+          python ci/refine_r26_selectors.py
+          python -c "from pathlib import Path; p=Path('integration_test/native_studio_test.dart'); t=p.read_text(); p.write_text(t.replace('scene.appearance!.slots[Slot.upper]', 'scene.appearance!.selected[Slot.upper]'))"
+      - name: Resolve observed layout and authenticated-read regressions
+        run: python ci/refine_r26_resume.py
+      - name: Preserve per-resource authentication and register every suite
+        run: python ci/refine_r26_readable_resources.py
+      - name: Resolve pinned dependency graph
+        run: flutter pub get --enforce-lockfile
+      - name: Format source before mechanical lint fixes
+        run: dart format lib test integration_test tool
+      - name: Apply mechanical lints only
+        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import,unused_import,use_null_aware_elements,unnecessary_brace_in_string_interps,sort_child_properties_last
+      - name: Deterministic formatting
+        run: dart format lib test integration_test tool
+      - name: Commit exact readable sources on feature branch
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'feat/studio-0626-compact-model-picker'
+          git diff --check
+          git add lib test integration_test tool pubspec.yaml .studio-r26-ui-applied .studio-r26-selectors-applied .studio-r26-readable-applied .studio-r26-resume-applied
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(studio): validated compact selectors and authenticated partial SPK reads [skip ci]'
+            git push origin HEAD:refs/heads/feat/studio-0626-compact-model-picker
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Preserve source checkpoint and diagnostic diff
+        if: always()
+        run: |
+          git archive --format=zip HEAD -o studio-r26-source.zip
+          git diff > studio-r26-uncommitted.diff
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Studio-R26-Source-Checkpoint
+          path: |
+            studio-r26-source.zip
+            studio-r26-uncommitted.diff
+          retention-days: 30
+  verify:
+    needs: source
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.source.outputs.sha }}
+    permissions:
+      contents: read

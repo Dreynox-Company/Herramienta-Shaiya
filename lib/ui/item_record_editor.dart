@@ -9,15 +9,22 @@ import '../editor/item_semantics.dart';
 import 'editor_icons.dart';
 import 'editor_pickers.dart';
 import 'item_icon_picker.dart';
+import 'item_model_picker.dart';
+import '../editor/item_model_catalog.dart';
 
 Future<bool?> showItemRecordEditor(
   BuildContext context,
   ItemWorkspace workspace,
-  ItemEntry entry,
-) => showDialog<bool>(
+  ItemEntry entry, {
+  bool chooseModel = false,
+}) => showDialog<bool>(
   context: context,
   barrierDismissible: false,
-  builder: (_) => ItemRecordEditor(workspace: workspace, entry: entry),
+  builder: (_) => ItemRecordEditor(
+    workspace: workspace,
+    entry: entry,
+    startWithModelPicker: chooseModel,
+  ),
 );
 
 /// Exact native fields are shared with the catalogue editor. No separate
@@ -27,12 +34,14 @@ class ItemRecordEditor extends StatefulWidget {
   final ItemEntry? entry;
   final EditDocument? resource;
   final int? resourceRow;
+  final bool startWithModelPicker;
   const ItemRecordEditor({
     super.key,
     required this.workspace,
     this.entry,
     this.resource,
     this.resourceRow,
+    this.startWithModelPicker = false,
   });
   @override
   State<ItemRecordEditor> createState() => _ItemRecordEditorState();
@@ -64,7 +73,7 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
   late final EditorImages images;
   String group = 'Todos los campos', query = '';
   String? message;
-  bool allowClose = false;
+  bool allowClose = false, showTechnical = false, choosingModel = false;
   @override
   void initState() {
     super.initState();
@@ -83,6 +92,11 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
       }
     } else {
       add(widget.resource!, widget.resourceRow!);
+    }
+    if (widget.startWithModelPicker) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) chooseModel();
+      });
     }
   }
 
@@ -217,13 +231,101 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
     });
   }
 
+  bool get canChooseModel => widget.entry != null
+      ? ItemModelCatalog.supports(widget.entry!.type)
+      : widget.resource is CatalogDocument &&
+            (widget.resource as CatalogDocument)
+                .materials(widget.resourceRow!)
+                .isNotEmpty;
+
+  Future<void> chooseModel() async {
+    if (!canChooseModel || choosingModel) return;
+    setState(() => choosingModel = true);
+    try {
+      final image = fields
+          .where((f) => f.span.spec.name.toLowerCase() == 'image')
+          .firstOrNull;
+      final revision = widget.workspace.revision;
+      final choice = await pickItemModel(
+        context,
+        widget.workspace,
+        item: widget.entry,
+        document: widget.resource is CatalogDocument
+            ? widget.resource as CatalogDocument
+            : null,
+        currentOrdinal: image == null
+            ? widget.resource!.rows[widget.resourceRow!].ordinal
+            : int.tryParse(image.controller.text),
+      );
+      if (choice == null || !mounted) return;
+      if (widget.workspace.revision != revision ||
+          widget.workspace.sourceChanged) {
+        throw StateError(
+          'La sesión cambió durante la selección. No se aplicó el modelo.',
+        );
+      }
+      // Image selects the native material, including texture, in every body
+      // variant. Editing a material instead copies its mesh+texture together.
+      final proposed = <_EditableItemField, String>{};
+      if (image != null) {
+        proposed[image] = '${choice.ordinal}';
+      } else {
+        for (final f in fields) {
+          final name = f.span.spec.name;
+          if (name == 'MeshIndex' ||
+              name == 'TextureIndex' ||
+              name == 'Alpha' ||
+              name.startsWith('Parts[') &&
+                  (name.endsWith('.Mesh') || name.endsWith('.Texture'))) {
+            final value = choice.fields[name];
+            if (value == null) {
+              throw StateError(
+                'El modelo tiene un número de partes incompatible.',
+              );
+            }
+            proposed[f] = value;
+          }
+        }
+        final newParts = choice.fields.keys
+            .where((n) => n.endsWith('.Mesh'))
+            .length;
+        final oldParts = fields
+            .where((f) => f.span.spec.name.endsWith('.Mesh'))
+            .length;
+        if (newParts != oldParts) {
+          throw StateError(
+            'No se cambia PartCount al reasignar un MON. Elige una entrada compatible.',
+          );
+        }
+      }
+      for (final entry in proposed.entries) {
+        widget.workspace.validateField(
+          entry.key.document,
+          entry.key.span,
+          entry.value,
+        );
+      }
+      setState(() {
+        for (final entry in proposed.entries) {
+          entry.key.controller.text = entry.value;
+        }
+        message =
+            'Modelo preparado: ${choice.name}. Pulsa Aplicar a la sesión para confirmar.';
+      });
+    } catch (e) {
+      if (mounted) setState(() => message = '$e');
+    } finally {
+      if (mounted) setState(() => choosingModel = false);
+    }
+  }
+
   Widget editField(_EditableItemField f) {
     final meta = meaning(f), name = f.span.spec.name;
     final choices = fieldChoices(f.document, name);
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 4),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -246,11 +348,12 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
                 ),
               ],
             ),
-            Text(
-              '$name · ${f.span.spec.type} · ${meta.group}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 6),
+            if (showTechnical)
+              Text(
+                '$name · ${f.span.spec.type} · ${meta.group}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            const SizedBox(height: 3),
             TextField(
               key: ValueKey('item-field-${f.document.path}-$name'),
               controller: f.controller,
@@ -278,7 +381,7 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
                     : null,
               ),
             ),
-            if (f.writable && choices != null)
+            if (showTechnical && f.writable && choices != null)
               Wrap(
                 spacing: 6,
                 children: [
@@ -311,6 +414,14 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
                   }
                 },
               ),
+            if (f.writable &&
+                canChooseModel &&
+                const {'image', 'meshindex'}.contains(name.toLowerCase()))
+              TextButton.icon(
+                onPressed: choosingModel ? null : chooseModel,
+                icon: const Icon(Icons.view_in_ar_outlined, size: 16),
+                label: const Text('Elegir modelo 3D + textura'),
+              ),
             if (f.writable && isAssetField(name))
               TextButton.icon(
                 onPressed: () => chooseAsset(f),
@@ -341,11 +452,12 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
         if (!didPop) close();
       },
       child: AlertDialog(
+        insetPadding: const EdgeInsets.all(12),
         title: Text(
           widget.entry?.displayName ?? 'Editar recurso #${widget.resourceRow}',
         ),
         content: SizedBox(
-          width: 830,
+          width: 1040,
           height: MediaQuery.sizeOf(context).height * .69,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -360,7 +472,26 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
                 const Text(
                   'No existe fila de texto: no se crea ni se asocia otro nombre automáticamente.',
                 ),
-              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (canChooseModel)
+                    TextButton.icon(
+                      key: const ValueKey('choose-item-model'),
+                      onPressed: choosingModel ? null : chooseModel,
+                      icon: const Icon(Icons.view_in_ar_outlined, size: 16),
+                      label: const Text('Cambiar modelo 3D'),
+                    ),
+                  FilterChip(
+                    label: const Text('Detalles técnicos'),
+                    selected: showTechnical,
+                    onSelected: (value) =>
+                        setState(() => showTechnical = value),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               TextField(
                 onChanged: (s) => setState(() => query = s),
                 decoration: const InputDecoration(
@@ -386,9 +517,32 @@ class _ItemRecordEditorState extends State<ItemRecordEditor> {
                   child: Text(message!),
                 ),
               Expanded(
-                child: ListView.builder(
-                  itemCount: visible.length,
-                  itemBuilder: (_, i) => editField(visible[i]),
+                child: LayoutBuilder(
+                  builder: (_, box) {
+                    final columns =
+                        box.maxWidth >= 680 &&
+                            MediaQuery.textScalerOf(context).scale(12) <= 18
+                        ? 2
+                        : 1;
+                    final width = (box.maxWidth - (columns - 1) * 8) / columns;
+                    return ListView(
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 0,
+                          children: [
+                            for (final field in visible)
+                              SizedBox(
+                                width: field.span.spec.text
+                                    ? box.maxWidth
+                                    : width,
+                                child: editField(field),
+                              ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
               Text(

@@ -1299,24 +1299,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   Future<void> mountInStudio() => runAction(() async {
     final callback = widget.onMount;
     if (callback == null) return;
-    if (!source.canExtractAll) {
+    if (!source.canReadSimpleResources) {
       throw const SpkFailure(
         'SPK_STUDIO_MOUNT_PROFILE',
-        'Para usar DATA.SPK en el editor y la herramienta 3D deben estar '
-            'autenticados los recursos simples y fragmentados.',
+        'Autentica primero el perfil de recursos simples.',
       );
     }
-    if (!source.fullyValidatedResources) {
-      operation = 'Auditando todos los payloads antes de montar Studio…';
-      if (mounted) setState(() {});
-      await _auditAllResources(source);
-    }
-    if (!hasConfirmedCoreTables) {
-      operation = 'Identificando tablas editables antes de montar Studio…';
-      if (mounted) setState(() {});
-      await _discoverCoreTables();
-    }
-    operation = 'Montando DATA.SPK como biblioteca de Studio…';
+    operation =
+        'Montando recursos legibles; los nombres inferidos no se usan como rutas nativas…';
     if (mounted) setState(() {});
     await callback(source);
     if (mounted) Navigator.of(context).pop();
@@ -2602,11 +2592,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (source.names.isConfirmed(record.entryId)) {
       return canon(source.names[record.entryId]!);
     }
-    if (!source.fullyValidatedResources) {
+    if (!source.canReadRecord(record) ||
+        source.validatedFormat(record.entryId) == null) {
       throw const SpkFailure(
-        'SPK_EDIT_AUDIT_REQUIRED',
-        'Para editar un recurso sin nombre confirmado primero debe completarse '
-            'la auditoría integral del SPK.',
+        'SPK_EDIT_RESOURCE_REQUIRED',
+        'Lee y autentica este Entry ID antes de abrirlo en el editor.',
       );
     }
     final format = source.validatedFormat(record.entryId) ?? 'BIN';
@@ -2682,27 +2672,16 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   });
 
   Future<void> openRecordInEditor(SpkRecord record) => runAction(() async {
-    if (!source.canExtractAll) {
+    if (!source.canReadRecord(record)) {
       throw const SpkFailure(
         'SPK_EDITOR_PROFILE',
-        'El editor requiere recursos simples y fragmentados autenticados.',
+        'Este recurso no está desbloqueado. No se omite su autenticación.',
       );
     }
-    if (!source.fullyValidatedResources) {
-      operation = 'Auditando DATA.SPK antes de habilitar edición…';
-      if (mounted) setState(() {});
-      await _auditAllResources(source);
-    }
-    if (source.validatedFormat(record.entryId) == 'SDATA' &&
-        !source.names.isConfirmed(record.entryId)) {
-      operation = 'Identificando la tabla SData por estructura…';
-      if (mounted) setState(() {});
-      await _discoverCoreTables(source);
-    }
+    await source.readEntry(record);
     final path = _editableLibraryPath(record);
-    final library = await Library.fromSpk(
+    final library = await Library.fromSpkEditable(
       source,
-      requireCharacter: false,
       progress: (message) {
         if (mounted) {
           setState(() => operation = message);
@@ -2727,18 +2706,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   });
 
   Future<void> replaceRecordInOverlay(SpkRecord record) => runAction(() async {
-    if (!source.canExtractAll) {
+    if (!source.canReadRecord(record)) {
       throw const SpkFailure(
         'SPK_OVERLAY_PROFILE',
-        'Para reemplazar un recurso deben estar autenticados los recursos '
-            'simples y fragmentados.',
+        'Este recurso no está desbloqueado.',
       );
     }
-    if (!source.fullyValidatedResources) {
-      operation = 'Auditando DATA.SPK antes de habilitar el reemplazo…';
-      if (mounted) setState(() {});
-      await _auditAllResources(source);
-    }
+    await source.readEntry(record);
 
     final path = _editableLibraryPath(record);
     final picked = await openFile(confirmButtonText: 'Usar como reemplazo');
@@ -2781,9 +2755,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     operation = 'Montando overlay editable para $path…';
     if (mounted) setState(() {});
-    final library = await Library.fromSpk(
+    final library = await Library.fromSpkEditable(
       source,
-      requireCharacter: false,
       progress: (message) {
         if (mounted) setState(() => operation = message);
       },
@@ -3057,7 +3030,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               icon: const Icon(Icons.edit_note_outlined),
               label: Text(_editorActionLabel(record)),
             ),
-          if (source.canExtractAll)
+          if (source.canReadRecord(record))
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.pop(c);
@@ -3452,7 +3425,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             label: Text(_editorActionLabel(record)),
           ),
         ],
-        if (source.canReadRecord(record) && source.canExtractAll) ...[
+        if (source.canReadRecord(record)) ...[
           const SizedBox(height: 7),
           OutlinedButton.icon(
             onPressed: busy ? null : () => replaceRecordInOverlay(record),
@@ -3515,6 +3488,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             Text(
               source.canExtractAll
                   ? 'Original protegido · overlay editable'
+                  : source.canReadSimpleResources
+                  ? 'Lectura parcial · fragmentos pendientes'
                   : 'Explorador · contenido cifrado',
               style: const TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
             ),
@@ -3527,12 +3502,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               icon: const Icon(Icons.security_outlined, size: 17),
               label: const Text('Desbloquear SPK'),
             ),
-          if (widget.onMount != null && source.canExtractAll)
+          if (widget.onMount != null && source.canReadSimpleResources)
             TextButton.icon(
               onPressed: busy ? null : mountInStudio,
               icon: const Icon(Icons.view_in_ar_outlined, size: 17),
               label: Text(
-                hasConfirmedCoreTables ? 'Usar en Studio' : 'Preparar Studio',
+                source.canExtractAll
+                    ? 'Usar en Studio'
+                    : 'Usar recursos legibles',
               ),
             ),
           if (source.canExtractAll)

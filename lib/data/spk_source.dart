@@ -1077,13 +1077,25 @@ class SpkArchiveSource {
       });
       return SpkReadResult(record, bytes, format);
     } catch (error) {
+      // A failed reread invalidates its format/full-audit label, not healthy entries.
+      _validatedFormats.remove(record.entryId);
+      fullResourceValidation = null;
+      final failure = error is SecretBoxAuthenticationError
+          ? SpkFailure(
+              'SPK_RESOURCE_AUTHENTICATION',
+              'El recurso no supera la autenticación AES-GCM. '
+                  'No se entregaron bytes ni se modificó el SPK.',
+              {'entryId': record.idHex, 'offset': record.dataOffset},
+            )
+          : error;
       if (failures.length >= 100) failures.removeAt(0);
       failures.add({
         'entryId': record.idHex,
         'offset': record.dataOffset,
         'storedBytes': record.storedBytes,
-        'error': error.toString(),
+        'error': failure.toString(),
       });
+      if (!identical(failure, error)) throw failure;
       rethrow;
     }
   }

@@ -18,6 +18,9 @@ import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/data/archive_export.dart';
 import 'package:herramienta_shaiya/ui/data_editor.dart';
 import 'package:herramienta_shaiya/ui/editor_model_preview.dart';
+import 'package:herramienta_shaiya/ui/item_model_picker.dart';
+import 'package:herramienta_shaiya/editor/item_model_catalog.dart';
+import 'package:herramienta_shaiya/editor/model_reference.dart';
 import 'package:herramienta_shaiya/data/archive_write.dart';
 import 'package:herramienta_shaiya/data/directory_pack.dart';
 import 'package:herramienta_shaiya/editor/schema_reader.dart';
@@ -528,6 +531,65 @@ void main() {
       () => find.byType(DataEditorPage).evaluate().isEmpty,
       'Closing editor returns to unchanged native viewer',
     );
+    // Capture the actual compact shell, not a mockup or a cropped viewport.
+    Future<void> captureBoundary(String key, String name) async {
+      await tester.pump(const Duration(milliseconds: 250));
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(ValueKey(key)),
+      );
+      final image = await boundary.toImage();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      await File(
+        '${output.path}/$name.png',
+      ).writeAsBytes(bytes!.buffer.asUint8List());
+    }
+
+    await captureBoundary('studio-shell-capture', 'r26_compact_shell');
+    final part = scene.appearance!.selected[Slot.upper]!;
+    final modelChoice = ItemModelChoice(
+      model: ModelReference(
+        'Torso sintético de prueba',
+        [(part.meshPath, part.texturePath, part.raw.alpha)],
+        sourcePath: part.tablePath,
+        sourceOrdinal: part.raw.id,
+      ),
+      name: 'Torso sintético de prueba',
+      row: 0,
+      fields: const {},
+    );
+    final beforeAppearance = scene.appearance;
+    final selectedFuture = showDialog<ItemModelChoice>(
+      context: state.context,
+      builder: (_) => RepaintBoundary(
+        key: const ValueKey('r26-model-picker-capture'),
+        child: ItemModelPicker(
+          library: scene.catalog!.library,
+          catalog: Future.value(ItemModelCatalog([modelChoice], [], 0)),
+          currentSource: part.tablePath,
+          currentOrdinal: part.raw.id,
+        ),
+      ),
+    );
+    await waitFor(
+      () => find.byType(NativeModelPreview).evaluate().isNotEmpty,
+      'R26 model selector creates an actual native preview',
+    );
+    final dynamic r26Preview = tester.state(find.byType(NativeModelPreview));
+    await waitFor(
+      () => r26Preview.ready == true && r26Preview.actor.parts.isNotEmpty,
+      'R26 selector loads the actual paired mesh and DDS',
+    );
+    expect(r26Preview.error, isNull);
+    await captureBoundary('r26-model-picker-capture', 'r26_model_picker');
+    await tester.tap(find.byKey(const ValueKey('confirm-model-picker')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect((await selectedFuture)?.key, modelChoice.key);
+    expect(identical(scene.appearance, beforeAppearance), isTrue);
+    passed.add(
+      'R26 3D selection returns a native pair without altering the mounted actor',
+    );
+
     final exportDir = await Directory.systemTemp.createTemp(
       'shaiya-export-integration-',
     );

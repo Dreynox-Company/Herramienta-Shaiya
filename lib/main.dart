@@ -32,6 +32,9 @@ import 'render/studio_scene.dart';
 import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
+import 'ui/editor_style.dart';
+import 'ui/studio_sections.dart';
+import 'ui/resource_model_preview.dart';
 import 'ui/data_editor.dart';
 import 'ui/items_page.dart';
 import 'ui/excelxml_lab.dart';
@@ -46,7 +49,7 @@ import 'data/appearance_snapshot.dart';
 import 'data/equipment_registry.dart';
 import 'ui/equipment_registry_panel.dart';
 
-const studioVersion = '0.6.25-dev';
+const studioVersion = '0.6.26';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,35 +67,7 @@ class ShaiyaApp extends StatelessWidget {
     locale: const Locale('es'),
     supportedLocales: const [Locale('es')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: ThemeData(
-      brightness: Brightness.dark,
-      useMaterial3: true,
-      visualDensity: VisualDensity.compact,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xffa5bcff),
-        brightness: Brightness.dark,
-      ),
-      scaffoldBackgroundColor: const Color(0xff101722),
-      inputDecorationTheme: const InputDecorationTheme(
-        isDense: true,
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      ),
-      textTheme: const TextTheme(
-        bodyMedium: TextStyle(fontSize: 12),
-        bodySmall: TextStyle(fontSize: 10),
-      ),
-      sliderTheme: const SliderThemeData(
-        trackHeight: 2,
-        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 5),
-        overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
-      ),
-      cardTheme: const CardThemeData(
-        color: Color(0xff192331),
-        elevation: 0,
-        margin: EdgeInsets.zero,
-      ),
-    ),
+    theme: EditorStyle.theme(ThemeData.dark(useMaterial3: true)),
     home: StudioPage(initialData: initialData),
   );
 }
@@ -355,7 +330,7 @@ class _StudioState extends State<StudioPage> {
         if (mounted) setState(() => progress = value);
       }
 
-      candidate = await Library.fromSpk(source, progress: report);
+      candidate = await Library.fromSpkEditable(source, progress: report);
       await loadBundledExtras();
       final next = Catalog(candidate);
       await next.load(report);
@@ -755,6 +730,22 @@ class _StudioState extends State<StudioPage> {
     id: id,
     label: label,
     detail: detail,
+    previewBuilder:
+        catalog != null &&
+            (T == PartRecord ||
+                T == WeaponRecord ||
+                T == CreatureRecord ||
+                key.endsWith('/set'))
+        ? (ctx, value, ready) => resourceModelPreview(
+            ctx,
+            catalog!.library,
+            value,
+            ready,
+            setParts: key.endsWith('/set')
+                ? scene.appearance?.archetype.sets[value]
+                : null,
+          )
+        : null,
     memory: _memories.putIfAbsent(key, SelectionMemory.new),
     enabled: !importing && scene.ready,
     emptyLabel: empty,
@@ -765,41 +756,19 @@ class _StudioState extends State<StudioPage> {
     },
   );
   Widget section(String title, List<Widget> children, {String? help}) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xffdbe3f1),
-                    ),
-                  ),
-                ),
-                if (help != null)
-                  Tooltip(
-                    message: help,
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 6),
-                      child: Icon(
-                        Icons.info_outline,
-                        size: 14,
-                        color: Color(0xff8394af),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            ...children,
-          ],
-        ),
+      StudioSection(
+        title: title,
+        help: help,
+        initiallyExpanded: !const {
+          'Atajos',
+          'Últimos eventos',
+          'Registro',
+          'Mirada natural',
+          'Recursos indexados',
+          'ExcelXml · sistemas de DATA',
+          'Efectos y sonido',
+        }.contains(title),
+        children: children,
       );
   String? excelXmlPath(String fileName) {
     final c = catalog;
@@ -1170,6 +1139,24 @@ class _StudioState extends State<StudioPage> {
           icon: const Icon(Icons.receipt_long, size: 16),
           label: const Text('Exportar diagnóstico de archivo'),
         ),
+        OutlinedButton.icon(
+          onPressed: disabled ? null : openSpkArchive,
+          icon: const Icon(Icons.folder_zip_outlined, size: 17),
+          label: const Text('Abrir DATA.SPK'),
+        ),
+        if (c != null) ...[
+          note(c.library.sourceLabel),
+          TextButton.icon(
+            onPressed: working ? null : openDataEditor,
+            icon: const Icon(Icons.edit_note, size: 17),
+            label: const Text('Editar recursos montados'),
+          ),
+          TextButton.icon(
+            onPressed: working ? null : openItems,
+            icon: const Icon(Icons.inventory_2_outlined, size: 17),
+            label: const Text('Abrir Ítems SData'),
+          ),
+        ],
         note(progress),
       ]);
     }
@@ -1424,8 +1411,8 @@ class _StudioState extends State<StudioPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            section('Alas', [
-              creatureField('wing'),
+            section('Alas', [creatureField('wing')]),
+            section('Ajustes de alas', [
               if (scene.wing != null) ...[
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
@@ -2030,8 +2017,8 @@ class _StudioState extends State<StudioPage> {
                     : '${scene.extraMotions!.profiles.length} perfiles aislados de los ANI originales. ${scene.character?.hover != null ? 'Este cuerpo tiene vuelo compatible.' : 'No se aplica un movimiento incompatible a este cuerpo.'}',
               ),
             ]),
-            section('Montura', [
-              creatureField('mount'),
+            section('Montura', [creatureField('mount')]),
+            section('Ajustes de montura', [
               if (scene.mount != null) ...[
                 actorAnimation(scene.mount!, 'mount'),
                 ExpansionTile(
@@ -3870,56 +3857,69 @@ class _StudioState extends State<StudioPage> {
   }
 
   @override
-  Widget build(BuildContext context) => StudioWorkspace(
-    viewport: viewport(),
-    left: panel(),
-    right: inspector(),
-    timeline: timeline(),
-    actions: actionBar(),
-    hasLibrary: scene.character != null,
-    onOpenEditor: catalog == null || working ? null : openDataEditor,
-    onOpenItems: catalog == null || working ? null : openItems,
-    onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
-    onExportScene: scene.character == null || working ? null : exportGameScene,
-    onOpenData: disabled ? null : sourceMenu,
-    onOpenSpk: disabled ? null : openSpkArchive,
-    tabs: const [
-      'Personaje',
-      'Equipamiento',
-      'Alas y monturas',
-      'Combate',
-      'Escenario',
-      'Diagnóstico',
-    ],
-    icons: const [
-      Icons.person_outline,
-      Icons.shield_outlined,
-      Icons.pets_outlined,
-      Icons.sports_martial_arts,
-      Icons.landscape_outlined,
-      Icons.fact_check_outlined,
-    ],
-    selectedTab: tab,
-    onTab: (v) {
-      scene.clearMovement();
-      setState(() => tab = v);
-    },
-    status: Row(
-      children: [
-        const Icon(Icons.lock_outline, size: 11, color: Color(0xff8cbaa3)),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            scene.status,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+  Widget build(BuildContext context) {
+    final docks = StudioDockContent.split(panel());
+    return RepaintBoundary(
+      key: const ValueKey('studio-shell-capture'),
+      child: StudioWorkspace(
+        viewport: viewport(),
+        left: docks.navigation,
+        right: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [docks.inspector, inspector()],
         ),
-        const SizedBox(width: 10),
-        const Text('Local · Edición controlada'),
-      ],
-    ),
-  );
+        timeline: timeline(),
+        actions: actionBar(),
+        hasLibrary: scene.character != null,
+        onOpenEditor: catalog == null || working ? null : openDataEditor,
+        onOpenItems: catalog == null || working ? null : openItems,
+        onOpenExcelXml: catalog == null || working
+            ? null
+            : () => openExcelXmlLab(),
+        onExportScene: scene.character == null || working
+            ? null
+            : exportGameScene,
+        onOpenData: disabled ? null : sourceMenu,
+        onOpenSpk: disabled ? null : openSpkArchive,
+        tabs: const [
+          'Personaje',
+          'Equipamiento',
+          'Alas y monturas',
+          'Combate',
+          'Escenario',
+          'Diagnóstico',
+        ],
+        icons: const [
+          Icons.person_outline,
+          Icons.shield_outlined,
+          Icons.pets_outlined,
+          Icons.sports_martial_arts,
+          Icons.landscape_outlined,
+          Icons.fact_check_outlined,
+        ],
+        selectedTab: tab,
+        onTab: (v) {
+          scene.clearMovement();
+          setState(() => tab = v);
+        },
+        status: Row(
+          children: [
+            const Icon(Icons.lock_outline, size: 11, color: Color(0xff8cbaa3)),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                scene.status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text('Local · Edición controlada'),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Uint8List _texturePreview(Map<String, Object> args) =>

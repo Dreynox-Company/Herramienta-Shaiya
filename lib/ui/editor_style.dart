@@ -33,6 +33,11 @@ class EditorStyle {
         bodyLarge: textTheme.bodyLarge!.copyWith(fontSize: 12),
         bodyMedium: textTheme.bodyMedium!.copyWith(fontSize: 12),
         bodySmall: textTheme.bodySmall!.copyWith(fontSize: 11),
+        titleLarge: textTheme.titleLarge!.copyWith(fontSize: 16),
+        headlineSmall: textTheme.headlineSmall!.copyWith(fontSize: 18),
+        headlineMedium: textTheme.headlineMedium!.copyWith(fontSize: 20),
+        labelMedium: textTheme.labelMedium!.copyWith(fontSize: 11),
+        labelSmall: textTheme.labelSmall!.copyWith(fontSize: 10),
         titleMedium: textTheme.titleMedium!.copyWith(fontSize: 13),
         titleSmall: textTheme.titleSmall!.copyWith(fontSize: 12),
         labelLarge: textTheme.labelLarge!.copyWith(fontSize: 11),
@@ -63,6 +68,48 @@ class EditorStyle {
         secondaryLabelStyle: textTheme.labelLarge!.copyWith(fontSize: 11),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      ),
+      listTileTheme: const ListTileThemeData(
+        dense: true,
+        horizontalTitleGap: 8,
+        minVerticalPadding: 3,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+      ),
+      expansionTileTheme: const ExpansionTileThemeData(
+        tilePadding: EdgeInsets.symmetric(horizontal: 4),
+        childrenPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      ),
+      cardTheme: const CardThemeData(
+        color: panel,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(4)),
+        ),
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: surface,
+        titleTextStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: text,
+        ),
+      ),
+      sliderTheme: const SliderThemeData(
+        trackHeight: 2,
+        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 5),
+        overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          textStyle: const TextStyle(fontSize: 11),
+          minimumSize: const Size(36, 30),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        ),
+      ),
+      tooltipTheme: const TooltipThemeData(
+        waitDuration: Duration(milliseconds: 450),
+        textStyle: TextStyle(fontSize: 11, color: background),
       ),
       iconTheme: const IconThemeData(size: 17, color: muted),
       dividerColor: line,

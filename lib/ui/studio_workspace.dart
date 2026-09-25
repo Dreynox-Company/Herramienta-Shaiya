@@ -40,11 +40,11 @@ class StudioWorkspace extends StatefulWidget {
 
 class _StudioWorkspaceState extends State<StudioWorkspace> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  bool leftOpen = true, rightOpen = false, timelineOpen = true;
-  double leftWidth = 244, rightWidth = 248;
+  bool leftOpen = true, rightOpen = true, timelineOpen = true;
+  double leftWidth = 236, rightWidth = 292;
 
   Widget _title(String text, VoidCallback close) => Container(
-    height: 38,
+    height: 32,
     padding: const EdgeInsets.only(left: 14, right: 4),
     decoration: const BoxDecoration(
       border: Border(bottom: BorderSide(color: Color(0xff2c3546))),
@@ -67,7 +67,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     ),
   );
   Widget _scroll(Widget body) =>
-      SingleChildScrollView(padding: const EdgeInsets.all(14), child: body);
+      SingleChildScrollView(padding: const EdgeInsets.all(8), child: body);
   Widget _panel(
     String title,
     Widget child,
@@ -97,7 +97,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
         if (left) {
           leftWidth = (leftWidth + event.delta.dx).clamp(210, 350);
         } else {
-          rightWidth = (rightWidth - event.delta.dx).clamp(210, 340);
+          rightWidth = (rightWidth - event.delta.dx).clamp(240, 440);
         }
       }),
       child: Container(
@@ -151,7 +151,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     return Container(
       width: 46,
       color: const Color(0xff131a24),
-      child: Column(children: buttons),
+      child: SingleChildScrollView(child: Column(children: buttons)),
     );
   }
 
@@ -185,7 +185,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     bool showLeft,
     bool showRight,
   ) => Container(
-    height: 48,
+    height: 42,
     padding: const EdgeInsets.symmetric(horizontal: 8),
     decoration: const BoxDecoration(
       color: Color(0xff121a26),
@@ -200,7 +200,11 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             if (mobile) {
               scaffoldKey.currentState?.openDrawer();
             } else {
-              setState(() => leftOpen = !leftOpen);
+              setState(() {
+                // Closing one dock must not silently open a wider hidden dock.
+                if (leftOpen && !showRight) rightOpen = false;
+                leftOpen = !leftOpen;
+              });
             }
           },
           icon: Icon(
