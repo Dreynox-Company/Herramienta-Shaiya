@@ -166,6 +166,29 @@ def _verify_exports(path: Path, exports: set[str]) -> None:
         )
 
 
+def legacy_external_users(
+    imports_by_file: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Return legacy runtime DLLs imported by PE files that will be retained."""
+
+    legacy_names = {
+        name.lower() for name in DEBUG_CRT | OPTIONAL_OLD_ANGLE
+    }
+    retained_imports = {
+        file: {dep.lower() for dep in deps}
+        for file, deps in imports_by_file.items()
+        if file.lower() not in legacy_names
+    }
+    return {
+        name: sorted(
+            file
+            for file, deps in retained_imports.items()
+            if name.lower() in deps
+        )
+        for name in sorted(DEBUG_CRT | OPTIONAL_OLD_ANGLE)
+    }
+
+
 def _copy_license_files(lib_dir: Path, release: Path) -> list[str]:
     target = release / "Docs" / "ThirdParty" / "ANGLE"
     target.mkdir(parents=True, exist_ok=True)
@@ -255,18 +278,12 @@ def main() -> None:
         p.name: sorted(pe_imports(p))
         for p in pe_files
     }
-    legacy_names = {name.lower() for name in DEBUG_CRT | OPTIONAL_OLD_ANGLE}
-
     # The upstream ANGLE payload is a dependency cluster: its own debug CRT
     # DLLs can import each other (for example vccorlib140d -> msvcp140d), and
     # libc++.dll can also import the debug CRT. Those internal edges must not
     # keep the obsolete cluster alive after libEGL/libGLESv2 are replaced.
     # Only imports from PE files that will remain in the release are relevant.
-    retained_imports = {
-        file: deps
-        for file, deps in imports_by_file.items()
-        if file.lower() not in legacy_names
-    }
+    external_users = legacy_external_users(imports_by_file)
 
     removed: list[str] = []
     retained_legacy: dict[str, list[str]] = {}
@@ -274,11 +291,7 @@ def main() -> None:
         path = release / name
         if not path.is_file():
             continue
-        users = sorted(
-            file
-            for file, deps in retained_imports.items()
-            if name.lower() in deps
-        )
+        users = external_users.get(name, [])
         if users:
             retained_legacy[name] = users
             if name in DEBUG_CRT:
