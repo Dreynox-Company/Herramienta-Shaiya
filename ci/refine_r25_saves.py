@@ -1,4 +1,4 @@
-"""Apply a small readable, idempotent save-boundary correction on R25 only."""
+"""Apply small readable, idempotent source corrections on R25 only."""
 from pathlib import Path
 import subprocess
 
@@ -38,6 +38,17 @@ def main():
             raise RuntimeError('Unexpected local test runner.')
         source = source.replace('void main() {', 'void main() {\n  nativeWingProfileSuite.main();')
         runner.write_text(source, encoding='utf-8')
+    editor = root / 'lib/ui/item_record_editor.dart'
+    source = editor.read_text(encoding='utf-8')
+    if "import '../core/formats.dart';" in source:
+        source = source.replace("import '../core/formats.dart';", "import '../data/library.dart';")
+        editor.write_text(source, encoding='utf-8')
+    panel = root / 'lib/ui/equipment_registry_panel.dart'
+    source = panel.read_text(encoding='utf-8')
+    old = 'if (mounted && result == true) Navigator.pop(context);'
+    if old in source:
+        source = source.replace(old, 'if (context.mounted && result == true) Navigator.pop(context);')
+        panel.write_text(source, encoding='utf-8')
 
 
 if __name__ == '__main__':
