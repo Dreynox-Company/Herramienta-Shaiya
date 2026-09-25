@@ -47,6 +47,10 @@ import '../test/workspace_interaction_test.dart' as suite41;
 import '../test/workspace_material_test.dart' as suite42;
 import '../test/xml_tree_document_test.dart' as suite44;
 
+import '../test/appearance_snapshot_test.dart' as suite47;
+import '../test/equipment_registry_test.dart' as suite48;
+import '../test/item_publication_test.dart' as suite49;
+
 void main() {
   suite0.main();
   suite1.main();
@@ -95,4 +99,7 @@ void main() {
   suite44.main();
   suite45.main();
   suite46.main();
+  suite47.main();
+  suite48.main();
+  suite49.main();
 }

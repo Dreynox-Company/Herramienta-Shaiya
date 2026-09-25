@@ -65,6 +65,7 @@ class SceneProfile {
     StudioScene s,
     Map<String, dynamic> p, {
     bool reloadWorld = false,
+    bool validateOnly = false,
   }) async {
     if (p['schema'] != schema) {
       throw const FormatException('Versión de escena desconocida.');
@@ -137,6 +138,7 @@ class SceneProfile {
     if (p['flight'] != null && p['flight'] is! bool) {
       throw const FormatException('Modo vuelo inválido.');
     }
+    if (validateOnly) return;
     await s.setAppearance(
       Appearance(a, selected, preset: p['preset'] as String?),
     );

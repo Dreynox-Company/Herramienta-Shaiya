@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -243,14 +244,33 @@ void main() {
       () => (scene.character!.root.position.y - scene.groundY).abs() < .001,
       'Map transition restores mounted actor height on the rendering loop',
     );
+    // Native offsets are translated before Rx/Ry/Rz and the animated bone.
+    // Check an independently evaluated origin, not an unrotated height sum.
+    const radians = 0.01745329238474369;
+    final offset = v.Vector3(
+      scene.wingOffsetX,
+      scene.wingOffsetY,
+      -scene.wingOffsetZ,
+    );
+    for (final rotation in [
+      v.Matrix4.rotationX(scene.wingRotX * radians),
+      v.Matrix4.rotationY(scene.wingRotY * radians),
+      v.Matrix4.rotationZ(scene.wingRotZ * radians),
+    ]) {
+      rotation.transform3(offset);
+    }
+    final actor = scene.character!;
+    final bone = actor.wingBone;
+    if (bone != null && bone >= 0 && bone < actor.world.length) {
+      final anchor = scene.activeWingPositionProfile != null
+          ? actor.world[bone]
+          : actor.world[bone] * (actor.wingReference ?? v.Matrix4.identity());
+      anchor.transform3(offset);
+    }
+    v.Matrix4.fromList(actor.visual.matrix.storage).transform3(offset);
     expect(
       scene.wing!.root.matrix.storage[13],
-      closeTo(
-        scene.character!.root.position.y +
-            scene.character!.visual.matrix.storage[13] +
-            scene.wingHeight,
-        .001,
-      ),
+      closeTo(actor.root.position.y + offset.y, .001),
     );
     passed.add(
       'Wing and rider remain in the same coordinate frame after loading a map',
