@@ -106,38 +106,71 @@ void main() {
     source.dispose();
   });
 
-  testWidgets('editor button centered on main toolbar', (tester) async {
-    tester.view.physicalSize = const Size(1440, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    var calls = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: StudioWorkspace(
-          viewport: const SizedBox(),
-          left: const SizedBox(),
-          right: const SizedBox(),
-          timeline: const SizedBox(),
-          actions: const SizedBox(),
-          status: const SizedBox(),
-          tabs: const ['Personaje'],
-          icons: const [Icons.person],
-          selectedTab: 0,
-          onTab: (_) {},
-          onOpenData: () {},
-          onOpenEditor: () {
-            calls++;
-          },
+  // The former centered overlay collided with adjacent actions. The toolbar
+  // now reserves dock controls and scrolls its actions at narrow widths.
+  // Assert reachability, geometry and the actual callback, not an obsolete X.
+  for (final width in [1440.0, 980.0, 650.0, 390.0]) {
+    testWidgets('every toolbar action remains usable at $width', (tester) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final calls = <String, int>{};
+      void record(String key) => calls.update(
+        key,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StudioWorkspace(
+            viewport: const SizedBox(),
+            left: const SizedBox(),
+            right: const SizedBox(),
+            timeline: const SizedBox(),
+            actions: const SizedBox(),
+            status: const SizedBox(),
+            tabs: const ['Personaje'],
+            icons: const [Icons.person],
+            selectedTab: 0,
+            onTab: (_) {},
+            onOpenData: () => record('data'),
+            onOpenEditor: () => record('editor'),
+            onOpenItems: () => record('items'),
+            onOpenSpk: () => record('spk'),
+            onOpenExcelXml: () => record('xml'),
+            onExportScene: () => record('export'),
+          ),
         ),
-      ),
-    );
-    expect(
-      tester.getCenter(find.byKey(const ValueKey('open-data-editor'))).dx,
-      closeTo(720, 1),
-    );
-    await tester.tap(find.byKey(const ValueKey('open-data-editor')));
-    expect(calls, 1);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      final left = find.byKey(const ValueKey('toggle-left'));
+      final right = find.byKey(const ValueKey('toggle-right'));
+      final actions = <String, Finder>{
+        'items': find.byKey(const ValueKey('open-items-catalog')),
+        'editor': find.byKey(const ValueKey('open-data-editor')),
+        'data': find.text('DATA'),
+        'spk': find.byKey(const ValueKey('open-spk')),
+        'xml': find.byKey(const ValueKey('open-excelxml')),
+        'export': find.byKey(const ValueKey('export-game-scene')),
+      };
+      final expected = <String, int>{};
+      // Also return through the actions in reverse to test scrolling both ways.
+      for (final key in [...actions.keys, ...actions.keys.toList().reversed]) {
+        final action = actions[key]!;
+        await tester.ensureVisible(action);
+        await tester.pumpAndSettle();
+        expect(action.hitTestable(), findsOneWidget);
+        final bounds = tester.getRect(action);
+        expect(bounds.left, greaterThanOrEqualTo(tester.getRect(left).right - 1));
+        expect(bounds.right, lessThanOrEqualTo(tester.getRect(right).left + 1));
+        expect(left.hitTestable(), findsOneWidget);
+        expect(right.hitTestable(), findsOneWidget);
+        await tester.tap(action);
+        await tester.pumpAndSettle();
+        expected.update(key, (count) => count + 1, ifAbsent: () => 1);
+        expect(calls, equals(expected));
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 }
