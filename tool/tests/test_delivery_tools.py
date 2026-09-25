@@ -20,6 +20,15 @@ package_windows = importlib.util.module_from_spec(PACKAGE_SPEC)
 assert PACKAGE_SPEC.loader is not None
 PACKAGE_SPEC.loader.exec_module(package_windows)
 
+ANGLE_HARDEN = Path(__file__).resolve().parents[2] / 'ci' / 'harden_angle_runtime.py'
+ANGLE_SPEC = importlib.util.spec_from_file_location(
+    'harden_angle_runtime',
+    ANGLE_HARDEN,
+)
+harden_angle_runtime = importlib.util.module_from_spec(ANGLE_SPEC)
+assert ANGLE_SPEC.loader is not None
+ANGLE_SPEC.loader.exec_module(harden_angle_runtime)
+
 
 class DeliveryToolsTest(unittest.TestCase):
     def test_windows_package_readme_uses_pubspec_version(self):
@@ -98,6 +107,35 @@ class DeliveryToolsTest(unittest.TestCase):
                     ):
                 with self.assertRaisesRegex(RuntimeError, 'hash mismatch'):
                     package_windows.install_flight_runtime(release)
+
+    def test_angle_debug_crt_internal_cluster_does_not_count_as_external_user(self):
+        imports = {
+            'herramienta_shaiya.exe': ['kernel32.dll'],
+            'flutter_angle_plugin.dll': ['vcruntime140.dll', 'libEGL.dll'],
+            'libEGL.dll': ['kernel32.dll'],
+            'libGLESv2.dll': ['d3d11.dll'],
+            'libc++.dll': ['msvcp140d.dll', 'ucrtbased.dll'],
+            'vccorlib140d.dll': ['msvcp140d.dll'],
+            'msvcp140d.dll': ['vcruntime140d.dll'],
+        }
+        users = harden_angle_runtime.legacy_external_users(imports)
+        self.assertEqual(users['msvcp140d.dll'], [])
+        self.assertEqual(users['ucrtbased.dll'], [])
+        self.assertEqual(users['vcruntime140d.dll'], [])
+
+    def test_angle_debug_crt_import_from_retained_plugin_is_blocking(self):
+        imports = {
+            'flutter_angle_plugin.dll': [
+                'libEGL.dll',
+                'vcruntime140d.dll',
+            ],
+            'vcruntime140d.dll': ['kernel32.dll'],
+        }
+        users = harden_angle_runtime.legacy_external_users(imports)
+        self.assertEqual(
+            users['vcruntime140d.dll'],
+            ['flutter_angle_plugin.dll'],
+        )
 
     def test_angle_hardening_evidence_is_bound_to_release_dll_hashes(self):
         with tempfile.TemporaryDirectory() as folder:
