@@ -1,0 +1,5 @@
+# Windows x64 ANGLE release runtime.
+# PyPI Trusted Publishing: Comfy-Org/comfy-angle 0.1.1.
+# Pin the exact win_amd64 wheel used by CI; --require-hashes rejects drift.
+comfy-angle==0.1.1 \
+    --hash=sha256:beddd2e3b9a67e55f5afaef4da73e3ac704fd88f0cbe6a6f67ce5718d7c7edeb
