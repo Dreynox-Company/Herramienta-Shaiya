@@ -51,10 +51,22 @@ import '../test/appearance_snapshot_test.dart' as suite47;
 import '../test/equipment_registry_test.dart' as suite48;
 import '../test/item_publication_test.dart' as suite49;
 
-import '../test/item_workspace_test.dart' as items_r25;
+import '../test/native_item_icons_test.dart' as suite60;
+
+import '../test/item_workspace_test.dart' as suite61;
+
+import '../test/item_query_test.dart' as suite62;
+
+import '../test/item_atlas_test.dart' as suite63;
+
+import '../test/item_record_editor_test.dart' as suite64;
 
 void main() {
-  items_r25.main();
+  suite64.main();
+  suite63.main();
+  suite62.main();
+  suite61.main();
+  suite60.main();
   suite0.main();
   suite1.main();
   suite2.main();

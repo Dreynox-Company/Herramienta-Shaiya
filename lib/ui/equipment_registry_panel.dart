@@ -7,11 +7,11 @@ import '../data/catalog.dart';
 import '../data/equipment_registry.dart';
 import '../data/item_publication.dart';
 import '../render/studio_scene.dart';
-import 'data_editor.dart';
-import 'item_workbench.dart';
-import 'editor_icons.dart';
-import '../data/library.dart';
+import '../data/item_workspace.dart';
 import '../editor/workbench_model.dart';
+import 'editor_icons.dart';
+import 'item_record_editor.dart';
+import 'items_page.dart';
 
 /// One searchable registered-item view reused for armor, weapons, wings, mounts.
 /// Raw-resource pickers live in the mutually exclusive other mode in Studio.
@@ -34,6 +34,9 @@ class EquipmentRegistryPanel extends StatefulWidget {
 class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
   late Future<EquipmentRegistry> future;
   late int revision;
+  int loadGeneration = 0;
+  ItemWorkspace? workspace;
+  EditorImages? images;
   @override
   void initState() {
     super.initState();
@@ -41,8 +44,22 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
   }
 
   void _reload() {
+    final generation = ++loadGeneration;
     revision = widget.scene.catalog!.library.revision;
-    future = EquipmentRegistry.load(widget.scene.catalog!.library);
+    final library = widget.scene.catalog!.library;
+    workspace?.removeListener(_sessionChanged);
+    future = ItemWorkspace.forLibrary(library).then((session) {
+      if (mounted &&
+          generation == loadGeneration &&
+          widget.scene.catalog?.library == library) {
+        workspace = session;
+        session.addListener(_sessionChanged);
+        final old = images;
+        images = EditorImages(session.preview);
+        WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
+      }
+      return session.registry;
+    });
   }
 
   @override
@@ -54,15 +71,59 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
     }
   }
 
+  @override
+  void dispose() {
+    workspace?.removeListener(_sessionChanged);
+    images?.dispose();
+    super.dispose();
+  }
+
+  void _sessionChanged() {
+    if (!mounted || workspace == null) return;
+    final old = images;
+    images = EditorImages(workspace!.preview);
+    setState(() => future = Future.value(workspace!.registry));
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
+  }
+
   Future<RegisteredItem?> choose(List<RegisteredItem> items, String title) =>
       showDialog<RegisteredItem>(
         context: context,
-        builder: (_) => _ItemPicker(
-          items: items,
-          title: title,
-          library: widget.scene.catalog!.library,
-        ),
+        builder: (_) =>
+            _ItemPicker(items: items, title: title, workspace: workspace!),
       );
+
+  Future<void> openItem(RegisteredItem? item) async {
+    widget.scene.clearMovement();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ItemsPage(
+          library: widget.scene.catalog!.library,
+          initialItemKey: item?.key,
+        ),
+      ),
+    );
+  }
+
+  Widget editCurrent(
+    List<RegisteredItem> matches,
+    String label,
+  ) => TextButton.icon(
+    icon: const Icon(Icons.tune, size: 16),
+    label: Text(
+      matches.isEmpty
+          ? '$label: sin objeto registrado'
+          : 'Editar $label · ${matches.length == 1 ? matches.single.label : '${matches.length} IDs'}',
+    ),
+    onPressed: !widget.enabled || matches.isEmpty
+        ? null
+        : () => widget.run(() async {
+            final item = matches.length == 1
+                ? matches.single
+                : await choose(matches, 'Selecciona el ID de $label a editar');
+            if (mounted && item != null) await openItem(item);
+          }),
+  );
 
   Widget row(
     EquipmentRegistry r,
@@ -109,17 +170,6 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
           style: TextStyle(fontSize: 10),
         ),
         const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: !widget.enabled
-              ? null
-              : () => Navigator.of(context).push<void>(
-                  MaterialPageRoute(
-                    builder: (_) => ItemWorkbench(library: c.library),
-                  ),
-                ),
-          icon: const Icon(Icons.inventory_2_outlined),
-          label: const Text('Ítems · editar cualquier objeto'),
-        ),
       ];
       if (widget.target == 'equipment') {
         for (final slot in [
@@ -155,18 +205,25 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
                 style: const TextStyle(fontSize: 10),
               ),
             );
-            if (r.hasSpanishText) {
+            if (r.hasSpanishText || matches.isNotEmpty) {
               children.add(
                 TextButton(
                   onPressed: !widget.enabled
                       ? null
-                      : () => widget.run(
-                          () => editItem(r, slot, current, matches),
-                        ),
+                      : () => widget.run(() async {
+                          if (matches.isEmpty) {
+                            await editItem(r, slot, current, matches);
+                          } else {
+                            final item = matches.length == 1
+                                ? matches.single
+                                : await choose(matches, 'Elige el ID a editar');
+                            if (mounted && item != null) await openItem(item);
+                          }
+                        }),
                   child: Text(
                     matches.isEmpty
                         ? 'Registrar esta pieza'
-                        : 'Nombre / icono / propiedades',
+                        : 'Editar ítem: propiedades, icono y recursos',
                   ),
                 ),
               );
@@ -193,6 +250,15 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
               scene.say('Equipado ${item.label}');
             }),
           );
+          final equipped = shield ? scene.shieldRecord : scene.weaponRecord;
+          if (equipped != null) {
+            children.add(
+              editCurrent(
+                r.forWeapon(equipped, a, cls),
+                shield ? 'escudo' : 'arma',
+              ),
+            );
+          }
         }
       } else {
         final wing = widget.target == 'wing';
@@ -223,6 +289,15 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
             }
           }),
         );
+        final equipped = wing ? scene.wingRecord : scene.mountRecord;
+        if (equipped != null) {
+          children.add(
+            editCurrent(
+              r.forCreature(equipped, widget.target, a, cls),
+              wing ? 'alas' : 'montura',
+            ),
+          );
+        }
         children.add(
           const Text(
             'Si varias familias MON comparten Image, se exige seleccionar la familia; nunca se toma la primera.',
@@ -232,20 +307,21 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
       }
       children.add(
         TextButton.icon(
-          onPressed: !widget.enabled
-              ? null
-              : () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => DataEditorPage(
-                      library: c.library,
-                      initialPath: r.dataPath,
-                    ),
-                  ),
-                ),
-          icon: const Icon(Icons.table_chart_outlined, size: 16),
-          label: const Text('Abrir tablas de objetos'),
+          key: const ValueKey('equipment-open-items'),
+          onPressed: !widget.enabled ? null : () => openItem(null),
+          icon: const Icon(Icons.inventory_2_outlined, size: 16),
+          label: const Text('Ítems · todos los tipos'),
         ),
       );
+      if (workspace?.dirty == true) {
+        children.add(
+          const Text(
+            'Hay cambios de sesión. El catálogo Ítems muestra el 3D de los recursos preparados. '
+            'El personaje principal conserva su DATA conectada hasta instalar el parche y recargarla.',
+            style: TextStyle(fontSize: 10),
+          ),
+        );
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
@@ -259,6 +335,14 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
     PartRecord part,
     List<RegisteredItem> candidates,
   ) async {
+    if (workspace?.dirty == true) {
+      throw const FormatException(
+        'Hay cambios pendientes en la sesión de Ítems. '
+        'Exporta e instala el parche en una copia, o descarta los cambios, antes de crear una fila nueva. '
+        'La creación no publica una tabla que omita tus cambios.',
+      );
+    }
+
     final scene = widget.scene,
         c = scene.catalog!,
         a = scene.appearance!.archetype;
@@ -371,32 +455,38 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
 class _ItemPicker extends StatefulWidget {
   final List<RegisteredItem> items;
   final String title;
-  final Library library;
+  final ItemWorkspace workspace;
   const _ItemPicker({
     required this.items,
     required this.title,
-    required this.library,
+    required this.workspace,
   });
   @override
   State<_ItemPicker> createState() => _ItemPickerState();
 }
 
 class _ItemPickerState extends State<_ItemPicker> {
-  late final images = EditorImages(widget.library);
+  String query = '';
+  late final EditorImages images;
+  @override
+  void initState() {
+    super.initState();
+    images = EditorImages(widget.workspace.preview);
+  }
+
   @override
   void dispose() {
     images.dispose();
     super.dispose();
   }
 
-  String query = '';
   @override
   Widget build(BuildContext context) {
     final entries = widget.items
         .where(
-          (i) => '${i.label} ${i.image} ${i.description}'
-              .toLowerCase()
-              .contains(query.toLowerCase()),
+          (i) => foldedSearch(
+            '${i.label} ${i.image} ${i.description}',
+          ).contains(foldedSearch(query)),
         )
         .toList();
     return AlertDialog(
@@ -423,25 +513,24 @@ class _ItemPickerState extends State<_ItemPicker> {
                     dense: true,
                     leading: DataIcon(
                       images: images,
-                      path: 'dbitemdata.sdata',
-                      summary: RecordSummary(0, item.key, item.name, '', {
-                        for (final v in item.values.entries)
-                          v.key: '${v.value}',
-                      }),
+                      path: widget.workspace.dataPath,
+                      summary: widget.workspace.byKey[item.key]!.summary,
                       size: 36,
                     ),
                     title: Text(item.label),
                     trailing: IconButton(
-                      tooltip: 'Editar todas las propiedades de este ítem',
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => ItemWorkbench(
-                            library: widget.library,
-                            initialKey: item.key,
-                          ),
-                        ),
-                      ),
+                      tooltip: 'Editar propiedades de ${item.key}',
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      onPressed: () async {
+                        final result = await showItemRecordEditor(
+                          context,
+                          widget.workspace,
+                          widget.workspace.byKey[item.key]!,
+                        );
+                        // The original candidate list is stale after changing Image,
+                        // class requirements, or stats. Reopen with a fresh registry.
+                        if (mounted && result == true) Navigator.pop(context);
+                      },
                     ),
                     subtitle: Text('Image ${item.image} · Icon ${item.icon}'),
                     onTap: () => Navigator.pop(context, item),

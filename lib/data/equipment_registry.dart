@@ -19,7 +19,7 @@ class RegisteredItem {
   int get id => values['itemtypeid']!;
   int get image => values['image']!;
   int get icon => values['icon'] ?? 0;
-  int get level => values['level'] ?? values['reqlv'] ?? 0;
+  int get level => values['reqlv'] ?? values['level'] ?? 0;
   String get key => '$type:$id';
   bool get hasName =>
       name.trim().isNotEmpty &&
@@ -49,6 +49,15 @@ class EquipmentRegistry {
       }
     }
   }
+
+  /// Shared item workspaces publish a view of their pending edits here.
+  factory EquipmentRegistry.fromItems(
+    Library library,
+    String dataPath,
+    String? textPath,
+    List<RegisteredItem> items,
+  ) => EquipmentRegistry._(library, dataPath, textPath, items);
+
   bool get hasSpanishText =>
       textPath != null && ClientLocale.languageOf(textPath!) == 'es';
 

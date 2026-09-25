@@ -191,127 +191,99 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
       color: Color(0xff121a26),
       border: Border(bottom: BorderSide(color: Color(0xff30394a))),
     ),
-    child: Stack(
-      alignment: Alignment.center,
+    child: Row(
       children: [
-        Row(
-          children: [
-            IconButton(
-              key: const ValueKey('toggle-left'),
-              tooltip: 'Biblioteca · mostrar / plegar',
-              onPressed: () {
-                if (mobile) {
-                  scaffoldKey.currentState?.openDrawer();
-                } else {
-                  setState(() => leftOpen = !leftOpen);
-                }
-              },
-              icon: Icon(
-                showLeft ? Icons.view_sidebar_outlined : Icons.menu,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 5),
-            const Icon(
-              Icons.view_in_ar_outlined,
-              size: 21,
-              color: Color(0xffb2c5ff),
-            ),
-            const SizedBox(width: 9),
-            const Text(
-              'SHAIYA',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.7,
-              ),
-            ),
-            if (width > 740)
-              const Text(
-                '  STUDIO',
-                style: TextStyle(
-                  fontSize: 12,
-                  letterSpacing: 1.5,
-                  color: Color(0xff9aaac4),
-                ),
-              ),
-            const Spacer(),
-            if (width > 1100)
-              const Text(
-                '0.6.22 · SPK V13 + Flight V3 + ExcelXml',
-                style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
-              ),
-            const SizedBox(width: 10),
-            TextButton.icon(
-              onPressed: widget.onOpenData,
-              icon: const Icon(Icons.folder_open, size: 17),
-              label: const Text('DATA', style: TextStyle(fontSize: 12)),
-            ),
-            if (widget.onOpenItems != null)
-              TextButton.icon(
-                key: const ValueKey('open-items'),
-                onPressed: widget.onOpenItems,
-                icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                label: const Text('Ítems'),
-              ),
-            if (widget.onOpenSpk != null)
-              TextButton.icon(
-                key: const ValueKey('open-spk'),
-                onPressed: widget.onOpenSpk,
-                icon: const Icon(Icons.folder_zip_outlined, size: 17),
-                label: const Text('SPK', style: TextStyle(fontSize: 12)),
-              ),
-            if (widget.onOpenExcelXml != null)
-              TextButton.icon(
-                key: const ValueKey('open-excelxml'),
-                onPressed: widget.onOpenExcelXml,
-                icon: const Icon(Icons.table_view_outlined, size: 17),
-                label: const Text('XML', style: TextStyle(fontSize: 12)),
-              ),
-            if (widget.onExportScene != null)
-              IconButton(
-                key: const ValueKey('export-game-scene'),
-                tooltip: 'Exportar escena al cliente Flutter',
-                onPressed: widget.onExportScene,
-                icon: const Icon(Icons.link, size: 18),
-              ),
-            IconButton(
-              key: const ValueKey('toggle-right'),
-              tooltip: 'Inspector · mostrar / plegar',
-              onPressed: () {
-                if (mobile ||
-                    (!showRight &&
-                        width - (leftOpen ? leftWidth + 51 : 46) - rightWidth <=
-                            380)) {
-                  scaffoldKey.currentState?.openEndDrawer();
-                } else {
-                  setState(() => rightOpen = !rightOpen);
-                }
-              },
-              icon: Icon(showRight ? Icons.last_page : Icons.tune, size: 19),
-            ),
-          ],
+        IconButton(
+          key: const ValueKey('toggle-left'),
+          tooltip: 'Biblioteca · mostrar / plegar',
+          onPressed: () {
+            if (mobile) {
+              scaffoldKey.currentState?.openDrawer();
+            } else {
+              setState(() => leftOpen = !leftOpen);
+            }
+          },
+          icon: Icon(
+            showLeft ? Icons.view_sidebar_outlined : Icons.menu,
+            size: 20,
+          ),
         ),
-        if (widget.onOpenEditor != null)
-          Align(
-            alignment: Alignment.center,
-            child: width < 570
-                ? IconButton(
-                    key: const ValueKey('open-data-editor'),
-                    tooltip: 'Editor avanzado de datos',
-                    onPressed: widget.onOpenEditor,
-                    icon: const Icon(Icons.edit_note, size: 24),
-                  )
-                : OutlinedButton.icon(
+        if (width >= 1050) ...[
+          const Icon(Icons.view_in_ar_outlined, size: 21),
+          const SizedBox(width: 9),
+          const Text(
+            'SHAIYA STUDIO',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: 18),
+        ],
+        // A bounded horizontal toolbar replaces the old centered overlay.
+        // Even a 360 px window cannot overlap the title, DATA and editor buttons.
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.onOpenItems != null)
+                  TextButton.icon(
+                    key: const ValueKey('open-items-catalog'),
+                    onPressed: widget.onOpenItems,
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: const Text('Ítems'),
+                  ),
+                if (widget.onOpenEditor != null)
+                  TextButton.icon(
                     key: const ValueKey('open-data-editor'),
                     onPressed: widget.onOpenEditor,
                     icon: const Icon(Icons.edit_note, size: 18),
-                    label: const Text(
-                      'Editor de datos',
-                      style: TextStyle(fontSize: 11),
-                    ),
+                    label: const Text('Editor de datos'),
                   ),
+                TextButton.icon(
+                  onPressed: widget.onOpenData,
+                  icon: const Icon(Icons.folder_open, size: 17),
+                  label: const Text('DATA'),
+                ),
+                if (widget.onOpenSpk != null)
+                  TextButton.icon(
+                    key: const ValueKey('open-spk'),
+                    onPressed: widget.onOpenSpk,
+                    icon: const Icon(Icons.folder_zip_outlined, size: 17),
+                    label: const Text('SPK'),
+                  ),
+                if (widget.onOpenExcelXml != null)
+                  TextButton.icon(
+                    key: const ValueKey('open-excelxml'),
+                    onPressed: widget.onOpenExcelXml,
+                    icon: const Icon(Icons.table_view_outlined, size: 17),
+                    label: const Text('XML'),
+                  ),
+                if (widget.onExportScene != null)
+                  IconButton(
+                    key: const ValueKey('export-game-scene'),
+                    tooltip: 'Exportar escena al cliente Flutter',
+                    onPressed: widget.onExportScene,
+                    icon: const Icon(Icons.link, size: 18),
+                  ),
+              ],
+            ),
           ),
+        ),
+        IconButton(
+          key: const ValueKey('toggle-right'),
+          tooltip: 'Inspector · mostrar / plegar',
+          onPressed: () {
+            if (mobile ||
+                (!showRight &&
+                    width - (leftOpen ? leftWidth + 51 : 46) - rightWidth <=
+                        380)) {
+              scaffoldKey.currentState?.openEndDrawer();
+            } else {
+              setState(() => rightOpen = !rightOpen);
+            }
+          },
+          icon: Icon(showRight ? Icons.last_page : Icons.tune, size: 19),
+        ),
       ],
     ),
   );
