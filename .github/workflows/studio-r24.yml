@@ -1,0 +1,59 @@
+name: Studio R24 native wings and responsive flight
+
+on:
+  push:
+    branches: [fix/studio-0624-flight-appearance-native]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-r24-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    if: github.ref == 'refs/heads/fix/studio-0624-flight-appearance-native'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/studio-0624-flight-appearance-native
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Apply digest-checked source patch
+        run: python ci/prepare_studio_r24.py
+      - name: Deterministic source format
+        run: dart format lib test integration_test tool
+      - name: Commit readable sources on isolated branch
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'fix/studio-0624-flight-appearance-native'
+          git diff --check
+          git add lib test integration_test tool docs .studio-r24-applied
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(studio): native wing matrix parity and nonblocking V3 locomotion'
+            git push origin HEAD:refs/heads/fix/studio-0624-flight-appearance-native
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  verify:
+    needs: source
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.source.outputs.sha }}
+    permissions:
+      contents: read
