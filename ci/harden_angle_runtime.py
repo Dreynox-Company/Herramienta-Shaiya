@@ -255,23 +255,36 @@ def main() -> None:
         p.name: sorted(pe_imports(p))
         for p in pe_files
     }
-    all_imports = {dll for deps in imports_by_file.values() for dll in deps}
+    legacy_names = {name.lower() for name in DEBUG_CRT | OPTIONAL_OLD_ANGLE}
+
+    # The upstream ANGLE payload is a dependency cluster: its own debug CRT
+    # DLLs can import each other (for example vccorlib140d -> msvcp140d), and
+    # libc++.dll can also import the debug CRT. Those internal edges must not
+    # keep the obsolete cluster alive after libEGL/libGLESv2 are replaced.
+    # Only imports from PE files that will remain in the release are relevant.
+    retained_imports = {
+        file: deps
+        for file, deps in imports_by_file.items()
+        if file.lower() not in legacy_names
+    }
 
     removed: list[str] = []
+    retained_legacy: dict[str, list[str]] = {}
     for name in sorted(DEBUG_CRT | OPTIONAL_OLD_ANGLE):
         path = release / name
         if not path.is_file():
             continue
-        if name.lower() in all_imports:
-            # Debug CRT must be absent. Optional legacy ANGLE helpers are kept
-            # only when another PE really imports them.
+        users = sorted(
+            file
+            for file, deps in retained_imports.items()
+            if name.lower() in deps
+        )
+        if users:
+            retained_legacy[name] = users
             if name in DEBUG_CRT:
-                users = [
-                    file for file, deps in imports_by_file.items()
-                    if name.lower() in deps
-                ]
                 raise RuntimeError(
-                    f"{name} still required by release PE(s): {', '.join(users)}"
+                    f"{name} still required by retained release PE(s): "
+                    + ", ".join(users)
                 )
             continue
         path.unlink()
@@ -315,6 +328,7 @@ def main() -> None:
             "libGLESv2.dll": sorted(REQUIRED_GLES_EXPORTS),
         },
         "removedLegacyRuntime": removed,
+        "retainedLegacyRuntime": retained_legacy,
         "debugCrtImports": offenders,
         "licensesBundled": licenses,
         "hardened": True,
