@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,11 +58,21 @@ class SpkWorkspaceUiContractTest(unittest.TestCase):
         self.assertIn("_rebuildSpkWorkspace", editor)
 
     def test_table_only_mode_is_explicit_and_default_stays_strict(self):
-        library = (ROOT / 'lib' / 'data' / 'library.dart').read_text(
-            encoding='utf-8'
-        )
-        self.assertIn("bool requireCharacter = true", library)
-        self.assertIn("if (!hasCharacter && requireCharacter)", library)
+        library = (ROOT / 'lib' / 'data' / 'library.dart').read_text(encoding='utf-8')
+        normalise = library.split('  static Library _normalise(', 1)[1].split('  String? resolve(', 1)[0]
+        compact = re.sub(r'\s+', '', normalise)
+        self.assertIn('boolrequireCharacter=true', compact)
+        # Resource mode must still normalize nested roots, not skip validation.
+        # The behavior (strict default, explicit opt-in, nested and ambiguous
+        # roots, relative-path safety) is executed by r27_library_policy_test.dart.
+        self.assertIn("if(!hasCharacter&&(requireCharacter||map.keys.any((p)=>p.contains('/character/'))))", compact)
+        self.assertIn('if(nested.isEmpty){throwconstFormatException(', compact)
+        self.assertIn('if(prefixes.length!=1){throwconstFormatException(', compact)
+        main = (ROOT / 'lib' / 'main.dart').read_text(encoding='utf-8')
+        self.assertIn('requireCharacter: false', main)
+        self.assertIn('requireArchetypes: false', main)
+        runner = (ROOT / 'tool' / 'run_all_local.dart').read_text(encoding='utf-8')
+        self.assertIn('../test/r27_library_policy_test.dart', runner)
 
 
 if __name__ == '__main__':
