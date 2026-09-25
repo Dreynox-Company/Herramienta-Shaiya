@@ -236,7 +236,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             const Spacer(),
             if (width > 1100)
               const Text(
-                '0.6.22 · SPK V13 + Flight V3 + ExcelXml',
+                '0.6.23 · SPK V13 + Flight V3 + ExcelXml + ANGLE Release',
                 style: TextStyle(fontSize: 10, color: Color(0xff8091ab)),
               ),
             const SizedBox(width: 10),
