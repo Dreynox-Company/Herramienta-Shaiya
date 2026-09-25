@@ -33,10 +33,14 @@ jobs:
           cache: true
       - name: Verify and apply owner-delivered full R25 sources
         run: python ci/apply_r25_complete.py
+      - name: Fix native save boundaries and audited editor integration
+        run: python ci/refine_r25_saves.py
       - name: Resolve locked dependencies with the pinned SDK
         run: flutter pub get --enforce-lockfile
-      - name: Apply only mechanical brace and import fixes
-        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import
+      - name: Normalize source before lint fixes
+        run: dart format lib test integration_test tool
+      - name: Apply only reported mechanical lints
+        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import,unused_import,use_null_aware_elements,unnecessary_brace_in_string_interps
       - name: Deterministic source format
         run: dart format lib test integration_test tool
       - name: Commit readable source checkpoint without modifying main
@@ -50,7 +54,7 @@ jobs:
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'fix(studio): complete shared item editor and reproducible SDK checks [skip ci]'
+            git commit -m 'fix(studio): strict item editor analysis and transactional native wing save [skip ci]'
             git push origin HEAD:refs/heads/fix/studio-0625-items-release
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
