@@ -76,8 +76,8 @@ void main() {
     ]) {
       // A real input is decoded JSON. Deeply decode the fixture so a mutation
       // reaches our validator instead of failing in Map<String, double>.[]=.
-      final fixture = jsonDecode(jsonEncode(snapshotFixture()))
-          as Map<String, dynamic>;
+      final fixture =
+          jsonDecode(jsonEncode(snapshotFixture())) as Map<String, dynamic>;
       mutation(fixture);
       expect(() => AppearanceSnapshot.validate(fixture), throwsFormatException);
     }
