@@ -222,6 +222,14 @@ void main() {
         final confirm = find.byKey(const ValueKey('confirm-model-picker'));
         expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
         final stale = callbacks[15]!;
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('model-choice-$source#16')),
+          45,
+          scrollable: find.descendant(
+            of: find.byKey(const ValueKey('model-picker-list')),
+            matching: find.byType(Scrollable),
+          ),
+        );
         await tester.tap(find.byKey(const ValueKey('model-choice-$source#16')));
         await tester.pumpAndSettle();
         stale(true);
@@ -235,10 +243,26 @@ void main() {
         expect(result, isNull);
         await tester.tap(find.text('Modelos'));
         await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('model-choice-$source#17')),
+          45,
+          scrollable: find.descendant(
+            of: find.byKey(const ValueKey('model-picker-list')),
+            matching: find.byType(Scrollable),
+          ),
+        );
         await tester.tap(find.byKey(const ValueKey('model-choice-$source#17')));
         await tester.pumpAndSettle();
         expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
         expect(find.textContaining('Faltan recursos'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('model-choice-$source#16')),
+          45,
+          scrollable: find.descendant(
+            of: find.byKey(const ValueKey('model-picker-list')),
+            matching: find.byType(Scrollable),
+          ),
+        );
         await tester.tap(find.byKey(const ValueKey('model-choice-$source#16')));
         await tester.pumpAndSettle();
         callbacks[16]!(true);

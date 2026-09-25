@@ -120,8 +120,15 @@ void main() {
         scaffold.closeDrawer();
         await tester.pumpAndSettle();
       }
-      await tester.tap(find.byKey(const ValueKey('toggle-right')));
-      await tester.pumpAndSettle();
+      // R26 opens the inspector by default when there is enough room.
+      if (find
+          .byKey(const ValueKey('play-sound'))
+          .hitTestable()
+          .evaluate()
+          .isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('toggle-right')));
+        await tester.pumpAndSettle();
+      }
       expectUnobstructedMaterial(tester);
       await tester.tap(find.byKey(const ValueKey('play-sound')));
       await tester.pumpAndSettle();

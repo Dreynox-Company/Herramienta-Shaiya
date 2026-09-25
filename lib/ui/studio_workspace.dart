@@ -151,7 +151,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     return Container(
       width: 46,
       color: const Color(0xff131a24),
-      child: Column(children: buttons),
+      child: SingleChildScrollView(child: Column(children: buttons)),
     );
   }
 
@@ -200,7 +200,11 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             if (mobile) {
               scaffoldKey.currentState?.openDrawer();
             } else {
-              setState(() => leftOpen = !leftOpen);
+              setState(() {
+                // Closing one dock must not silently open a wider hidden dock.
+                if (leftOpen && !showRight) rightOpen = false;
+                leftOpen = !leftOpen;
+              });
             }
           },
           icon: Icon(

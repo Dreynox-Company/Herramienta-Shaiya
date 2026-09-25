@@ -199,11 +199,29 @@ void main() {
       final path = lib.files.entries
           .firstWhere((e) => e.value == record.idHex)
           .key;
+      await source.readEntry(record);
+      expect(source.validatedFormat(record.entryId), isNotNull);
+      final readsBeforeCorruption = source.reads;
       final changed = await source.file.readAsBytes();
       changed[record.dataOffset + 50] ^= 1;
       await source.file.writeAsBytes(changed);
-      await expectLater(lib.read(path), throwsA(isA<SpkFailure>()));
+      await expectLater(
+        lib.read(path),
+        throwsA(
+          isA<SpkFailure>().having(
+            (error) => error.code,
+            'code',
+            'SPK_RESOURCE_AUTHENTICATION',
+          ),
+        ),
+      );
       expect(source.fullResourceValidation, isNull);
+      expect(source.validatedFormat(record.entryId), isNull);
+      expect(source.reads, readsBeforeCorruption);
+      expect(source.failures.last['entryId'], record.idHex);
+      expect(source.canReadFragmentedResources, isFalse);
+      await source.readEntry(source.index.simpleResources.last);
+      expect(source.reads, readsBeforeCorruption + 1);
     },
   );
 }
