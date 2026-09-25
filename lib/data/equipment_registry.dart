@@ -19,7 +19,7 @@ class RegisteredItem {
   int get id => values['itemtypeid']!;
   int get image => values['image']!;
   int get icon => values['icon'] ?? 0;
-  int get level => values['reqlv'] ?? 0;
+  int get level => values['level'] ?? values['reqlv'] ?? 0;
   String get key => '$type:$id';
   bool get hasName =>
       name.trim().isNotEmpty &&

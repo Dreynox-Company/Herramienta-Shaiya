@@ -8,6 +8,10 @@ import '../data/equipment_registry.dart';
 import '../data/item_publication.dart';
 import '../render/studio_scene.dart';
 import 'data_editor.dart';
+import 'item_workbench.dart';
+import 'editor_icons.dart';
+import '../data/library.dart';
+import '../editor/workbench_model.dart';
 
 /// One searchable registered-item view reused for armor, weapons, wings, mounts.
 /// Raw-resource pickers live in the mutually exclusive other mode in Studio.
@@ -53,7 +57,11 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
   Future<RegisteredItem?> choose(List<RegisteredItem> items, String title) =>
       showDialog<RegisteredItem>(
         context: context,
-        builder: (_) => _ItemPicker(items: items, title: title),
+        builder: (_) => _ItemPicker(
+          items: items,
+          title: title,
+          library: widget.scene.catalog!.library,
+        ),
       );
 
   Widget row(
@@ -101,6 +109,17 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
           style: TextStyle(fontSize: 10),
         ),
         const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: !widget.enabled
+              ? null
+              : () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => ItemWorkbench(library: c.library),
+                  ),
+                ),
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: const Text('Ítems · editar cualquier objeto'),
+        ),
       ];
       if (widget.target == 'equipment') {
         for (final slot in [
@@ -352,12 +371,24 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
 class _ItemPicker extends StatefulWidget {
   final List<RegisteredItem> items;
   final String title;
-  const _ItemPicker({required this.items, required this.title});
+  final Library library;
+  const _ItemPicker({
+    required this.items,
+    required this.title,
+    required this.library,
+  });
   @override
   State<_ItemPicker> createState() => _ItemPickerState();
 }
 
 class _ItemPickerState extends State<_ItemPicker> {
+  late final images = EditorImages(widget.library);
+  @override
+  void dispose() {
+    images.dispose();
+    super.dispose();
+  }
+
   String query = '';
   @override
   Widget build(BuildContext context) {
@@ -390,7 +421,28 @@ class _ItemPickerState extends State<_ItemPicker> {
                   final item = entries[i];
                   return ListTile(
                     dense: true,
+                    leading: DataIcon(
+                      images: images,
+                      path: 'dbitemdata.sdata',
+                      summary: RecordSummary(0, item.key, item.name, '', {
+                        for (final v in item.values.entries)
+                          v.key: '${v.value}',
+                      }),
+                      size: 36,
+                    ),
                     title: Text(item.label),
+                    trailing: IconButton(
+                      tooltip: 'Editar todas las propiedades de este ítem',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => ItemWorkbench(
+                            library: widget.library,
+                            initialKey: item.key,
+                          ),
+                        ),
+                      ),
+                    ),
                     subtitle: Text('Image ${item.image} · Icon ${item.icon}'),
                     onTap: () => Navigator.pop(context, item),
                   );

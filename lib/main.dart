@@ -33,6 +33,7 @@ import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
+import 'ui/item_workbench.dart';
 import 'ui/excelxml_lab.dart';
 import 'ui/wing_position_lab.dart';
 import 'ui/wing_systems_lab.dart';
@@ -45,7 +46,7 @@ import 'data/appearance_snapshot.dart';
 import 'data/equipment_registry.dart';
 import 'ui/equipment_registry_panel.dart';
 
-const studioVersion = '0.6.24';
+const studioVersion = '0.6.25';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -225,6 +226,17 @@ class _StudioState extends State<StudioPage> {
         'actualizadas ya están disponibles en Studio.',
       );
     });
+  }
+
+  Future<void> openItems() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ItemWorkbench(library: library)),
+    );
+    if (mounted) focus.requestFocus();
   }
 
   Future<void> openDataEditor() async {
@@ -3865,6 +3877,7 @@ class _StudioState extends State<StudioPage> {
     timeline: timeline(),
     actions: actionBar(),
     hasLibrary: scene.character != null,
+    onOpenItems: catalog == null || working ? null : openItems,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
     onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,

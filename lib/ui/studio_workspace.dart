@@ -10,6 +10,7 @@ class StudioWorkspace extends StatefulWidget {
   final VoidCallback? onOpenData,
       onOpenSpk,
       onOpenEditor,
+      onOpenItems,
       onOpenExcelXml,
       onExportScene;
   final bool hasLibrary;
@@ -28,6 +29,7 @@ class StudioWorkspace extends StatefulWidget {
     required this.onOpenData,
     this.onOpenSpk,
     this.onOpenEditor,
+    this.onOpenItems,
     this.onOpenExcelXml,
     this.onExportScene,
     this.hasLibrary = false,
@@ -245,6 +247,13 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
               icon: const Icon(Icons.folder_open, size: 17),
               label: const Text('DATA', style: TextStyle(fontSize: 12)),
             ),
+            if (widget.onOpenItems != null)
+              TextButton.icon(
+                key: const ValueKey('open-items'),
+                onPressed: widget.onOpenItems,
+                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                label: const Text('Ítems'),
+              ),
             if (widget.onOpenSpk != null)
               TextButton.icon(
                 key: const ValueKey('open-spk'),
