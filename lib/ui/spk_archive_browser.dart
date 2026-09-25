@@ -445,6 +445,15 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
         t.Float32BufferAttribute.fromList(mesh.normals.toList(), 3),
       );
     }
+    // Preserve the actual mesh UVs; a map without UVs is not a textured preview.
+    if (mesh.uv.length != mesh.vertices * 2) {
+      geometry.dispose();
+      throw const FormatException('Coordenadas UV incompletas en la malla.');
+    }
+    geometry.setAttributeFromString(
+      'uv',
+      t.Float32BufferAttribute.fromList(mesh.uv.toList(), 2),
+    );
     geometry.setIndex(mesh.indices.toList());
 
     if (widget.texturePng != null) {

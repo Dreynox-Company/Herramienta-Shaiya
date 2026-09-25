@@ -578,6 +578,8 @@ class _ResourcePreviewState extends State<ResourcePreview> {
       );
     }
     return FutureBuilder<ResourceRead>(
+      // A new selection must never reuse the previous snapshot while loading.
+      key: ValueKey((widget.index, e.key, request)),
       future: load,
       builder: (context, s) {
         if (s.hasError) {

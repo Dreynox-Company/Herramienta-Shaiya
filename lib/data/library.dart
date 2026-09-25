@@ -771,6 +771,18 @@ class Library {
     }
     if (replacements.isEmpty) return;
 
+    // Capture the manifest BEFORE resource validation. An external edit during
+    // asynchronous decryption must not become a new baseline we overwrite.
+    final manifestFile = File(
+      '$spkOverlayRoot${Platform.pathSeparator}_SPK_OVERLAY.json',
+    );
+    if (await manifestFile.exists() &&
+        await manifestFile.length() > 64 * 1024 * 1024) {
+      throw const FormatException('Manifiesto overlay demasiado grande.');
+    }
+    final oldManifest = await manifestFile.exists()
+        ? await manifestFile.readAsBytes()
+        : null;
     final verified =
         <String, ({String canonical, Uint8List bytes, String originalSha})>{};
     for (final entry in replacements.entries) {
@@ -818,26 +830,32 @@ class Library {
     final root = Directory(spkOverlayRoot!);
     await root.create(recursive: true);
     final stamp = DateTime.now().toUtc().toIso8601String();
-    final manifestFile = File(
-      '${root.path}${Platform.pathSeparator}_SPK_OVERLAY.json',
-    );
-    final oldManifest = await manifestFile.exists()
+    final currentManifest = await manifestFile.exists()
         ? await manifestFile.readAsBytes()
         : null;
+    if ((oldManifest == null) != (currentManifest == null) ||
+        (oldManifest != null &&
+            FileSave.hash(oldManifest) != FileSave.hash(currentManifest!))) {
+      throw const FormatException(
+        'El overlay cambió durante la verificación. Vuelve a abrir el recurso.',
+      );
+    }
     Map<String, dynamic> manifest = {
       'schema': 1,
       'sourceSpk': spk!.file.path,
       'indexSha256': spk!.index.encryptedIndexSha256,
       'entries': <String, dynamic>{},
     };
-    if (await manifestFile.exists()) {
+    if (oldManifest != null) {
       try {
-        final raw = jsonDecode(await manifestFile.readAsString());
-        if (raw is Map &&
-            raw['indexSha256']?.toString().toLowerCase() ==
+        final raw = jsonDecode(utf8.decode(oldManifest));
+        if (raw is! Map ||
+            raw['entries'] is! Map ||
+            raw['indexSha256']?.toString().toLowerCase() !=
                 spk!.index.encryptedIndexSha256.toLowerCase()) {
-          manifest = Map<String, dynamic>.from(raw);
+          throw const FormatException('El manifiesto no corresponde al SPK.');
         }
+        manifest = Map<String, dynamic>.from(raw);
       } catch (_) {
         throw const FormatException(
           'No se puede guardar sobre un manifiesto overlay inválido.',

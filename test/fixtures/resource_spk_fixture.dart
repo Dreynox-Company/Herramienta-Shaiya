@@ -162,7 +162,7 @@ Future<SpkArchiveSource> resourceSpkFixture(
     return SpkArchiveSource.open(file.path, profile, names: names);
   }
   SpkIndex.validateRelationships(records, aux, header);
-  final source = SpkArchiveSource.fromValidatedIndexForTesting(
+  final source = await SpkArchiveSource.fromValidatedIndexForTesting(
     file: file,
     index: SpkIndex(
       header: header,

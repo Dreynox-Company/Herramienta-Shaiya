@@ -86,10 +86,11 @@ class CatalogDocument extends EditDocument {
         p = '$p.mlt';
       } else if (magic.startsWith('ITM') ||
           magic.startsWith('IT2') ||
-          magic.startsWith('pandaIT2'))
+          magic.startsWith('pandaIT2')) {
         p = '$p.itm';
-      else if (magic.startsWith('MO2') || magic.startsWith('MO4'))
+      } else if (magic.startsWith('MO2') || magic.startsWith('MO4')) {
         p = '$p.mon';
+      }
     }
     if (p.endsWith('.mlt')) {
       readMlt(input, path);

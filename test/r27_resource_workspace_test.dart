@@ -244,7 +244,11 @@ void main() {
       expect(source.fullResourceValidation, isNull);
       await File('${root.path}/_SPK_MANIFEST.json').writeAsString('{}');
       await expectLater(
-        source.verifyNamesFromDirectory(root, progress: (_, _, _) {}),
+        source.verifyNamesFromDirectory(
+          root,
+          control: SpkExtractControl(),
+          progress: (_, _, _) {},
+        ),
         throwsFormatException,
       );
     },
