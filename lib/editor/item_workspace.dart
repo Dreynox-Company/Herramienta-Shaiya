@@ -122,8 +122,11 @@ class ItemWorkspace {
   int revision = 0;
   Library? _view;
   Library view(Library source) => _view ??= _ItemView(this, source);
-  ItemWorkspace(this.data, this.text)
-    : documents = {data.path: data, text.path: ?text} {
+  ItemWorkspace(this.data, this.text) : documents = {data.path: data} {
+    final localized = text;
+    if (localized != null) {
+      documents[localized.path] = localized;
+    }
     if (!data.complete || (text != null && !text!.complete)) {
       throw const FormatException(
         'El editor de ítems requiere tablas completas.',
@@ -185,7 +188,7 @@ class ItemWorkspace {
 
   void rebuild() {
     final names = <String, (int, Map<String, String>)>{};
-    if (text != null)
+    if (text != null) {
       for (var row = 0; row < text!.rows.length; row++) {
         final v = values(text!, row), key = identity(v);
         if (names.containsKey(key)) {
@@ -193,6 +196,7 @@ class ItemWorkspace {
         }
         names[key] = (row, v);
       }
+    }
     final next = <ItemEntry>[], keys = <String>{};
     for (var row = 0; row < data.rows.length; row++) {
       final v = values(data, row), key = identity(v);
