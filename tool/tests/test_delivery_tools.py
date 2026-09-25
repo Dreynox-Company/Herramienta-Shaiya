@@ -310,6 +310,8 @@ class DeliveryToolsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / 'lib').mkdir()
+            (root / 'platform/branding').mkdir(parents=True)
+            (root / 'platform/branding/app_icon.ico.b64').write_bytes((Path(prepare.__file__).resolve().parents[1] / 'platform/branding/app_icon.ico.b64').read_bytes())
             (root / 'lib/main.dart').write_text('REAL APP')
             (root / 'pubspec.yaml').write_text('version: 0.5.0+7')
             def destructive_template(*args, **kwargs):

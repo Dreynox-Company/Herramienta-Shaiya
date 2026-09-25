@@ -1,3 +1,5 @@
+import '../test/r27_orbit_input_test.dart' as r27_orbit;
+import '../test/r27_resource_workspace_test.dart' as r27_resources;
 // Complete regression runner: all top-level test suites.
 import '../test/appearance_snapshot_test.dart' as suite0;
 import '../test/archive_export_test.dart' as suite1;
@@ -59,6 +61,8 @@ import '../test/workspace_material_test.dart' as suite56;
 import '../test/xml_tree_document_test.dart' as suite57;
 
 void main() {
+  r27_orbit.main();
+  r27_resources.main();
   suite0.main();
   suite1.main();
   suite2.main();

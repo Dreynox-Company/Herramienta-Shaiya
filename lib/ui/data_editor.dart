@@ -185,18 +185,20 @@ class _DataEditorPageState extends State<DataEditorPage> {
   List<String> get paths =>
       {...widget.library.files.keys, ..._cache.keys}
           .where(
-            (p) => [
-              '.sdata',
-              '.svmap',
-              '.csv',
-              '.mlt',
-              '.itm',
-              '.mon',
-              '.ini',
-              '.cfg',
-              '.txt',
-              '.xml',
-            ].any(p.toLowerCase().endsWith),
+            (p) =>
+                [
+                  '.sdata',
+                  '.svmap',
+                  '.csv',
+                  '.mlt',
+                  '.itm',
+                  '.mon',
+                  '.ini',
+                  '.cfg',
+                  '.txt',
+                  '.xml',
+                ].any(p.toLowerCase().endsWith) ||
+                p == widget.initialPath,
           )
           .toList()
         ..sort();

@@ -5,7 +5,7 @@ import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
+import 'model_orbit_input.dart';
 import 'package:flutter/services.dart';
 import 'package:three_js/three_js.dart' as t;
 import 'package:path/path.dart' as p;
@@ -399,11 +399,8 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
   t.Texture? previewTexture;
   bool ready = false;
   late bool wireframe;
-  double yaw = .45;
-  double pitch = .18;
-  double zoom = 1;
+  final orbit = ModelOrbit();
   double centerY = 0;
-  double distance = 1;
 
   @override
   void initState() {
@@ -492,19 +489,21 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
     final centerZ = (minZ + maxZ) / 2;
     object!.position.setValues(-centerX, 0, -centerZ);
     final span = math.max(maxX - minX, math.max(maxY - minY, maxZ - minZ));
-    distance = math.max(.02, span * 1.7);
+    orbit.distance = math.max(.02, span * 1.7);
     _camera();
     view.addAnimationEvent((_) => _camera());
   }
 
   void _camera() {
-    final d = distance * zoom;
+    final d = orbit.distance * orbit.zoom;
     view.camera.position.setValues(
-      math.sin(yaw) * math.cos(pitch) * d,
-      centerY + math.sin(pitch) * d,
-      math.cos(yaw) * math.cos(pitch) * d,
+      orbit.targetX + math.sin(orbit.yaw) * math.cos(orbit.pitch) * d,
+      centerY + orbit.targetY + math.sin(orbit.pitch) * d,
+      orbit.targetZ + math.cos(orbit.yaw) * math.cos(orbit.pitch) * d,
     );
-    view.camera.lookAt(t.Vector3(0, centerY, 0));
+    view.camera.lookAt(
+      t.Vector3(orbit.targetX, centerY + orbit.targetY, orbit.targetZ),
+    );
   }
 
   @override
@@ -512,6 +511,7 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
     object?.geometry?.dispose();
     object?.material?.dispose();
     previewTexture?.dispose();
+    orbit.dispose();
     view.dispose();
     super.dispose();
   }
@@ -526,23 +526,7 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Listener(
-                onPointerSignal: (event) {
-                  if (event is PointerScrollEvent) {
-                    setState(() {
-                      zoom = (zoom * math.exp(event.scrollDelta.dy * .0015))
-                          .clamp(.12, 12.0);
-                    });
-                  }
-                },
-                child: GestureDetector(
-                  onPanUpdate: (details) => setState(() {
-                    yaw += details.delta.dx * .01;
-                    pitch = (pitch + details.delta.dy * .01).clamp(-1.45, 1.45);
-                  }),
-                  child: view.build(),
-                ),
-              ),
+              child: ModelOrbitInput(orbit: orbit, child: view.build()),
             ),
             if (!ready)
               const Positioned(
@@ -568,17 +552,13 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
           ),
           TextButton(
             onPressed: () => setState(() {
-              yaw = 0;
-              pitch = 0;
-              zoom = 1;
+              orbit.reset(azimuth: 0, elevation: 0);
             }),
             child: const Text('Frente'),
           ),
           TextButton(
             onPressed: () => setState(() {
-              yaw = math.pi / 2;
-              pitch = 0;
-              zoom = 1;
+              orbit.reset(azimuth: math.pi / 2, elevation: 0);
             }),
             child: const Text('Perfil'),
           ),
@@ -600,6 +580,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
   static Future<void> pickAndOpen(
     BuildContext context, {
     Future<void> Function(SpkArchiveSource source)? onMount,
+    bool autoMount = false,
   }) async {
     final picked = await openFile(
       acceptedTypeGroups: const [
@@ -613,6 +594,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
     if (profile == null || !context.mounted) return;
 
     final progress = ValueNotifier<String>('Abriendo DATA.SPK…');
+    var progressOpen = true;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -662,6 +644,11 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       }
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
+      progressOpen = false;
+      if (autoMount && onMount != null) {
+        await onMount(source);
+        return;
+      }
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) =>
@@ -670,7 +657,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
       );
     } catch (error) {
       if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
+        if (progressOpen) Navigator.of(context, rootNavigator: true).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(spkFriendlyErrorMessage(error)),

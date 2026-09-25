@@ -10,13 +10,44 @@ import os
 import shutil
 import subprocess
 import sys
+from prepare_branding import prepare as prepare_branding
 
 ROOT = Path(__file__).resolve().parents[1]
+
+WINDOWS_ICONS = r'''  // SHSTUDIO_RUNTIME_ICON: original supplied HQ icon, local only.
+  struct ShStudioIcons {
+    HICON big = nullptr;
+    HICON small = nullptr;
+    ~ShStudioIcons() {
+      if (big) DestroyIcon(big);
+      if (small) DestroyIcon(small);
+    }
+  } shstudio_icons;
+  wchar_t executable_path[32768] = {};
+  DWORD executable_length = GetModuleFileNameW(nullptr, executable_path, 32768);
+  if (executable_length > 0 && executable_length < 32768) {
+    std::wstring icon_path(executable_path, executable_length);
+    auto slash = icon_path.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) {
+      icon_path.resize(slash + 1);
+      icon_path += L"Extras\\Branding\\ShStudio_Logo_HQ.ico";
+      shstudio_icons.big = static_cast<HICON>(LoadImageW(nullptr, icon_path.c_str(),
+        IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE));
+      shstudio_icons.small = static_cast<HICON>(LoadImageW(nullptr, icon_path.c_str(),
+        IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE));
+      if (shstudio_icons.big) SendMessageW(window.GetHandle(), WM_SETICON, ICON_BIG,
+        reinterpret_cast<LPARAM>(shstudio_icons.big));
+      if (shstudio_icons.small) SendMessageW(window.GetHandle(), WM_SETICON, ICON_SMALL,
+        reinterpret_cast<LPARAM>(shstudio_icons.small));
+    }
+  }'''
+
 
 
 def prepare(platforms: str = "windows,android") -> None:
     if not set(platforms.split(",")) <= {"windows", "android", "linux"}:
         raise ValueError("Plataforma de generación no permitida.")
+    icon = prepare_branding(ROOT)
     flutter = shutil.which("flutter")
     if not flutter:
         raise RuntimeError("No se encuentra Flutter. Añade flutter/bin al PATH y vuelve a abrir la consola.")
@@ -57,9 +88,18 @@ def prepare(platforms: str = "windows,android") -> None:
         runner = ROOT / "windows/runner/main.cpp"
         if runner.exists():
             text = runner.read_text(encoding="utf-8").replace(
-                'L"herramienta_shaiya"', 'L"Shaiya Studio"'
+                'L"herramienta_shaiya"', 'L"ShStudio"'
             ).replace("1280, 720", "1440, 900")
+            text = text.replace('L"Shaiya Studio"', 'L"ShStudio"')
+            # Prefer the complete user ICO beside the EXE; RC frames remain the
+            # fallback and the executable's Explorer icon. No online resources.
+            anchor = '  window.SetQuitOnClose(true);'
+            if 'SHSTUDIO_RUNTIME_ICON' not in text:
+                if anchor not in text:
+                    raise RuntimeError('Unknown Flutter runner template')
+                text = text.replace(anchor, WINDOWS_ICONS + '\n' + anchor)
             runner.write_text(text, encoding="utf-8")
+            (ROOT / "windows/runner/resources/app_icon.ico").write_bytes(icon)
     print("Plataformas preparadas. Las fuentes y los recursos DATA permanecen intactos.")
 
 

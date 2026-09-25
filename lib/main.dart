@@ -28,6 +28,9 @@ import 'core/game_metadata.dart';
 import 'core/world_resources.dart';
 import 'data/library.dart';
 import 'data/spk_source.dart';
+import 'data/resource_index.dart';
+import 'ui/resource_workspace.dart';
+import 'ui/studio_brand.dart';
 import 'render/studio_scene.dart';
 import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
@@ -63,7 +66,7 @@ class ShaiyaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: 'Shaiya Studio',
+    title: 'ShStudio',
     locale: const Locale('es'),
     supportedLocales: const [Locale('es')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -84,6 +87,87 @@ class _StudioState extends State<StudioPage> {
   late final three.ThreeJS renderer;
   Catalog? catalog;
   int tab = 0;
+  ResourceIndex? _resourceIndex;
+  ResourceIndex? get resourceIndex {
+    final library = catalog?.library;
+    if (library == null) return null;
+    if (!identical(_resourceIndex?.library, library)) {
+      _resourceIndex?.removeListener(refresh);
+      _resourceIndex?.dispose();
+      _resourceIndex = ResourceIndex(library)..addListener(refresh);
+    }
+    return _resourceIndex;
+  }
+
+  Future<void> browseMountedSpk() async {
+    final source = catalog?.library.spk;
+    if (source == null) return;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            SpkArchiveBrowserPage(source: source, onMount: mountSpkWorkspace),
+      ),
+    );
+  }
+
+  Future<void> resolveResourceNames() async {
+    final source = catalog?.library.spk;
+    if (source == null || working || importing) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar rutas por contenido'),
+        content: const Text(
+          'Selecciona una carpeta DATA original con nombres conocidos. '
+          'Se compararán contenidos completos por SHA-256, no tamaños. '
+          'No uses una extracción de este mismo SPK con nombres inferidos: sería una comprobación circular. '
+          'Los duplicados se mantendrán sin resolver.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Elegir referencia'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final dir = await getDirectoryPath(
+      confirmButtonText: 'Usar DATA original de referencia',
+    );
+    if (dir == null || !mounted) return;
+    setState(() => working = true);
+    var reload = false;
+    try {
+      await source.verifyNamesFromDirectory(
+        Directory(dir),
+        control: SpkExtractControl(),
+        progress: (message, done, total) {
+          if (mounted) setState(() => progress = '$message $done/$total');
+        },
+      );
+      await File('${source.file.path}.names.json').writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          ...source.names.toJson(),
+          'spkIndexSha256': source.index.encryptedIndexSha256,
+        }),
+        flush: true,
+      );
+      reload = true;
+    } catch (e) {
+      showError(e);
+    } finally {
+      if (mounted) setState(() => working = false);
+    }
+    if (reload && mounted) await mountSpkWorkspace(source);
+  }
+
   bool importing = false, working = false;
   String progress = 'Selecciona DATA para comenzar.';
   final List<String> diagnostics = [];
@@ -316,6 +400,7 @@ class _StudioState extends State<StudioPage> {
     await SpkArchiveBrowserPage.pickAndOpen(
       context,
       onMount: mountSpkWorkspace,
+      autoMount: true,
     );
     if (mounted) focus.requestFocus();
   }
@@ -330,7 +415,11 @@ class _StudioState extends State<StudioPage> {
         if (mounted) setState(() => progress = value);
       }
 
-      candidate = await Library.fromSpkEditable(source, progress: report);
+      candidate = await Library.fromSpkEditable(
+        source,
+        progress: report,
+        allowLocked: true,
+      );
       await loadBundledExtras();
       final next = Catalog(candidate);
       await next.load(report);
@@ -351,6 +440,7 @@ class _StudioState extends State<StudioPage> {
         );
       }
       catalog = next;
+      tab = 6; // Always publish the SPK resource workspace, even without a rig.
       _memories.clear();
       diagnostics.addAll(next.warnings);
       scene.combat.reset();
@@ -701,6 +791,8 @@ class _StudioState extends State<StudioPage> {
 
   @override
   void dispose() {
+    _resourceIndex?.removeListener(refresh);
+    _resourceIndex?.dispose();
     scene.removeListener(refresh);
     scene.dispose();
     catalog?.library.dispose();
@@ -1118,10 +1210,19 @@ class _StudioState extends State<StudioPage> {
 
   Widget panel() {
     final c = catalog, a = scene.appearance?.archetype;
+    if (tab == 6 && c != null) {
+      return ResourceSidebar(
+        index: resourceIndex!,
+        onBrowseArchive: c.library.spk == null ? null : browseMountedSpk,
+        onResolveNames: c.library.spk?.canReadSimpleResources == true
+            ? resolveResourceNames
+            : null,
+      );
+    }
     if (c == null || a == null) {
       return section('Biblioteca local', [
         note(
-          'Conecta la carpeta DATA descomprimida. Los recursos permanecen en tu equipo.',
+          'Conecta DATA, SAH/SAF o SPK. El explorador de recursos no necesita un personaje completo.',
         ),
         FilledButton.icon(
           onPressed: disabled ? null : () => connect(),
@@ -1146,6 +1247,16 @@ class _StudioState extends State<StudioPage> {
         ),
         if (c != null) ...[
           note(c.library.sourceLabel),
+          FilledButton.icon(
+            key: const ValueKey('show-source-resources'),
+            onPressed: () => setState(() => tab = 6),
+            icon: const Icon(Icons.folder_copy_outlined, size: 17),
+            label: const Text('Ver recursos y editar'),
+          ),
+          if (a == null)
+            note(
+              'No hay un rig Character resuelto. La biblioteca sí está abierta: puedes ver mallas, texturas y editar tablas desde Recursos.',
+            ),
           TextButton.icon(
             onPressed: working ? null : openDataEditor,
             icon: const Icon(Icons.edit_note, size: 17),
@@ -3858,19 +3969,44 @@ class _StudioState extends State<StudioPage> {
 
   @override
   Widget build(BuildContext context) {
+    final resources = resourceIndex;
+    final resourceMode = tab == 6 && resources != null;
     final docks = StudioDockContent.split(panel());
     return RepaintBoundary(
       key: const ValueKey('studio-shell-capture'),
       child: StudioWorkspace(
-        viewport: viewport(),
-        left: docks.navigation,
-        right: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [docks.inspector, inspector()],
+        viewport: IndexedStack(
+          index: resourceMode ? 1 : 0,
+          children: [
+            Stack(
+              children: [
+                Positioned.fill(child: viewport()),
+                if (catalog == null && !importing)
+                  const Center(child: StudioBrand(full: true, size: 430)),
+              ],
+            ),
+            resourceMode
+                ? ResourcePreview(
+                    index: resources,
+                    entry: resources.selected,
+                    onEdited: () {
+                      if (mounted) setState(() {});
+                    },
+                  )
+                : const SizedBox.expand(),
+          ],
         ),
+        leftOwnsScroll: resourceMode,
+        left: resourceMode ? panel() : docks.navigation,
+        right: resourceMode
+            ? ResourceDetails(index: resources)
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [docks.inspector, inspector()],
+              ),
         timeline: timeline(),
         actions: actionBar(),
-        hasLibrary: scene.character != null,
+        hasLibrary: scene.character != null && !resourceMode,
         onOpenEditor: catalog == null || working ? null : openDataEditor,
         onOpenItems: catalog == null || working ? null : openItems,
         onOpenExcelXml: catalog == null || working
@@ -3888,6 +4024,7 @@ class _StudioState extends State<StudioPage> {
           'Combate',
           'Escenario',
           'Diagnóstico',
+          'Recursos',
         ],
         icons: const [
           Icons.person_outline,
@@ -3896,6 +4033,7 @@ class _StudioState extends State<StudioPage> {
           Icons.sports_martial_arts,
           Icons.landscape_outlined,
           Icons.fact_check_outlined,
+          Icons.folder_copy_outlined,
         ],
         selectedTab: tab,
         onTab: (v) {

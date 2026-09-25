@@ -3,7 +3,8 @@ import '../render/native_view.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
+import 'model_orbit_input.dart';
+import '../data/spk_source.dart';
 import 'package:flutter/foundation.dart';
 import 'package:three_js/three_js.dart' as t;
 
@@ -137,11 +138,13 @@ class NativeModelPreview extends StatefulWidget {
   final Library library;
   final ModelReference model;
   final ValueChanged<bool>? onReadyChanged;
+  final ModelOrbit? cameraController;
   const NativeModelPreview({
     super.key,
     required this.library,
     required this.model,
     this.onReadyChanged,
+    this.cameraController,
   });
   @override
   State<NativeModelPreview> createState() => _NativeModelPreviewState();
@@ -155,10 +158,14 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   String clipName = 'Pose original';
   int _clipRequest = 0;
   bool dead = false, ready = false, wire = false, playing = true;
-  double yaw = .35, pitch = .18, distance = 4, centerY = 1, zoom = 1;
+  late final ModelOrbit orbit;
+  double centerY = 1;
+  bool cameraReady = false;
   @override
   void initState() {
     super.initState();
+    orbit = widget.cameraController ?? ModelOrbit();
+    orbit.addListener(camera);
     parts = StudioScene((_) {});
     view = NativeView(
       settings: t.Settings(
@@ -198,7 +205,7 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
       int vertices = 0;
       for (final ref in widget.model.parts) {
         if (!widget.library.files.containsKey(ref.$1) ||
-            !widget.library.files.containsKey(ref.$2)) {
+            (ref.$2.isNotEmpty && !widget.library.files.containsKey(ref.$2))) {
           throw FormatException(
             'Recurso no presente: ${!widget.library.files.containsKey(ref.$1) ? ref.$1 : ref.$2}',
           );
@@ -241,13 +248,14 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
         throw const FormatException('Modelo sin partes.');
       }
       centerY = (minY + maxY) / 2;
-      distance = math.max(
+      orbit.distance = math.max(
         .02,
         math.max(maxY - minY, math.max(maxX - minX, maxZ - minZ)) * 1.65,
       );
       staged.root.position.setValues(-(minX + maxX) / 2, 0, -(minZ + maxZ) / 2);
       actor = staged;
       view.scene.add(staged.root);
+      cameraReady = true;
       camera();
       if (!dead && mounted) widget.onReadyChanged?.call(true);
       view.addAnimationEvent((dt) {
@@ -265,14 +273,16 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   }
 
   void camera() {
-    if (dead) return;
-    final d = distance * zoom;
+    if (dead || !cameraReady) return;
+    final d = orbit.distance * orbit.zoom;
     view.camera.position.setValues(
-      math.sin(yaw) * math.cos(pitch) * d,
-      centerY + math.sin(pitch) * d,
-      math.cos(yaw) * math.cos(pitch) * d,
+      orbit.targetX + math.sin(orbit.yaw) * math.cos(orbit.pitch) * d,
+      centerY + orbit.targetY + math.sin(orbit.pitch) * d,
+      orbit.targetZ + math.cos(orbit.yaw) * math.cos(orbit.pitch) * d,
     );
-    view.camera.lookAt(t.Vector3(0, centerY, 0));
+    view.camera.lookAt(
+      t.Vector3(orbit.targetX, centerY + orbit.targetY, orbit.targetZ),
+    );
   }
 
   Future<void> chooseClip(String name) async {
@@ -327,6 +337,8 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   @override
   void dispose() {
     dead = true;
+    orbit.removeListener(camera);
+    if (widget.cameraController == null) orbit.dispose();
     actor?.dispose();
     parts.dispose();
     view.dispose();
@@ -340,23 +352,7 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Listener(
-                onPointerSignal: (e) {
-                  if (e is PointerScrollEvent) {
-                    setState(
-                      () => zoom = (zoom * math.exp(e.scrollDelta.dy * .0015))
-                          .clamp(.15, 8.0),
-                    );
-                  }
-                },
-                child: GestureDetector(
-                  onPanUpdate: (d) => setState(() {
-                    yaw += d.delta.dx * .01;
-                    pitch = (pitch + d.delta.dy * .01).clamp(-1.4, 1.4);
-                  }),
-                  child: view.build(),
-                ),
-              ),
+              child: ModelOrbitInput(orbit: orbit, child: view.build()),
             ),
             if (error != null)
               Positioned(
@@ -415,27 +411,15 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
               icon: Icon(playing ? Icons.pause : Icons.play_arrow),
             ),
             TextButton(
-              onPressed: () => setState(() {
-                yaw = 0;
-                pitch = 0;
-                zoom = 1;
-              }),
+              onPressed: () => orbit.reset(azimuth: 0, elevation: 0),
               child: const Text('Frente'),
             ),
             TextButton(
-              onPressed: () => setState(() {
-                yaw = math.pi;
-                pitch = .15;
-                zoom = 1;
-              }),
+              onPressed: () => orbit.reset(azimuth: math.pi, elevation: .15),
               child: const Text('Espalda'),
             ),
             TextButton(
-              onPressed: () => setState(() {
-                yaw = math.pi / 2;
-                pitch = 0;
-                zoom = 1;
-              }),
+              onPressed: () => orbit.reset(azimuth: math.pi / 2, elevation: 0),
               child: const Text('Perfil'),
             ),
             FilterChip(
@@ -449,7 +433,7 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
               },
             ),
             const Text(
-              'Arrastra: girar · rueda: zoom',
+              'Izq.: girar · der./central: desplazar · rueda: zoom · F: encuadrar',
               style: TextStyle(fontSize: 10, color: EditorStyle.muted),
             ),
           ],
@@ -459,7 +443,9 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
   );
 }
 
-MeshData _mesh((Uint8List, String) a) => a.$2.toLowerCase().endsWith('.3dc')
+MeshData _mesh((Uint8List, String) a) =>
+    (a.$2.toLowerCase().endsWith('.3dc') ||
+        SpkArchiveSource.detectFormat(a.$1) == '3DC')
     ? MeshData.skinned(a.$1, a.$2)
     : MeshData.object(a.$1, a.$2);
 ClipData _clip((Uint8List, String) a) => ClipData.parse(a.$1, a.$2);

@@ -10,6 +10,7 @@ import '../core/spk_archive.dart';
 import 'archive_source.dart';
 import 'spk_source.dart';
 import 'spk_writer.dart';
+import 'file_save.dart';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
@@ -104,6 +105,9 @@ class Library {
 
   String get sourceLabel {
     if (spk != null) {
+      if (!spk!.canReadSimpleResources) {
+        return 'DATA.SPK · índice abierto · perfil de lectura pendiente';
+      }
       return spk!.canExtractAll
           ? 'DATA.SPK · lectura autenticada + overlay editable'
           : 'DATA.SPK · acceso parcial autenticado · fragmentos bloqueados · overlay editable';
@@ -303,10 +307,11 @@ class Library {
   /// No whole-archive extraction or decryption is triggered by opening Studio.
   static Future<Library> fromSpkEditable(
     SpkArchiveSource source, {
+    bool allowLocked = false,
     void Function(String)? progress,
     String? overlayRoot,
   }) async {
-    if (!source.canReadSimpleResources) {
+    if (!source.canReadSimpleResources && !allowLocked) {
       throw const SpkFailure(
         'SPK_WORKSPACE_PROFILE',
         'Autentica primero el perfil de recursos simples.',
@@ -319,7 +324,9 @@ class Library {
         blocked++;
         continue;
       }
-      final hasName = source.names.isConfirmed(record.entryId);
+      final hasName =
+          source.names.isConfirmed(record.entryId) &&
+          supportedPath(source.names[record.entryId]!);
       final path = hasName
           ? canon(SpkArchiveSource.safeRelative(source.names[record.entryId]!))
           : canon(
@@ -338,7 +345,7 @@ class Library {
         technical++;
       }
     }
-    if (files.isEmpty) {
+    if (files.isEmpty && !allowLocked) {
       throw const FormatException('No hay recursos legibles para montar.');
     }
     progress?.call(
@@ -656,7 +663,97 @@ class Library {
     return File('$root${Platform.pathSeparator}$relative');
   }
 
+  Future<({Uint8List bytes, String baseSha})> _spkSnapshot(
+    String path,
+    int limit,
+  ) async {
+    final id = files[path], source = spk!;
+    final record = _spkRecords[id];
+    if (record == null) throw FormatException('Registro SPK ausente: $path');
+    final original = (await source.readEntry(record, limit: limit)).bytes;
+    final baseSha = sha256.convert(original).toString();
+    final manifestFile = File(
+      '$spkOverlayRoot${Platform.pathSeparator}_SPK_OVERLAY.json',
+    );
+    if (!await manifestFile.exists()) {
+      if (await _spkOverlayFile(path).exists()) {
+        throw const FormatException(
+          'Overlay sin manifiesto: no se cargan cambios no confirmados.',
+        );
+      }
+      return (bytes: original, baseSha: baseSha);
+    }
+    if (await manifestFile.length() > 64 * 1024 * 1024) {
+      throw const FormatException('Manifiesto overlay demasiado grande.');
+    }
+    final manifest = jsonDecode(await manifestFile.readAsString());
+    if (manifest is! Map ||
+        manifest['indexSha256'] != source.index.encryptedIndexSha256 ||
+        manifest['entries'] is! Map) {
+      throw const FormatException(
+        'El manifiesto overlay no corresponde al SPK abierto.',
+      );
+    }
+    final hits = (manifest['entries'] as Map).entries
+        .where((e) => e.value is Map && e.value['entryId'] == id)
+        .toList();
+    if (hits.isEmpty) return (bytes: original, baseSha: baseSha);
+    if (hits.length != 1) {
+      throw const FormatException(
+        'El overlay contiene dos cambios para el mismo Entry ID.',
+      );
+    }
+    final entry = hits.single;
+    if (entry.value['originalSha256'] != baseSha) {
+      throw const FormatException(
+        'El recurso SPK original cambió desde la edición.',
+      );
+    }
+    final file = _spkOverlayFile(
+      canon((entry.value['file'] ?? entry.key).toString()),
+    );
+    if (!await file.exists()) {
+      throw const FormatException('Falta el archivo del overlay.');
+    }
+    if (await file.length() > limit) {
+      throw FormatException('$path supera el presupuesto de lectura.');
+    }
+    final bytes = await file.readAsBytes();
+    if (bytes.length != entry.value['bytes'] ||
+        sha256.convert(bytes).toString() != entry.value['overlaySha256']) {
+      throw const FormatException(
+        'Los bytes del overlay no coinciden con su manifiesto.',
+      );
+    }
+    return (bytes: bytes, baseSha: baseSha);
+  }
+
+  Future<void> _overlayTail = Future<void>.value();
   Future<void> writeSpkOverlay(
+    Map<String, Uint8List> replacements, {
+    required Map<String, String> expectedHashes,
+    bool keepBackup = true,
+  }) {
+    final copy = {
+      for (final entry in replacements.entries)
+        entry.key: Uint8List.fromList(entry.value),
+    };
+    final hashes = Map<String, String>.from(expectedHashes);
+    final result = _overlayTail.then(
+      (_) => _writeSpkOverlay(
+        copy,
+        expectedHashes: hashes,
+        keepBackup: keepBackup,
+      ),
+    );
+    _overlayTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  Future<void> _writeSpkOverlay(
     Map<String, Uint8List> replacements, {
     required Map<String, String> expectedHashes,
     bool keepBackup = true,
@@ -696,15 +793,15 @@ class Library {
           'La ruta ${entry.key} todavía es inferida. Antes de editarla, '
           'confírmala por SHA-256 o con el descubrimiento estructural de tablas. '
           'Los recursos sin nombre sí pueden editarse por su ruta técnica '
-          'Entry ID después de la auditoría completa.',
+          'Entry ID después de autenticar su lectura.',
         );
       }
       final expected = expectedHashes[entry.key] ?? expectedHashes[canonical];
       if (expected == null || expected.isEmpty) {
         throw FormatException('Falta el hash esperado de ${entry.key}.');
       }
-      final current = await read(canonical, limit: 128 * 1024 * 1024);
-      final actual = sha256.convert(current).toString();
+      final snapshot = await _spkSnapshot(canonical, 128 * 1024 * 1024);
+      final actual = sha256.convert(snapshot.bytes).toString();
       if (actual != expected) {
         throw FormatException(
           'El recurso cambió desde que se abrió el editor: ${entry.key}. '
@@ -714,7 +811,7 @@ class Library {
       verified[canonical] = (
         canonical: canonical,
         bytes: Uint8List.fromList(entry.value),
-        originalSha: actual,
+        originalSha: snapshot.baseSha,
       );
     }
 
@@ -724,6 +821,9 @@ class Library {
     final manifestFile = File(
       '${root.path}${Platform.pathSeparator}_SPK_OVERLAY.json',
     );
+    final oldManifest = await manifestFile.exists()
+        ? await manifestFile.readAsBytes()
+        : null;
     Map<String, dynamic> manifest = {
       'schema': 1,
       'sourceSpk': spk!.file.path,
@@ -739,7 +839,9 @@ class Library {
           manifest = Map<String, dynamic>.from(raw);
         }
       } catch (_) {
-        // Un manifiesto viejo o incompleto no se usa como autoridad.
+        throw const FormatException(
+          'No se puede guardar sobre un manifiesto overlay inválido.',
+        );
       }
     }
     final entries = Map<String, dynamic>.from(
@@ -747,7 +849,9 @@ class Library {
     );
 
     for (final item in verified.values) {
-      final target = _spkOverlayFile(item.canonical);
+      final contentHash = sha256.convert(item.bytes).toString();
+      final contentPath = '_versions/${files[item.canonical]}/$contentHash.bin';
+      final target = _spkOverlayFile(contentPath);
       await target.parent.create(recursive: true);
       final temp = File(
         '${target.path}.${DateTime.now().microsecondsSinceEpoch}.partial',
@@ -762,18 +866,24 @@ class Library {
         );
       }
       if (await target.exists()) {
-        if (keepBackup) {
-          final backup = File('${target.path}.bak');
-          if (await backup.exists()) await backup.delete();
-          await target.rename(backup.path);
-        } else {
-          await target.delete();
+        if (sha256.convert(await target.readAsBytes()).toString() !=
+            expectedWritten) {
+          await temp.delete();
+          throw const FormatException(
+            'Generación de overlay alterada externamente.',
+          );
         }
+        await temp.delete();
+      } else {
+        await temp.rename(target.path);
       }
-      await temp.rename(target.path);
       final record = _spkRecords[files[item.canonical]];
+      entries.removeWhere(
+        (_, info) => info is Map && info['entryId'] == files[item.canonical],
+      );
       entries[item.canonical] = {
         'entryId': files[item.canonical],
+        'file': contentPath,
         'nameAuthority':
             record != null && spk!.names.isConfirmed(record.entryId)
             ? 'confirmed-path'
@@ -793,13 +903,22 @@ class Library {
       'updatedAt': stamp,
       'entries': entries,
     };
-    final manifestTemp = File('${manifestFile.path}.partial');
-    await manifestTemp.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(manifest),
-      flush: true,
+    final manifestBytes = Uint8List.fromList(
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest)),
     );
-    if (await manifestFile.exists()) await manifestFile.delete();
-    await manifestTemp.rename(manifestFile.path);
+    if (oldManifest != null) {
+      await FileSave.replace(
+        manifestFile.path,
+        manifestBytes,
+        expectedHash: sha256.convert(oldManifest).toString(),
+        keepBackup: keepBackup,
+      );
+    } else {
+      // An exclusive creation is the first publication. An interrupted first
+      // save is reported, never interpreted as an empty successful manifest.
+      await manifestFile.create(exclusive: true);
+      await manifestFile.writeAsBytes(manifestBytes, flush: true);
+    }
   }
 
   Future<Map<String, Object?>> exportSpkWorkspace(
@@ -886,11 +1005,13 @@ class Library {
           final info = entry.value is Map
               ? Map<String, dynamic>.from(entry.value as Map)
               : <String, dynamic>{};
-          final expectedId = files[canonical];
-          if (expectedId == null || info['entryId']?.toString() != expectedId) {
+          final expectedId = info['entryId']?.toString();
+          if (expectedId == null || !_spkRecords.containsKey(expectedId)) {
             throw FormatException('Overlay inconsistente para ${entry.key}.');
           }
-          final overlayFile = _spkOverlayFile(canonical);
+          final overlayFile = _spkOverlayFile(
+            canon((info['file'] ?? canonical).toString()),
+          );
           if (!await overlayFile.exists()) {
             throw FormatException(
               'Falta el recurso editado del overlay: ${entry.key}.',
@@ -904,7 +1025,11 @@ class Library {
             );
           }
 
-          final row = rowsByPath[canonical];
+          final row =
+              rows
+                  .where((r) => r['entryId']?.toString() == expectedId)
+                  .firstOrNull ??
+              rowsByPath[canonical];
           if (row == null) {
             throw FormatException(
               'La extracción completa no contiene ${entry.key}.',
@@ -1013,7 +1138,8 @@ class Library {
       for (var i = 0; i < list.length; i++) {
         final entry = list[i];
         final canonical = canon(entry.key);
-        final idHex = files[canonical];
+        final savedInfo = entry.value is Map ? entry.value as Map : const {};
+        final idHex = savedInfo['entryId']?.toString();
         final record = idHex == null ? null : _spkRecords[idHex];
         if (record == null) {
           throw FormatException(
@@ -1028,7 +1154,9 @@ class Library {
             'Entry ID inconsistente en overlay: ${entry.key}.',
           );
         }
-        final editedFile = _spkOverlayFile(canonical);
+        final editedFile = _spkOverlayFile(
+          canon((info['file'] ?? canonical).toString()),
+        );
         if (!await editedFile.exists()) {
           throw FormatException(
             'Falta el archivo editado del overlay: ${entry.key}.',
@@ -1216,21 +1344,7 @@ class Library {
     final canonical = canon(path);
     final id = files[canonical];
     if (id == null) throw FormatException('Recurso ausente: $path');
-    if (spk != null) {
-      final overlay = _spkOverlayFile(canonical);
-      if (await overlay.exists()) {
-        final length = await overlay.length();
-        if (length > limit) {
-          throw FormatException('$path supera el límite de lectura.');
-        }
-        return overlay.readAsBytes();
-      }
-      final record = _spkRecords[id];
-      if (record == null) {
-        throw FormatException('Registro SPK ausente para $path.');
-      }
-      return (await spk!.readEntry(record, limit: limit)).bytes;
-    }
+    if (spk != null) return (await _spkSnapshot(canonical, limit)).bytes;
     if (archive != null) return archive!.read(id, limit: limit);
     if (saf) {
       final b = await channel.invokeMethod<Uint8List>('read', {
