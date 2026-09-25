@@ -34,6 +34,7 @@ jobs:
           python ci/refine_r27_review.py
           python ci/refine_r27_material_tests.py
           python ci/refine_r27_catalog_mount.py
+          python ci/refine_r27_library_mount.py
       - name: Generate exact provided icon assets
         run: python tool/prepare_branding.py
       - name: Register every regression in the local runner
