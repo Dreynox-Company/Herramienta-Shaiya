@@ -39,6 +39,43 @@ class DeliveryToolsTest(unittest.TestCase):
         self.assertIn("'spk-50135-full-audit-and-reopen'", text)
         self.assertIn("'windows-angle-release-runtime'", text)
 
+    def test_windows_angle_release_hardening_is_fail_closed(self):
+        root = Path(__file__).resolve().parents[2]
+        package = (root / 'ci' / 'package_windows.py').read_text(
+            encoding='utf-8'
+        )
+        workflow = (root / '.github' / 'workflows' / 'build.yml').read_text(
+            encoding='utf-8'
+        )
+        manifest = json.loads(
+            (root / 'ci' / 'angle-vcpkg' / 'vcpkg.json').read_text(
+                encoding='utf-8'
+            )
+        )
+        hardener = (root / 'ci' / 'harden_angle_windows.ps1').read_text(
+            encoding='utf-8'
+        )
+
+        self.assertEqual(
+            manifest['builtin-baseline'],
+            '5f96cd15fd745122cf27e0524606d6c1efc5fd07',
+        )
+        self.assertIn('angle', str(manifest['dependencies']))
+        self.assertIn("angle_release_validated=bool(", package)
+        self.assertIn("'angleReleaseRuntimeValidated':angle_release_validated", package)
+        self.assertIn(
+            "'graphicsRuntimeHardeningComplete':bool("
+            "not debug_crt and angle_release_validated)",
+            package,
+        )
+        self.assertIn("inputs.harden_angle", workflow)
+        self.assertIn("Harden ANGLE Release runtime", workflow)
+        self.assertIn("Smoke hardened ANGLE Release with mounted DATA", workflow)
+        self.assertIn("libEGL.dll", hardener)
+        self.assertIn("libGLESv2.dll", hardener)
+        self.assertIn("debugCrtRemaining", hardener)
+        self.assertIn("Licenses/vcpkg", hardener)
+
     def test_windows_package_tracks_real_flight_v3_runtime_hashes(self):
         root = Path(__file__).resolve().parents[2]
         text = (root / 'ci' / 'package_windows.py').read_text(encoding='utf-8')
