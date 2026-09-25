@@ -171,8 +171,9 @@ class _ItemWorkbenchState extends State<ItemWorkbench> {
   Future<void> editReference(ModelReference ref) async {
     final capturedEntry = session!.byKey[selected]!;
     final path = ref.sourcePath, ordinal = ref.sourceOrdinal;
-    if (path == null || ordinal == null)
+    if (path == null || ordinal == null) {
       throw const FormatException('Referencia sin identidad de catálogo.');
+    }
     if (!await confirm(
       context,
       'Recurso compartido',
@@ -187,8 +188,9 @@ class _ItemWorkbenchState extends State<ItemWorkbench> {
           r.ordinal == ordinal &&
           {'Material', 'Equipo', 'Modelo animado'}.contains(r.kind),
     );
-    if (row < 0)
+    if (row < 0) {
       throw const FormatException('No existe el registro del catálogo.');
+    }
     final fields = <PropertyBinding>[
       for (final f in d.fields(row)) PropertyBinding(d, row, f),
     ];
@@ -239,11 +241,12 @@ class _ItemWorkbenchState extends State<ItemWorkbench> {
       widget.library,
       Directory('$parent/Items_${DateTime.now().microsecondsSinceEpoch}'),
     );
-    if (mounted)
+    if (mounted) {
       setState(
         () => message =
             'Exportado y verificado: ${out.path}. El borrador se conserva; DATA sigue intacta.',
       );
+    }
   }
 
   @override
@@ -426,16 +429,18 @@ class _ItemWorkbenchState extends State<ItemWorkbench> {
                                   ? null
                                   : () {
                                       select(e.key);
-                                      if (!wide)
+                                      if (!wide) {
                                         setState(() => mobileDetail = true);
+                                      }
                                     },
                             );
                           },
                         );
-                        if (!wide)
+                        if (!wide) {
                           return mobileDetail && selected != null
                               ? detail(s.byKey[selected]!)
                               : list;
+                        }
                         return Row(
                           children: [
                             Expanded(flex: 5, child: list),
@@ -532,14 +537,16 @@ class _ItemWorkbenchState extends State<ItemWorkbench> {
           key: ValueKey('${e.key}-${session!.revision}'),
           future: references,
           builder: (context, snap) {
-            if (snap.hasError)
+            if (snap.hasError) {
               return SelectableText('Referencia no resuelta: ${snap.error}');
+            }
             final refs = snap.data;
             if (refs == null) return const LinearProgressIndicator();
-            if (refs.isEmpty)
+            if (refs.isEmpty) {
               return const Text(
                 'Sin referencia equipable demostrada para este tipo/Image. El icono y todos los campos SData siguen editables.',
               );
+            }
             return Column(
               children: [
                 for (final ref in refs)
@@ -685,8 +692,9 @@ class _ItemPropertiesDialogState extends State<ItemPropertiesDialog> {
           context,
           'Descartar edición',
           'Los campos aún no aplicados se descartarán.',
-        ))
+        )) {
       return;
+    }
     if (!mounted) return;
     setState(() => leaving = true);
     await WidgetsBinding.instance.endOfFrame;
@@ -700,8 +708,9 @@ class _ItemPropertiesDialogState extends State<ItemPropertiesDialog> {
       final value = controls[b.key]!.text;
       if (value == original[b.key]) continue;
       try {
-        if (b.document.read(b.field) != original[b.key])
+        if (b.document.read(b.field) != original[b.key]) {
           throw const FormatException('Este campo cambió mientras se editaba.');
+        }
         b.document.validate(b.field, value);
         if (b.field.spec.name.toLowerCase() == 'icon' &&
             (int.tryParse(value) == null ||
@@ -852,10 +861,11 @@ class _ItemPropertiesDialogState extends State<ItemPropertiesDialog> {
                                             0,
                                       ),
                                     );
-                                    if (value != null && mounted)
+                                    if (value != null && mounted) {
                                       setState(
                                         () => controls[b.key]!.text = '$value',
                                       );
+                                    }
                                   },
                                 ),
                               if (b.editable && isAssetField(n))
@@ -869,10 +879,11 @@ class _ItemPropertiesDialogState extends State<ItemPropertiesDialog> {
                                       n,
                                       controls[b.key]!.text,
                                     );
-                                    if (value != null && mounted)
+                                    if (value != null && mounted) {
                                       setState(
                                         () => controls[b.key]!.text = value,
                                       );
+                                    }
                                   },
                                 ),
                               if (b.editable && options != null)

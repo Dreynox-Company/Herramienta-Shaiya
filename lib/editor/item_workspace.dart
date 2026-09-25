@@ -46,15 +46,17 @@ String itemFamilyLabel(int type) {
   final f = ItemIconLayout.family(type);
   if (f >= 1 && f <= 15) return 'Armas';
   if ({19, 34}.contains(f)) return 'Escudos';
-  if (equipmentSlotsForItemType(type).any((s) => s >= 0 && s <= 4))
+  if (equipmentSlotsForItemType(type).any((s) => s >= 0 && s <= 4)) {
     return 'Armaduras';
+  }
   if ({22, 23, 24, 39, 40}.contains(f)) return 'Accesorios';
   if (type == 95) return 'Lapisias';
   if (type == 94) return 'Lingotes de gremio';
   if ({30, 98}.contains(type)) return 'Lapis y materiales';
   if ({27, 28, 29, 99, 128, 129}.contains(type)) return 'Misiones / materiales';
-  if (f == 25 || {100, 101, 102, 103, 130, 131}.contains(type))
+  if (f == 25 || {100, 101, 102, 103, 130, 131}.contains(type)) {
     return 'Consumibles / especiales';
+  }
   return 'Otros · tipo $type';
 }
 
@@ -64,8 +66,9 @@ class ItemQuery {
   final List<bool Function(ItemEntry)> _tests;
   ItemQuery._(this._tests);
   factory ItemQuery.parse(String input, Iterable<String> fields) {
-    if (input.length > 4096)
+    if (input.length > 4096) {
       throw const FormatException('Consulta demasiado larga.');
+    }
     final known = fields.map((s) => s.toLowerCase()).toSet();
     final tests = <bool Function(ItemEntry)>[];
     for (final m in RegExp(r'"([^"]*)"|(\S+)').allMatches(input)) {
@@ -77,8 +80,9 @@ class ItemQuery {
         final field = cmp[1]!.toLowerCase(),
             op = cmp[2]!,
             value = BigInt.parse(cmp[3]!);
-        if (!known.contains(field))
+        if (!known.contains(field)) {
           throw FormatException('Campo desconocido: $field');
+        }
         tests.add((item) {
           final actual = BigInt.tryParse(item.values[field] ?? '');
           if (actual == null) return false;
@@ -119,7 +123,7 @@ class ItemWorkspace {
   Library? _view;
   Library view(Library source) => _view ??= _ItemView(this, source);
   ItemWorkspace(this.data, this.text)
-    : documents = {data.path: data, if (text != null) text.path: text} {
+    : documents = {data.path: data, text.path: ?text} {
     if (!data.complete || (text != null && !text!.complete)) {
       throw const FormatException(
         'El editor de ítems requiere tablas completas.',
@@ -140,8 +144,9 @@ class ItemWorkspace {
       beside: path,
     );
     final chosen = textPath ?? choices.firstOrNull;
-    if (chosen != null && !choices.contains(chosen))
+    if (chosen != null && !choices.contains(chosen)) {
       throw const FormatException('Texto de otra familia.');
+    }
     return compute(parse, <String, Object?>{
       'data': await library.read(path),
       'path': path,
@@ -183,8 +188,9 @@ class ItemWorkspace {
     if (text != null)
       for (var row = 0; row < text!.rows.length; row++) {
         final v = values(text!, row), key = identity(v);
-        if (names.containsKey(key))
+        if (names.containsKey(key)) {
           throw FormatException('Texto duplicado: $key');
+        }
         names[key] = (row, v);
       }
     final next = <ItemEntry>[], keys = <String>{};
@@ -223,8 +229,9 @@ class ItemWorkspace {
   /// first mutation. Identity remapping is intentionally a separate operation.
   void apply(Map<EditDocument, List<(int, FieldSpan, String)>> changes) {
     for (final pair in changes.entries) {
-      if (documents[pair.key.path] != pair.key)
+      if (documents[pair.key.path] != pair.key) {
         throw const FormatException('Documento ajeno a la sesión.');
+      }
       for (final (row, f, value) in pair.value) {
         if ({
           'itemtype',
@@ -315,22 +322,25 @@ class ItemWorkspace {
       final check = d is CatalogDocument
           ? CatalogDocument.open(bytes, d.path, d.codec.encoding)
           : EditorReader.open(bytes, d.path, encoding: d.codec.encoding);
-      if (!check.complete || check.rows.length != d.rows.length)
+      if (!check.complete || check.rows.length != d.rows.length) {
         throw FormatException('Relectura fallida: ${d.path}');
+      }
       for (final change in d.changes) {
         final f = check
             .fields(change.row)
             .where((f) => f.spec.name == change.field.spec.name)
             .single;
-        if (check.read(f) != d.read(change.field))
+        if (check.read(f) != d.read(change.field)) {
           throw FormatException('Cambio perdido: ${d.path} / ${f.spec.name}');
+        }
       }
       outputs[d.path] = bytes;
     }
     Future<void> conflicts() async {
       for (final path in outputs.keys) {
-        if (FileSave.hash(await lib.read(path)) != documents[path]!.sha)
+        if (FileSave.hash(await lib.read(path)) != documents[path]!.sha) {
           throw FormatException('DATA cambió: $path. No se publicó el lote.');
+        }
       }
     }
 
@@ -342,8 +352,9 @@ class ItemWorkspace {
         final f = File('${stage.path}/COPIAR_EN_DATA/${canon(pair.key)}');
         await f.parent.create(recursive: true);
         await f.writeAsBytes(pair.value, flush: true);
-        if (FileSave.hash(await f.readAsBytes()) != FileSave.hash(pair.value))
+        if (FileSave.hash(await f.readAsBytes()) != FileSave.hash(pair.value)) {
           throw const FileSystemException('Fallo de integridad.');
+        }
       }
       final manifest = {
         'schema': 1,
@@ -391,8 +402,9 @@ class ItemWorkspace {
         flush: true,
       );
       await conflicts();
-      if (await destination.exists())
+      if (await destination.exists()) {
         throw const FileSystemException('Conflicto de destino.');
+      }
       return await stage.rename(destination.path);
     } finally {
       if (await stage.exists()) await stage.delete(recursive: true);
@@ -412,8 +424,9 @@ class _ItemView extends Library {
     final d = workspace.documents[canon(path)];
     if (d == null || !d.dirty) return source.read(path, limit: limit);
     final bytes = d.exportBytes();
-    if (bytes.length > limit)
+    if (bytes.length > limit) {
       throw const FormatException('Recurso fuera de límite.');
+    }
     return bytes;
   }
 
