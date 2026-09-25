@@ -110,17 +110,16 @@ void main() {
   // now reserves dock controls and scrolls its actions at narrow widths.
   // Assert reachability, geometry and the actual callback, not an obsolete X.
   for (final width in [1440.0, 980.0, 650.0, 390.0]) {
-    testWidgets('every toolbar action remains usable at $width', (tester) async {
+    testWidgets('every toolbar action remains usable at $width', (
+      tester,
+    ) async {
       tester.view.physicalSize = Size(width, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final calls = <String, int>{};
-      void record(String key) => calls.update(
-        key,
-        (count) => count + 1,
-        ifAbsent: () => 1,
-      );
+      void record(String key) =>
+          calls.update(key, (count) => count + 1, ifAbsent: () => 1);
       await tester.pumpWidget(
         MaterialApp(
           home: StudioWorkspace(
@@ -161,7 +160,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(action.hitTestable(), findsOneWidget);
         final bounds = tester.getRect(action);
-        expect(bounds.left, greaterThanOrEqualTo(tester.getRect(left).right - 1));
+        expect(
+          bounds.left,
+          greaterThanOrEqualTo(tester.getRect(left).right - 1),
+        );
         expect(bounds.right, lessThanOrEqualTo(tester.getRect(right).left + 1));
         expect(left.hitTestable(), findsOneWidget);
         expect(right.hitTestable(), findsOneWidget);
