@@ -371,7 +371,9 @@ bool excelXmlHasPs0032ClientLiteral(String path) {
   return ps0032ClientExcelXmlFiles.contains(file);
 }
 
-String excelXmlClientEvidence(String path) =>
-    excelXmlHasPs0032ClientLiteral(path)
-        ? 'ps0032: nombre/ruta literal confirmado en game.exe'
-        : 'ps0032: sin literal de nombre; puede ser server-side o resolución dinámica';
+String excelXmlClientEvidence(String path) {
+  if (excelXmlHasPs0032ClientLiteral(path)) {
+    return 'ps0032: nombre/ruta literal confirmado en game.exe';
+  }
+  return 'ps0032: sin literal de nombre; puede ser server-side o resolución dinámica';
+}
