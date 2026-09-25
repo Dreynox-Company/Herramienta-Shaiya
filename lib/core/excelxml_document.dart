@@ -349,7 +349,6 @@ String excelXmlPurpose(String path) {
   return 'ExcelXml · tabla de DATA';
 }
 
-
 /// Exact filename literals found in the audited ps0032 game.exe
 /// (SHA-256 509c4a8f...). Absence from this set is not proof that a table is
 /// unused: it may be server-side or resolved without a literal filename.
@@ -374,5 +373,5 @@ bool excelXmlHasPs0032ClientLiteral(String path) {
 
 String excelXmlClientEvidence(String path) =>
     excelXmlHasPs0032ClientLiteral(path)
-    ? 'ps0032: nombre/ruta literal confirmado en game.exe'
-    : 'ps0032: sin literal de nombre; puede ser server-side o resolución dinámica';
+        ? 'ps0032: nombre/ruta literal confirmado en game.exe'
+        : 'ps0032: sin literal de nombre; puede ser server-side o resolución dinámica';
