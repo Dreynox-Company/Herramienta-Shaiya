@@ -33,6 +33,8 @@ jobs:
           cache: true
       - name: Apply digest-checked source patch
         run: python ci/prepare_studio_r24.py
+      - name: Apply digest-checked appearance follow-up
+        run: python ci/prepare_studio_r24_appearance.py
       - name: Resolve pinned package language version
         run: flutter pub get --enforce-lockfile
       - name: Deterministic source format
@@ -44,17 +46,19 @@ jobs:
           set -euo pipefail
           test "$(git branch --show-current)" = 'fix/studio-0624-flight-appearance-native'
           git diff --check
-          git add lib test integration_test tool docs .studio-r24-applied
+          git add lib test integration_test tool docs pubspec.yaml .studio-r24-applied .studio-r24-appearance-applied
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'fix(studio): materialize and format audited R24 sources'
+            git commit -m 'feat(studio): verified appearance snapshots and explicit item publication'
             git push origin HEAD:refs/heads/fix/studio-0624-flight-appearance-native
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Archive checkpoint before test gates
+        if: always()
         run: git archive --format=zip HEAD -o studio-r24-source.zip
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Studio-R24-Source-Checkpoint
           path: studio-r24-source.zip
