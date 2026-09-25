@@ -143,6 +143,14 @@ def main():
         raise RuntimeError('Expected native Windows AMD64 PE executable')
     native=json.loads((ROOT/'qa-native/result.json').read_text())
     startup=json.loads((ROOT/'qa-windows/resultado.json').read_text(encoding='utf-8-sig'))
+    angle_hardening_path=ROOT/'qa-angle'/'angle-hardening.json'
+    angle_smoke_path=ROOT/'qa-angle'/'resultado.json'
+    angle_hardening={}
+    angle_smoke={}
+    if angle_hardening_path.is_file():
+        angle_hardening=json.loads(angle_hardening_path.read_text(encoding='utf-8-sig'))
+    if angle_smoke_path.is_file():
+        angle_smoke=json.loads(angle_smoke_path.read_text(encoding='utf-8-sig'))
     profiles=ROOT/'profiles'
     if profiles.is_dir():
         target=release/'profiles'
@@ -160,6 +168,7 @@ def main():
         'SPK_REAL_READER_STATUS.md',
         'DATA_CAPABILITY_MATRIX.md',
         'WINDOWS_RELEASE_AUDIT.md',
+        'WINDOWS_ANGLE_HARDENING.md',
         'WING_REAL_DATA_AUDIT.md',
         'VEHICLE_REAL_DATA_AUDIT.md',
         'REAL_QA_ACCEPTANCE.md',
@@ -201,6 +210,19 @@ def main():
         crypto_profile.get('evidence',{}).get('resourceKeyValidated') is True
     )
     real_acceptance=load_real_acceptance()
+    angle_hashes=angle_hardening.get('sha256',{}) if isinstance(angle_hardening,dict) else {}
+    angle_release_validated=bool(
+        isinstance(angle_hardening,dict) and
+        angle_hardening.get('source') == 'microsoft/vcpkg angle' and
+        angle_hardening.get('amd64') is True and
+        angle_hardening.get('debugCrtRemaining') == [] and
+        isinstance(angle_hashes,dict) and
+        _sha256_text(angle_hashes.get('libEGL.dll')) and
+        _sha256_text(angle_hashes.get('libGLESv2.dll')) and
+        angle_smoke.get('process_alive') is True and
+        angle_smoke.get('native_window') is True and
+        bool(angle_smoke.get('data_path'))
+    )
     delivery_status={
         'schema':1,
         'version':version,
@@ -213,7 +235,12 @@ def main():
                 startup.get('native_window') is True
             ),
             'debugCrtBundled':debug_crt,
-            'graphicsRuntimeHardeningComplete':not debug_crt,
+            'angleReleaseRuntimeValidated':angle_release_validated,
+            'angleRuntimeSource':angle_hardening.get('source') if angle_hardening else None,
+            'angleRuntimeBaseline':angle_hardening.get('builtinBaseline') if angle_hardening else None,
+            'angleRuntimeSha256':angle_hashes if angle_release_validated else {},
+            'angleDataSmoke':angle_smoke if angle_release_validated else {},
+            'graphicsRuntimeHardeningComplete':bool(not debug_crt and angle_release_validated),
         },
         'flightV3':{
             'runtimeExpectedSha256':FLIGHT_RUNTIME_SHA256,
@@ -239,7 +266,7 @@ def main():
         },
     }
     blocking=[]
-    if debug_crt:
+    if not delivery_status['windows']['graphicsRuntimeHardeningComplete']:
         blocking.append('windows-angle-release-runtime')
     if not delivery_status['flightV3']['runtimeBundled']:
         blocking.append('flight-v3-runtime-not-bundled')
