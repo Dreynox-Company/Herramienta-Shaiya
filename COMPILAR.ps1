@@ -15,4 +15,9 @@ $parameters = @('tool/build.py', '--platform', $names[$Plataforma])
 if ($Ejecutar) { $parameters += '--run' }
 if ($Integracion) { $parameters += '--integration' }
 & $python.Source @prefix @parameters
-if ($LASTEXITCODE -ne 0) { throw 'El proceso se detuvo. Revisa el mensaje anterior y .build-logs; no se ha declarado una compilación correcta.' }
+if ($LASTEXITCODE -ne 0) {
+    $code = $LASTEXITCODE
+    Write-Host "Compilación detenida (salida $code). El diagnóstico original aparece arriba." -ForegroundColor Red
+    Write-Host 'Para usar la herramienta, abre herramienta_shaiya.exe del paquete Windows; no necesitas compilar.'
+    exit $code
+}

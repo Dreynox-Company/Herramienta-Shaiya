@@ -13,6 +13,7 @@ import time
 import zipfile
 
 from prepare import ROOT, prepare
+from build_diagnostics import run_logged, validate_toolchain
 
 
 def cmake_version(executable: str) -> tuple[int, int, int] | None:
@@ -73,28 +74,23 @@ def main() -> None:
     with log_path.open("w", encoding="utf-8") as log:
         def run(command: list[str], env: dict[str, str] | None = None) -> None:
             commands.append(command)
-            title = "\n> " + subprocess.list2cmdline(command)
-            print(title)
-            log.write(title + "\n")
-            log.flush()
-            process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE,
-                                       stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-            assert process.stdout is not None
-            for line in process.stdout:
-                print(line, end="", flush=True)
-                log.write(line)
-            if process.wait() != 0:
-                raise RuntimeError(f"Falló {command[1] if len(command)>1 else command[0]}. Registro: {log_path}")
-            log.flush()
+            run_logged(command, cwd=ROOT, log=log, log_path=log_path, env=env)
 
         run([flutter, "--version"])
+        version_process = subprocess.run([flutter, "--version", "--machine"], cwd=ROOT,
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if version_process.returncode:
+            raise RuntimeError("No se pudo consultar la versión de Flutter: " + version_process.stderr)
+        metadata = json.loads(version_process.stdout)
+        (logs / "toolchain.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        validate_toolchain(metadata)
         if args.platform != "test" or args.integration:
             platforms = "windows,android" if args.platform == "both" else (
                 "windows" if args.integration else args.platform)
             prepare(platforms)
         run([flutter, "pub", "get", "--enforce-lockfile"])
-        # Informational legacy style hints do not mask errors or warnings.
-        run([flutter, "analyze", "--no-fatal-infos"])
+        # Keep the same strict analysis used in release CI.
+        run([flutter, "analyze"])
         run([flutter, "test", "--reporter", "expanded"])
         run([sys.executable, "-m", "unittest", "discover", "-s", "tool/tests", "-v"])
         if args.integration:
@@ -102,6 +98,12 @@ def main() -> None:
             run([sys.executable, "tool/make_native_fixture.py", str(fixture)])
             env = dict(os.environ, SHAIYA_FIXTURE_PATH=str(fixture), SHAIYA_QA_PATH=str(logs / "qa-native"))
             run([flutter, "test", "integration_test/native_studio_test.dart", "-d", "windows", "--reporter", "expanded"], env)
+        manifest = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
+        match = re.search(r"^version:\s*(\S+)", manifest, re.MULTILINE)
+        if not match:
+            raise RuntimeError("pubspec.yaml no contiene versión del producto.")
+        product_version = match.group(1)
+        version_label = product_version.replace("+", "-")
         dist = ROOT / "dist"
         dist.mkdir(exist_ok=True)
         produced = []
@@ -112,7 +114,7 @@ def main() -> None:
             if not executable.is_file() or not (folder / "data").is_dir():
                 raise RuntimeError("La compilación no produjo un paquete Windows completo; no se generará el ZIP.")
             shutil.copy2(ROOT / "LEEME_WINDOWS.txt", folder / "LEEME.txt")
-            target = dist / "Shaiya_Studio_0_6_0_Windows.zip"
+            target = dist / f"Shaiya_Studio_{version_label}_Windows.zip"
             temporary = target.with_suffix(".zip.tmp")
             with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as z:
                 for item in sorted(folder.rglob("*")):
@@ -128,10 +130,10 @@ def main() -> None:
             apk = ROOT / "build/app/outputs/flutter-apk/app-debug.apk"
             if not apk.is_file():
                 raise RuntimeError("La compilación no produjo el APK; no se generará un archivo de entrega.")
-            target = dist / "Shaiya_Studio_0_6_0_Android_PRUEBAS.apk"
+            target = dist / f"Shaiya_Studio_{version_label}_Android_PRUEBAS.apk"
             shutil.copy2(apk, target)
             produced.append(str(target))
-        report = {"version": "0.6.0+8", "platform": args.platform, "commands": commands,
+        report = {"version": product_version, "platform": args.platform, "commands": commands,
                   "outputs": produced, "finished": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                   "native_window_integration": args.integration, "log": str(log_path)}
         (dist / "compilacion_local.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

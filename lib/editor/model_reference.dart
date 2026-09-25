@@ -1,5 +1,4 @@
 import '../core/formats.dart';
-import '../core/item_icon_layout.dart';
 import '../core/equipment_rules.dart';
 import '../data/library.dart';
 import 'catalog_document.dart';
@@ -41,18 +40,9 @@ class ModelReferences {
             lib.resolve(e.$1, [
                   '$root/3dc',
                   '$root/3do',
-                  root,
-                  'item/3do',
-                  'character/wing/3dc',
-                ], uniqueFallback: true) ??
+                ], uniqueFallback: false) ??
                 e.$1,
-            lib.resolve(e.$2, [
-                  '$root/dds',
-                  root,
-                  'item/dds',
-                  'character/wing/dds',
-                ], uniqueFallback: true) ??
-                e.$2,
+            lib.resolve(e.$2, ['$root/dds'], uniqueFallback: false) ?? e.$2,
             e.$3,
           ),
       ];
@@ -68,7 +58,7 @@ class ModelReferences {
         final path = lib.resolve(name, [
           '${directoryName(d.path)}/ani',
           directoryName(d.path),
-        ], uniqueFallback: true);
+        ], uniqueFallback: false);
         if (path != null) {
           final key = f.spec.name.substring(10);
           const labels = {
@@ -103,7 +93,11 @@ class ModelReferences {
         (weaponFamily > 0 || equipmentSlotsForItemType(type).contains(6))) {
       final family = weaponFamily > 0
           ? weaponFamily
-          : ItemIconLayout.family(type);
+          : const {69, 75}.contains(type)
+          ? 19
+          : const {84, 90}.contains(type)
+          ? 34
+          : type;
       final path = 'item/${family.toString().padLeft(2, '0')}.itm';
       if (!lib.files.containsKey(path)) return [];
       final rows = readItm(await lib.read(path), path);
@@ -119,14 +113,10 @@ class ModelReferences {
       ];
     }
 
-    if ((type == wingItemType || type == 122 || type == 42 || type == 125) &&
-        model != null) {
-      final rootPrefix = (type == 42 || type == 125)
-          ? 'vehicle/'
-          : 'character/wing/';
+    if (type == wingItemType && model != null) {
       final out = <ModelReference>[];
       for (final path in lib.files.keys.where(
-        (p) => p.startsWith(rootPrefix) && p.endsWith('.mon'),
+        (p) => p.startsWith('character/wing/') && p.endsWith('.mon'),
       )) {
         final rows = readMon(await lib.read(path), path);
         if (model < 0 || model >= rows.length) continue;
@@ -139,12 +129,55 @@ class ModelReferences {
           final resolved = lib.resolve(animation.value, [
             '$root/ani',
             root,
-          ], uniqueFallback: true);
+          ], uniqueFallback: false);
           if (resolved != null) animations[animation.key] = resolved;
         }
         out.add(
           ModelReference(
-            '${type == 42 || type == 125 ? 'Montura' : 'Alas'} · ItemType $type · Image $model · ${baseName(path)}',
+            'Alas · ItemType $wingItemType · Image $model · ${baseName(path)}',
+            locate(
+              record.parts
+                  .where((p) => !p.isNull)
+                  .map((p) => (p.mesh, p.texture, p.alpha))
+                  .toList(),
+              path,
+            ),
+            animations: animations,
+            sourcePath: path,
+            sourceOrdinal: model,
+          ),
+        );
+      }
+      return out;
+    }
+
+    // Mount families can share Image. Preserve every matching MON source so
+    // the user chooses a family explicitly; never silently select the first.
+    if (model != null && const {42, 125, 120, 123}.contains(type)) {
+      final mount = type == 42 || type == 125;
+      final out = <ModelReference>[];
+      for (final path in lib.files.keys.where(
+        (p) => mount
+            ? p.startsWith('vehicle/') && p.endsWith('.mon')
+            : p.startsWith('pet/') && p.endsWith('.mon'),
+      )) {
+        final records = readMon(await lib.read(path), path);
+        if (model < 0 || model >= records.length) continue;
+        final record = records[model];
+        if (!record.parts.any((p) => !p.isNull)) continue;
+        final root = directoryName(path);
+        final animations = <String, String>{};
+        for (final animation in record.animations.entries) {
+          if (animation.value.isEmpty) continue;
+          final resolved = lib.resolve(animation.value, [
+            '$root/ani',
+            root,
+          ], uniqueFallback: false);
+          if (resolved != null) animations[animation.key] = resolved;
+        }
+        out.add(
+          ModelReference(
+            '$path · Image $model',
             locate(
               record.parts
                   .where((p) => !p.isNull)
@@ -212,7 +245,7 @@ class ModelReferences {
         for (final a in r.animations.entries) {
           final path = lib.resolve(a.value, [
             '$root/ani',
-          ], uniqueFallback: true);
+          ], uniqueFallback: false);
           if (path != null) animations[a.key] = path;
         }
         out.add(
@@ -223,6 +256,8 @@ class ModelReferences {
               p,
             ),
             animations: animations,
+            sourcePath: p,
+            sourceOrdinal: model,
           ),
         );
       }

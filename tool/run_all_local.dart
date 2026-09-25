@@ -1,4 +1,5 @@
 // Complete local regression runner. Keep synchronized with test/*_test.dart.
+import '../test/native_wing_profile_test.dart' as native_wing_profile_suite;
 import '../test/archive_export_test.dart' as suite0;
 import '../test/archive_test.dart' as suite1;
 import '../test/body_coverage_test.dart' as suite2;
@@ -46,15 +47,22 @@ import '../test/wing_systems_test.dart' as suite40;
 import '../test/workspace_interaction_test.dart' as suite41;
 import '../test/workspace_material_test.dart' as suite42;
 import '../test/xml_tree_document_test.dart' as suite44;
-
 import '../test/appearance_snapshot_test.dart' as suite47;
 import '../test/equipment_registry_test.dart' as suite48;
 import '../test/item_publication_test.dart' as suite49;
-
-import '../test/item_workspace_test.dart' as items_r25;
+import '../test/native_item_icons_test.dart' as suite60;
+import '../test/item_workspace_test.dart' as suite61;
+import '../test/item_query_test.dart' as suite62;
+import '../test/item_atlas_test.dart' as suite63;
+import '../test/item_record_editor_test.dart' as suite64;
 
 void main() {
-  items_r25.main();
+  native_wing_profile_suite.main();
+  suite64.main();
+  suite63.main();
+  suite62.main();
+  suite61.main();
+  suite60.main();
   suite0.main();
   suite1.main();
   suite2.main();

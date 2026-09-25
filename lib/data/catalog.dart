@@ -1,3 +1,4 @@
+import '../core/native_wing_profile.dart';
 import '../core/textures.dart';
 import '../core/body_coverage.dart';
 import 'game_names.dart';
@@ -725,9 +726,13 @@ class Catalog {
         'WingPosition.xml no está montado; no hay destino real que editar.',
       );
     }
-    document.update(profile);
-    final bytes = document.encode();
-    document.validateEncoded(bytes);
+    validateNativeWingProfile(profile);
+    // Stage a separate document: an I/O failure must not change mounted DATA
+    // metadata or make the next save inherit an uncommitted profile.
+    final candidate = WingPositionDocument.parse(document.encode(), path);
+    candidate.update(profile);
+    final bytes = candidate.encode();
+    candidate.validateEncoded(bytes);
     await library.writeResource(path, bytes);
     wingPositions = WingPositionDocument.parse(bytes, path);
   }

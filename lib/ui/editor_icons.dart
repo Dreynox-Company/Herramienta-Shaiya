@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/textures.dart';
-import '../core/item_icon_layout.dart';
+import '../core/native_item_icons.dart';
 import '../data/library.dart';
 import '../editor/workbench_model.dart';
 import 'editor_style.dart';
@@ -14,14 +14,14 @@ class EditorIconRef {
   final int index;
   final bool sheet;
   final int? columns, rows;
-  final int pageBase;
+  final int? nativeType;
   const EditorIconRef(
     this.path,
     this.index, {
     this.sheet = true,
     this.columns,
     this.rows,
-    this.pageBase = 0,
+    this.nativeType,
   });
 }
 
@@ -31,9 +31,10 @@ class EditorImages {
   final retained = <ui.Image>[];
   bool closed = false;
   int bytes = 0;
+  late final Set<String> iconFiles = library.files.keys.toSet();
   EditorImages(this.library);
   Future<ui.Image?> image(String path) => cache.putIfAbsent(path, () async {
-    if (closed) return null;
+    if (closed || cache.length > 128) return null;
     try {
       final b = await library.read(path, limit: 32 * 1024 * 1024);
       final pixels = await compute(_decode, (b, path));
@@ -79,20 +80,16 @@ class EditorImages {
     final type = int.tryParse(v['itemtype'] ?? v['type'] ?? '');
     final index = int.tryParse(v['icon'] ?? v['iconid'] ?? '');
     if (domain == EditorDomain.items && index != null && type != null) {
-      final layout = ItemIconLayout.resolve(type, index);
-      if (layout == null || !layout.inBounds) return null;
-      for (final ext in ['dds', 'tga']) {
-        final path = 'interface/icon/${layout.stem}.$ext';
-        if (library.files.containsKey(path)) {
-          return EditorIconRef(
-            path,
-            layout.tile,
-            columns: layout.columns,
-            rows: layout.rows,
-            pageBase: layout.pageBase,
-          );
-        }
-      }
+      final ref = NativeItemIcons.resolve(type, index, iconFiles);
+      return ref == null
+          ? null
+          : EditorIconRef(
+              ref.path,
+              ref.index,
+              columns: ref.columns,
+              rows: ref.rows,
+              nativeType: type,
+            );
     }
 
     if (domain == EditorDomain.skills && index != null) {
@@ -149,19 +146,27 @@ class DataIcon extends StatelessWidget {
       child: ref == null
           ? Tooltip(
               message:
-                  'Icono ausente, fuera de rango o tipo no soportado por ps0032. No se sustituye por otro objeto.',
+                  'Icono no resuelto · perfil ps0032. No se sustituye por otro objeto.',
               child: fallback,
             )
           : FutureBuilder<ui.Image?>(
               future: images.image(ref.path),
               builder: (c, s) {
-                final image = s.connectionState == ConnectionState.done
-                    ? s.data
-                    : null;
-                if (image == null) return fallback;
+                final image = s.data;
+                if (image == null) {
+                  return Tooltip(
+                    message: s.connectionState == ConnectionState.done
+                        ? 'No se pudo decodificar ${ref.path}'
+                        : 'Cargando miniatura…',
+                    child: fallback,
+                  );
+                }
                 final columns = ref.columns ?? image.width ~/ 32,
                     rows = ref.rows ?? image.height ~/ 32;
-                if (ref.index < 0 || ref.index >= columns * rows) {
+                if (columns < 1 ||
+                    rows < 1 ||
+                    ref.index < 0 ||
+                    ref.index >= columns * rows) {
                   return Tooltip(
                     message: 'Índice ${ref.index} fuera de ${ref.path}',
                     child: fallback,
@@ -169,9 +174,9 @@ class DataIcon extends StatelessWidget {
                 }
                 return Tooltip(
                   message:
-                      '${ref.path} · Icon ${ref.index + ref.pageBase} · celda ${ref.index} · ps0032',
+                      '${ref.path} · celda ${ref.index}${ref.nativeType == null ? '' : ' · Icon nativo ${summary.values['icon'] ?? '?'}'}',
                   child: CustomPaint(
-                    painter: _IconPainter(image, ref.index, columns, rows),
+                    painter: NativeIconPainter(image, ref.index, columns, rows),
                   ),
                 );
               },
@@ -180,10 +185,10 @@ class DataIcon extends StatelessWidget {
   }
 }
 
-class _IconPainter extends CustomPainter {
+class NativeIconPainter extends CustomPainter {
   final ui.Image image;
   final int index, columns, rows;
-  _IconPainter(this.image, this.index, this.columns, this.rows);
+  NativeIconPainter(this.image, this.index, this.columns, this.rows);
   @override
   void paint(Canvas c, Size s) {
     c.drawImageRect(
@@ -200,7 +205,7 @@ class _IconPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _IconPainter o) =>
+  bool shouldRepaint(covariant NativeIconPainter o) =>
       o.image != image ||
       o.index != index ||
       o.columns != columns ||

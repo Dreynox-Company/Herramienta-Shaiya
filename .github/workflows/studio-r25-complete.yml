@@ -1,0 +1,76 @@
+name: Studio R25 complete item editor Windows release
+
+on:
+  push:
+    branches: [fix/studio-0625-items-release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-r25-complete-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    if: github.ref == 'refs/heads/fix/studio-0625-items-release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/studio-0625-items-release
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Verify and apply owner-delivered full R25 sources
+        run: python ci/apply_r25_complete.py
+      - name: Fix native save boundaries and audited editor integration
+        run: python ci/refine_r25_saves.py
+      - name: Resolve locked dependencies with the pinned SDK
+        run: flutter pub get --enforce-lockfile
+      - name: Normalize source before lint fixes
+        run: dart format lib test integration_test tool
+      - name: Apply only reported mechanical lints
+        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import,unused_import,use_null_aware_elements,unnecessary_brace_in_string_interps
+      - name: Deterministic source format
+        run: dart format lib test integration_test tool
+      - name: Commit readable source checkpoint without modifying main
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'fix/studio-0625-items-release'
+          git diff --check
+          git add lib test integration_test tool pubspec.yaml COMPILAR.ps1 .studio-r25-complete-applied
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(studio): strict item editor analysis and transactional native wing save [skip ci]'
+            git push origin HEAD:refs/heads/fix/studio-0625-items-release
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Preserve exact source checkpoint and transport evidence
+        if: always()
+        run: git archive --format=zip HEAD -o studio-r25-source-checkpoint.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Studio-R25-Source-Checkpoint
+          path: studio-r25-source-checkpoint.zip
+          retention-days: 30
+  verify:
+    needs: source
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.source.outputs.sha }}
+    permissions:
+      contents: read
