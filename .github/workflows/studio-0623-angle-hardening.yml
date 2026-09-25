@@ -1,0 +1,21 @@
+name: Shaiya Studio 0.6.23 - Windows ANGLE Release hardening
+
+on:
+  push:
+    branches:
+      - feat/studio-0623-windows-hardening
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-0623-angle-hardening
+  cancel-in-progress: true
+
+jobs:
+  verified-hardening:
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ github.sha }}
+      harden_angle: true
