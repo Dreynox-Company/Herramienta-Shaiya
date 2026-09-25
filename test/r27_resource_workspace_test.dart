@@ -8,6 +8,7 @@ import 'package:herramienta_shaiya/core/game_text_codec.dart';
 import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/data/file_save.dart';
 import 'package:herramienta_shaiya/data/resource_index.dart';
+import 'package:herramienta_shaiya/data/spk_source.dart' show SpkExtractControl;
 import 'package:herramienta_shaiya/editor/catalog_document.dart';
 import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'package:herramienta_shaiya/ui/resource_workspace.dart';
