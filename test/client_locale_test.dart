@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/client_locale.dart';
 import 'package:herramienta_shaiya/data/library.dart';
@@ -54,30 +55,24 @@ Uint8List sampleItemName() {
 }
 
 void main() {
-  test(
-    'loose catalogue preserves conflicting originals without discarding valid labels',
-    () {
-      final catalogue = ClientLocale.indexedCatalogue(
-        Uint8List.fromList(
-          utf8.encode('1\t"Daño <v>"\n2\t"A"\n2\t"B"\n3\t"Ñ"\n3\t"Ñ"'),
-        ),
-        'systemmessage/spn.txt',
-      );
-      expect(catalogue.resolved, {1: 'Daño <v>', 3: 'Ñ'});
-      expect(catalogue.conflicts, {
-        2: ['A', 'B'],
-      });
-      expect(catalogue.duplicates.keys, containsAll([2, 3]));
-    },
-  );
-  test(
-    'library retains loose localization and CSV files rather than filtering them out',
-    () {
-      expect(supportedPath('World/1_spn.txt'), true);
-      expect(supportedPath('systemmessage/spn.txt'), true);
-      expect(supportedPath('dbitemdata.csv'), true);
-    },
-  );
+  test('loose catalogue preserves conflicting originals without discarding valid labels', () {
+    final catalogue = ClientLocale.indexedCatalogue(
+      Uint8List.fromList(
+        utf8.encode('1\t"Daño <v>"\n2\t"A"\n2\t"B"\n3\t"Ñ"\n3\t"Ñ"'),
+      ),
+      'systemmessage/spn.txt',
+    );
+    expect(catalogue.resolved, {1: 'Daño <v>', 3: 'Ñ'});
+    expect(catalogue.conflicts, {
+      2: ['A', 'B'],
+    });
+    expect(catalogue.duplicates.keys, containsAll([2, 3]));
+  });
+  test('library retains loose localization and CSV files rather than filtering them out', () {
+    expect(supportedPath('World/1_spn.txt'), true);
+    expect(supportedPath('systemmessage/spn.txt'), true);
+    expect(supportedPath('dbitemdata.csv'), true);
+  });
 
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final suffix in ['spn', 'spa', 'esp', 'es', 'spain', 'spanish']) {

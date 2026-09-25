@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
+
 import '../core/archive_index.dart';
 import 'archive_source.dart';
 
@@ -144,9 +146,8 @@ class ArchiveExport {
     RandomAccessFile? saf;
     try {
       if (pack) {
-        saf = await File(
-          '${staging.path}/data.saf',
-        ).open(mode: FileMode.writeOnly);
+        saf = await File('${staging.path}/data.saf')
+            .open(mode: FileMode.writeOnly);
       }
       final newEntries = <ArchiveEntry>[];
       for (var i = 0; i < list.length; i++) {

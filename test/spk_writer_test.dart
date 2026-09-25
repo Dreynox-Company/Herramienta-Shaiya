@@ -347,9 +347,9 @@ void main() {
           originalHash,
         );
 
-        final profileJson =
-            jsonDecode(await File(result.profileFile).readAsString())
-                as Map<String, dynamic>;
+        final profileJson = jsonDecode(
+          await File(result.profileFile).readAsString(),
+        ) as Map<String, dynamic>;
         final profile = SpkCryptoProfile.fromJson(profileJson);
         final rebuilt = await SpkArchiveSource.open(target.path, profile);
         await rebuilt.validateSimpleResourceProfile();
@@ -376,9 +376,9 @@ void main() {
           orderedEquals(fragmentedReplacement),
         );
 
-        final auditJson =
-            jsonDecode(await File(result.auditFile).readAsString())
-                as Map<String, dynamic>;
+        final auditJson = jsonDecode(
+          await File(result.auditFile).readAsString(),
+        ) as Map<String, dynamic>;
         final restored = await SpkArchiveSource.open(target.path, profile);
         await restored.validateSimpleResourceProfile();
         await restored.validateFragmentedResourceProfile();

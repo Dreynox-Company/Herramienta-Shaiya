@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../editor/document.dart';
 import '../editor/workbench_model.dart';
 import '../editor/field_semantics.dart';

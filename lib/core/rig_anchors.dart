@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:vector_math/vector_math_64.dart' as v;
+
 import 'formats.dart';
 
 /// A point on an original skinned triangle. Evaluating the same barycentric

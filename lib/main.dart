@@ -1,22 +1,27 @@
 import 'render/native_view.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:file_selector/file_selector.dart';
+
 import 'core/extra_motion.dart';
 import 'core/flight_v3_bundle.dart';
 import 'core/equipment_rules.dart';
 import 'core/vehicle_position.dart';
 import 'core/textures.dart';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:three_js/three_js.dart' as three;
+
 import 'core/formats.dart';
 import 'data/catalog.dart';
 import 'core/game_metadata.dart';
@@ -292,9 +297,8 @@ class _StudioState extends State<StudioPage> {
     await act(() async {
       final bytes = Uint8List.fromList(
         utf8.encode(
-          const JsonEncoder.withIndent(
-            '  ',
-          ).convert(SceneProfile.capture(scene)),
+          const JsonEncoder.withIndent('  ')
+              .convert(SceneProfile.capture(scene)),
         ),
       );
       final file = File(selected.path);
@@ -583,9 +587,8 @@ class _StudioState extends State<StudioPage> {
     final installedName = runtimeSubset
         ? 'Shaiya_Studio_FlightV3_Runtime.zip'
         : 'Shaiya_Vuelo_Combate_V3_Completo.zip';
-    await File(
-      '${folder.path}/$installedName',
-    ).writeAsBytes(bytes, flush: true);
+    await File('${folder.path}/$installedName')
+        .writeAsBytes(bytes, flush: true);
     await scene.installFlightV3(bundle);
     scene.say(
       'Flight V3 instalado: ${bundle.transitions.length} transiciones, '
@@ -611,9 +614,8 @@ class _StudioState extends State<StudioPage> {
     final d = await getApplicationDocumentsDirectory();
     final folder = Directory('${d.path}/HerramientaShaiya');
     await folder.create(recursive: true);
-    await File(
-      '${folder.path}/flight.json.gz',
-    ).writeAsBytes(bytes, flush: true);
+    await File('${folder.path}/flight.json.gz')
+        .writeAsBytes(bytes, flush: true);
     await scene.installExtras(extras);
     scene.say(
       '${extras.profiles.length} perfiles suplementarios de vuelo verificados; los ANI originales se conservan.',
@@ -1255,8 +1257,7 @@ class _StudioState extends State<StudioPage> {
                       a.sets[s]!.values.map((p) => p.raw.texture).join(' · '),
                 ),
               ],
-              help:
-                  'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
+              help: 'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
             ),
             note(
               'El conjunto conserva cara y cabello y equipa su casco correspondiente. El cabello se oculta al llevar casco y reaparece al retirarlo.',
@@ -1296,8 +1297,7 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
               ],
-              help:
-                  'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
+              help: 'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
             ),
             section('Mano secundaria', [
               if (permitsShield(scene.weaponRecord))
@@ -1687,9 +1687,8 @@ class _StudioState extends State<StudioPage> {
                             : () => act(() async {
                                 await Clipboard.setData(
                                   ClipboardData(
-                                    text: const JsonEncoder.withIndent(
-                                      '  ',
-                                    ).convert(scene.wingTransformSnapshot),
+                                    text: const JsonEncoder.withIndent('  ')
+                                        .convert(scene.wingTransformSnapshot),
                                   ),
                                 );
                               }),
@@ -3632,8 +3631,7 @@ class _StudioState extends State<StudioPage> {
                                           );
                                           if (ctx.mounted) {
                                             setDialog(
-                                              () => status =
-                                                  'Asociación manual aplicada. Comprueba la distribución UV en el visor.',
+                                              () => status = 'Asociación manual aplicada. Comprueba la distribución UV en el visor.',
                                             );
                                           }
                                         } catch (e) {

@@ -1,7 +1,9 @@
 import 'legacy_text.dart';
+
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:vector_math/vector_math_64.dart' as v;
 
 /// Lectura acotada: valida todos los recuentos antes de reservar memoria.

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/input/viewport_movement_input.dart';
 import 'package:herramienta_shaiya/render/studio_scene.dart';
+
 import 'locomotion_test.dart' show exampleScene;
 
 void main() {

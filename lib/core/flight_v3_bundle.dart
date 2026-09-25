@@ -201,9 +201,8 @@ class FlightV3Bundle {
     for (final line in const LineSplitter().convert(sumsText)) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
-      final match = RegExp(
-        r'^([0-9a-fA-F]{64})\s+\*?(.+)$',
-      ).firstMatch(trimmed);
+      final match = RegExp(r'^([0-9a-fA-F]{64})\s+\*?(.+)$')
+          .firstMatch(trimmed);
       if (match == null) {
         throw const FormatException('SHA256SUMS.txt de Flight V3 es inválido.');
       }

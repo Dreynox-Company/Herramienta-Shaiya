@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/seed_data.dart';
@@ -12,6 +13,7 @@ import 'package:herramienta_shaiya/data/directory_pack.dart';
 import 'package:herramienta_shaiya/data/file_save.dart';
 import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'package:herramienta_shaiya/editor/structure_editor.dart';
+
 import 'editor_document_test.dart' show binaryTable;
 import 'archive_test.dart' show sampleIndex;
 
@@ -56,107 +58,97 @@ void main() {
       },
     );
   }
-  test(
-    'duplicate identity rejects equivalent leading-zero key and never mutates source',
-    () {
-      final b = binaryTable(
-            ['ItemType', 'ItemTypeId'],
-            [
-              [1, 1],
-            ],
-          ),
-          d = EditorReader.open(b, 'dbitemdata.sdata');
-      expect(
-        () => StructureEditor.duplicate(d, 0, {
-          'ItemType': '01',
-          'ItemTypeId': '001',
-        }),
-        throwsFormatException,
+  test('duplicate identity rejects equivalent leading-zero key and never mutates source', () {
+    final b = binaryTable(
+          ['ItemType', 'ItemTypeId'],
+          [
+            [1, 1],
+          ],
+        ),
+        d = EditorReader.open(b, 'dbitemdata.sdata');
+    expect(
+      () => StructureEditor.duplicate(d, 0, {
+        'ItemType': '01',
+        'ItemTypeId': '001',
+      }),
+      throwsFormatException,
+    );
+    expect(d.exportBytes(), b);
+  });
+  test('directory construction includes unknown formats and Unicode files with overrides', () async {
+    final dir = await Directory.systemTemp.createTemp('dir-pack-');
+    try {
+      final data = Directory('${dir.path}/DATA')..createSync(),
+          out = Directory('${dir.path}/out')..createSync();
+      await Directory('${data.path}/Personalizado').create();
+      await File('${data.path}/Personalizado/Ñandú.extra')
+          .writeAsBytes([1, 2, 3]);
+      await File('${data.path}/empty.zero').writeAsBytes([]);
+      await File('${data.path}/config.ini').writeAsString('X=1');
+      final result = await DirectoryPack.build(
+        data,
+        out,
+        replacements: {'config.ini': Uint8List.fromList(utf8.encode('X=2'))},
+        control: ExportControl(),
+        progress: (_) {},
       );
-      expect(d.exportBytes(), b);
-    },
-  );
-  test(
-    'directory construction includes unknown formats and Unicode files with overrides',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('dir-pack-');
-      try {
-        final data = Directory('${dir.path}/DATA')..createSync(),
-            out = Directory('${dir.path}/out')..createSync();
-        await Directory('${data.path}/Personalizado').create();
-        await File(
-          '${data.path}/Personalizado/Ñandú.extra',
-        ).writeAsBytes([1, 2, 3]);
-        await File('${data.path}/empty.zero').writeAsBytes([]);
-        await File('${data.path}/config.ini').writeAsString('X=1');
-        final result = await DirectoryPack.build(
+      final archive = await ArchiveSource.fromFiles(
+        '${result.folder}/data.sah',
+        '${result.folder}/data.saf',
+      );
+      expect(archive.index.entries.length, 3);
+      expect(await archive.read('personalizado/ñandú.extra'), [1, 2, 3]);
+      expect(await archive.read('empty.zero'), isEmpty);
+      expect(utf8.decode(await archive.read('config.ini')), 'X=2');
+      archive.close();
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+  test('directory construction rejects inside destination, case collisions, and links', () async {
+    final dir = await Directory.systemTemp.createTemp('dir-reject-');
+    try {
+      final data = Directory('${dir.path}/DATA')..createSync(),
+          out = Directory('${dir.path}/out')..createSync();
+      final inside = Directory('${data.path}/dest')..createSync();
+      await File('${data.path}/a').writeAsBytes([1]);
+      await expectLater(
+        DirectoryPack.build(
           data,
-          out,
-          replacements: {'config.ini': Uint8List.fromList(utf8.encode('X=2'))},
+          inside,
           control: ExportControl(),
           progress: (_) {},
-        );
-        final archive = await ArchiveSource.fromFiles(
-          '${result.folder}/data.sah',
-          '${result.folder}/data.saf',
-        );
-        expect(archive.index.entries.length, 3);
-        expect(await archive.read('personalizado/ñandú.extra'), [1, 2, 3]);
-        expect(await archive.read('empty.zero'), isEmpty);
-        expect(utf8.decode(await archive.read('config.ini')), 'X=2');
-        archive.close();
-      } finally {
-        await dir.delete(recursive: true);
-      }
-    },
-  );
-  test(
-    'directory construction rejects inside destination, case collisions, and links',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('dir-reject-');
-      try {
-        final data = Directory('${dir.path}/DATA')..createSync(),
-            out = Directory('${dir.path}/out')..createSync();
-        final inside = Directory('${data.path}/dest')..createSync();
-        await File('${data.path}/a').writeAsBytes([1]);
+        ),
+        throwsFormatException,
+      );
+      if (!Platform.isWindows) {
+        await File('${data.path}/A').writeAsBytes([2]);
         await expectLater(
           DirectoryPack.build(
             data,
-            inside,
+            out,
             control: ExportControl(),
             progress: (_) {},
           ),
           throwsFormatException,
         );
-        if (!Platform.isWindows) {
-          await File('${data.path}/A').writeAsBytes([2]);
-          await expectLater(
-            DirectoryPack.build(
-              data,
-              out,
-              control: ExportControl(),
-              progress: (_) {},
-            ),
-            throwsFormatException,
-          );
-          await File('${data.path}/A').delete();
-          await Link('${data.path}/alias').create(out.path);
-          await expectLater(
-            DirectoryPack.build(
-              data,
-              out,
-              control: ExportControl(),
-              progress: (_) {},
-            ),
-            throwsFormatException,
-          );
-        }
-        expect(await out.list().isEmpty, true);
-      } finally {
-        await dir.delete(recursive: true);
+        await File('${data.path}/A').delete();
+        await Link('${data.path}/alias').create(out.path);
+        await expectLater(
+          DirectoryPack.build(
+            data,
+            out,
+            control: ExportControl(),
+            progress: (_) {},
+          ),
+          throwsFormatException,
+        );
       }
-    },
-  );
+      expect(await out.list().isEmpty, true);
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
   test(
     'file replacement is atomic, opt-in backup and stale-content protection',
     () async {

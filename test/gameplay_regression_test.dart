@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import 'package:three_js/three_js.dart' as t;
@@ -11,6 +12,7 @@ import 'package:herramienta_shaiya/render/studio_scene.dart';
 import 'package:herramienta_shaiya/core/combat.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/render/world_builder.dart';
+
 import 'locomotion_test.dart' show exampleScene, motion;
 import 'core_test.dart' as fixture;
 
@@ -348,48 +350,35 @@ void main() {
       );
       expect(planner.find(v.Vector3(-1, 0, 0), v.Vector3(5, 0, 0)), isNull);
     });
-    test(
-      'instance culling uses transformed batches rather than a prototype at zero',
-      () {
-        final world = LoadedWorld(
-          WorldResource(WorldData(0, Uint16List(0), Uint8List(0), [], [], '')),
+    test('instance culling uses transformed batches rather than a prototype at zero', () {
+      final world = LoadedWorld(
+        WorldResource(WorldData(0, Uint16List(0), Uint8List(0), [], [], '')),
+      );
+      final geometry = t.BufferGeometry()
+        ..setAttributeFromString(
+          'position',
+          t.Float32BufferAttribute.fromList([-.5, 0, 0, .5, 0, 0, 0, 1, 0], 3),
         );
-        final geometry = t.BufferGeometry()
-          ..setAttributeFromString(
-            'position',
-            t.Float32BufferAttribute.fromList([
-              -.5,
-              0,
-              0,
-              .5,
-              0,
-              0,
-              0,
-              1,
-              0,
-            ], 3),
-          );
-        geometry.setIndex([0, 1, 2]);
-        final mesh = t.InstancedMesh(
-          geometry,
-          t.MeshBasicMaterial.fromMap({'color': 0xffffff}),
-          1,
-        );
-        mesh.setMatrixAt(0, t.Matrix4()..setPosition(100, 0, 100));
-        mesh.computeBoundingSphere();
-        mesh.frustumCulled = false;
-        world.instances.add(mesh);
-        world.root.add(mesh);
-        world.origin(100, 100);
-        final camera = t.PerspectiveCamera(45, 1, .1, 100)
-          ..position.setValues(0, 1, 5);
-        camera.lookAt(t.Vector3(0, .5, 0));
-        world.updateVisibility(camera);
-        expect(mesh.visible, isTrue);
-        expect(mesh.frustumCulled, isFalse);
-        world.dispose();
-        geometry.dispose();
-      },
-    );
+      geometry.setIndex([0, 1, 2]);
+      final mesh = t.InstancedMesh(
+        geometry,
+        t.MeshBasicMaterial.fromMap({'color': 0xffffff}),
+        1,
+      );
+      mesh.setMatrixAt(0, t.Matrix4()..setPosition(100, 0, 100));
+      mesh.computeBoundingSphere();
+      mesh.frustumCulled = false;
+      world.instances.add(mesh);
+      world.root.add(mesh);
+      world.origin(100, 100);
+      final camera = t.PerspectiveCamera(45, 1, .1, 100)
+        ..position.setValues(0, 1, 5);
+      camera.lookAt(t.Vector3(0, .5, 0));
+      world.updateVisibility(camera);
+      expect(mesh.visible, isTrue);
+      expect(mesh.frustumCulled, isFalse);
+      world.dispose();
+      geometry.dispose();
+    });
   });
 }

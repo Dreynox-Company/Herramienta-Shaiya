@@ -1,8 +1,11 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
+
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -59,9 +62,8 @@ void main() {
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
       expect(bytes, isNotNull);
-      await File(
-        '${output.path}/$name.png',
-      ).writeAsBytes(bytes!.buffer.asUint8List());
+      await File('${output.path}/$name.png')
+          .writeAsBytes(bytes!.buffer.asUint8List());
     }
 
     await waitFor(
@@ -462,9 +464,8 @@ void main() {
       format: ui.ImageByteFormat.png,
     );
     editorImage.dispose();
-    await File(
-      '${output.path}/native_editor.png',
-    ).writeAsBytes(editorBytes!.buffer.asUint8List());
+    await File('${output.path}/native_editor.png')
+        .writeAsBytes(editorBytes!.buffer.asUint8List());
     await tester.tap(find.text('Deshacer'));
     await waitFor(
       () => find.text('-1').evaluate().isEmpty,

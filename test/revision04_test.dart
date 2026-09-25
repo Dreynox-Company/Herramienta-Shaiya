@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import 'package:herramienta_shaiya/core/pose_layers.dart';
@@ -11,6 +12,7 @@ import 'package:herramienta_shaiya/core/spatial_window.dart';
 import 'package:herramienta_shaiya/core/world_resources.dart';
 import 'package:herramienta_shaiya/core/body_coverage.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
+
 import 'body_coverage_test.dart' as body;
 import 'core_test.dart' as core;
 import 'locomotion_test.dart' as locomotion;
@@ -132,27 +134,24 @@ void main() {
     });
   });
   group('Appearance and masks', () {
-    test(
-      'matching helmet is selected while the chosen hair is retained, not rendered',
-      () {
-        final a = core.archetype(),
-            hat = core.part(Slot.helmet, 52, 'humf_helmet016.dds'),
-            hair = core.part(Slot.hair, 4, 'hum_hair004.dds');
-        a.parts[Slot.helmet]!.add(hat);
-        a.parts[Slot.hair]!.add(hair);
-        final look = Appearance.forSet(a, '016');
-        expect(look.selected[Slot.helmet], hat);
-        expect(look.selected[Slot.hair], hair);
-        expect(look.effective.any((p) => p.slot == Slot.hair), false);
-        expect(
-          look
-              .withPart(Slot.helmet, null)
-              .effective
-              .any((p) => identical(p, hair)),
-          true,
-        );
-      },
-    );
+    test('matching helmet is selected while the chosen hair is retained, not rendered', () {
+      final a = core.archetype(),
+          hat = core.part(Slot.helmet, 52, 'humf_helmet016.dds'),
+          hair = core.part(Slot.hair, 4, 'hum_hair004.dds');
+      a.parts[Slot.helmet]!.add(hat);
+      a.parts[Slot.hair]!.add(hair);
+      final look = Appearance.forSet(a, '016');
+      expect(look.selected[Slot.helmet], hat);
+      expect(look.selected[Slot.hair], hair);
+      expect(look.effective.any((p) => p.slot == Slot.hair), false);
+      expect(
+        look
+            .withPart(Slot.helmet, null)
+            .effective
+            .any((p) => identical(p, hair)),
+        true,
+      );
+    });
     test(
       'combined garment parts can cover the lower body without base leggings',
       () {

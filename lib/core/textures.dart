@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+
 import 'package:image/image.dart' as img;
+
 import 'formats.dart';
 
 /// Texturas de color original. El modo Glow de MLT no usa alfa como opacidad.

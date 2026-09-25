@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/core/extra_motion.dart';
@@ -120,12 +121,10 @@ Future<void> main() async {
     'verifiedFaces': faceDetails,
     'archivalReferenceTests': archiveTests,
     'failures': failures,
-    'scope':
-        'Binary, geometry coverage, skeletal and catalogue validation; not a visual approval of every texture.',
+    'scope': 'Binary, geometry coverage, skeletal and catalogue validation; not a visual approval of every texture.',
   };
-  await File(
-    output,
-  ).writeAsString(const JsonEncoder.withIndent('  ').convert(report));
+  await File(output)
+      .writeAsString(const JsonEncoder.withIndent('  ').convert(report));
   stdout.writeln(
     'AUDIT_DONE ${actors.length} actors, ${archiveTests.length} archives, ${failures.length} errors',
   );

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
+
 import 'formats.dart';
 import 'mounted_motion.dart';
 
@@ -25,9 +27,8 @@ class ExtraMotionProfile {
       id == archetype &&
       sex == (female ? 'Femenino' : 'Masculino') &&
       parents.length == original.bones.length &&
-      Iterable<int>.generate(
-        parents.length,
-      ).every((i) => parents[i] == original.bones[i].parent);
+      Iterable<int>.generate(parents.length)
+          .every((i) => parents[i] == original.bones[i].parent);
 }
 
 class ExtraMotionLibrary {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:herramienta_shaiya/core/formats.dart';
 import 'package:herramienta_shaiya/core/world_resources.dart';
 import 'package:herramienta_shaiya/core/game_metadata.dart';
@@ -78,9 +79,8 @@ void main(List<String> args) async {
     'names',
   );
   final monsterNames = readMonsterNames(
-    await File(
-      '${root.path}/BinarySData/DBMonsterText_CHN.SData',
-    ).readAsBytes(),
+    await File('${root.path}/BinarySData/DBMonsterText_CHN.SData')
+        .readAsBytes(),
     'monster names',
   );
   final result = {
@@ -93,9 +93,8 @@ void main(List<String> args) async {
     'itemNames': itemNames.length,
     'monsterNames': monsterNames.length,
   };
-  await File(
-    args[1],
-  ).writeAsString(const JsonEncoder.withIndent(' ').convert(result));
+  await File(args[1])
+      .writeAsString(const JsonEncoder.withIndent(' ').convert(result));
   stdout.writeln(
     '3DO: $meshes; DG: $dg; WLD: ${worlds.length}; items: ${itemData.length}; errors: ${errors.length}',
   );

@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -136,9 +137,9 @@ class _ExcelXmlLabPageState extends State<ExcelXmlLabPage> {
               (path) =>
                   filter.isEmpty ||
                   path.toLowerCase().contains(filter.toLowerCase()) ||
-                  excelXmlPurpose(
-                    path,
-                  ).toLowerCase().contains(filter.toLowerCase()),
+                  excelXmlPurpose(path)
+                      .toLowerCase()
+                      .contains(filter.toLowerCase()),
             )
             .toList()
           ..sort();

@@ -119,12 +119,14 @@ String foldedSearch(String s) {
 int compareEditorValues(String a, String b) {
   final x = BigInt.tryParse(a), y = BigInt.tryParse(b);
   if (x != null && y != null) return x.compareTo(y);
-  final aa = RegExp(
-    r'\d+|\D+',
-  ).allMatches(a.toLowerCase()).map((m) => m[0]!).toList();
-  final bb = RegExp(
-    r'\d+|\D+',
-  ).allMatches(b.toLowerCase()).map((m) => m[0]!).toList();
+  final aa = RegExp(r'\d+|\D+')
+      .allMatches(a.toLowerCase())
+      .map((m) => m[0]!)
+      .toList();
+  final bb = RegExp(r'\d+|\D+')
+      .allMatches(b.toLowerCase())
+      .map((m) => m[0]!)
+      .toList();
   for (var i = 0; i < aa.length && i < bb.length; i++) {
     final u = BigInt.tryParse(aa[i]), v = BigInt.tryParse(bb[i]);
     final r = u != null && v != null ? u.compareTo(v) : aa[i].compareTo(bb[i]);

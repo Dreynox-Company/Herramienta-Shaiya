@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/game_text_codec.dart';
@@ -12,6 +13,7 @@ import 'package:herramienta_shaiya/ui/editor_map.dart';
 import 'package:herramienta_shaiya/ui/editor_pickers.dart';
 import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/ui/editor_icons.dart';
+
 import 'editor_document_test.dart' show binaryTable;
 
 void main() {
@@ -104,32 +106,29 @@ void main() {
       expect(matchesRelation(drops.first, {'id': '206'}, mob.rows[0]), false);
     },
   );
-  test(
-    'map markers preserve multiple NPC positions and exclude portal destination',
-    () {
-      final d = EditorReader.open(
-        binaryTable(
-          [
-            'id',
-            'Positions[0].X',
-            'Positions[0].Z',
-            'Positions[1].X',
-            'Positions[1].Z',
-            'TargetPosition.X',
-            'TargetPosition.Z',
-          ],
-          [
-            [1, 10, 20, 30, 40, 900, 900],
-          ],
-        ),
-        'binarysdata/locations.sdata',
-      );
-      final markers = mapMarkers(d, [0]);
-      expect(markers.length, 2);
-      expect(markers[0].x, 10);
-      expect(markers[1].z, 40);
-    },
-  );
+  test('map markers preserve multiple NPC positions and exclude portal destination', () {
+    final d = EditorReader.open(
+      binaryTable(
+        [
+          'id',
+          'Positions[0].X',
+          'Positions[0].Z',
+          'Positions[1].X',
+          'Positions[1].Z',
+          'TargetPosition.X',
+          'TargetPosition.Z',
+        ],
+        [
+          [1, 10, 20, 30, 40, 900, 900],
+        ],
+      ),
+      'binarysdata/locations.sdata',
+    );
+    final markers = mapMarkers(d, [0]);
+    expect(markers.length, 2);
+    expect(markers[0].x, 10);
+    expect(markers[1].z, 40);
+  });
   test(
     'known flag choices never relabel arbitrary numeric fields as enums',
     () {

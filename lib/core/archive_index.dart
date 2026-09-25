@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
+
 import 'formats.dart';
 import 'seed_data.dart';
 
@@ -46,8 +48,7 @@ class ArchiveIndex {
         .take(64)
         .map((n) => n.toRadixString(16).padLeft(2, '0'))
         .join(),
-    'privacy':
-        'Sin rutas absolutas, usuario ni claves. Solo metadatos, hasta 64 bytes de cabecera SAH y hasta 16 bytes de las últimas cabeceras de recurso; nada se envía automáticamente.',
+    'privacy': 'Sin rutas absolutas, usuario ni claves. Solo metadatos, hasta 64 bytes de cabecera SAH y hasta 16 bytes de las últimas cabeceras de recurso; nada se envía automáticamente.',
   };
 
   static ArchiveIndex decode(Uint8List input, int safLength, {int? countXor}) {
@@ -125,13 +126,11 @@ class ArchiveIndex {
                 : 'XOR de contador de archivos por directorio 0x${key.toRadixString(16)}',
           ].join(' + '),
           'warnings': [
-            if (signature != 'SAH')
-              'Firma personalizada; estructura y rangos del índice completos verificados.',
+            if (signature != 'SAH') 'Firma personalizada; estructura y rangos del índice completos verificados.',
             ...reader.warnings,
           ],
           'attempts': errors,
-          'payloadValidation':
-              'La integridad de cada recurso se comprueba al leerlo; el índice no incluye un checksum global SAF.',
+          'payloadValidation': 'La integridad de cada recurso se comprueba al leerlo; el índice no incluye un checksum global SAF.',
         });
       } catch (e) {
         errors.add({
@@ -149,8 +148,7 @@ class ArchiveIndex {
         ...info,
         'status': 'rejected',
         'attempts': errors,
-        'nextStep':
-            'Conservar ambos archivos originales. Compartir este informe y, con autorización, el SAH de muestra. No se prueba una clave desconocida ni se altera el archivo.',
+        'nextStep': 'Conservar ambos archivos originales. Compartir este informe y, con autorización, el SAH de muestra. No se prueba una clave desconocida ni se altera el archivo.',
       },
     );
   }

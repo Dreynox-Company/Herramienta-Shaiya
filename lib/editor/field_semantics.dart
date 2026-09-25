@@ -20,9 +20,8 @@ class FieldMeaning {
   ];
   static FieldMeaning of(String name) {
     final n = name.toLowerCase().replaceAll('_', '');
-    final socket = RegExp(
-      r'^attachment\[(\d+)\]\[(\d+)\]\.(.+)$',
-    ).firstMatch(n);
+    final socket = RegExp(r'^attachment\[(\d+)\]\[(\d+)\]\.(.+)$')
+        .firstMatch(n);
     if (socket != null) {
       return FieldMeaning(
         'Anclaje ${socket[1]} · mano ${socket[2]} · ${socket[3]}',

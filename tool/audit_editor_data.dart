@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+
 import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'package:herramienta_shaiya/core/game_text_codec.dart';
 import 'package:herramienta_shaiya/core/seed_data.dart';
@@ -90,7 +91,6 @@ void main(List<String> args) async {
       stdout.writeln('ERROR $name $e');
     }
   }
-  File(
-    args.length > 1 ? args[1] : 'audit_editor.json',
-  ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
+  File(args.length > 1 ? args[1] : 'audit_editor.json')
+      .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
 }

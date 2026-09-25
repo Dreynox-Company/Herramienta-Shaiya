@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import '../core/game_text_codec.dart';
 import '../core/seed_data.dart';
 import 'document.dart';
@@ -205,8 +206,7 @@ class EditorReader {
       warnings: [
         ...warnings,
         ...errors,
-        if (candidates.isEmpty)
-          'No existe todavía un esquema validado para este archivo. Sus bytes no se omiten ni se modifican.',
+        if (candidates.isEmpty) 'No existe todavía un esquema validado para este archivo. Sus bytes no se omiten ni se modifican.',
       ],
       parsedBytes: 0,
       complete: false,
@@ -236,9 +236,9 @@ class EditorReader {
     for (var i = 0; i < columns; i++) {
       final n = c.byte();
       header.add(
-        const GameTextCodec(
-          GameTextEncoding.utf16le,
-        ).decode(c.take(n * 2)).replaceAll('\u0000', ''),
+        const GameTextCodec(GameTextEncoding.utf16le)
+            .decode(c.take(n * 2))
+            .replaceAll('\u0000', ''),
       );
     }
     final count = c.count(200000);

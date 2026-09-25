@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 import '../core/client_locale.dart';
 import '../core/game_text_codec.dart';
 import '../editor/document.dart';
@@ -189,9 +190,8 @@ class _RelationsDialogState extends State<_RelationsDialog> {
             .where(
               (r) =>
                   q.isEmpty ||
-                  foldedSearch(
-                    '${r.summary.id} ${r.summary.name} ${r.path}',
-                  ).contains(q),
+                  foldedSearch('${r.summary.id} ${r.summary.name} ${r.path}')
+                      .contains(q),
             )
             .toList();
     return AlertDialog(

@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:three_js/three_js.dart' as t;
 import 'package:vector_math/vector_math_64.dart' as v;
+
 import '../core/formats.dart';
 import '../core/world_resources.dart';
 import '../core/scene_objects.dart';
@@ -11,8 +13,11 @@ import '../core/spatial_window.dart';
 import 'studio_scene.dart' show RenderPart;
 part 'world_stream.dart';
 
-typedef PartFactory =
-    Future<RenderPart> Function(MeshData mesh, String texture, {bool opaque});
+typedef PartFactory = Future<RenderPart> Function(
+  MeshData mesh,
+  String texture, {
+  bool opaque,
+});
 
 class LoadedWorld {
   final t.Group root = t.Group();

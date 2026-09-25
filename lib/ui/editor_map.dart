@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+
 import '../editor/document.dart';
 import 'editor_icons.dart';
 import 'editor_style.dart';
@@ -117,9 +119,9 @@ class _EditorMapViewState extends State<EditorMapView> {
         ? ''
         : sheets
                   .where(
-                    (p) => RegExp(
-                      '(^|/)minimap_0*$id\\.(dds|tga|png|bmp)\$',
-                    ).hasMatch(p),
+                    (p) =>
+                        RegExp('(^|/)minimap_0*$id\\.(dds|tga|png|bmp)\$')
+                            .hasMatch(p),
                   )
                   .firstOrNull ??
               '';
@@ -142,9 +144,9 @@ class _EditorMapViewState extends State<EditorMapView> {
   Widget build(BuildContext context) {
     final doc = widget.document,
         extent = doc.payload.length >= 4
-            ? ByteData.sublistView(
-                doc.payload,
-              ).getUint32(0, Endian.little).toDouble()
+            ? ByteData.sublistView(doc.payload)
+                  .getUint32(0, Endian.little)
+                  .toDouble()
             : 0.0;
     if (doc.profile != 'svmap' || extent < 1 || extent > 16384) {
       return const Center(child: Text('El plano necesita un SVMAP validado.'));

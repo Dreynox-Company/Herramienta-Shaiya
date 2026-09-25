@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'formats.dart';
 import 'seed_data.dart';
 import 'legacy_text.dart';
@@ -18,9 +19,8 @@ class DataTable {
       final count = r.u8();
       r.need(count * 2);
       fields.add(
-        LegacyText.unicode(
-          r.bytes.sublist(r.offset, r.offset + count * 2),
-        ).toLowerCase(),
+        LegacyText.unicode(r.bytes.sublist(r.offset, r.offset + count * 2))
+            .toLowerCase(),
       );
       r.skip(count * 2);
     }

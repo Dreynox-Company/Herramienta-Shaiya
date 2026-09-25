@@ -1,5 +1,7 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../editor/document.dart';
 import '../editor/workbench_model.dart';
 import 'editor_icons.dart';

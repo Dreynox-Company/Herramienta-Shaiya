@@ -449,8 +449,7 @@ class SpkCoreTableDiscovery {
           )
           .toList(),
       'unresolvedSkillCandidates': unassignedSkills.length,
-      'method':
-          'authenticated-payload+manifest-structure+SEED-checksum+binary-header+schema-roundtrip+row-correlation',
+      'method': 'authenticated-payload+manifest-structure+SEED-checksum+binary-header+schema-roundtrip+row-correlation',
     };
   }
 }

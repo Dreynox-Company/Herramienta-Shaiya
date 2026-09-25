@@ -252,52 +252,46 @@ void main() {
     }
   });
 
-  test(
-    'full audit validates inferred extensions and exposes real technical formats',
-    () async {
-      final root = await Directory.systemTemp.createTemp(
-        'spk-name-format-audit-',
+  test('full audit validates inferred extensions and exposes real technical formats', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'spk-name-format-audit-',
+    );
+    try {
+      final fixture = await _buildSimpleFixture(root);
+      final source = await _sourceFor(fixture, fixture.profile);
+      source.names.mergeHints(
+        {
+          0x1000: 'Character/Human/body.dds',
+          0x1001: 'Character/Human/wrong.xml',
+          0x1002: 'Custom/unknown.asset',
+        },
+        confidence: 'strong-inferred',
+        evidence: 'fixture-name-correlation',
       );
-      try {
-        final fixture = await _buildSimpleFixture(root);
-        final source = await _sourceFor(fixture, fixture.profile);
-        source.names.mergeHints(
-          {
-            0x1000: 'Character/Human/body.dds',
-            0x1001: 'Character/Human/wrong.xml',
-            0x1002: 'Custom/unknown.asset',
-          },
-          confidence: 'strong-inferred',
-          evidence: 'fixture-name-correlation',
-        );
-        await source.validateSimpleResourceProfile();
-        await source.validateAllResources(
-          control: SpkExtractControl(),
-          progress: (_, _, _) {},
-        );
+      await source.validateSimpleResourceProfile();
+      await source.validateAllResources(
+        control: SpkExtractControl(),
+        progress: (_, _, _) {},
+      );
 
-        final validation = source.validateInferredNamesByFormat();
-        expect(validation['validated'], 1);
-        expect(validation['rejected'], 1);
-        expect(validation['preservedUnknown'], 1);
-        expect(source.names.confidence(0x1000), 'validated-inferred');
-        expect(source.names[0x1001], isNull);
-        expect(source.names[0x1002], 'Custom/unknown.asset');
+      final validation = source.validateInferredNamesByFormat();
+      expect(validation['validated'], 1);
+      expect(validation['rejected'], 1);
+      expect(validation['preservedUnknown'], 1);
+      expect(source.names.confidence(0x1000), 'validated-inferred');
+      expect(source.names[0x1001], isNull);
+      expect(source.names[0x1002], 'Custom/unknown.asset');
 
-        final wrong = source.index.resources.firstWhere(
-          (record) => record.entryId == 0x1001,
-        );
-        expect(source.displayType(wrong), 'DDS');
-        expect(source.technicalPath(wrong), endsWith('.dds'));
-        expect(
-          source.technicalPath(wrong),
-          contains('_SPK_SinNombre/Simples/'),
-        );
-      } finally {
-        await root.delete(recursive: true);
-      }
-    },
-  );
+      final wrong = source.index.resources.firstWhere(
+        (record) => record.entryId == 0x1001,
+      );
+      expect(source.displayType(wrong), 'DDS');
+      expect(source.technicalPath(wrong), endsWith('.dds'));
+      expect(source.technicalPath(wrong), contains('_SPK_SinNombre/Simples/'));
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
 
   test('full audit accepts zero decodedBytes as unspecified length', () async {
     final root = await Directory.systemTemp.createTemp('spk-zero-declared-');
@@ -420,13 +414,9 @@ void main() {
           expectedHashes: {technical: sha256.convert(original).toString()},
         );
         expect(await library.read(technical), orderedEquals(replacement));
-        final manifest =
-            jsonDecode(
-                  await File(
-                    '${root.path}/overlay/_SPK_OVERLAY.json',
-                  ).readAsString(),
-                )
-                as Map<String, dynamic>;
+        final manifest = jsonDecode(
+          await File('${root.path}/overlay/_SPK_OVERLAY.json').readAsString(),
+        ) as Map<String, dynamic>;
         final entries = Map<String, dynamic>.from(manifest['entries'] as Map);
         expect(
           (entries[technical] as Map)['nameAuthority'],
@@ -608,13 +598,11 @@ void main() {
           ).readAsBytes(),
           orderedEquals(replacement),
         );
-        final manifest =
-            jsonDecode(
-                  await File(
-                    '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
-                  ).readAsString(),
-                )
-                as Map<String, dynamic>;
+        final manifest = jsonDecode(
+          await File(
+            '${folder.path}${Platform.pathSeparator}_SPK_MANIFEST.json',
+          ).readAsString(),
+        ) as Map<String, dynamic>;
         expect(manifest['workspaceOverlayApplied'], 1);
         expect(
           manifest['workspaceIndexSha256'],

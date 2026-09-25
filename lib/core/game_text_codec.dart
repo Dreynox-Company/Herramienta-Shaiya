@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'legacy_text.dart';
 
 /// An encoding is an on-disk contract, not a font setting. Lossy encoding is

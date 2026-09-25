@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/game_text_codec.dart';
 import 'package:herramienta_shaiya/core/seed_data.dart';
@@ -92,9 +93,9 @@ void main() {
         throwsFormatException,
       );
       expect(
-        () => const GameTextCodec(
-          GameTextEncoding.utf8,
-        ).encode(String.fromCharCode(0xd800)),
+        () =>
+            const GameTextCodec(GameTextEncoding.utf8)
+                .encode(String.fromCharCode(0xd800)),
         throwsFormatException,
       );
     });

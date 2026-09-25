@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+
 import 'package:herramienta_shaiya/core/scene_objects.dart';
 import 'package:herramienta_shaiya/core/world_resources.dart';
 
@@ -24,9 +25,8 @@ void main(List<String> args) async {
     }
   }
   final result = {'verified': counts, 'errors': errors};
-  await File(
-    args[1],
-  ).writeAsString(const JsonEncoder.withIndent(' ').convert(result));
+  await File(args[1])
+      .writeAsString(const JsonEncoder.withIndent(' ').convert(result));
   stdout.writeln(counts);
   for (final e in errors.take(20)) {
     stdout.writeln(e);

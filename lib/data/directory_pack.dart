@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:path/path.dart' as p;
+
 import '../core/archive_index.dart';
 import 'archive_source.dart';
 import 'archive_export.dart';
@@ -28,9 +30,9 @@ class DirectoryPack {
         stats = <FileStat>[],
         names = <String>{};
     int offset = 0;
-    final discovered = await Directory(
-      root,
-    ).list(recursive: true, followLinks: false).toList();
+    final discovered = await Directory(root)
+        .list(recursive: true, followLinks: false)
+        .toList();
     discovered.sort((a, b) => a.path.compareTo(b.path));
     for (final entity in discovered) {
       control.check();

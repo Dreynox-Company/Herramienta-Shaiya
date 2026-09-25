@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math' as math;
+
 import 'package:herramienta_shaiya/core/formats.dart';
 
 void main(List<String> args) {
@@ -67,7 +68,6 @@ void main(List<String> args) {
       }
     }
   }
-  File(
-    args[1],
-  ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(rows));
+  File(args[1])
+      .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(rows));
 }

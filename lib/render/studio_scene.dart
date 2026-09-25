@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:three_js/three_js.dart' as t;
 import 'package:vector_math/vector_math_64.dart' as v;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
+
 import '../core/formats.dart';
 import '../core/textures.dart';
 import '../core/combat.dart';
@@ -16,6 +18,8 @@ import '../core/flight_transition.dart';
 import '../core/flight_v3_bundle.dart';
 import '../core/wing_motion.dart';
 import '../core/wing_position.dart';
+import '../core/wing_native_transform.dart';
+import '../core/flight_presentation.dart';
 import '../core/vehicle_position.dart';
 import '../core/mon_editor.dart';
 import '../core/mounted_motion.dart';
@@ -118,7 +122,9 @@ class Actor {
   HeadLookController? headLook;
   List<v.Matrix4>? _blendFrom;
   List<v.Matrix4> _rawPose = [];
-  double _blendTime = .18;
+  double _blendTime = .18, _blendDuration = .18;
+  double _presentationRate = 1;
+  ClipData? get transitionDestination => _afterClip;
   bool headTracking = false;
   int? wingBone;
   v.Matrix4? wingReference;
@@ -129,8 +135,13 @@ class Actor {
   void pose() {
     if (clip == null) return;
     final pose = clip!.pose(time, loop: loop);
-    _rawPose = _blendFrom != null && _blendTime < .18
-        ? blendSkeleton(_blendFrom!, pose, clip!.bones, _blendTime / .18)
+    _rawPose = _blendFrom != null && _blendTime < _blendDuration
+        ? blendSkeleton(
+            _blendFrom!,
+            pose,
+            clip!.bones,
+            _blendTime / _blendDuration,
+          )
         : pose;
     world = _rawPose.map((m) => m.clone()).toList();
     if (headTracking) headLook?.apply(world);
@@ -140,19 +151,21 @@ class Actor {
   }
 
   void tick(double dt) {
+    if (!dt.isFinite || dt <= 0) return;
     _blendTime += dt;
-    if (_blendTime >= .18) _blendFrom = null;
-    if (playing) time += dt * speed;
-    if (!loop && clip != null && time > clip!.duration) {
+    if (_blendTime >= _blendDuration) _blendFrom = null;
+    if (playing) time += dt * speed * _presentationRate;
+    if (playing && !loop && clip != null && time >= clip!.duration) {
+      final remainder = (time - clip!.duration) / _presentationRate;
       final next = _afterClip;
       if (next != null) {
         final phase = _afterClipTime;
         final repeat = _afterClipLoop;
-        _afterClip = null;
-        _afterClipTime = 0;
-        _afterClipLoop = true;
         play(next, repeat: repeat);
-        time = repeat ? phase % next.duration : phase.clamp(0.0, next.duration);
+        final destinationTime = phase + remainder;
+        time = repeat
+            ? destinationTime % next.duration
+            : destinationTime.clamp(0.0, next.duration);
       } else if (idle != null) {
         play(idle!);
       }
@@ -160,7 +173,12 @@ class Actor {
     pose();
   }
 
-  void play(ClipData c, {bool repeat = true}) {
+  void play(ClipData c, {bool repeat = true, double blendSeconds = .18}) {
+    if (!blendSeconds.isFinite || blendSeconds <= 0) {
+      throw ArgumentError.value(blendSeconds, 'blendSeconds');
+    }
+    _presentationRate = 1;
+    _blendDuration = blendSeconds;
     _afterClip = null;
     _afterClipTime = 0;
     _afterClipLoop = true;
@@ -180,11 +198,34 @@ class Actor {
     ClipData destination, {
     double destinationPhase = 0,
     bool destinationLoop = true,
+    double? presentationSeconds,
   }) {
-    play(transition, repeat: false);
+    if (presentationSeconds != null &&
+        (!presentationSeconds.isFinite || presentationSeconds <= 0)) {
+      throw ArgumentError.value(presentationSeconds, 'presentationSeconds');
+    }
+    play(
+      transition,
+      repeat: false,
+      blendSeconds: presentationSeconds == null
+          ? .18
+          : math.min(FlightPresentation.entryBlendSeconds, presentationSeconds),
+    );
+    _presentationRate = presentationSeconds == null
+        ? 1
+        : transition.duration / presentationSeconds;
     _afterClip = destination;
     _afterClipTime = destinationPhase.isFinite ? destinationPhase : 0;
     _afterClipLoop = destinationLoop;
+  }
+
+  /// Changes the endpoint without rewinding the active takeoff/landing.
+  /// A new endpoint starts at phase zero; unchanged endpoints keep their phase.
+  void redirectTransition(ClipData destination) {
+    if (_afterClip == null || identical(_afterClip, destination)) return;
+    _afterClip = destination;
+    _afterClipTime = 0;
+    _afterClipLoop = true;
   }
 
   int get requiredBones =>
@@ -1094,9 +1135,8 @@ class StudioScene extends ChangeNotifier {
           rgba[i + 3] = ((1 - d).clamp(0.0, 1.0) * 230).round();
         }
       }
-      texture = await t.TextureLoader(
-        flipY: false,
-      ).fromBytes(Pixels(16, 16, rgba).png());
+      texture = await t.TextureLoader(flipY: false)
+          .fromBytes(Pixels(16, 16, rgba).png());
       if (texture == null) return;
       if (disposed || rev != _effectRevision) {
         texture.dispose();
@@ -2346,7 +2386,7 @@ class StudioScene extends ChangeNotifier {
     }
     combat.cancelActions();
     flightV3PreviewId = id;
-    _playFlightV3Transition(transition);
+    _playFlightV3Transition(transition, interactive: false);
     report(
       'Flight V3 preview · $id · '
       '${flightV3TransitionLabel(transition)}',
@@ -2413,7 +2453,10 @@ class StudioScene extends ChangeNotifier {
     return null;
   }
 
-  void _playFlightV3Transition(FlightV3Transition transition) {
+  void _playFlightV3Transition(
+    FlightV3Transition transition, {
+    bool interactive = true,
+  }) {
     final actor = character;
     if (actor == null) return;
     final destination = _flightV3Destination(transition) ?? actor.idle;
@@ -2423,6 +2466,12 @@ class StudioScene extends ChangeNotifier {
         transition.clip,
         destination,
         destinationPhase: transition.destinationPhase,
+        presentationSeconds: interactive
+            ? FlightPresentation.budget(
+                transition.kind,
+                combat: transition.id.contains('COMBAT'),
+              )
+            : null,
       );
     } else {
       actor.play(transition.clip, repeat: false);
@@ -2549,7 +2598,7 @@ class StudioScene extends ChangeNotifier {
                     : 'V3_LAND_NORMAL_NEUTRAL')]
         : null;
     setFlightEnabled(enabled);
-    if (v3Transition != null && character != null) {
+    if (v3Transition != null && character != null && !flightCombatLock) {
       _playFlightV3Transition(v3Transition);
     } else {
       _flightBodyTransition = null;
@@ -2606,7 +2655,6 @@ class StudioScene extends ChangeNotifier {
   bool get sceneCombatLocked {
     final a = character;
     return busy ||
-        flightBodyTransitionActive ||
         combat.playerHealth <= 0 ||
         (combat.active &&
             a != null &&
@@ -2658,7 +2706,13 @@ class StudioScene extends ChangeNotifier {
       }
       return false;
     }
-    if (flying && flightV3Compatible && !flightBodyTransitionActive) {
+    if (flightBodyTransitionActive) {
+      // Animation is presentation, never a movement lock. Preserve progress
+      // while redirecting the destination to the current held/click intent.
+      a.redirectTransition(desired);
+      return true;
+    }
+    if (flying && flightV3Compatible) {
       final shielded = shieldRecord != null;
       final fromHover = identical(a.clip, a.hover);
       final fromFlight = identical(a.clip, a.flight);
@@ -2784,12 +2838,17 @@ class StudioScene extends ChangeNotifier {
       final sx = wingScaleX * (wingMirrorX ? -1 : 1);
       final sy = wingScaleY * (wingMirrorY ? -1 : 1);
       final sz = wingScaleZ * (wingMirrorZ ? -1 : 1);
-      final local =
-          v.Matrix4.translationValues(wingOffsetX, wingOffsetY, wingOffsetZ) *
-          v.Matrix4.rotationX(wingRotX * math.pi / 180) *
-          v.Matrix4.rotationY(wingRotY * math.pi / 180) *
-          v.Matrix4.rotationZ(wingRotZ * math.pi / 180) *
-          v.Matrix4.diagonal3Values(sx, sy, sz);
+      final local = nativeWingLocalTransform(
+        rotX: wingRotX,
+        rotY: wingRotY,
+        rotZ: wingRotZ,
+        leftRight: wingOffsetX,
+        upDown: wingOffsetY,
+        frontBack: wingOffsetZ,
+        scaleX: sx,
+        scaleY: sy,
+        scaleZ: sz,
+      );
       final matrix =
           root * v.Matrix4.fromList(a.visual.matrix.storage) * anchor * local;
       wing!.root.matrix.copyFromArray(matrix.storage);

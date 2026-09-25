@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+
 import '../core/game_text_codec.dart';
 import '../data/library.dart';
 import '../data/archive_export.dart';
@@ -1293,8 +1295,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
       'version': '0.6.1',
       'source': widget.library.sourceDiagnostics,
       'tables': _cache.values.map((d) => d.report()).toList(),
-      'privacy':
-          'Sin contenido de tablas ni credenciales. No se envía automáticamente.',
+      'privacy': 'Sin contenido de tablas ni credenciales. No se envía automáticamente.',
       'status': status,
     };
     final p = await _save(
@@ -2266,8 +2267,7 @@ class _DataEditorPageState extends State<DataEditorPage> {
                               _buildDirectory,
                             ),
                           Tooltip(
-                            message:
-                                'Respaldo opcional; el guardado utiliza una transacción temporal incluso sin esta opción.',
+                            message: 'Respaldo opcional; el guardado utiliza una transacción temporal incluso sin esta opción.',
                             child: FilterChip(
                               label: const Text(
                                 'Respaldo',

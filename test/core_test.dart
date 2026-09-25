@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/formats.dart';
 import 'package:herramienta_shaiya/core/textures.dart';
@@ -127,17 +128,14 @@ void main() {
         setIdentity('humf_wedding_lower.dds'),
       );
     });
-    test(
-      'conjunto incompleto limpia la selección anterior pero conserva las piernas base',
-      () {
-        final a = archetype(), first = Appearance.forSet(a, '016');
-        expect(first.selected[Slot.lower], isNotNull);
-        final next = Appearance.forSet(a, 'wedding', previous: first);
-        expect(next.selected[Slot.lower], isNull);
-        expect(next.fullCostume, isFalse);
-        expect(next.effective.any((p) => p.slot == Slot.lower), isTrue);
-      },
-    );
+    test('conjunto incompleto limpia la selección anterior pero conserva las piernas base', () {
+      final a = archetype(), first = Appearance.forSet(a, '016');
+      expect(first.selected[Slot.lower], isNotNull);
+      final next = Appearance.forSet(a, 'wedding', previous: first);
+      expect(next.selected[Slot.lower], isNull);
+      expect(next.fullCostume, isFalse);
+      expect(next.effective.any((p) => p.slot == Slot.lower), isTrue);
+    });
     test('selecciones son inmutables', () {
       final a = Appearance.forSet(archetype(), '016');
       expect(() => a.selected[Slot.upper] = null, throwsUnsupportedError);

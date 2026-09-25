@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+
 import '../core/archive_index.dart';
 
 /// Range reads avoid ever copying or loading the entire SAF in memory.

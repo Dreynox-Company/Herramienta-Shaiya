@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../editor/document.dart';
 import '../editor/field_semantics.dart';
 import '../editor/workbench_model.dart';
@@ -412,9 +413,8 @@ class _RecordEditorWindowState extends State<RecordEditorWindow> {
                             draft.before[f.spec.name] !=
                                 draft.values[f.spec.name]) &&
                         (q.isEmpty ||
-                            foldedSearch(
-                              '${m.label} ${f.spec.name}',
-                            ).contains(q));
+                            foldedSearch('${m.label} ${f.spec.name}')
+                                .contains(q));
                   }).toList();
                   final narrow = box.maxWidth < 620;
                   final menu = narrow

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/offline/save_store.dart';
 import 'package:path/path.dart' as p;
@@ -31,9 +32,8 @@ void main() {
     'create/load retain Unicode, faction, corpus and 64-bit values',
     () async {
       final s = await create();
-      final loaded = await SaveStore(
-        directory,
-      ).load(s.id, expectedCorpus: corpus);
+      final loaded = await SaveStore(directory)
+          .load(s.id, expectedCorpus: corpus);
       expect(loaded.title, 'Partida Ñ — dragón 🐉');
       expect(loaded.state['gold'], 9223372036854775807);
       expect(loaded.faction, 'luz');
@@ -138,9 +138,8 @@ void main() {
         throwsStateError,
       );
       expect((await store.load(a.id)).revision, 1);
-      await File(
-        p.join(directory.path, a.id, '.pending-from-crash'),
-      ).writeAsString('broken');
+      await File(p.join(directory.path, a.id, '.pending-from-crash'))
+          .writeAsString('broken');
       expect((await store.load(a.id)).state, a.state);
     },
   );
@@ -179,9 +178,8 @@ void main() {
         expectedCorpus: corpus,
         state: {'gold': 1},
       );
-      await File(
-        p.join(directory.path, a.id, '000000000002.json'),
-      ).writeAsString('{bad');
+      await File(p.join(directory.path, a.id, '000000000002.json'))
+          .writeAsString('{bad');
       await expectLater(store.load(a.id), throwsFormatException);
       final list = await store.list();
       expect(list.unreadable.containsKey(a.id), true);
@@ -201,9 +199,8 @@ void main() {
   });
   test('copied save with mismatching ID is rejected', () async {
     final a = await create(), b = await create();
-    await File(
-      p.join(directory.path, a.id, '000000000001.json'),
-    ).copy(p.join(directory.path, b.id, '000000000001.json'));
+    await File(p.join(directory.path, a.id, '000000000001.json'))
+        .copy(p.join(directory.path, b.id, '000000000001.json'));
     await expectLater(store.load(b.id), throwsFormatException);
   });
   for (final id in ['../outside', 'C:\\game', '/tmp', '123', '..', 'a' * 33]) {
