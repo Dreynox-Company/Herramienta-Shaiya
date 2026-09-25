@@ -1,0 +1,52 @@
+name: Restore audited checkpoint then verify Windows
+on:
+  push:
+    branches: [fix/windows-ci-audited-20260919]
+    paths:
+      - ci/recovery/restore_checkpoint.py
+      - .github/workflows/restore-audited.yml
+permissions:
+  contents: read
+jobs:
+  import:
+    if: github.repository == 'Dreynox-Company/Herramienta-Shaiya' && github.ref == 'refs/heads/fix/windows-ci-audited-20260919'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      source_ref: ${{ steps.commit.outputs.source_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Recover and verify exact readable sources
+        run: python ci/recovery/restore_checkpoint.py
+      - name: Commit verified sources to this branch only; no force push
+        id: commit
+        shell: bash
+        env:
+          TARGET_BRANCH: fix/windows-ci-audited-20260919
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python - <<'PY'
+          import json, subprocess
+          report=json.load(open('ci/checkpoint-provenance.json'))
+          paths=report['changedPaths']
+          subprocess.run(['git','add','--',*paths,'ci/checkpoint-provenance.json'],check=True)
+          subprocess.run(['git','add','-u','--','ci/recovery'],check=True)
+          PY
+          git commit -m 'fix: integrate exact audited Spanish and manual-flight sources'
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo "source_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  verify:
+    needs: import
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.import.outputs.source_ref }}

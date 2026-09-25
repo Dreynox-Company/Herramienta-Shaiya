@@ -1,0 +1,36 @@
+name: Restore and build Studio 0.6
+on:
+  push:
+    branches: [release/studio-06-suite]
+    paths: [.github/workflows/suite-restore-build.yml]
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      source_commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/studio-06-suite
+          fetch-depth: 1
+      - name: Recover the complete hash-checked source delta
+        run: python ci/import06/restore.py
+      - name: Commit only restored application sources
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name 'Shaiya Studio CI'
+          git config user.email 'studio-ci@users.noreply.github.com'
+          git commit -m 'feat: recover complete visual editor 0.6 with transactional archive editing'
+          git push origin HEAD:release/studio-06-suite
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  verified-build:
+    needs: restore
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.restore.outputs.source_commit }}

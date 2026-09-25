@@ -1,0 +1,69 @@
+name: SPK integration formatter and verifier
+
+on:
+  push:
+    branches:
+      - feat/studio-063-spk-archive-browser
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[spk-format]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Format changed Dart sources
+        run: |
+          dart format \
+            lib/core/spk_archive.dart \
+            lib/data/spk_source.dart \
+            lib/ui/spk_archive_browser.dart \
+            lib/main.dart \
+            test/spk_archive_test.dart
+      - name: Analyze project
+        run: flutter analyze 2>&1 | tee spk-analyze.txt
+      - name: Run focused SPK tests
+        run: flutter test test/spk_archive_test.dart --reporter expanded 2>&1 | tee spk-tests.txt
+      - name: Commit deterministic formatting and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add pubspec.lock \
+            lib/core/spk_archive.dart \
+            lib/data/spk_source.dart \
+            lib/ui/spk_archive_browser.dart \
+            lib/main.dart \
+            test/spk_archive_test.dart
+          if git diff --cached --quiet; then
+            echo "No deterministic changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: format SPK integration and lock dependencies [spk-format]"
+          git push origin HEAD:feat/studio-063-spk-archive-browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SPK-formatted-sources
+          path: |
+            pubspec.lock
+            lib/core/spk_archive.dart
+            lib/data/spk_source.dart
+            lib/ui/spk_archive_browser.dart
+            lib/main.dart
+            test/spk_archive_test.dart
+            spk-analyze.txt
+            spk-tests.txt
+          if-no-files-found: error
+          retention-days: 7
