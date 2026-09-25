@@ -7,6 +7,11 @@ on:
         required: false
         type: string
         default: ''
+      harden_angle:
+        description: Replace flutter_angle Debug runtime with pinned Release ANGLE and validate it
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -108,6 +113,17 @@ jobs:
         run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
       - name: Build Windows release
         run: flutter build windows --release
+      - uses: actions/cache@v5
+        if: ${{ inputs.harden_angle }}
+        with:
+          path: build/vcpkg-binary-cache
+          key: angle-vcpkg-cbe29d6909ef-x64-windows-v1
+      - name: Harden ANGLE Release runtime
+        if: ${{ inputs.harden_angle }}
+        run: ./ci/harden_angle_windows.ps1
+      - name: Smoke hardened ANGLE Release with mounted DATA
+        if: ${{ inputs.harden_angle }}
+        run: ./tool/smoke_windows.ps1 -DataPath $env:SHAIYA_FIXTURE_PATH -OutputFolder qa-angle
       - name: Native SPK writer round-trip - simple, fragments, index and sidecars
         run: |
           $release = Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release'
