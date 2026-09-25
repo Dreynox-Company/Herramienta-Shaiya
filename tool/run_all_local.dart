@@ -56,7 +56,10 @@ import '../test/item_query_test.dart' as suite62;
 import '../test/item_atlas_test.dart' as suite63;
 import '../test/item_record_editor_test.dart' as suite64;
 
+import '../test/r26_models_layout_test.dart' as r26_models;
+
 void main() {
+  r26_models.main();
   native_wing_profile_suite.main();
   suite64.main();
   suite63.main();

@@ -1299,24 +1299,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   Future<void> mountInStudio() => runAction(() async {
     final callback = widget.onMount;
     if (callback == null) return;
-    if (!source.canExtractAll) {
+    if (!source.canReadSimpleResources) {
       throw const SpkFailure(
         'SPK_STUDIO_MOUNT_PROFILE',
-        'Para usar DATA.SPK en el editor y la herramienta 3D deben estar '
-            'autenticados los recursos simples y fragmentados.',
+        'Autentica primero el perfil de recursos simples.',
       );
     }
-    if (!source.fullyValidatedResources) {
-      operation = 'Auditando todos los payloads antes de montar Studio…';
-      if (mounted) setState(() {});
-      await _auditAllResources(source);
-    }
-    if (!hasConfirmedCoreTables) {
-      operation = 'Identificando tablas editables antes de montar Studio…';
-      if (mounted) setState(() {});
-      await _discoverCoreTables();
-    }
-    operation = 'Montando DATA.SPK como biblioteca de Studio…';
+    operation =
+        'Montando recursos legibles; los nombres inferidos no se usan como rutas nativas…';
     if (mounted) setState(() {});
     await callback(source);
     if (mounted) Navigator.of(context).pop();
@@ -3515,6 +3505,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             Text(
               source.canExtractAll
                   ? 'Original protegido · overlay editable'
+                  : source.canReadSimpleResources
+                  ? 'Lectura parcial · fragmentos pendientes'
                   : 'Explorador · contenido cifrado',
               style: const TextStyle(fontSize: 9, color: Color(0xff8e9bb0)),
             ),
@@ -3527,12 +3519,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               icon: const Icon(Icons.security_outlined, size: 17),
               label: const Text('Desbloquear SPK'),
             ),
-          if (widget.onMount != null && source.canExtractAll)
+          if (widget.onMount != null && source.canReadSimpleResources)
             TextButton.icon(
               onPressed: busy ? null : mountInStudio,
               icon: const Icon(Icons.view_in_ar_outlined, size: 17),
               label: Text(
-                hasConfirmedCoreTables ? 'Usar en Studio' : 'Preparar Studio',
+                source.canExtractAll
+                    ? 'Usar en Studio'
+                    : 'Usar recursos legibles',
               ),
             ),
           if (source.canExtractAll)

@@ -104,7 +104,9 @@ class Library {
 
   String get sourceLabel {
     if (spk != null) {
-      return 'DATA.SPK · lectura autenticada + overlay editable';
+      return spk!.canExtractAll
+          ? 'DATA.SPK · lectura autenticada + overlay editable'
+          : 'DATA.SPK · acceso parcial autenticado · fragmentos bloqueados · overlay editable';
     }
     return archive == null
         ? 'Carpeta DATA'
@@ -294,6 +296,70 @@ class Library {
       source.close();
       rethrow;
     }
+  }
+
+  /// Mount readable resources lazily. Only confirmed paths enter semantic
+  /// Character/Item catalogs; inferred names remain technical Entry IDs.
+  /// No whole-archive extraction or decryption is triggered by opening Studio.
+  static Future<Library> fromSpkEditable(
+    SpkArchiveSource source, {
+    void Function(String)? progress,
+    String? overlayRoot,
+  }) async {
+    if (!source.canReadSimpleResources) {
+      throw const SpkFailure(
+        'SPK_WORKSPACE_PROFILE',
+        'Autentica primero el perfil de recursos simples.',
+      );
+    }
+    final files = <String, String>{};
+    var blocked = 0, confirmed = 0, technical = 0;
+    for (final record in source.index.resources) {
+      if (!source.canReadRecord(record)) {
+        blocked++;
+        continue;
+      }
+      final hasName = source.names.isConfirmed(record.entryId);
+      final path = hasName
+          ? canon(SpkArchiveSource.safeRelative(source.names[record.entryId]!))
+          : canon(
+              '_SPK_SinNombre/${record.idHex}${SpkArchiveSource.extensionFor(source.validatedFormat(record.entryId) ?? 'BIN')}',
+            );
+      if (!supportedPath(path)) continue;
+      if (files.containsKey(path) && files[path] != record.idHex) {
+        throw FormatException(
+          'Dos Entry IDs reclaman la misma ruta confirmada: $path',
+        );
+      }
+      files[path] = record.idHex;
+      if (hasName) {
+        confirmed++;
+      } else {
+        technical++;
+      }
+    }
+    if (files.isEmpty) {
+      throw const FormatException('No hay recursos legibles para montar.');
+    }
+    progress?.call(
+      'SPK: $confirmed rutas confirmadas, $technical Entry IDs, $blocked recursos bloqueados.',
+    );
+    return _normalise(
+      source.file.path,
+      false,
+      files,
+      spk: source,
+      spkOverlayRoot: overlayRoot ?? '${source.file.path}.studio-overlay',
+      requireCharacter: false,
+      spkMountReport: {
+        'selectiveMount': true,
+        'confirmedMounted': confirmed,
+        'technicalMounted': technical,
+        'blockedResources': blocked,
+        'inferredMounted': 0,
+        'completePayloadAccess': source.canExtractAll,
+      },
+    );
   }
 
   static Future<Library> fromSpk(
@@ -571,13 +637,14 @@ class Library {
 
   bool _isTechnicalSpkPath(String canonical, SpkRecord record) {
     final source = spk;
-    if (source == null || !source.fullyValidatedResources) return false;
+    if (source == null || !source.canReadRecord(record)) return false;
     final format = source.validatedFormat(record.entryId) ?? 'BIN';
     final technical = canon(
       '_SPK_SinNombre/${record.idHex}'
       '${SpkArchiveSource.extensionFor(format)}',
     );
-    return canonical == technical;
+    return canonical == technical ||
+        canonical == canon('_SPK_SinNombre/${record.idHex}.bin');
   }
 
   File _spkOverlayFile(String path) {
@@ -599,10 +666,10 @@ class Library {
         'La biblioteca abierta no es un workspace SPK.',
       );
     }
-    if (!spk!.canExtractAll) {
+    if (!spk!.canReadSimpleResources) {
       throw const SpkFailure(
         'SPK_OVERLAY_PROFILE',
-        'El overlay editable requiere lectura completa y autenticada del SPK.',
+        'El overlay editable requiere un perfil autenticado. Cada recurso se valida al leerlo.',
       );
     }
     if (replacements.isEmpty) return;

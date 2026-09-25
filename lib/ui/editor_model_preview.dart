@@ -136,10 +136,12 @@ class _ModelDialogState extends State<_ModelDialog> {
 class NativeModelPreview extends StatefulWidget {
   final Library library;
   final ModelReference model;
+  final ValueChanged<bool>? onReadyChanged;
   const NativeModelPreview({
     super.key,
     required this.library,
     required this.model,
+    this.onReadyChanged,
   });
   @override
   State<NativeModelPreview> createState() => _NativeModelPreviewState();
@@ -203,6 +205,10 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
         }
         final b = await widget.library.read(ref.$1, limit: 64 * 1024 * 1024),
             mesh = await compute(_mesh, (b, ref.$1));
+        if (dead) {
+          staged.dispose();
+          return;
+        }
         vertices += mesh.vertices;
         if (vertices > 1000000) {
           throw const FormatException(
@@ -243,6 +249,7 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
       actor = staged;
       view.scene.add(staged.root);
       camera();
+      if (!dead && mounted) widget.onReadyChanged?.call(true);
       view.addAnimationEvent((dt) {
         if (dead) return;
         if (playing) actor?.tick(dt.clamp(0, .05));
@@ -250,7 +257,10 @@ class _NativeModelPreviewState extends State<NativeModelPreview> {
       });
     } catch (e) {
       staged.dispose();
-      if (mounted) setState(() => error = '$e');
+      if (mounted) {
+        widget.onReadyChanged?.call(false);
+        setState(() => error = '$e');
+      }
     }
   }
 

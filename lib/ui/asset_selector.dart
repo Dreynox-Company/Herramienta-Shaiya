@@ -4,6 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+typedef AssetPreviewBuilder<T> =
+    Widget Function(BuildContext context, T value, ValueChanged<bool> onReady);
+
 class SelectionMemory {
   String query = '';
   String? cursor;
@@ -16,6 +19,7 @@ class AssetSelector<T> extends StatefulWidget {
   final T? value;
   final String Function(T) id, label;
   final String Function(T)? detail;
+  final AssetPreviewBuilder<T>? previewBuilder;
   final Future<void> Function(T) onChanged;
   final void Function(Object)? onError;
   final SelectionMemory memory;
@@ -31,6 +35,7 @@ class AssetSelector<T> extends StatefulWidget {
     required this.onChanged,
     required this.memory,
     this.detail,
+    this.previewBuilder,
     this.onError,
     this.enabled = true,
     this.emptyLabel = 'Sin selección',
@@ -107,6 +112,7 @@ class _AssetSelectorState<T> extends State<AssetSelector<T>> {
         id: widget.id,
         label: widget.label,
         detail: widget.detail,
+        previewBuilder: widget.previewBuilder,
         memory: widget.memory,
       ),
     );
@@ -277,6 +283,7 @@ class AssetPickerDialog<T> extends StatefulWidget {
   final T? current;
   final String Function(T) id, label;
   final String Function(T)? detail;
+  final AssetPreviewBuilder<T>? previewBuilder;
   final SelectionMemory memory;
   const AssetPickerDialog({
     super.key,
@@ -287,6 +294,7 @@ class AssetPickerDialog<T> extends StatefulWidget {
     required this.label,
     required this.memory,
     this.detail,
+    this.previewBuilder,
   });
   @override
   State<AssetPickerDialog<T>> createState() => _AssetPickerDialogState<T>();
@@ -296,7 +304,68 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
   late final TextEditingController _search;
   late final ScrollController _scroll;
   late List<T> _filtered;
-  int _cursor = 0;
+  int _cursor = 0, _previewGeneration = 0;
+  bool _previewReady = false;
+  String? get _highlight =>
+      _filtered.isEmpty ? null : widget.id(_filtered[_cursor]);
+  void _chooseCursor(int index) {
+    final before = _highlight;
+    setState(() {
+      _cursor = index;
+      if (before != _highlight) {
+        _previewGeneration++;
+        _previewReady = false;
+      }
+    });
+  }
+
+  Widget _preview() {
+    if (_filtered.isEmpty) {
+      return const Center(child: Text('Selecciona un recurso.'));
+    }
+    final value = _filtered[_cursor], identity = _highlight;
+    final request = _previewGeneration;
+    return KeyedSubtree(
+      key: ValueKey('resource-preview-$identity'),
+      child: widget.previewBuilder!(context, value, (ready) {
+        if (mounted &&
+            request == _previewGeneration &&
+            identity == _highlight) {
+          setState(() => _previewReady = ready);
+        }
+      }),
+    );
+  }
+
+  Widget _contents() {
+    final list = _filtered.isEmpty
+        ? const Center(child: Text('No hay recursos que coincidan.'))
+        : ListView.builder(
+            controller: _scroll,
+            itemExtent: rowHeight,
+            itemCount: _filtered.length,
+            itemBuilder: (_, i) => _row(i),
+          );
+    if (widget.previewBuilder == null) return list;
+    return LayoutBuilder(
+      builder: (_, box) => box.maxWidth >= 700
+          ? Row(
+              children: [
+                SizedBox(width: box.maxWidth * .4, child: list),
+                const VerticalDivider(width: 10),
+                Expanded(child: _preview()),
+              ],
+            )
+          : Column(
+              children: [
+                Expanded(child: list),
+                const Divider(height: 6),
+                Expanded(child: _preview()),
+              ],
+            ),
+    );
+  }
+
   static const rowHeight = 64.0;
   String? get selectedId =>
       widget.current == null ? null : widget.id(widget.current as T);
@@ -346,21 +415,29 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
 
   void _move(int delta) {
     if (_filtered.isEmpty) return;
-    setState(() => _cursor = (_cursor + delta).clamp(0, _filtered.length - 1));
+    _chooseCursor((_cursor + delta).clamp(0, _filtered.length - 1));
     _reveal();
   }
 
   void _commit() {
-    if (_filtered.isNotEmpty) Navigator.pop(context, _filtered[_cursor]);
+    if (_filtered.isNotEmpty &&
+        (widget.previewBuilder == null || _previewReady)) {
+      Navigator.pop(context, _filtered[_cursor]);
+    }
   }
 
   void _query(String query) {
+    final before = _highlight;
     setState(() {
       _filtered = filter(query);
       _cursor = math.max(
         0,
         _filtered.indexWhere((x) => widget.id(x) == selectedId),
       );
+      if (before != _highlight) {
+        _previewGeneration++;
+        _previewReady = false;
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
   }
@@ -385,8 +462,8 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
       color: active ? const Color(0xff2b3a55) : Colors.transparent,
       child: InkWell(
         onTap: () {
-          setState(() => _cursor = index);
-          _commit();
+          _chooseCursor(index);
+          if (widget.previewBuilder == null) _commit();
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -481,7 +558,12 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
     return Dialog(
       insetPadding: const EdgeInsets.all(18),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 600),
+        constraints: BoxConstraints(
+          maxWidth: widget.previewBuilder == null ? 620 : 1100,
+          maxHeight: widget.previewBuilder == null
+              ? 600
+              : MediaQuery.sizeOf(context).height * .86,
+        ),
         child: CallbackShortcuts(
           bindings: bindings,
           child: Column(
@@ -494,7 +576,7 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
                       child: Text(
                         widget.title,
                         style: const TextStyle(
-                          fontSize: 17,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -534,18 +616,7 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
                 ),
               ),
               const Divider(height: 1),
-              Expanded(
-                child: _filtered.isEmpty
-                    ? const Center(
-                        child: Text('No hay recursos que coincidan.'),
-                      )
-                    : ListView.builder(
-                        controller: _scroll,
-                        itemExtent: rowHeight,
-                        itemCount: _filtered.length,
-                        itemBuilder: (context, index) => _row(index),
-                      ),
-              ),
+              Expanded(child: _contents()),
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -566,7 +637,11 @@ class _AssetPickerDialogState<T> extends State<AssetPickerDialog<T>> {
                     ),
                     const SizedBox(width: 16),
                     FilledButton(
-                      onPressed: _filtered.isEmpty ? null : _commit,
+                      onPressed:
+                          _filtered.isEmpty ||
+                              widget.previewBuilder != null && !_previewReady
+                          ? null
+                          : _commit,
                       child: const Text('Aplicar'),
                     ),
                   ],
