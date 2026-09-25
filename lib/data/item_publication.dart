@@ -53,11 +53,13 @@ class ItemPublication {
     final found = <int>[];
     for (var row = 0; row < d.rows.length; row++) {
       final fields = StructureEditor.identity(d, row);
-      if (fields.length != 2)
+      if (fields.length != 2) {
         throw const FormatException('Se requiere identidad Type + TypeId.');
+      }
       if (int.tryParse(d.read(fields[0])) == type &&
-          int.tryParse(d.read(fields[1])) == id)
+          int.tryParse(d.read(fields[1])) == id) {
         found.add(row);
+      }
     }
     if (found.length > 1) throw FormatException('Clave duplicada $type:$id.');
     return found.firstOrNull;
@@ -70,8 +72,9 @@ class ItemPublication {
     required String textPath,
     required List<ItemPublicationEdit> edits,
   }) {
-    if (edits.isEmpty || edits.length > 32)
+    if (edits.isEmpty || edits.length > 32) {
       throw const FormatException('Lote de objetos inválido.');
+    }
     if (ClientLocale.languageOf(textPath) != 'es' ||
         ClientLocale.directory(textPath) != ClientLocale.directory(dataPath)) {
       throw const FormatException(
@@ -115,18 +118,21 @@ class ItemPublication {
       if (creating) {
         // The bundled offline backend 0.1.2 uses byte TypeId. Do not introduce
         // new IDs that would be truncated there. Existing higher IDs stay readable.
-        if (edit.id > 255)
+        if (edit.id > 255) {
           throw const FormatException(
             'El backend offline 0.1.2 solo admite nuevos TypeId de 1 a 255.',
           );
-        if (row != null || textRow != null)
+        }
+        if (row != null || textRow != null) {
           throw FormatException('$key ya existe: reparar, no duplicar.');
+        }
         final template = locate(d, edit.type, edit.templateId!),
             textTemplate = locate(t, edit.type, edit.templateId!);
-        if (template == null || textTemplate == null)
+        if (template == null || textTemplate == null) {
           throw const FormatException(
             'La plantilla debe existir en ambas tablas.',
           );
+        }
         void clone(EditDocument doc, int from) {
           final ids = StructureEditor.identity(doc, from);
           StructureEditor.duplicate(doc, from, {
@@ -157,8 +163,9 @@ class ItemPublication {
           );
         }
         final f = field(d, row, e.key);
-        if (f.spec.text || f.spec.type == 'opaque')
+        if (f.spec.text || f.spec.type == 'opaque') {
           throw const FormatException('Se esperaba una propiedad numérica.');
+        }
         final value = int.tryParse(e.value);
         if (value == null || value < 0 || value > 2147483647) {
           throw FormatException('Propiedad fuera de rango: ${e.key}.');
@@ -287,8 +294,9 @@ class ItemPublication {
           );
         }
       }
-      if (await destination.exists())
+      if (await destination.exists()) {
         throw const FileSystemException('Conflicto de destino.');
+      }
       return await stage.rename(destination.path);
     } finally {
       if (await stage.exists()) await stage.delete(recursive: true);

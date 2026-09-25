@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 
 import '../core/client_locale.dart';
@@ -81,8 +79,9 @@ class EquipmentRegistry {
       input['dataPath'] as String,
     );
     for (final field in ['itemtype', 'itemtypeid', 'image']) {
-      if (!data.fields.contains(field))
+      if (!data.fields.contains(field)) {
         throw FormatException('DBItemData no contiene $field.');
+      }
     }
     final names = <String, ItemName>{};
     if (input['text'] != null) {
@@ -90,8 +89,9 @@ class EquipmentRegistry {
         input['text'] as Uint8List,
         input['textPath'] as String,
       )) {
-        if (names.containsKey(name.key))
+        if (names.containsKey(name.key)) {
           throw FormatException('Texto duplicado: ${name.key}.');
+        }
         names[name.key] = name;
       }
     }

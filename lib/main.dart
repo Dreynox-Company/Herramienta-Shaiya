@@ -1074,8 +1074,9 @@ class _StudioState extends State<StudioPage> {
           ? null
           : (selection) => setState(() {
               equipmentMode = selection.single;
-              if (equipmentMode == EquipmentSelectionMode.registered)
+              if (equipmentMode == EquipmentSelectionMode.registered) {
                 scene.inspectAnyEquipment = false;
+              }
               _memories.clear();
             }),
     ),
@@ -3528,8 +3529,9 @@ class _StudioState extends State<StudioPage> {
       );
       return;
     }
-    if (data['version'] != 2)
+    if (data['version'] != 2) {
       throw const FormatException('Versión de apariencia desconocida.');
+    }
     final a = catalog!.archetypes
         .where((a) => a.id == data['archetype'] && a.race == data['race'])
         .firstOrNull;

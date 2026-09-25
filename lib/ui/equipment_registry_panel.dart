@@ -45,8 +45,9 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
   void didUpdateWidget(covariant EquipmentRegistryPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.scene.catalog?.library != widget.scene.catalog?.library ||
-        revision != widget.scene.catalog!.library.revision)
+        revision != widget.scene.catalog!.library.revision) {
       _reload();
+    }
   }
 
   Future<RegisteredItem?> choose(List<RegisteredItem> items, String title) =>
@@ -78,10 +79,11 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
   Widget build(BuildContext context) => FutureBuilder<EquipmentRegistry>(
     future: future,
     builder: (context, snapshot) {
-      if (snapshot.hasError)
+      if (snapshot.hasError) {
         return SelectableText(
           '${snapshot.error}\nNo se mezclan tablas de otra carpeta.',
         );
+      }
       final r = snapshot.data;
       if (r == null) return const LinearProgressIndicator();
       final scene = widget.scene,
@@ -134,7 +136,7 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
                 style: const TextStyle(fontSize: 10),
               ),
             );
-            if (r.hasSpanishText)
+            if (r.hasSpanishText) {
               children.add(
                 TextButton(
                   onPressed: !widget.enabled
@@ -149,6 +151,7 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
                   ),
                 ),
               );
+            }
           }
         }
         for (final shield in [false, true]) {
@@ -196,8 +199,9 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
                       ],
                     ),
                   );
-            if (record != null)
+            if (record != null) {
               await scene.selectCreature(record, widget.target);
+            }
           }),
         );
         children.add(
@@ -270,10 +274,11 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
       255,
       (i) => i + 1,
     ).where((i) => !ids.contains(i)).firstOrNull;
-    if (existing == null && free == null)
+    if (existing == null && free == null) {
       throw const FormatException(
         'No queda un TypeId compatible con el backend offline 0.1.2.',
       );
+    }
     final result = await showDialog<ItemPublicationEdit>(
       context: context,
       builder: (_) => _ItemEditDialog(
@@ -323,7 +328,7 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
       ),
     );
     scene.say('Parche exportado: ${out.path}. DATA original intacta.');
-    if (mounted)
+    if (mounted) {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -340,6 +345,7 @@ class _EquipmentRegistryPanelState extends State<EquipmentRegistryPanel> {
           ],
         ),
       );
+    }
   }
 }
 

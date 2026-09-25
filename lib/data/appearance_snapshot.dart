@@ -144,8 +144,9 @@ class AppearanceSnapshot {
       final root = directoryName(source);
       for (final pair in [(part.mesh, meshFolder), (part.texture, 'dds')]) {
         final path = c.library.resolve(pair.$1, ['$root/${pair.$2}', root]);
-        if (path == null)
+        if (path == null) {
           throw FormatException('Recurso sin resolver: ${pair.$1}');
+        }
         add(path);
       }
     }
@@ -251,8 +252,9 @@ class AppearanceSnapshot {
   }
 
   static Map<String, dynamic> decode(List<int> bytes) {
-    if (bytes.length > maxBytes)
+    if (bytes.length > maxBytes) {
       throw const FormatException('Apariencia demasiado grande.');
+    }
     final out = object(jsonDecode(utf8.decode(bytes)), 'apariencia');
     validate(out);
     return out;
@@ -265,8 +267,9 @@ class AppearanceSnapshot {
     validate(value);
     for (final entry in value['resources'] as List) {
       final record = object(entry, 'recurso'), path = record['path'] as String;
-      if (!library.files.containsKey(path))
+      if (!library.files.containsKey(path)) {
         throw FormatException('Falta $path.');
+      }
       final actual = await _fingerprint(library, path);
       if (actual['bytes'] != record['bytes'] ||
           actual['sha256'] != record['sha256']) {
@@ -282,8 +285,9 @@ class AppearanceSnapshot {
     final bytes = Uint8List.fromList(
       utf8.encode(const JsonEncoder.withIndent('  ').convert(value)),
     );
-    if (bytes.length > maxBytes)
+    if (bytes.length > maxBytes) {
       throw const FormatException('Apariencia demasiado grande.');
+    }
     if (await file.exists()) {
       await FileSave.replace(
         file.path,
@@ -417,8 +421,9 @@ class AppearanceSnapshot {
     await SceneProfile.apply(scene, _presentation(scene, p));
     final wing = object(value['wingTransform'], 'wingTransform');
     final bone = wing['boneIndex'] as int;
-    if (bone >= scene.wingBoneCount)
+    if (bone >= scene.wingBoneCount) {
       throw const FormatException('El hueso no existe en el rig cargado.');
+    }
     if (!scene.wingBoneWritable && bone != scene.wingBoneIndex) {
       throw const FormatException(
         'El hueso requiere un WingPosition.xml editable.',
