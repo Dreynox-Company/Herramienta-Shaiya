@@ -22,6 +22,44 @@ def git(*args): return subprocess.check_output(['git',*args],cwd=ROOT,text=True)
 def _sha256_text(value):
     return isinstance(value,str) and bool(re.fullmatch(r'[0-9a-fA-F]{64}',value))
 
+def load_angle_hardening(release):
+    evidence_path=ROOT/'qa-windows'/'angle-runtime.json'
+    empty={
+        'source':None,
+        'hardened':False,
+        'provider':None,
+        'providerVersion':None,
+        'releaseDllSha256':{},
+        'debugCrtImports':{},
+    }
+    if not evidence_path.is_file():
+        return empty
+    data=json.loads(evidence_path.read_text(encoding='utf-8'))
+    if data.get('schema')!=1:
+        raise RuntimeError('ANGLE hardening evidence schema must be 1')
+    if data.get('provider')!='comfy-angle' or data.get('providerVersion')!='0.1.1':
+        raise RuntimeError('ANGLE hardening evidence provider/version mismatch')
+    hashes=data.get('releaseDllSha256') or {}
+    for name in ['libEGL.dll','libGLESv2.dll']:
+        expected=str(hashes.get(name) or '').lower()
+        target=release/name
+        if not _sha256_text(expected) or not target.is_file() or sha(target)!=expected:
+            raise RuntimeError(f'ANGLE hardening evidence does not match {name}')
+    debug_imports=data.get('debugCrtImports') or {}
+    hardened=(
+        data.get('hardened') is True and
+        isinstance(debug_imports,dict) and
+        not debug_imports
+    )
+    return {
+        'source':str(evidence_path),
+        'hardened':hardened,
+        'provider':data.get('provider'),
+        'providerVersion':data.get('providerVersion'),
+        'releaseDllSha256':hashes,
+        'debugCrtImports':debug_imports,
+    }
+
 def load_real_acceptance():
     configured=os.environ.get('SHAIYA_REAL_QA_ACCEPTANCE')
     candidates=[]
@@ -193,6 +231,7 @@ def main():
         p.name for p in release.iterdir()
         if p.is_file() and p.name.lower() in debug_crt_names
     )
+    angle_hardening=load_angle_hardening(release)
     crypto_profile={}
     profile_path=ROOT/'profiles'/'spk-crypto-profile.json'
     if profile_path.is_file():
@@ -213,7 +252,13 @@ def main():
                 startup.get('native_window') is True
             ),
             'debugCrtBundled':debug_crt,
-            'graphicsRuntimeHardeningComplete':not debug_crt,
+            'graphicsRuntimeHardeningEvidence':angle_hardening['source'],
+            'graphicsRuntimeProvider':angle_hardening['provider'],
+            'graphicsRuntimeProviderVersion':angle_hardening['providerVersion'],
+            'graphicsRuntimeDllSha256':angle_hardening['releaseDllSha256'],
+            'graphicsRuntimeHardeningComplete':(
+                not debug_crt and angle_hardening['hardened']
+            ),
         },
         'flightV3':{
             'runtimeExpectedSha256':FLIGHT_RUNTIME_SHA256,
@@ -239,7 +284,7 @@ def main():
         },
     }
     blocking=[]
-    if debug_crt:
+    if not delivery_status['windows']['graphicsRuntimeHardeningComplete']:
         blocking.append('windows-angle-release-runtime')
     if not delivery_status['flightV3']['runtimeBundled']:
         blocking.append('flight-v3-runtime-not-bundled')
