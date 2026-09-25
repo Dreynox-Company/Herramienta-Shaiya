@@ -9,6 +9,7 @@ import '../data/library.dart';
 import '../editor/item_query.dart';
 import '../editor/item_semantics.dart';
 import '../editor/model_reference.dart';
+import '../editor/item_model_catalog.dart';
 import '../editor/workbench_model.dart';
 import 'editor_icons.dart';
 import 'item_asset_import.dart';
@@ -523,21 +524,22 @@ class _ItemsPageState extends State<ItemsPage> {
             icon: const Icon(Icons.tune),
             label: const Text('Editar todas las propiedades'),
           ),
-          OutlinedButton.icon(
-            key: const ValueKey('change-selected-item-model'),
-            onPressed: busy
-                ? null
-                : () => run(() async {
-                    await showItemRecordEditor(
-                      context,
-                      workspace!,
-                      item,
-                      chooseModel: true,
-                    );
-                  }),
-            icon: const Icon(Icons.view_in_ar_outlined),
-            label: const Text('Cambiar modelo 3D'),
-          ),
+          if (ItemModelCatalog.supports(item.type))
+            OutlinedButton.icon(
+              key: const ValueKey('change-selected-item-model'),
+              onPressed: busy
+                  ? null
+                  : () => run(() async {
+                      await showItemRecordEditor(
+                        context,
+                        workspace!,
+                        item,
+                        chooseModel: true,
+                      );
+                    }),
+              icon: const Icon(Icons.view_in_ar_outlined),
+              label: const Text('Cambiar modelo 3D'),
+            ),
           OutlinedButton.icon(
             onPressed: busy ? null : () => resources(item),
             icon: const Icon(Icons.view_in_ar),

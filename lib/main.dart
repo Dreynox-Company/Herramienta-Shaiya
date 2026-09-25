@@ -758,7 +758,6 @@ class _StudioState extends State<StudioPage> {
   Widget section(String title, List<Widget> children, {String? help}) =>
       StudioSection(
         title: title,
-        children: children,
         help: help,
         initiallyExpanded: !const {
           'Atajos',
@@ -769,6 +768,7 @@ class _StudioState extends State<StudioPage> {
           'ExcelXml · sistemas de DATA',
           'Efectos y sonido',
         }.contains(title),
+        children: children,
       );
   String? excelXmlPath(String fileName) {
     final c = catalog;
