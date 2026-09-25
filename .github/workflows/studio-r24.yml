@@ -1,4 +1,4 @@
-name: Studio R24 native wings and responsive flight
+name: Studio R24-R25 native wings and item workbench
 
 on:
   push:
@@ -31,10 +31,12 @@ jobs:
           flutter-version: '3.47.4'
           channel: stable
           cache: true
-      - name: Apply digest-checked source patch
+      - name: Apply digest-checked R24 source patch
         run: python ci/prepare_studio_r24.py
       - name: Apply digest-checked appearance follow-up
         run: python ci/prepare_studio_r24_appearance.py
+      - name: Integrate readable R25 item workbench sources
+        run: python ci/prepare_studio_r25_items.py
       - name: Resolve pinned package language version
         run: flutter pub get --enforce-lockfile
       - name: Apply reported brace and redundant-import fixes only
@@ -48,11 +50,11 @@ jobs:
           set -euo pipefail
           test "$(git branch --show-current)" = 'fix/studio-0624-flight-appearance-native'
           git diff --check
-          git add lib test integration_test tool docs pubspec.yaml .studio-r24-applied .studio-r24-appearance-applied
+          git add lib test integration_test tool docs pubspec.yaml .studio-r24-applied .studio-r24-appearance-applied .studio-r25-items-applied
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'fix(studio): preserve strict analysis for appearance and item publication'
+            git commit -m 'feat(studio): integrated native item workbench and icon addressing'
             git push origin HEAD:refs/heads/fix/studio-0624-flight-appearance-native
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
