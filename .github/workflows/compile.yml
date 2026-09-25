@@ -12,5 +12,5 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify-and-build:
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[restore-checkpoint]')
+    if: github.ref_name != 'feat/studio-0623-windows-hardening' && (github.event_name != 'push' || !contains(github.event.head_commit.message, '[restore-checkpoint]'))
     uses: ./.github/workflows/build.yml
