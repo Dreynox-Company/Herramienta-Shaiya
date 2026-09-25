@@ -6,6 +6,7 @@ import 'package:herramienta_shaiya/core/flight_transition.dart';
 import 'package:herramienta_shaiya/core/formats.dart';
 import 'package:herramienta_shaiya/input/viewport_movement_input.dart';
 import 'package:herramienta_shaiya/render/studio_scene.dart';
+
 import 'locomotion_test.dart' show exampleScene, motion;
 
 StudioScene flyingFixture() {

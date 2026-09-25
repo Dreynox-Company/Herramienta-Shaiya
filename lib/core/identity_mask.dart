@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'formats.dart';
 
 /// View-only mask for whole costumes that embed a head/hood. Character identity

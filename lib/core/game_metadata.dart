@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'formats.dart';
 import 'seed_data.dart';
 import 'legacy_text.dart';

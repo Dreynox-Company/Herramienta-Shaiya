@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import 'package:three_js/three_js.dart' as t;
@@ -11,6 +12,7 @@ import 'package:herramienta_shaiya/render/studio_scene.dart';
 import 'package:herramienta_shaiya/core/combat.dart';
 import 'package:herramienta_shaiya/data/catalog.dart';
 import 'package:herramienta_shaiya/render/world_builder.dart';
+
 import 'locomotion_test.dart' show exampleScene, motion;
 import 'core_test.dart' as fixture;
 

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+
 import '../editor/document.dart';
 import 'editor_icons.dart';
 import 'editor_style.dart';

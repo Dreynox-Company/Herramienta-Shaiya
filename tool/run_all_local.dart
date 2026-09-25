@@ -15,6 +15,7 @@ import '../test/excelxml_document_test.dart' as suite12;
 import '../test/excelxml_semantics_test.dart' as suite43;
 import '../test/extra_motion_test.dart' as suite13;
 import '../test/flight_key_input_test.dart' as suite14;
+import '../test/flight_responsiveness_test.dart' as suite45;
 import '../test/flight_v3_bundle_test.dart' as suite15;
 import '../test/gameplay_regression_test.dart' as suite16;
 import '../test/local_game_test.dart' as suite17;
@@ -39,13 +40,21 @@ import '../test/streaming_test.dart' as suite35;
 import '../test/vehicle_position_test.dart' as suite36;
 import '../test/wing_item_mapping_test.dart' as suite37;
 import '../test/wing_motion_test.dart' as suite38;
+import '../test/wing_native_transform_test.dart' as suite46;
 import '../test/wing_position_test.dart' as suite39;
 import '../test/wing_systems_test.dart' as suite40;
 import '../test/workspace_interaction_test.dart' as suite41;
 import '../test/workspace_material_test.dart' as suite42;
 import '../test/xml_tree_document_test.dart' as suite44;
 
+import '../test/appearance_snapshot_test.dart' as suite47;
+import '../test/equipment_registry_test.dart' as suite48;
+import '../test/item_publication_test.dart' as suite49;
+
+import '../test/item_workspace_test.dart' as items_r25;
+
 void main() {
+  items_r25.main();
   suite0.main();
   suite1.main();
   suite2.main();
@@ -91,4 +100,9 @@ void main() {
   suite42.main();
   suite43.main();
   suite44.main();
+  suite45.main();
+  suite46.main();
+  suite47.main();
+  suite48.main();
+  suite49.main();
 }

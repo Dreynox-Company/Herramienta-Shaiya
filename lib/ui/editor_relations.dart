@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 import '../core/client_locale.dart';
 import '../core/game_text_codec.dart';
 import '../editor/document.dart';

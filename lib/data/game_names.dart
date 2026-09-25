@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
+
 import '../core/game_metadata.dart';
 import '../core/equipment_rules.dart';
 import '../core/formats.dart';

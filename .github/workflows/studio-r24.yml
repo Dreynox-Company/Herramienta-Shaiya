@@ -1,0 +1,83 @@
+name: Studio R24-R25 native wings and item workbench
+
+on:
+  push:
+    branches: [fix/studio-0624-flight-appearance-native]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-r24-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    if: github.ref == 'refs/heads/fix/studio-0624-flight-appearance-native'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/studio-0624-flight-appearance-native
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Apply digest-checked R24 source patch
+        run: python ci/prepare_studio_r24.py
+      - name: Apply digest-checked appearance follow-up
+        run: python ci/prepare_studio_r24_appearance.py
+      - name: Integrate readable R25 item workbench sources
+        run: python ci/prepare_studio_r25_items.py
+      - name: Integrate item context and stable navigation
+        run: python ci/finish_studio_r25_items.py
+      - name: Correct optional localized table metadata
+        run: python ci/r25_fix_metadata.py
+      - name: Resolve pinned package language version
+        run: flutter pub get --enforce-lockfile
+      - name: Normalize new suite prefix
+        run: python -c "from pathlib import Path; p=Path('tool/run_all_local.dart'); p.write_text(p.read_text().replace('itemsR25','items_r25'))"
+      - name: Deterministic source format
+        run: dart format lib test integration_test tool
+      - name: Apply reported formatted-source diagnostics only
+        run: dart fix --apply --code=curly_braces_in_flow_control_structures,unnecessary_import
+      - name: Final deterministic source format
+        run: dart format lib test integration_test tool
+      - name: Commit readable sources on isolated branch
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'fix/studio-0624-flight-appearance-native'
+          git diff --check
+          git add lib test integration_test tool docs pubspec.yaml .studio-r24-applied .studio-r24-appearance-applied .studio-r25-items-applied .studio-r25-finish-applied
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(studio): strict item metadata and formatted native editor'
+            git push origin HEAD:refs/heads/fix/studio-0624-flight-appearance-native
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Archive checkpoint before test gates
+        if: always()
+        run: git archive --format=zip HEAD -o studio-r24-source.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Studio-R24-Source-Checkpoint
+          path: studio-r24-source.zip
+  verify:
+    needs: source
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ needs.source.outputs.sha }}
+    permissions:
+      contents: read

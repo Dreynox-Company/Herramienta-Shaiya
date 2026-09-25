@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'formats.dart';
 
 /// Static surfaces and collision hulls are independent lists in SMOD.

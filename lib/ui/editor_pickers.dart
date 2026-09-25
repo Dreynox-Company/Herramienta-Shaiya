@@ -1,5 +1,7 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../editor/document.dart';
 import '../editor/workbench_model.dart';
 import 'editor_icons.dart';
@@ -237,7 +239,12 @@ Future<int?> pickIcon(
   if (image == null || !context.mounted) return null;
   return showDialog<int>(
     context: context,
-    builder: (c) => _IconDialog(image: image, path: ref.path, current: current),
+    builder: (c) => _IconDialog(
+      image: image,
+      path: ref.path,
+      current: current - ref.pageBase,
+      ref: ref,
+    ),
   );
 }
 
@@ -245,10 +252,12 @@ class _IconDialog extends StatefulWidget {
   final ui.Image image;
   final String path;
   final int current;
+  final EditorIconRef ref;
   const _IconDialog({
     required this.image,
     required this.path,
     required this.current,
+    required this.ref,
   });
   @override
   State<_IconDialog> createState() => _IconDialogState();
@@ -258,8 +267,9 @@ class _IconDialogState extends State<_IconDialog> {
   late int selected = widget.current;
   @override
   Widget build(BuildContext context) {
-    final cols = widget.image.width ~/ 32,
-        count = cols * (widget.image.height ~/ 32);
+    final cols = widget.ref.columns ?? widget.image.width ~/ 32,
+        rows = widget.ref.rows ?? widget.image.height ~/ 32,
+        count = cols * rows;
     return AlertDialog(
       title: const Text('Iconos originales del juego'),
       content: SizedBox(
@@ -297,11 +307,16 @@ class _IconDialogState extends State<_IconDialog> {
                           width: 32,
                           height: 32,
                           child: CustomPaint(
-                            painter: IconTilePainter(widget.image, i, cols),
+                            painter: IconTilePainter(
+                              widget.image,
+                              i,
+                              cols,
+                              rows: rows,
+                            ),
                           ),
                         ),
                         Text(
-                          '$i',
+                          '${i + widget.ref.pageBase}',
                           style: const TextStyle(
                             fontSize: 10,
                             color: EditorStyle.muted,
@@ -326,9 +341,13 @@ class _IconDialogState extends State<_IconDialog> {
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: selected < 0 || selected >= count
+          onPressed:
+              selected < 0 ||
+                  selected >= count ||
+                  (widget.ref.pageBase > 0 &&
+                      selected + widget.ref.pageBase > 255)
               ? null
-              : () => Navigator.pop(context, selected),
+              : () => Navigator.pop(context, selected + widget.ref.pageBase),
           child: const Text('Usar icono'),
         ),
       ],
@@ -339,12 +358,18 @@ class _IconDialogState extends State<_IconDialog> {
 class IconTilePainter extends CustomPainter {
   final ui.Image image;
   final int index, columns;
-  IconTilePainter(this.image, this.index, this.columns);
+  final int? rows;
+  IconTilePainter(this.image, this.index, this.columns, {this.rows});
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(index % columns * 32.0, index ~/ columns * 32.0, 32, 32),
+      Rect.fromLTWH(
+        index % columns * image.width / columns,
+        index ~/ columns * image.height / (rows ?? image.height ~/ 32),
+        image.width / columns,
+        image.height / (rows ?? image.height ~/ 32),
+      ),
       Offset.zero & size,
       Paint()..filterQuality = FilterQuality.medium,
     );

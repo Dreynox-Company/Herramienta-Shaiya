@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import '../core/formats.dart';
 import '../core/game_text_codec.dart';
 import 'document.dart';

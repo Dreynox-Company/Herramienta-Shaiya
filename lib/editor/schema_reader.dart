@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import '../core/game_text_codec.dart';
 import '../core/seed_data.dart';
 import 'document.dart';

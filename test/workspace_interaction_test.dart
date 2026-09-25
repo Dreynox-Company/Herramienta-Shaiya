@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:herramienta_shaiya/core/attachment_pose.dart';
 import 'package:herramienta_shaiya/ui/asset_selector.dart';
 import 'package:herramienta_shaiya/ui/studio_workspace.dart';
 import 'package:herramienta_shaiya/render/studio_scene.dart';
+
 import 'locomotion_test.dart' show exampleScene, motion;
 
 void main() {

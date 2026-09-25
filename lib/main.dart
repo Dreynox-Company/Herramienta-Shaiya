@@ -1,22 +1,27 @@
 import 'render/native_view.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:file_selector/file_selector.dart';
+
 import 'core/extra_motion.dart';
 import 'core/flight_v3_bundle.dart';
 import 'core/equipment_rules.dart';
 import 'core/vehicle_position.dart';
 import 'core/textures.dart';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:three_js/three_js.dart' as three;
+
 import 'core/formats.dart';
 import 'data/catalog.dart';
 import 'core/game_metadata.dart';
@@ -28,6 +33,7 @@ import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
+import 'ui/item_workbench.dart';
 import 'ui/excelxml_lab.dart';
 import 'ui/wing_position_lab.dart';
 import 'ui/wing_systems_lab.dart';
@@ -36,8 +42,11 @@ import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
+import 'data/appearance_snapshot.dart';
+import 'data/equipment_registry.dart';
+import 'ui/equipment_registry_panel.dart';
 
-const studioVersion = '0.6.22';
+const studioVersion = '0.6.25';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +116,7 @@ class _StudioState extends State<StudioPage> {
   final focus = FocusNode();
   final Map<String, SelectionMemory> _memories = {};
   String inspectorTarget = 'Personaje', lastSound = '';
+  EquipmentSelectionMode equipmentMode = EquipmentSelectionMode.resources;
   double gestureScale = 1;
   final xController = TextEditingController(),
       zController = TextEditingController();
@@ -216,6 +226,17 @@ class _StudioState extends State<StudioPage> {
         'actualizadas ya están disponibles en Studio.',
       );
     });
+  }
+
+  Future<void> openItems() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ItemWorkbench(library: library)),
+    );
+    if (mounted) focus.requestFocus();
   }
 
   Future<void> openDataEditor() async {
@@ -1047,7 +1068,53 @@ class _StudioState extends State<StudioPage> {
     );
   }
 
+  Widget equipmentModeField() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: SegmentedButton<EquipmentSelectionMode>(
+      segments: const [
+        ButtonSegment(
+          value: EquipmentSelectionMode.resources,
+          label: Text('Recursos / conjuntos'),
+        ),
+        ButtonSegment(
+          value: EquipmentSelectionMode.registered,
+          label: Text('Objetos registrados'),
+        ),
+      ],
+      selected: {equipmentMode},
+      onSelectionChanged: disabled
+          ? null
+          : (selection) => setState(() {
+              equipmentMode = selection.single;
+              if (equipmentMode == EquipmentSelectionMode.registered) {
+                scene.inspectAnyEquipment = false;
+              }
+              _memories.clear();
+            }),
+    ),
+  );
+
   Widget creatureField(String kind) {
+    if (kind != 'wing' && kind != 'mount') return _rawCreatureField(kind);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        equipmentModeField(),
+        if (equipmentMode == EquipmentSelectionMode.registered)
+          EquipmentRegistryPanel(
+            key: ValueKey('registry/$kind/${catalog!.library.location}'),
+            scene: scene,
+            target: kind,
+            enabled: !disabled,
+            run: (action) => act(action),
+          )
+        else
+          _rawCreatureField(kind),
+      ],
+    );
+  }
+
+  Widget _rawCreatureField(String kind) {
     final c = catalog!,
         items = kind == 'mount'
             ? c.mounts
@@ -1233,111 +1300,123 @@ class _StudioState extends State<StudioPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            section(
-              'Conjunto',
-              [
-                field<String>(
-                  '${a.race}/${a.id}/set',
-                  'Atuendo completo',
-                  a.sets.keys.toList(),
-                  scene.appearance!.preset ??
-                      scene.appearance!.selected[Slot.upper]?.key,
-                  (s) => s,
-                  displaySet,
-                  (v) => scene.setAppearance(
-                    Appearance.forSet(
-                      scene.appearance!.archetype,
-                      v,
-                      previous: scene.appearance,
+            equipmentModeField(),
+            if (equipmentMode == EquipmentSelectionMode.registered)
+              EquipmentRegistryPanel(
+                key: ValueKey('registry/equipment/${c.library.location}'),
+                scene: scene,
+                target: 'equipment',
+                enabled: !disabled,
+                run: (action) => act(action),
+              )
+            else ...[
+              section(
+                'Conjunto',
+                [
+                  field<String>(
+                    '${a.race}/${a.id}/set',
+                    'Atuendo completo',
+                    a.sets.keys.toList(),
+                    scene.appearance!.preset ??
+                        scene.appearance!.selected[Slot.upper]?.key,
+                    (s) => s,
+                    displaySet,
+                    (v) => scene.setAppearance(
+                      Appearance.forSet(
+                        scene.appearance!.archetype,
+                        v,
+                        previous: scene.appearance,
+                      ),
+                    ),
+                    detail: (s) =>
+                        a.sets[s]!.values.map((p) => p.raw.texture).join(' · '),
+                  ),
+                ],
+                help:
+                    'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
+              ),
+              note(
+                'El conjunto conserva cara y cabello y equipa su casco correspondiente. El cabello se oculta al llevar casco y reaparece al retirarlo.',
+              ),
+              section('Piezas', [
+                for (final s in [
+                  Slot.upper,
+                  Slot.lower,
+                  Slot.hand,
+                  Slot.foot,
+                  Slot.helmet,
+                ])
+                  partField(s),
+              ]),
+              section(
+                'Armas',
+                [
+                  field<WeaponRecord>(
+                    'weapons/${a.id}/${scene.characterClass.id}',
+                    'Equipo de combate',
+                    scene.availableWeapons,
+                    scene.weaponRecord,
+                    (w) => '${w.source}#${w.id}',
+                    c.names.weaponTitle,
+                    scene.equip,
+                    detail: (w) =>
+                        '${c.names.weaponDetail(w)}\n${scene.compatibilityFor(w).reason}',
+                    empty: 'Sin arma',
+                  ),
+                  TextButton(
+                    onPressed: disabled
+                        ? null
+                        : () => act(() => scene.equip(null)),
+                    child: const Text(
+                      'Quitar arma',
+                      style: TextStyle(fontSize: 11),
                     ),
                   ),
-                  detail: (s) =>
-                      a.sets[s]!.values.map((p) => p.raw.texture).join(' · '),
-                ),
-              ],
-              help:
-                  'Un conjunto sustituye todas las piezas incompatibles. ↑ y ↓ recorren el catálogo cuando este campo tiene el foco.',
-            ),
-            note(
-              'El conjunto conserva cara y cabello y equipa su casco correspondiente. El cabello se oculta al llevar casco y reaparece al retirarlo.',
-            ),
-            section('Piezas', [
-              for (final s in [
-                Slot.upper,
-                Slot.lower,
-                Slot.hand,
-                Slot.foot,
-                Slot.helmet,
-              ])
-                partField(s),
-            ]),
-            section(
-              'Armas',
-              [
-                field<WeaponRecord>(
-                  'weapons/${a.id}/${scene.characterClass.id}',
-                  'Equipo de combate',
-                  scene.availableWeapons,
-                  scene.weaponRecord,
-                  (w) => '${w.source}#${w.id}',
-                  c.names.weaponTitle,
-                  scene.equip,
-                  detail: (w) =>
-                      '${c.names.weaponDetail(w)}\n${scene.compatibilityFor(w).reason}',
-                  empty: 'Sin arma',
-                ),
+                ],
+                help:
+                    'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
+              ),
+              section('Mano secundaria', [
+                if (permitsShield(scene.weaponRecord))
+                  field<WeaponRecord>(
+                    'shields/${a.id}/${scene.characterClass.id}',
+                    'Escudo',
+                    scene.availableShields,
+                    scene.shieldRecord,
+                    (w) => '${w.source}#${w.id}',
+                    c.names.weaponTitle,
+                    scene.equipShield,
+                    detail: (w) =>
+                        '${c.names.weaponDetail(w)}\n${scene.compatibilityFor(w).reason}',
+                    empty: 'Sin escudo',
+                  )
+                else
+                  note(
+                    'El arma actual ocupa ambas manos. Equipa un arma de una mano para añadir un escudo.',
+                  ),
                 TextButton(
                   onPressed: disabled
                       ? null
-                      : () => act(() => scene.equip(null)),
-                  child: const Text(
-                    'Quitar arma',
+                      : () => act(() => scene.equipShield(null)),
+                  child: const Text('Quitar escudo'),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Inspeccionar equipo de otras clases',
                     style: TextStyle(fontSize: 11),
                   ),
+                  subtitle: const Text(
+                    'No cambia las reglas del juego; los anclajes siguen comprobándose',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                  value: scene.inspectAnyEquipment,
+                  onChanged: (v) =>
+                      setState(() => scene.inspectAnyEquipment = v),
                 ),
-              ],
-              help:
-                  'Se conservan los anclajes originales IT2. Las armas dobles utilizan ambas manos cuando el perfil lo define.',
-            ),
-            section('Mano secundaria', [
-              if (permitsShield(scene.weaponRecord))
-                field<WeaponRecord>(
-                  'shields/${a.id}/${scene.characterClass.id}',
-                  'Escudo',
-                  scene.availableShields,
-                  scene.shieldRecord,
-                  (w) => '${w.source}#${w.id}',
-                  c.names.weaponTitle,
-                  scene.equipShield,
-                  detail: (w) =>
-                      '${c.names.weaponDetail(w)}\n${scene.compatibilityFor(w).reason}',
-                  empty: 'Sin escudo',
-                )
-              else
-                note(
-                  'El arma actual ocupa ambas manos. Equipa un arma de una mano para añadir un escudo.',
-                ),
-              TextButton(
-                onPressed: disabled
-                    ? null
-                    : () => act(() => scene.equipShield(null)),
-                child: const Text('Quitar escudo'),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: const Text(
-                  'Inspeccionar equipo de otras clases',
-                  style: TextStyle(fontSize: 11),
-                ),
-                subtitle: const Text(
-                  'No cambia las reglas del juego; los anclajes siguen comprobándose',
-                  style: TextStyle(fontSize: 10),
-                ),
-                value: scene.inspectAnyEquipment,
-                onChanged: (v) => setState(() => scene.inspectAnyEquipment = v),
-              ),
-            ]),
+              ]),
+            ],
             weaponEffectsPanel(),
           ],
         );
@@ -3402,19 +3481,45 @@ class _StudioState extends State<StudioPage> {
   }
 
   Future<void> saveAppearance() async {
-    final look = scene.appearance!;
-    await saveFile(
-      'apariencia.json',
-      jsonEncode({
-        'version': 2,
-        'preset': look.preset,
-        'archetype': look.archetype.id,
-        'race': look.archetype.race,
-        'fullCostume': look.fullCostume,
-        'slots': {
-          for (final e in look.selected.entries) e.key.name: e.value?.raw.id,
+    final snapshot = await AppearanceSnapshot.capture(scene);
+    if (catalog!.library.files.containsKey('binarysdata/dbitemdata.sdata')) {
+      final registry = await EquipmentRegistry.load(catalog!.library);
+      final look = scene.appearance!,
+          a = look.archetype,
+          cls = scene.characterClass;
+      snapshot['itemAudit'] = {
+        'dataPath': registry.dataPath,
+        'textPath': registry.textPath,
+        'entries': {
+          for (final p in look.selected.values.whereType<PartRecord>())
+            if (EquipmentRegistry.bodySlot(p.slot) != null)
+              p.slot.name: registry.describeCandidates(
+                registry.forPart(p, a, cls),
+              ),
+          if (scene.weaponRecord != null)
+            'weapon': registry.describeCandidates(
+              registry.forWeapon(scene.weaponRecord!, a, cls),
+            ),
+          if (scene.shieldRecord != null)
+            'shield': registry.describeCandidates(
+              registry.forWeapon(scene.shieldRecord!, a, cls),
+            ),
+          if (scene.wingRecord != null)
+            'wing': registry.describeCandidates(
+              registry.forCreature(scene.wingRecord!, 'wing', a, cls),
+            ),
+          if (scene.mountRecord != null)
+            'mount': registry.describeCandidates(
+              registry.forCreature(scene.mountRecord!, 'mount', a, cls),
+            ),
         },
-      }),
+      };
+    }
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/HerramientaShaiya/apariencia.json');
+    await AppearanceSnapshot.save(file, snapshot);
+    scene.say(
+      'Apariencia completa guardada: ${file.path}. Recursos verificados; no modifica game.exe.',
     );
   }
 
@@ -3424,7 +3529,21 @@ class _StudioState extends State<StudioPage> {
     if (!await f.exists()) {
       throw const FormatException('No hay una apariencia guardada.');
     }
-    final data = jsonDecode(await f.readAsString()) as Map;
+    if (await f.length() > AppearanceSnapshot.maxBytes) {
+      throw const FormatException('Apariencia demasiado grande.');
+    }
+    final bytes = await f.readAsBytes();
+    final data = jsonDecode(utf8.decode(bytes)) as Map;
+    if (data['schema'] == AppearanceSnapshot.schema) {
+      await AppearanceSnapshot.apply(scene, AppearanceSnapshot.decode(bytes));
+      scene.say(
+        'Apariencia completa restaurada: armadura, armas, alas y montura.',
+      );
+      return;
+    }
+    if (data['version'] != 2) {
+      throw const FormatException('Versión de apariencia desconocida.');
+    }
     final a = catalog!.archetypes
         .where((a) => a.id == data['archetype'] && a.race == data['race'])
         .firstOrNull;
@@ -3758,6 +3877,7 @@ class _StudioState extends State<StudioPage> {
     timeline: timeline(),
     actions: actionBar(),
     hasLibrary: scene.character != null,
+    onOpenItems: catalog == null || working ? null : openItems,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
     onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,

@@ -1,7 +1,10 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 import '../core/textures.dart';
+import '../core/item_icon_layout.dart';
 import '../data/library.dart';
 import '../editor/workbench_model.dart';
 import 'editor_style.dart';
@@ -10,7 +13,16 @@ class EditorIconRef {
   final String path;
   final int index;
   final bool sheet;
-  const EditorIconRef(this.path, this.index, {this.sheet = true});
+  final int? columns, rows;
+  final int pageBase;
+  const EditorIconRef(
+    this.path,
+    this.index, {
+    this.sheet = true,
+    this.columns,
+    this.rows,
+    this.pageBase = 0,
+  });
 }
 
 class EditorImages {
@@ -21,7 +33,7 @@ class EditorImages {
   int bytes = 0;
   EditorImages(this.library);
   Future<ui.Image?> image(String path) => cache.putIfAbsent(path, () async {
-    if (closed || cache.length > 64) return null;
+    if (closed) return null;
     try {
       final b = await library.read(path, limit: 32 * 1024 * 1024);
       final pixels = await compute(_decode, (b, path));
@@ -67,40 +79,22 @@ class EditorImages {
     final type = int.tryParse(v['itemtype'] ?? v['type'] ?? '');
     final index = int.tryParse(v['icon'] ?? v['iconid'] ?? '');
     if (domain == EditorDomain.items && index != null && type != null) {
-      final number = type.toString().padLeft(2, '0');
+      final layout = ItemIconLayout.resolve(type, index);
+      if (layout == null || !layout.inBounds) return null;
       for (final ext in ['dds', 'tga']) {
-        final path = 'interface/icon/$number.$ext';
-        if (library.files.containsKey(path)) return EditorIconRef(path, index);
-      }
-      final base = type <= 15
-          ? 'weapon'
-          : const {19, 34, 69, 84}.contains(type)
-          ? 'shield'
-          : const {16, 31}.contains(type)
-          ? 'helmet'
-          : const {17, 32, 67, 82}.contains(type)
-          ? 'upper'
-          : const {18, 33, 68, 83}.contains(type)
-          ? 'lower'
-          : const {20, 35, 70, 85}.contains(type)
-          ? 'hand'
-          : const {21, 36, 71, 86}.contains(type)
-          ? 'foot'
-          : type == 25
-          ? 'gem'
-          : const {22, 23, 24}.contains(type)
-          ? 'acc'
-          : type == 42
-          ? 'vehicle'
-          : 'somo';
-      final candidates = [
-        'interface/icon/icon_$base.dds',
-        'interface/icon/icon_${base}1.dds',
-      ];
-      for (final p in candidates) {
-        if (library.files.containsKey(p)) return EditorIconRef(p, index);
+        final path = 'interface/icon/${layout.stem}.$ext';
+        if (library.files.containsKey(path)) {
+          return EditorIconRef(
+            path,
+            layout.tile,
+            columns: layout.columns,
+            rows: layout.rows,
+            pageBase: layout.pageBase,
+          );
+        }
       }
     }
+
     if (domain == EditorDomain.skills && index != null) {
       final page = index ~/ 256 + 1, tile = index % 256;
       for (final ext in ['dds', 'tga']) {
@@ -153,13 +147,20 @@ class DataIcon extends StatelessWidget {
       width: size,
       height: size,
       child: ref == null
-          ? fallback
+          ? Tooltip(
+              message:
+                  'Icono ausente, fuera de rango o tipo no soportado por ps0032. No se sustituye por otro objeto.',
+              child: fallback,
+            )
           : FutureBuilder<ui.Image?>(
               future: images.image(ref.path),
               builder: (c, s) {
-                final image = s.data;
+                final image = s.connectionState == ConnectionState.done
+                    ? s.data
+                    : null;
                 if (image == null) return fallback;
-                final columns = image.width ~/ 32, rows = image.height ~/ 32;
+                final columns = ref.columns ?? image.width ~/ 32,
+                    rows = ref.rows ?? image.height ~/ 32;
                 if (ref.index < 0 || ref.index >= columns * rows) {
                   return Tooltip(
                     message: 'Índice ${ref.index} fuera de ${ref.path}',
@@ -167,9 +168,10 @@ class DataIcon extends StatelessWidget {
                   );
                 }
                 return Tooltip(
-                  message: '${ref.path} · icono ${ref.index}',
+                  message:
+                      '${ref.path} · Icon ${ref.index + ref.pageBase} · celda ${ref.index} · ps0032',
                   child: CustomPaint(
-                    painter: _IconPainter(image, ref.index, columns),
+                    painter: _IconPainter(image, ref.index, columns, rows),
                   ),
                 );
               },
@@ -180,17 +182,17 @@ class DataIcon extends StatelessWidget {
 
 class _IconPainter extends CustomPainter {
   final ui.Image image;
-  final int index, columns;
-  _IconPainter(this.image, this.index, this.columns);
+  final int index, columns, rows;
+  _IconPainter(this.image, this.index, this.columns, this.rows);
   @override
   void paint(Canvas c, Size s) {
     c.drawImageRect(
       image,
       Rect.fromLTWH(
-        (index % columns) * 32.0,
-        (index ~/ columns) * 32.0,
-        32,
-        32,
+        (index % columns) * image.width / columns,
+        (index ~/ columns) * image.height / rows,
+        image.width / columns,
+        image.height / rows,
       ),
       Offset.zero & s,
       Paint()..filterQuality = FilterQuality.medium,
@@ -199,5 +201,8 @@ class _IconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _IconPainter o) =>
-      o.image != image || o.index != index;
+      o.image != image ||
+      o.index != index ||
+      o.columns != columns ||
+      o.rows != rows;
 }

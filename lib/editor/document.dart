@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
+
 import '../core/game_text_codec.dart';
 import '../core/seed_data.dart';
 

@@ -1,4 +1,5 @@
 import '../core/formats.dart';
+import '../core/item_icon_layout.dart';
 import '../core/equipment_rules.dart';
 import '../data/library.dart';
 import 'catalog_document.dart';
@@ -8,7 +9,15 @@ class ModelReference {
   final String label;
   final List<(String, String, int)> parts;
   final Map<String, String> animations;
-  const ModelReference(this.label, this.parts, {this.animations = const {}});
+  final String? sourcePath;
+  final int? sourceOrdinal;
+  const ModelReference(
+    this.label,
+    this.parts, {
+    this.animations = const {},
+    this.sourcePath,
+    this.sourceOrdinal,
+  });
 }
 
 class ModelReferences {
@@ -81,6 +90,8 @@ class ModelReferences {
           'Registro original #${d.rows[row].ordinal}',
           locate(parts, d.path),
           animations: anim,
+          sourcePath: d.path,
+          sourceOrdinal: d.rows[row].ordinal,
         ),
       ];
     }
@@ -89,14 +100,10 @@ class ModelReferences {
     final weaponFamily = type == null ? 0 : weaponFamilyForItemType(type);
     if (type != null &&
         model != null &&
-        (weaponFamily > 0 || {19, 34, 69, 84}.contains(type))) {
+        (weaponFamily > 0 || equipmentSlotsForItemType(type).contains(6))) {
       final family = weaponFamily > 0
           ? weaponFamily
-          : type == 69
-          ? 19
-          : type == 84
-          ? 34
-          : type;
+          : ItemIconLayout.family(type);
       final path = 'item/${family.toString().padLeft(2, '0')}.itm';
       if (!lib.files.containsKey(path)) return [];
       final rows = readItm(await lib.read(path), path);
@@ -106,14 +113,20 @@ class ModelReferences {
         ModelReference(
           '$path · modelo $model',
           locate([(record.mesh, record.texture, record.alpha)], path),
+          sourcePath: path,
+          sourceOrdinal: model,
         ),
       ];
     }
 
-    if (type == wingItemType && model != null) {
+    if ((type == wingItemType || type == 122 || type == 42 || type == 125) &&
+        model != null) {
+      final rootPrefix = (type == 42 || type == 125)
+          ? 'vehicle/'
+          : 'character/wing/';
       final out = <ModelReference>[];
       for (final path in lib.files.keys.where(
-        (p) => p.startsWith('character/wing/') && p.endsWith('.mon'),
+        (p) => p.startsWith(rootPrefix) && p.endsWith('.mon'),
       )) {
         final rows = readMon(await lib.read(path), path);
         if (model < 0 || model >= rows.length) continue;
@@ -131,7 +144,7 @@ class ModelReferences {
         }
         out.add(
           ModelReference(
-            'Alas · ItemType $wingItemType · Image $model · ${baseName(path)}',
+            '${type == 42 || type == 125 ? 'Montura' : 'Alas'} · ItemType $type · Image $model · ${baseName(path)}',
             locate(
               record.parts
                   .where((p) => !p.isNull)
@@ -140,6 +153,8 @@ class ModelReferences {
               path,
             ),
             animations: animations,
+            sourcePath: path,
+            sourceOrdinal: model,
           ),
         );
       }
@@ -173,6 +188,8 @@ class ModelReferences {
           ModelReference(
             baseName(path).replaceAll('.mlt', '').toUpperCase(),
             locate([(r.mesh, r.texture, r.alpha)], path),
+            sourcePath: path,
+            sourceOrdinal: model,
           ),
         );
       }

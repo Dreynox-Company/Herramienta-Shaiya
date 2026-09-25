@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:vector_math/vector_math_64.dart' as v;
+
 import 'formats.dart';
 import 'legacy_text.dart';
 

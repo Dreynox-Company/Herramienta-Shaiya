@@ -1,9 +1,12 @@
 import '../render/native_view.dart';
+
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:three_js/three_js.dart' as t;
+
 import '../core/formats.dart';
 import '../data/library.dart';
 import '../editor/document.dart';

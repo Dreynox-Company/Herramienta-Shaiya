@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'document.dart';
 import 'schema_reader.dart';
 

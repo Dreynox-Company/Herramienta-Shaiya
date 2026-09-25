@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:vector_math/vector_math_64.dart' as v;
 
 /// Horizontal input projected from the orbit camera, independent of pitch.

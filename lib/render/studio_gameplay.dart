@@ -433,7 +433,9 @@ extension StudioGameplay on StudioScene {
         moving &&
         !blocked &&
         (game.jump.airborne ||
-            (desired != null && actor.clip == desired && actor.playing))) {
+            ((desired != null && actor.clip == desired ||
+                    flightBodyTransitionActive) &&
+                actor.playing))) {
       var speed = mount != null
           ? ((running || touchRun) ? 7.0 : 3.5)
           : ((running || touchRun) ? 4.0 : 2.0);

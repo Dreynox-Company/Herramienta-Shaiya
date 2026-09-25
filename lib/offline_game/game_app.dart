@@ -1,8 +1,10 @@
 import '../render/native_view.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
+
 import 'package:flutter/gestures.dart';
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
@@ -12,6 +14,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:three_js/three_js.dart' as three;
+
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
 import '../core/formats.dart';

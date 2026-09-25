@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'game_text_codec.dart';
 
 /// A resource's locale is part of its format contract. Spanish text must never

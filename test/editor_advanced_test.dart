@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/core/game_text_codec.dart';
@@ -12,6 +13,7 @@ import 'package:herramienta_shaiya/ui/editor_map.dart';
 import 'package:herramienta_shaiya/ui/editor_pickers.dart';
 import 'package:herramienta_shaiya/data/library.dart';
 import 'package:herramienta_shaiya/ui/editor_icons.dart';
+
 import 'editor_document_test.dart' show binaryTable;
 
 void main() {
