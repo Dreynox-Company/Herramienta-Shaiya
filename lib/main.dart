@@ -52,7 +52,7 @@ import 'data/appearance_snapshot.dart';
 import 'data/equipment_registry.dart';
 import 'ui/equipment_registry_panel.dart';
 
-const studioVersion = '0.6.26';
+const studioVersion = '0.6.27';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -252,7 +252,7 @@ class _StudioState extends State<StudioPage> {
       final refreshed = Catalog(library);
       await refreshed.load((s) {
         if (mounted) setState(() => progress = s);
-      });
+      }, requireArchetypes: false);
       if (!mounted) return;
       final archetype = refreshed.archetypes
           .where(
@@ -279,6 +279,9 @@ class _StudioState extends State<StudioPage> {
         await scene.setAppearance(
           Appearance(archetype, slots, preset: look.preset),
         );
+      } else {
+        scene.clearAppearance();
+        tab = 6;
       }
       scene.say(
         'DATA guardada y catálogo recargado. XML, referencias y texturas '
@@ -421,9 +424,13 @@ class _StudioState extends State<StudioPage> {
         allowLocked: true,
       );
       await loadBundledExtras();
+      await loadBundledFlightV3();
       final next = Catalog(candidate);
-      await next.load(report);
-      if (!mounted) return;
+      await next.load(report, requireArchetypes: false);
+      if (!mounted) {
+        candidate.dispose();
+        return;
+      }
 
       scene.catalog = next;
       if (next.archetypes.isNotEmpty) {
@@ -449,12 +456,11 @@ class _StudioState extends State<StudioPage> {
       await scene.selectCreature(null, 'wing');
       await scene.setWorld(null);
       await scene.setSky(null);
-      progress = next.archetypes.isEmpty
-          ? '${candidate.files.length} recursos SPK montados · editor listo · '
-                '3D pendiente de más rutas Character · overlay editable: '
-                '${candidate.spkOverlayRoot}'
-          : '${candidate.files.length} recursos SPK montados · editor + 3D · '
-                'overlay editable: ${candidate.spkOverlayRoot}';
+      progress =
+          '${source.index.resources.length} registros SPK indexados · '
+          '${candidate.files.length} accesibles según perfil · '
+          'selecciona un recurso para verificar y editar · '
+          'overlay: ${candidate.spkOverlayRoot}';
       if (old?.library != candidate) old?.library.dispose();
     } catch (_) {
       if (catalog != scene.catalog) scene.catalog = old;
@@ -748,13 +754,21 @@ class _StudioState extends State<StudioPage> {
       await loadBundledExtras();
       await loadBundledFlightV3();
       final next = Catalog(lib);
-      await next.load(report);
-      if (!mounted) return;
+      await next.load(report, requireArchetypes: false);
+      if (!mounted) {
+        candidate.dispose();
+        return;
+      }
       scene.catalog = next;
       final first =
           next.archetypes.where((a) => a.id == 'humf').firstOrNull ??
-          next.archetypes.first;
-      await scene.setAppearance(Appearance.initial(first));
+          next.archetypes.firstOrNull;
+      if (first != null) {
+        await scene.setAppearance(Appearance.initial(first));
+      } else {
+        scene.clearAppearance();
+        tab = 6;
+      }
       catalog = next;
       _memories.clear();
       diagnostics.addAll(next.warnings);

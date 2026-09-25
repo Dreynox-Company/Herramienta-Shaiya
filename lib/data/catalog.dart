@@ -752,7 +752,10 @@ class Catalog {
     );
   }
 
-  Future<void> load(void Function(String) progress) async {
+  Future<void> load(
+    void Function(String) progress, {
+    bool requireArchetypes = true,
+  }) async {
     final paths = library.files.keys.toList()..sort();
 
     vehiclePositionPath = paths
@@ -927,9 +930,10 @@ class Catalog {
     await names.load(library, progress);
     warnings.addAll(names.warnings);
     if (archetypes.isEmpty) {
-      throw const FormatException(
-        'No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.',
-      );
+      const message =
+          'No se encontraron arquetipos MLT utilizables. Revisa el diagnóstico.';
+      if (requireArchetypes) throw const FormatException(message);
+      warnings.add('$message La biblioteca de recursos permanece disponible.');
     }
   }
 
