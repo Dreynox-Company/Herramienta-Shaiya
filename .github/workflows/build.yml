@@ -108,6 +108,14 @@ jobs:
         run: flutter test integration_test/native_studio_test.dart -d windows --reporter expanded
       - name: Build Windows release
         run: flutter build windows --release
+      - name: Harden Windows ANGLE release runtime
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r ci/angle-runtime-requirements.txt
+          $release = Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release'
+          $qa = Join-Path $env:GITHUB_WORKSPACE 'qa-windows'
+          New-Item -ItemType Directory -Force -Path $qa | Out-Null
+          python ci/harden_angle_runtime.py --release $release --evidence (Join-Path $qa 'angle-runtime.json')
+          if ($LASTEXITCODE -ne 0) { throw 'ANGLE release runtime hardening failed.' }
       - name: Native SPK writer round-trip - simple, fragments, index and sidecars
         run: |
           $release = Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release'
