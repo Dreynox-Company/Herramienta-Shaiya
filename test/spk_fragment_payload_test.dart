@@ -21,23 +21,18 @@ Uint8List _offsetChunkNonce(int dataOffset, int localChunk) {
   return bytes;
 }
 
-Future<SecretBox> _encrypt(
-  Uint8List clear,
-  Uint8List key,
-  Uint8List nonce,
-) => AesGcm.with128bits().encrypt(
-  clear,
-  secretKey: SecretKey(key),
-  nonce: nonce,
-);
+Future<SecretBox> _encrypt(Uint8List clear, Uint8List key, Uint8List nonce) =>
+    AesGcm.with128bits().encrypt(
+      clear,
+      secretKey: SecretKey(key),
+      nonce: nonce,
+    );
 
 void main() {
   test(
     'SPK payloads derive fragmented nonce rule and authenticate reconstruction',
     () async {
-      final key = Uint8List.fromList(
-        List<int>.generate(16, (i) => 0xa0 + i),
-      );
+      final key = Uint8List.fromList(List<int>.generate(16, (i) => 0xa0 + i));
       final firstClear = Uint8List.fromList(<int>[
         0x91,
         0x02,
@@ -169,23 +164,14 @@ void main() {
   );
 
   test('SPK nonce derivation can prove record-ordinal chunk nonces', () async {
-    final key = Uint8List.fromList(
-      List<int>.generate(16, (i) => 0x30 + i),
-    );
+    final key = Uint8List.fromList(List<int>.generate(16, (i) => 0x30 + i));
     final samples = <SpkFragmentAuthSample>[];
     var offset = 4096;
     for (final tuple in <(int, int)>[(7, 31), (12, 44)]) {
       final clear = Uint8List.fromList(
-        List<int>.generate(
-          41 + tuple.$1,
-          (i) => (i * 7 + tuple.$1) & 0xff,
-        ),
+        List<int>.generate(41 + tuple.$1, (i) => (i * 7 + tuple.$1) & 0xff),
       );
-      final box = await _encrypt(
-        clear,
-        key,
-        _recordOrdinalNonce(tuple.$1, 0),
-      );
+      final box = await _encrypt(clear, key, _recordOrdinalNonce(tuple.$1, 0));
       final record = SpkRecord(
         ordinal: tuple.$1,
         entryId: 0x100000000000000 + tuple.$1,

@@ -4,6 +4,9 @@ import 'game_names.dart';
 export '../core/motion_catalog.dart';
 import '../core/motion_catalog.dart';
 import '../core/formats.dart';
+import '../core/wing_position.dart';
+import '../core/vehicle_position.dart';
+import '../core/mon_editor.dart';
 import 'library.dart';
 part 'texture_discovery.dart';
 
@@ -182,6 +185,10 @@ class Catalog {
   final List<Archetype> archetypes = [];
   final List<WeaponRecord> weapons = [];
   final List<CreatureRecord> creatures = [], mounts = [], wings = [];
+  WingPositionDocument? wingPositions;
+  String? wingPositionPath;
+  VehiclePositionDocument vehiclePositions = VehiclePositionDocument.empty();
+  String? vehiclePositionPath;
   final List<String> worlds = [],
       sounds = [],
       effects = [],
@@ -261,10 +268,12 @@ class Catalog {
     final parts = n.split('_');
     for (final entry in tokens.entries) {
       for (final token in entry.value) {
-        if (parts.any((part) =>
-            part == token ||
-            (part.startsWith(token) &&
-                int.tryParse(part.substring(token.length)) != null))) {
+        if (parts.any(
+          (part) =>
+              part == token ||
+              (part.startsWith(token) &&
+                  int.tryParse(part.substring(token.length)) != null),
+        )) {
           return entry.key;
         }
       }
@@ -299,11 +308,9 @@ class Catalog {
       final marker = meshPath.indexOf('/3dc/');
       final root = meshPath.substring(0, marker);
       final stem = file.substring(0, file.length - 4);
-      final texture = library.resolve(
-        '$stem.dds',
-        ['$root/dds'],
-        uniqueFallback: false,
-      );
+      final texture = library.resolve('$stem.dds', [
+        '$root/dds',
+      ], uniqueFallback: false);
       if (texture == null) continue;
 
       final slotMap = byCode.putIfAbsent(
@@ -345,13 +352,7 @@ class Catalog {
           )
           .toList();
       archetypes.add(
-        Archetype(
-          entry.key,
-          root.split('/')[1],
-          root,
-          entry.value,
-          animations,
-        ),
+        Archetype(entry.key, root.split('/')[1], root, entry.value, animations),
       );
       added++;
     }
@@ -366,8 +367,438 @@ class Catalog {
       progress('SPK: ${archetypes.length} arquetipos disponibles para 3D');
     }
   }
+
+  void _auditMonReferences(String source, List<CreatureRecord> records) {
+    final root = directoryName(source);
+    var loadSentinels = 0;
+    var missingAnimations = 0;
+    var missingSounds = 0;
+    var missingEffects = 0;
+    var missingMeshes = 0;
+    var missingTextures = 0;
+    final examples = <String>{};
+
+    String? resolve(String raw, List<String> roots, String kind) {
+      if (raw.isEmpty) return null;
+      if (isMonLoadSentinel(raw)) {
+        loadSentinels++;
+        return null;
+      }
+      final found = library.resolve(raw, roots, uniqueFallback: true);
+      if (found == null && examples.length < 8) {
+        examples.add('$kind: $raw');
+      }
+      return found;
+    }
+
+    for (final record in records) {
+      for (final raw in record.animations.values) {
+        if (raw.isEmpty || isMonLoadSentinel(raw)) {
+          if (isMonLoadSentinel(raw)) loadSentinels++;
+          continue;
+        }
+        if (resolve(raw, ['$root/ani', root], 'ANI') == null) {
+          missingAnimations++;
+        }
+      }
+      for (final raw in record.sounds.values) {
+        if (raw.isEmpty || isMonLoadSentinel(raw)) {
+          if (isMonLoadSentinel(raw)) loadSentinels++;
+          continue;
+        }
+        if (resolve(raw, [
+              '$root/sound',
+              '$root/snd',
+              'sound',
+              root,
+            ], 'audio') ==
+            null) {
+          missingSounds++;
+        }
+      }
+      for (final raw in record.effects.values) {
+        if (raw.isEmpty || isMonLoadSentinel(raw)) {
+          if (isMonLoadSentinel(raw)) loadSentinels++;
+          continue;
+        }
+        if (resolve(raw, [
+              '$root/effect',
+              'effect',
+              '$root/3de',
+              root,
+            ], 'efecto') ==
+            null) {
+          missingEffects++;
+        }
+      }
+      for (final part in record.parts) {
+        if (!part.mesh.toLowerCase().startsWith('null.') &&
+            resolve(part.mesh, ['$root/3dc', '$root/3do', root], 'malla') ==
+                null) {
+          missingMeshes++;
+        }
+        if (!part.texture.toLowerCase().startsWith('null.') &&
+            resolve(part.texture, [
+                  '$root/dds',
+                  '$root/tga',
+                  root,
+                ], 'textura') ==
+                null) {
+          missingTextures++;
+        }
+      }
+    }
+
+    final missing =
+        missingAnimations +
+        missingSounds +
+        missingEffects +
+        missingMeshes +
+        missingTextures;
+    if (loadSentinels > 0) {
+      warnings.add(
+        '$source · MON: $loadSentinels slots LOAD nativos preservados; '
+        '${records.length} registros.',
+      );
+    }
+    if (missing > 0) {
+      warnings.add(
+        '$source · referencias ausentes en la DATA montada: '
+        '$missingAnimations ANI, $missingSounds audio, '
+        '$missingEffects efectos, $missingMeshes mallas, '
+        '$missingTextures texturas.'
+        '${examples.isEmpty ? '' : ' Ejemplos: ${examples.join(' · ')}'}',
+      );
+    }
+  }
+
+  List<String> wingAnimationCandidates(CreatureRecord record) {
+    final root = directoryName(record.source);
+    final prefix = '$root/ani/';
+    final out =
+        library.files.keys
+            .where((p) => p.startsWith(prefix) && p.endsWith('.ani'))
+            .toList()
+          ..sort();
+    return out;
+  }
+
+  Future<CreatureRecord> _saveMonMutation(
+    CreatureRecord record, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+    required void Function(EditableMonDocument document) mutate,
+  }) async {
+    if (!record.source.startsWith(requiredRoot) ||
+        !record.source.endsWith('.mon')) {
+      throw FormatException('El recurso seleccionado no pertenece a $label.');
+    }
+    final original = await library.read(record.source);
+    final document = EditableMonDocument.parse(original, record.source);
+    if (record.id < 0 || record.id >= document.records.length) {
+      throw FormatException(
+        'El ID ${record.id} no existe en ${record.source}.',
+      );
+    }
+    mutate(document);
+    final encoded = document.encode();
+    document.validateEncoded(encoded);
+
+    final verified = readMon(encoded, record.source);
+    if (verified.length != document.records.length) {
+      throw const FormatException(
+        'La revalidación MON no conserva todos los registros.',
+      );
+    }
+    final updated = verified[record.id];
+    await library.writeResource(record.source, encoded);
+
+    final index = target.indexWhere(
+      (entry) => entry.source == record.source && entry.id == record.id,
+    );
+    if (index >= 0) target[index] = updated;
+    return updated;
+  }
+
+  Future<CreatureRecord> _saveMonAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) =>
+        document.setAnimation(record.id, slot, baseName(animationPath)),
+  );
+
+  Future<CreatureRecord> _saveMonSound(
+    CreatureRecord record,
+    String slot,
+    String soundPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setSound(
+      record.id,
+      slot,
+      soundPath.isEmpty ? '' : baseName(soundPath),
+    ),
+  );
+
+  Future<CreatureRecord> _saveMonEffect(
+    CreatureRecord record,
+    String slot,
+    String effectPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setEffect(
+      record.id,
+      slot,
+      effectPath.isEmpty ? '' : baseName(effectPath),
+    ),
+  );
+
+  Future<CreatureRecord> _saveMonAttachedEffect(
+    CreatureRecord record,
+    String effectPath, {
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setAttachedEffect(
+      record.id,
+      effectPath.isEmpty ? '' : baseName(effectPath),
+    ),
+  );
+
+  Future<CreatureRecord> _saveMonPart(
+    CreatureRecord record,
+    int partId, {
+    String? meshPath,
+    String? texturePath,
+    required String requiredRoot,
+    required List<CreatureRecord> target,
+    required String label,
+  }) => _saveMonMutation(
+    record,
+    requiredRoot: requiredRoot,
+    target: target,
+    label: label,
+    mutate: (document) => document.setPart(
+      record.id,
+      partId,
+      mesh: meshPath == null ? null : baseName(meshPath),
+      texture: texturePath == null ? null : baseName(texturePath),
+    ),
+  );
+
+  Future<CreatureRecord> saveWingAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath,
+  ) => _saveMonAnimation(
+    record,
+    slot,
+    animationPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingSound(
+    CreatureRecord record,
+    String slot,
+    String soundPath,
+  ) => _saveMonSound(
+    record,
+    slot,
+    soundPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingEffect(
+    CreatureRecord record,
+    String slot,
+    String effectPath,
+  ) => _saveMonEffect(
+    record,
+    slot,
+    effectPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingAttachedEffect(
+    CreatureRecord record,
+    String effectPath,
+  ) => _saveMonAttachedEffect(
+    record,
+    effectPath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveWingPart(
+    CreatureRecord record,
+    int partId, {
+    String? meshPath,
+    String? texturePath,
+  }) => _saveMonPart(
+    record,
+    partId,
+    meshPath: meshPath,
+    texturePath: texturePath,
+    requiredRoot: 'character/wing/',
+    target: wings,
+    label: 'Character/Wing/*.MON',
+  );
+
+  Future<CreatureRecord> saveMountAnimation(
+    CreatureRecord record,
+    String slot,
+    String animationPath,
+  ) => _saveMonAnimation(
+    record,
+    slot,
+    animationPath,
+    requiredRoot: 'vehicle/',
+    target: mounts,
+    label: 'Vehicle/*.MON',
+  );
+
+  Future<CreatureRecord> saveMountSound(
+    CreatureRecord record,
+    String slot,
+    String soundPath,
+  ) => _saveMonSound(
+    record,
+    slot,
+    soundPath,
+    requiredRoot: 'vehicle/',
+    target: mounts,
+    label: 'Vehicle/*.MON',
+  );
+
+  Future<CreatureRecord> saveMountEffect(
+    CreatureRecord record,
+    String slot,
+    String effectPath,
+  ) => _saveMonEffect(
+    record,
+    slot,
+    effectPath,
+    requiredRoot: 'vehicle/',
+    target: mounts,
+    label: 'Vehicle/*.MON',
+  );
+
+  Future<void> saveWingPosition(WingPositionProfile profile) async {
+    final document = wingPositions;
+    final path = wingPositionPath;
+    if (document == null || path == null) {
+      throw const FormatException(
+        'WingPosition.xml no está montado; no hay destino real que editar.',
+      );
+    }
+    document.update(profile);
+    final bytes = document.encode();
+    document.validateEncoded(bytes);
+    await library.writeResource(path, bytes);
+    wingPositions = WingPositionDocument.parse(bytes, path);
+  }
+
+  Future<void> saveVehiclePosition(VehiclePositionProfile profile) async {
+    vehiclePositions.update(profile);
+    final bytes = vehiclePositions.encode();
+    vehiclePositions.validateEncoded(bytes);
+    await library.writeOrCreateLooseResource(
+      VehiclePositionDocument.canonicalPath,
+      bytes,
+    );
+    vehiclePositionPath = VehiclePositionDocument.canonicalPath;
+    vehiclePositions = VehiclePositionDocument.parse(
+      bytes,
+      vehiclePositionPath!,
+    );
+  }
+
   Future<void> load(void Function(String) progress) async {
     final paths = library.files.keys.toList()..sort();
+
+    vehiclePositionPath = paths
+        .where((p) => p == VehiclePositionDocument.canonicalPath)
+        .firstOrNull;
+    if (vehiclePositionPath != null) {
+      try {
+        vehiclePositions = VehiclePositionDocument.parse(
+          await library.read(vehiclePositionPath!),
+          vehiclePositionPath!,
+        );
+        progress(
+          'VehiclePosition.ini · '
+          '${vehiclePositions.profiles.length} perfiles Studio Bridge',
+        );
+      } catch (e) {
+        warnings.add('VehiclePosition.ini: $e');
+        vehiclePositions = VehiclePositionDocument.empty();
+      }
+    } else {
+      vehiclePositions = VehiclePositionDocument.empty();
+    }
+
+    wingPositionPath = paths
+        .where(
+          (p) =>
+              p == WingPositionDocument.canonicalPath ||
+              p.endsWith('/wingposition.xml'),
+        )
+        .firstOrNull;
+    if (wingPositionPath != null) {
+      try {
+        wingPositions = WingPositionDocument.parse(
+          await library.read(wingPositionPath!),
+          wingPositionPath!,
+        );
+        final verified = wingPositions!.matchesVerifiedSource
+            ? ' · fuente canónica verificada'
+            : ' · archivo editable de esta DATA';
+        progress('WingPosition.xml · 48 perfiles$verified');
+      } catch (e) {
+        warnings.add('WingPosition.xml: $e');
+        wingPositions = null;
+      }
+    } else {
+      warnings.add(
+        'WingPosition.xml no está presente en la biblioteca montada. '
+        'Studio puede previsualizar el baseline verificado, pero no escribir '
+        'posicionamiento al juego sin el XML real.',
+      );
+    }
     for (final p in paths.where(
       (p) => RegExp(r'^character/[^/]+/[^/]+_upper\.mlt$').hasMatch(p),
     )) {
@@ -445,7 +876,8 @@ class Catalog {
         final entries = readMon(
           await library.read(p),
           p,
-        ).where((c) => c.parts.any((p) => !p.isNull));
+        ).where((c) => c.parts.any((p) => !p.isNull)).toList(growable: false);
+        _auditMonReferences(p, entries);
         if (p.startsWith('vehicle/')) {
           mounts.addAll(entries);
         } else if (p.startsWith('character/wing/')) {

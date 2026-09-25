@@ -91,7 +91,6 @@ List<String> spkNameMapCandidatePaths(
   ];
 }
 
-
 List<String> spkResourceProfileCandidatePaths(
   String spkPath,
   String indexSha256, {
@@ -202,8 +201,9 @@ Future<SpkArchiveSource> loadAutomaticSpkResourceProfile(
       final value = await readSpkJsonFile(file);
       if (value is! Map) continue;
       final data = Map<String, dynamic>.from(value);
-      final declared =
-          (data['indexSha256'] ?? data['spkIndexSha256'])?.toString().toLowerCase();
+      final declared = (data['indexSha256'] ?? data['spkIndexSha256'])
+          ?.toString()
+          .toLowerCase();
       if (declared != null &&
           declared.isNotEmpty &&
           declared != source.index.encryptedIndexSha256.toLowerCase()) {
@@ -340,12 +340,42 @@ Future<bool> loadAutomaticSpkFullAudit(
   }
 }
 
-
 Future<dynamic> readSpkJsonFile(File file) async {
   final bytes = await file.readAsBytes();
   return jsonDecode(utf8.decode(bytes, allowMalformed: true));
 }
 
+String spkFriendlyErrorMessage(Object error) {
+  if (error is SpkFailure) {
+    final output = error.report['output']?.toString();
+    final consoleLog = error.report['consoleLog']?.toString();
+    final diagnosisFile = error.report['diagnosisFile']?.toString();
+    final failure = error.report['failure']?.toString();
+    final details = <String>[
+      if (failure != null && failure.isNotEmpty) failure,
+      if (diagnosisFile != null && diagnosisFile.isNotEmpty)
+        'Diagnóstico: $diagnosisFile',
+      if (consoleLog != null && consoleLog.isNotEmpty)
+        'Log: $consoleLog'
+      else if (output != null && output.isNotEmpty)
+        'Diagnóstico: $output',
+    ];
+    return '${error.code}: ${error.message}'
+        '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
+  }
+  if (error is FormatException) {
+    final message = error.message.toString();
+    if (message.contains('Missing extension byte') ||
+        message.contains('Unexpected extension byte')) {
+      return 'SPK_TEXT_ENCODING_INVALID: un decodificador de texto recibió '
+          'bytes incompletos o una codificación distinta de UTF-8. Studio '
+          'detuvo la operación y no modificó DATA.SPK. Si ocurrió al '
+          'inspeccionar un recurso, usa HEX/ASCII o la codificación legacy.';
+    }
+    return message;
+  }
+  return error.toString();
+}
 
 class _SpkMeshPreview extends StatefulWidget {
   final MeshData mesh;
@@ -460,10 +490,7 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
     centerY = (minY + maxY) / 2;
     final centerZ = (minZ + maxZ) / 2;
     object!.position.setValues(-centerX, 0, -centerZ);
-    final span = math.max(
-      maxX - minX,
-      math.max(maxY - minY, maxZ - minZ),
-    );
+    final span = math.max(maxX - minX, math.max(maxY - minY, maxZ - minZ));
     distance = math.max(.02, span * 1.7);
     _camera();
     view.addAnimationEvent((_) => _camera());
@@ -564,15 +591,10 @@ class _SpkMeshPreviewState extends State<_SpkMeshPreview> {
   );
 }
 
-
 class SpkArchiveBrowserPage extends StatefulWidget {
   final SpkArchiveSource source;
   final Future<void> Function(SpkArchiveSource source)? onMount;
-  const SpkArchiveBrowserPage({
-    super.key,
-    required this.source,
-    this.onMount,
-  });
+  const SpkArchiveBrowserPage({super.key, required this.source, this.onMount});
 
   static Future<void> pickAndOpen(
     BuildContext context, {
@@ -650,7 +672,7 @@ class SpkArchiveBrowserPage extends StatefulWidget {
         Navigator.of(context, rootNavigator: true).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString()),
+            content: Text(spkFriendlyErrorMessage(error)),
             duration: const Duration(seconds: 7),
           ),
         );
@@ -738,6 +760,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
   int operationDone = 0;
   int operationTotal = 0;
   String studioBuildLabel = '';
+  Directory? referenceDataDirectory;
 
   SpkArchiveSource get source => widget.source;
 
@@ -864,6 +887,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'Autenticación offline válida: ${diagnosis['offlineValid'] ?? 0}',
         'Claves candidatas probadas: ${diagnosis['candidateKeysTested'] ?? 0}',
         'Claves candidatas autenticadas: ${diagnosis['candidateKeysAuthenticated'] ?? 0}',
+        'Barrido estático V13: ${diagnosis['staticCandidatesTested'] ?? 0} '
+            'candidatas · profundas: ${diagnosis['staticDeepCandidatesTested'] ?? 0} '
+            '· módulos: ${diagnosis['staticModulesScanned'] ?? 0}',
+        if (diagnosis['staticMatchSource'] != null)
+          'Coincidencia estática: ${diagnosis['staticMatchSource']}',
         if (diagnosis['events'] is List)
           'Eventos: ${(diagnosis['events'] as List).join(', ')}',
       ],
@@ -871,8 +899,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         '',
         'Diagnóstico: $diagnosisFile',
       ],
-      if (consoleLog != null && consoleLog.isNotEmpty)
-        'Log: $consoleLog',
+      if (consoleLog != null && consoleLog.isNotEmpty) 'Log: $consoleLog',
       if (output != null && output.isNotEmpty && diagnosisFile == null)
         'Carpeta: $output',
     ];
@@ -919,36 +946,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     );
   }
 
-  String _friendlyError(Object error) {
-    if (error is SpkFailure) {
-      final output = error.report['output']?.toString();
-      final consoleLog = error.report['consoleLog']?.toString();
-      final diagnosisFile = error.report['diagnosisFile']?.toString();
-      final failure = error.report['failure']?.toString();
-      final details = <String>[
-        if (failure != null && failure.isNotEmpty) failure,
-        if (diagnosisFile != null && diagnosisFile.isNotEmpty)
-          'Diagnóstico: $diagnosisFile',
-        if (consoleLog != null && consoleLog.isNotEmpty)
-          'Log: $consoleLog'
-        else if (output != null && output.isNotEmpty)
-          'Diagnóstico: $output',
-      ];
-      return '${error.code}: ${error.message}'
-          '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
-    }
-    if (error is FormatException) {
-      final message = error.message.toString();
-      if (message.contains('Missing extension byte') ||
-          message.contains('Unexpected extension byte')) {
-        return 'SPK_TEXT_ENCODING_INVALID: se intentó interpretar como UTF-8 '
-            'un recurso que no contiene UTF-8 válido. Studio no modificó el '
-            'payload; usa la codificación legacy correcta o la vista binaria.';
-      }
-      return message;
-    }
-    return error.toString();
-  }
+  String _friendlyError(Object error) => spkFriendlyErrorMessage(error);
 
   Future<void> runAction(Future<void> Function() action) async {
     if (busy) return;
@@ -1057,11 +1055,36 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
   });
 
+  Future<void> chooseReferenceDataDirectory() => runAction(() async {
+    final folder = await getDirectoryPath(
+      confirmButtonText: 'Usar DATA para preview',
+    );
+    if (folder == null || !mounted) return;
+    final directory = Directory(folder);
+    if (!await directory.exists()) {
+      throw const FileSystemException(
+        'La carpeta DATA de referencia no existe.',
+      );
+    }
+    if (!mounted) return;
+    setState(() => referenceDataDirectory = directory);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'DATA de referencia activa. Doble clic en una ruta candidata para '
+          'ver su recurso sin afirmar que el payload SPK esté descifrado.',
+        ),
+      ),
+    );
+  });
+
   Future<void> resolveNamesFromReferenceData() => runAction(() async {
     final folder = await getDirectoryPath(
       confirmButtonText: 'Usar DATA como referencia',
     );
     if (folder == null || !mounted) return;
+
+    setState(() => referenceDataDirectory = Directory(folder));
 
     final verify = source.canReadSimpleResources
         ? await showDialog<bool>(
@@ -1235,7 +1258,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         'profileId': archive.profile.profileId,
         'resourceKeySha256': archive.profile.effectiveResourceSecret == null
             ? null
-            : sha256.convert(archive.profile.effectiveResourceSecret!).toString(),
+            : sha256
+                  .convert(archive.profile.effectiveResourceSecret!)
+                  .toString(),
         'chunkNonceRule': archive.profile.chunkNonceRule,
         'validation': audited,
         'resourceFormats': archive.validatedFormatsJson,
@@ -1322,17 +1347,38 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
 
     var candidateKeysTested = 0;
     var candidateKeysAuthenticated = 0;
-    final candidateEvidence = File(
-      p.join(output.path, 'candidate-keys.json'),
-    );
+    final candidateEvidence = File(p.join(output.path, 'candidate-keys.json'));
     if (await candidateEvidence.exists()) {
       try {
         final raw = await readSpkJsonFile(candidateEvidence);
         if (raw is Map) {
-          candidateKeysTested =
-              (raw['tested'] as num?)?.toInt() ?? 0;
+          candidateKeysTested = (raw['tested'] as num?)?.toInt() ?? 0;
           candidateKeysAuthenticated =
               (raw['authenticated'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+    }
+
+    var staticCandidatesTested = 0;
+    var staticDeepCandidatesTested = 0;
+    var staticModulesScanned = 0;
+    var staticDeepModulesScanned = 0;
+    String? staticMatchSource;
+    final staticEvidence = File(p.join(output.path, 'static-key-sweep.json'));
+    if (await staticEvidence.exists()) {
+      try {
+        final raw = await readSpkJsonFile(staticEvidence);
+        if (raw is Map) {
+          staticCandidatesTested = (raw['tested'] as num?)?.toInt() ?? 0;
+          staticDeepCandidatesTested =
+              (raw['deepTested'] as num?)?.toInt() ?? 0;
+          staticModulesScanned = (raw['modules'] as List?)?.length ?? 0;
+          staticDeepModulesScanned =
+              (raw['deepModulesScanned'] as num?)?.toInt() ?? 0;
+          final match = raw['match'];
+          if (match is Map && match['source'] != null) {
+            staticMatchSource = match['source'].toString();
+          }
         }
       } catch (_) {}
     }
@@ -1360,8 +1406,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (target is Map && target['kind'] == 'chunk') chunkHits++;
     }
 
-    final simpleValidated =
-        (profile['simpleValidated'] as num?)?.toInt() ?? 0;
+    final simpleValidated = (profile['simpleValidated'] as num?)?.toInt() ?? 0;
 
     String reason;
     if (!eventCodes.contains('HOOK_READY') &&
@@ -1376,8 +1421,17 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           'para revisar esta inconsistencia.';
     } else if (rows.isEmpty && candidateKeysTested > 0) {
       reason =
-          'Se observaron $candidateKeysTested claves candidatas de CNG/OpenSSL, '
-          'pero ninguna autenticó los payloads AES-GCM reales del DATA.SPK.';
+          'Se observaron $candidateKeysTested claves candidatas dinámicas, '
+          'pero ninguna autenticó los payloads AES-GCM reales del DATA.SPK. '
+          'El barrido estático probó $staticCandidatesTested candidatas '
+          '($staticDeepCandidatesTested en secciones PE de datos).';
+    } else if (rows.isEmpty &&
+        (staticCandidatesTested > 0 || staticDeepCandidatesTested > 0)) {
+      reason =
+          'El barrido estático V13 probó $staticCandidatesTested candidatas '
+          '($staticDeepCandidatesTested profundas en $staticDeepModulesScanned '
+          'módulos PE) sin autenticar la clave; el cliente tampoco expuso una '
+          'candidata dinámica válida durante la captura.';
     } else if (rows.isEmpty) {
       reason =
           'El cliente no expuso ninguno de los 55.457 ciphertexts objetivo ni '
@@ -1415,15 +1469,20 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       'offlineValid': offlineValid,
       'candidateKeysTested': candidateKeysTested,
       'candidateKeysAuthenticated': candidateKeysAuthenticated,
+      'staticCandidatesTested': staticCandidatesTested,
+      'staticDeepCandidatesTested': staticDeepCandidatesTested,
+      'staticModulesScanned': staticModulesScanned,
+      'staticDeepModulesScanned': staticDeepModulesScanned,
       'events': eventCodes.toList()..sort(),
       'profileReadyForSimple': profile['readyForSimple'] == true,
       'profileResourceKeys': profile['resourceKeys'],
       'profileModes': profile['modes'],
       'profileAadRule': profile['aadRule'],
     };
-    await File(
-      p.join(output.path, 'probe-diagnosis.json'),
-    ).writeAsString(
+    if (staticMatchSource != null) {
+      diagnosis['staticMatchSource'] = staticMatchSource;
+    }
+    await File(p.join(output.path, 'probe-diagnosis.json')).writeAsString(
       const JsonEncoder.withIndent('  ').convert(diagnosis),
       flush: true,
     );
@@ -1525,9 +1584,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           width: 520,
           child: Text(
             'Shaiya Studio abrirá game.exe de esa instalación e instrumentará '
-            'solo ese proceso. ResourceProbe V12 observa CNG/OpenSSL y valida '
-            'cualquier clave candidata exclusivamente contra ciphertexts AES-GCM '
-            'reales del DATA.SPK ya indexado.\n\n'
+            'solo ese proceso. ResourceProbe V13 combina CNG/OpenSSL, BoringSSL, '
+            'mbedTLS, wolfSSL, barrido PE acotado y candidatos runtime. Ninguna '
+            'clave se acepta hasta autenticar ciphertexts AES-GCM reales del '
+            'DATA.SPK ya indexado.\n\n'
             'Desconecta Internet antes de continuar. No inicies sesión ni '
             'escribas credenciales. El aviso de servidor sin conexión es '
             'esperado. DATA.SPK y game.exe no se modifican.',
@@ -1556,7 +1616,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
         DateTime.now().millisecondsSinceEpoch.toString(),
       ),
     );
-    operation = 'Preparando ResourceProbe V12…';
+    operation = 'Preparando ResourceProbe V13…';
     if (mounted) setState(() {});
 
     final process = await Process.start(
@@ -1607,7 +1667,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     await File(p.join(output.path, 'probe-console.log')).writeAsString(
       [
-        'Shaiya Studio ResourceProbe V12',
+        'Shaiya Studio ResourceProbe V13',
         'exitCode=$exitCode',
         'game=${game.path}',
         'data=${source.file.path}',
@@ -1618,7 +1678,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       flush: true,
     );
 
-    final profileFile = File(p.join(output.path, 'derived-resource-profile.json'));
+    final profileFile = File(
+      p.join(output.path, 'derived-resource-profile.json'),
+    );
     if (!await profileFile.exists()) {
       throw SpkFailure(
         'SPK_PROBE_NO_PROFILE',
@@ -1676,10 +1738,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     if (!next.canExtractAll) {
       final persistent = File('${source.file.path}.resources.json');
       await persistent.writeAsString(
-        const JsonEncoder.withIndent('  ').convert({
-          ...data,
-          'studioValidation': simpleValidation,
-        }),
+        const JsonEncoder.withIndent(
+          '  ',
+        ).convert({...data, 'studioValidation': simpleValidation}),
         flush: true,
       );
     }
@@ -1953,7 +2014,8 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             '${result['files']} recursos extraídos en ${result['folder']}',
           ),
           duration: const Duration(seconds: 8),
-        ),      );
+        ),
+      );
     }
   });
 
@@ -1968,9 +2030,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
           .join(' ')
           .padRight(47);
       final printable = String.fromCharCodes(
-        chunk.map(
-          (value) => value >= 32 && value <= 126 ? value : 46,
-        ),
+        chunk.map((value) => value >= 32 && value <= 126 ? value : 46),
       );
       rows.add(
         '${offset.toRadixString(16).padLeft(8, '0')}  $hex  |$printable|',
@@ -1978,9 +2038,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     if (limit < bytes.length) {
       rows.add('');
-      rows.add(
-        '… vista HEX limitada a $limit de ${bytes.length} bytes …',
-      );
+      rows.add('… vista HEX limitada a $limit de ${bytes.length} bytes …');
     }
     return rows.join('\n');
   }
@@ -2137,10 +2195,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     (limit < result.bytes.length
                         ? '\n\n… vista limitada a 256 KiB …'
                         : ''),
-                style: const TextStyle(
-                  fontFamily: 'Consolas',
-                  fontSize: 11,
-                ),
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
               ),
             ),
           );
@@ -2151,10 +2206,12 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             [
               'Materiales: ${rows.length}',
               '',
-              ...rows.take(300).map(
-                (row) =>
-                    '#${row.id} · ${row.mesh} → ${row.texture} · alpha=${row.alpha}',
-              ),
+              ...rows
+                  .take(300)
+                  .map(
+                    (row) =>
+                        '#${row.id} · ${row.mesh} → ${row.texture} · alpha=${row.alpha}',
+                  ),
               if (rows.length > 300) '… ${rows.length - 300} registros más …',
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
@@ -2166,11 +2223,13 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             [
               'Modelos de objetos/armas: ${rows.length}',
               '',
-              ...rows.take(300).map(
-                (row) =>
-                    '#${row.id} · ${row.mesh} → ${row.texture} · '
-                    'transformaciones=${row.transforms.length}',
-              ),
+              ...rows
+                  .take(300)
+                  .map(
+                    (row) =>
+                        '#${row.id} · ${row.mesh} → ${row.texture} · '
+                        'transformaciones=${row.transforms.length}',
+                  ),
               if (rows.length > 300) '… ${rows.length - 300} registros más …',
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
@@ -2182,12 +2241,132 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             [
               'Criaturas/modelos: ${rows.length}',
               '',
-              ...rows.take(300).map(
-                (row) =>
-                    '#${row.id} · ${row.name} · partes=${row.parts.length} · '
-                    'animaciones=${row.animations.length}',
-              ),
+              ...rows
+                  .take(300)
+                  .map(
+                    (row) =>
+                        '#${row.id} · ${row.name} · partes=${row.parts.length} · '
+                        'animaciones=${row.animations.length}',
+                  ),
               if (rows.length > 300) '… ${rows.length - 300} registros más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'WTR':
+          final water = WtrData.parse(result.bytes, path);
+          preview = SelectableText(
+            [
+              'Tabla de agua WTR',
+              '',
+              'Tile size: ${water.tileSize}',
+              'Texturas: ${water.textures.length}',
+              ...water.textures.take(200).map((texture) => '• $texture'),
+              if (water.textures.length > 200)
+                '… ${water.textures.length - 200} texturas más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'MANI':
+          final mani = ManiData.parse(result.bytes, path);
+          preview = SelectableText(
+            'MAni válida\n\n'
+            'Versión: 0x${mani.version.toRadixString(16)}\n'
+            'Rotación habilitada: ${mani.enableRotation}\n'
+            'Rotación: ${mani.rotation.x.toStringAsFixed(4)}, '
+            '${mani.rotation.y.toStringAsFixed(4)}, '
+            '${mani.rotation.z.toStringAsFixed(4)}\n'
+            'Velocidad: ${mani.animationSpeed.toStringAsFixed(4)}',
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'VANI':
+          final vani = VaniData.parse(result.bytes, path);
+          preview = SelectableText(
+            [
+              'VAni válida',
+              '',
+              'Frames: ${vani.frameCount}',
+              'Mallas: ${vani.meshes.length}',
+              'Radio: ${vani.radius.toStringAsFixed(3)}',
+              ...vani.meshes
+                  .take(100)
+                  .map(
+                    (mesh) =>
+                        '• ${mesh.texture} · ${mesh.vertices} vértices · '
+                        '${mesh.indices.length ~/ 3} triángulos · '
+                        '${mesh.frameCount} frames',
+                  ),
+              if (vani.meshes.length > 100)
+                '… ${vani.meshes.length - 100} mallas más …',
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'SMOD':
+          final smod = readSmodData(result.bytes, path);
+          final triangles = smod.collisions.fold<int>(
+            0,
+            (sum, collision) => sum + collision.triangles,
+          );
+          preview = SelectableText(
+            [
+              'SMOD válido',
+              '',
+              'Partes visuales: ${smod.parts.length}',
+              'Mallas de colisión: ${smod.collisions.length}',
+              'Triángulos de colisión: $triangles',
+              'Radio: ${smod.radius.toStringAsFixed(3)}',
+              ...smod.parts
+                  .take(100)
+                  .map(
+                    (part) =>
+                        '• ${part.texture} · ${part.mesh.vertices} vértices · '
+                        '${part.mesh.triangles} triángulos',
+                  ),
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'DG':
+          final dg = DgData.parse(result.bytes, path);
+          final triangles = dg.collisions.fold<int>(
+            0,
+            (sum, collision) => sum + collision.triangles,
+          );
+          preview = SelectableText(
+            [
+              'Dungeon DG válido',
+              '',
+              'Partes visuales: ${dg.parts.length}',
+              'Lightmaps declarados: ${dg.lightmapCount}',
+              'Mallas de colisión: ${dg.collisions.length}',
+              'Triángulos de colisión: $triangles',
+              ...dg.parts
+                  .take(100)
+                  .map(
+                    (part) =>
+                        '• ${part.texture} · ${part.mesh.vertices} vértices · '
+                        '${part.mesh.triangles} triángulos',
+                  ),
+            ].join('\n'),
+            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+          );
+          break;
+        case 'SVMAP':
+          final map = SvmapData.parse(result.bytes, path);
+          preview = SelectableText(
+            [
+              'SVMAP válido',
+              '',
+              'Tamaño de mapa: ${map.mapSize}',
+              'Tamaño de celda: ${map.cellSize}',
+              'NPC/rutas: ${map.npcs.length}',
+              'Áreas de mobs: ${map.mobAreas.length}',
+              'Portales: ${map.portals.length}',
+              'Spawns: ${map.spawns.length}',
+              'Áreas con nombre: ${map.namedAreas.length}',
             ].join('\n'),
             style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
           );
@@ -2293,9 +2472,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                                       ),
                                     ),
                                   ),
-                                  for (var col = 0;
-                                      col < visibleColumns;
-                                      col++)
+                                  for (var col = 0; col < visibleColumns; col++)
                                     SizedBox(
                                       width: 150,
                                       child: Padding(
@@ -2349,9 +2526,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                                     ),
                                   ),
                                 ),
-                                for (var col = 0;
-                                    col < visibleColumns;
-                                    col++)
+                                for (var col = 0; col < visibleColumns; col++)
                                   SizedBox(
                                     width: 150,
                                     child: Padding(
@@ -2542,10 +2717,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => DataEditorPage(
-            library: library,
-            initialPath: path,
-          ),
+          builder: (_) => DataEditorPage(library: library, initialPath: path),
         ),
       );
     } finally {
@@ -2568,9 +2740,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
 
     final path = _editableLibraryPath(record);
-    final picked = await openFile(
-      confirmButtonText: 'Usar como reemplazo',
-    );
+    final picked = await openFile(confirmButtonText: 'Usar como reemplazo');
     if (picked == null) return;
 
     final replacementFile = File(picked.path);
@@ -2618,10 +2788,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       },
     );
     try {
-      final current = await library.read(
-        path,
-        limit: maxReplacementBytes,
-      );
+      final current = await library.read(path, limit: maxReplacementBytes);
       final expectedHash = sha256.convert(current).toString();
       await library.writeSpkOverlay(
         {path: replacementBytes},
@@ -2671,8 +2838,14 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
       if (!candidates.contains(path.toLowerCase())) continue;
       try {
         final result = await source.readEntry(record);
-        if (!const {'DDS', 'PNG', 'BMP', 'JPEG', 'GIF', 'TGA'}
-            .contains(result.format)) {
+        if (!const {
+          'DDS',
+          'PNG',
+          'BMP',
+          'JPEG',
+          'GIF',
+          'TGA',
+        }.contains(result.format)) {
           continue;
         }
         return Pixels.decode(result.bytes, path).png();
@@ -2682,6 +2855,150 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
     }
     return null;
   }
+
+  File? _referenceFileFor(SpkRecord record) {
+    final root = referenceDataDirectory;
+    final relative = source.names[record.entryId];
+    if (root == null || relative == null || relative.isEmpty) return null;
+    final segments = relative.replaceAll('\\', '/').split('/');
+    final candidate = p.normalize(p.joinAll([root.path, ...segments]));
+    final normalizedRoot = p.normalize(root.path);
+    if (candidate != normalizedRoot && !p.isWithin(normalizedRoot, candidate)) {
+      return null;
+    }
+    return File(candidate);
+  }
+
+  Future<Uint8List?> _matchingReferenceTexturePng(
+    String meshPath,
+    String meshFormat,
+  ) async {
+    final root = referenceDataDirectory;
+    if (root == null || (meshFormat != '3DC' && meshFormat != '3DO')) {
+      return null;
+    }
+    final normalized = meshPath.replaceAll('\\', '/');
+    final dot = normalized.lastIndexOf('.');
+    if (dot < 0) return null;
+    final stem = normalized.substring(0, dot);
+    final stems = <String>{
+      stem,
+      if (normalized.toLowerCase().contains('/3dc/'))
+        stem.replaceFirst(RegExp(r'/3dc/', caseSensitive: false), '/DDS/'),
+      if (normalized.toLowerCase().contains('/3do/'))
+        stem.replaceFirst(RegExp(r'/3do/', caseSensitive: false), '/DDS/'),
+    };
+    final candidates = <String>[
+      for (final value in stems) ...['$value.dds', '$value.tga'],
+    ];
+
+    for (final relative in candidates) {
+      final file = File(
+        p.normalize(p.joinAll([root.path, ...relative.split('/')])),
+      );
+      if (!await file.exists()) continue;
+      try {
+        if (await file.length() > 64 * 1024 * 1024) continue;
+        final bytes = await file.readAsBytes();
+        final format = SpkArchiveSource.detectFormat(bytes);
+        if (!const {
+          'DDS',
+          'PNG',
+          'BMP',
+          'JPEG',
+          'GIF',
+          'TGA',
+        }.contains(format)) {
+          continue;
+        }
+        return Pixels.decode(bytes, relative).png();
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<void> inspectReferenceResource(
+    SpkRecord record,
+  ) => runAction(() async {
+    final file = _referenceFileFor(record);
+    if (file == null || !await file.exists()) {
+      throw const SpkFailure(
+        'SPK_REFERENCE_FILE_MISSING',
+        'La ruta inferida no existe dentro de la DATA de referencia seleccionada.',
+      );
+    }
+    const maxBytes = 128 * 1024 * 1024;
+    final length = await file.length();
+    if (length > maxBytes) {
+      throw const FormatException(
+        'La copia de referencia supera el límite de inspección de 128 MiB.',
+      );
+    }
+    final bytes = await file.readAsBytes();
+    final format = SpkArchiveSource.detectFormat(bytes);
+    final result = SpkReadResult(record, bytes, format);
+    if (!mounted) return;
+    final candidatePath = source.names[record.entryId]!;
+    final meshTexturePng = await _matchingReferenceTexturePng(
+      candidatePath,
+      format,
+    );
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Referencia · ${fileName(record)}'),
+        content: SizedBox(
+          width: 820,
+          height: 620,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xff2a2115),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xff6f542c)),
+                ),
+                child: const Text(
+                  'COPIA DATA DE REFERENCIA · este visor NO afirma que el '
+                  'payload del SPK esté descifrado ni permite escribirlo. '
+                  'Sirve para trabajar visualmente mientras AutoPerfil cierra '
+                  'la clave real del contenedor.',
+                  style: TextStyle(fontSize: 10, color: Color(0xffe1b86e)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                'ID SPK: ${record.idHex} · Formato referencia: $format · '
+                'Bytes: ${bytesLabel(bytes.length)}\n'
+                'SHA-256 referencia: ${sha256.convert(bytes)}\n'
+                'Ruta candidata: $candidatePath',
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
+              ),
+              const Divider(height: 20),
+              Expanded(
+                child: _inspectionPreview(
+                  result,
+                  candidatePath,
+                  meshTexturePng: meshTexturePng,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  });
 
   Future<void> inspectResource(SpkRecord record) => runAction(() async {
     if (!source.canReadRecord(record)) {
@@ -2862,9 +3179,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               SizedBox(
                 width: 95,
                 child: Text(
-                  source.canReadSimpleResources
-                      ? 'Formato'
-                      : 'Tipo estimado',
+                  source.canReadSimpleResources ? 'Formato' : 'Tipo estimado',
                 ),
               ),
               const SizedBox(width: 105, child: Text('Almacenado')),
@@ -2923,6 +3238,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     ? null
                     : source.canReadRecord(record)
                     ? () => inspectResource(record)
+                    : referenceDataDirectory != null &&
+                          source.names[record.entryId] != null
+                    ? () => inspectReferenceResource(record)
                     : captureResourceProfile,
                 child: Container(
                   color: active ? const Color(0xff29384f) : null,
@@ -2954,8 +3272,9 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                         child: Text(
                           (() {
                             final base = fileName(record);
-                            final inferred =
-                                source.names.inferredPath(record.entryId);
+                            final inferred = source.names.inferredPath(
+                              record.entryId,
+                            );
                             if (inferred == null) return base;
                             final key = inferred
                                 .replaceAll('\\', '/')
@@ -3098,10 +3417,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                   : 'PAYLOAD NO LEÍDO: la ruta mostrada es '
                         '${source.nameConfidence(record)}. Hasta autenticar '
                         'el payload no se habilitan visor ni edición.',
-              style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xffd9b66f),
-              ),
+              style: const TextStyle(fontSize: 10, color: Color(0xffd9b66f)),
             ),
           ),
           const SizedBox(height: 7),
@@ -3110,6 +3426,15 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
             icon: const Icon(Icons.key_outlined, size: 17),
             label: const Text('Desbloquear con AutoPerfil SPK'),
           ),
+          if (referenceDataDirectory != null &&
+              source.names[record.entryId] != null) ...[
+            const SizedBox(height: 7),
+            OutlinedButton.icon(
+              onPressed: busy ? null : () => inspectReferenceResource(record),
+              icon: const Icon(Icons.visibility_outlined, size: 17),
+              label: const Text('Ver copia DATA de referencia'),
+            ),
+          ],
         ] else
           FilledButton.tonalIcon(
             onPressed: busy ? null : () => inspectResource(record),
@@ -3358,9 +3683,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: const BoxDecoration(
                 color: Color(0xff12251d),
-                border: Border(
-                  bottom: BorderSide(color: Color(0xff285c46)),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xff285c46))),
               ),
               child: Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -3392,10 +3715,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'BinarySData/DBItemData.SData',
-                              'Objetos / trade',
-                              fieldGroup: 'Requisitos',
-                            ),
+                            'BinarySData/DBItemData.SData',
+                            'Objetos / trade',
+                            fieldGroup: 'Requisitos',
+                          ),
                     icon: const Icon(Icons.inventory_2_outlined, size: 16),
                     label: const Text('Objetos / trade'),
                   ),
@@ -3403,10 +3726,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'BinarySData/DBMonsterData.SData',
-                              'Mobs / drops',
-                              fieldGroup: 'Botín y oro',
-                            ),
+                            'BinarySData/DBMonsterData.SData',
+                            'Mobs / drops',
+                            fieldGroup: 'Botín y oro',
+                          ),
                     icon: const Icon(Icons.pest_control_outlined, size: 16),
                     label: const Text('Mobs / drops'),
                   ),
@@ -3414,10 +3737,10 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy
                         ? null
                         : () => openCoreTableEditor(
-                              'BinarySData/DBSkillData.SData',
-                              'Skills',
-                              fieldGroup: 'Habilidades',
-                            ),
+                            'BinarySData/DBSkillData.SData',
+                            'Skills',
+                            fieldGroup: 'Habilidades',
+                          ),
                     icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
                     label: const Text('Skills'),
                   ),
@@ -3436,9 +3759,7 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: const BoxDecoration(
                 color: Color(0xff2a2115),
-                border: Border(
-                  bottom: BorderSide(color: Color(0xff6f542c)),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xff6f542c))),
               ),
               child: Row(
                 children: [
@@ -3461,6 +3782,49 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                     onPressed: busy ? null : captureResourceProfile,
                     icon: const Icon(Icons.security_outlined, size: 16),
                     label: const Text('Desbloquear con AutoPerfil'),
+                  ),
+                  const SizedBox(width: 6),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : chooseReferenceDataDirectory,
+                    icon: const Icon(Icons.folder_open_outlined, size: 16),
+                    label: Text(
+                      referenceDataDirectory == null
+                          ? 'Usar DATA de referencia'
+                          : 'Cambiar DATA de referencia',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (referenceDataDirectory != null)
+            Container(
+              constraints: const BoxConstraints(minHeight: 34),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xff172337),
+                border: Border(bottom: BorderSide(color: Color(0xff365070))),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.visibility_outlined,
+                    size: 16,
+                    color: Color(0xff9dbbdf),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'PREVIEW DE REFERENCIA ACTIVO: doble clic en una ruta '
+                      'candidata para visualizar su archivo de la DATA externa. '
+                      'El SPK sigue fail-closed hasta autenticar sus payloads.',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => setState(() => referenceDataDirectory = null),
+                    child: const Text('Desactivar'),
                   ),
                 ],
               ),
@@ -3535,17 +3899,11 @@ class _SpkArchiveBrowserState extends State<SpkArchiveBrowserPage> {
                       hintText: 'Formato',
                     ),
                     items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('Todos'),
-                      ),
+                      const DropdownMenuItem(value: '', child: Text('Todos')),
                       for (final value in availableFormatFilters())
                         DropdownMenuItem(
                           value: value,
-                          child: Text(
-                            value,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(value, overflow: TextOverflow.ellipsis),
                         ),
                     ],
                     onChanged: (value) =>

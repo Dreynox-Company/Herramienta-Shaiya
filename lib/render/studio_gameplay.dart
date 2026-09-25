@@ -317,14 +317,32 @@ extension StudioGameplay on StudioScene {
     final delta = _frameAccumulator.clamp(0.0, .10);
     _frameAccumulator = 0;
     final actor = character;
+    final v3WasLocked = flightV3CombatLock;
+    if (_flightV3CombatReturnRemaining > 0) {
+      _flightV3CombatReturnRemaining = math.max(
+        0,
+        _flightV3CombatReturnRemaining - delta,
+      );
+    }
     flightState.step(
       delta,
       eligible: flightAvailable,
-      inCombat: combat.inGuard,
+      inCombat: flightCombatLock,
       hoverHeight: hoverOffset,
     );
+    if (v3WasLocked &&
+        !flightV3CombatLock &&
+        flightEnabled &&
+        wing != null &&
+        mount == null &&
+        flightState.grounded &&
+        !flightBodyTransitionActive) {
+      startFlightV3CombatTakeoff();
+    }
     final pending = flightState.pendingTarget;
-    if (pending != null && flightState.grounded) {
+    if (pending != null &&
+        flightState.grounded &&
+        !flightBodyTransitionActive) {
       flightState.cancel();
       final selected = combat.target;
       if (game.opponents.containsKey(pending) &&
@@ -392,6 +410,7 @@ extension StudioGameplay on StudioScene {
         (actor.clip != desired || !actor.playing || !actor.loop)) {
       applyLocomotion(movementTransitions.requested);
     }
+    _syncWingMotion(moving);
     if (actor?.headLook != null) {
       actor!.headTracking = headTracking && combat.playerHealth > 0;
       actor.headLook!.step(
@@ -484,7 +503,19 @@ extension StudioGameplay on StudioScene {
     updateSelectionRing();
     combat.step(delta, enemyDistance);
     if (_lastGuard != combat.inGuard) {
+      final wasGuarding = _lastGuard;
       _lastGuard = combat.inGuard;
+      if (wasGuarding &&
+          !combat.inGuard &&
+          !flightV3Compatible &&
+          flightEnabled &&
+          wing != null &&
+          mount == null &&
+          flightState.grounded) {
+        // Legacy supplemental flight resumes from the original guard timeout.
+        // Flight V3 uses its own source-defined 5 s post-combat timer above.
+        refreshIdle();
+      }
       refreshIdle();
       movementTransitions.invalidate();
       if (!moving &&

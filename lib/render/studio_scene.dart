@@ -13,6 +13,11 @@ import '../core/locomotion.dart';
 import '../core/pose_layers.dart';
 import '../core/rig_anchors.dart';
 import '../core/flight_transition.dart';
+import '../core/flight_v3_bundle.dart';
+import '../core/wing_motion.dart';
+import '../core/wing_position.dart';
+import '../core/vehicle_position.dart';
+import '../core/mon_editor.dart';
 import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
@@ -94,7 +99,11 @@ class Actor {
   SurfaceAnchor? seat;
   int pelvisBone = 1;
   final Map<String, ClipData> mountedAttacks = {};
+  final Map<int, ClipData> riderMotions = {};
   final List<RenderPart> parts = [];
+  ClipData? _afterClip;
+  double _afterClipTime = 0;
+  bool _afterClipLoop = true;
   ClipData? clip,
       idle,
       normal,
@@ -134,13 +143,27 @@ class Actor {
     _blendTime += dt;
     if (_blendTime >= .18) _blendFrom = null;
     if (playing) time += dt * speed;
-    if (!loop && clip != null && time > clip!.duration && idle != null) {
-      play(idle!);
+    if (!loop && clip != null && time > clip!.duration) {
+      final next = _afterClip;
+      if (next != null) {
+        final phase = _afterClipTime;
+        final repeat = _afterClipLoop;
+        _afterClip = null;
+        _afterClipTime = 0;
+        _afterClipLoop = true;
+        play(next, repeat: repeat);
+        time = repeat ? phase % next.duration : phase.clamp(0.0, next.duration);
+      } else if (idle != null) {
+        play(idle!);
+      }
     }
     pose();
   }
 
   void play(ClipData c, {bool repeat = true}) {
+    _afterClip = null;
+    _afterClipTime = 0;
+    _afterClipLoop = true;
     if (clip != c && _rawPose.length == c.bones.length) {
       _blendFrom = _rawPose.map((m) => m.clone()).toList();
       _blendTime = 0;
@@ -150,6 +173,18 @@ class Actor {
     loop = repeat;
     playing = true;
     pose();
+  }
+
+  void playTransition(
+    ClipData transition,
+    ClipData destination, {
+    double destinationPhase = 0,
+    bool destinationLoop = true,
+  }) {
+    play(transition, repeat: false);
+    _afterClip = destination;
+    _afterClipTime = destinationPhase.isFinite ? destinationPhase : 0;
+    _afterClipLoop = destinationLoop;
   }
 
   int get requiredBones =>
@@ -186,16 +221,754 @@ class StudioScene extends ChangeNotifier {
   Attachment? shieldAttachment;
   CharacterClass? selectedClass;
   ExtraMotionLibrary? extraMotions;
+  FlightV3Bundle? flightV3;
   final FlightTransition flightState = FlightTransition();
-  bool flightEnabled = false, headTracking = true, inspectAnyEquipment = false;
-  double hoverOffset = .38, wingYaw = 0;
-  final Map<String, ({double height, double depth, double size, double yaw})>
+  ClipData? _flightBodyTransition;
+  bool flightEnabled = false,
+      wingAutoMotion = true,
+      headTracking = true,
+      inspectAnyEquipment = false;
+  WingMotionPhase? _wingMotionPhase;
+  double hoverOffset = .38;
+  double wingOffsetX = 0,
+      wingOffsetY = 1.3,
+      wingOffsetZ = .25,
+      wingRotX = 0,
+      wingRotY = 0,
+      wingRotZ = 0,
+      wingScaleX = 1,
+      wingScaleY = 1,
+      wingScaleZ = 1;
+  bool wingMirrorX = false, wingMirrorY = false, wingMirrorZ = false;
+  // Backward-compatible scene-profile aliases. Legacy scenes store yaw in
+  // radians plus one uniform scale; the new native editor stores full Euler
+  // degrees and per-axis scale.
+  double get wingYaw => wingRotY * math.pi / 180;
+  set wingYaw(double radians) => wingRotY = radians * 180 / math.pi;
+
+  double get wingHeight => wingOffsetY;
+  set wingHeight(double value) => wingOffsetY = value;
+
+  double get wingDepth => wingOffsetZ;
+  set wingDepth(double value) => wingOffsetZ = value;
+
+  double get wingSize => (wingScaleX + wingScaleY + wingScaleZ) / 3;
+  set wingSize(double value) {
+    wingScaleX = value;
+    wingScaleY = value;
+    wingScaleZ = value;
+  }
+
+  final Map<
+    String,
+    ({
+      double x,
+      double y,
+      double z,
+      double rotX,
+      double rotY,
+      double rotZ,
+      double scaleX,
+      double scaleY,
+      double scaleZ,
+      bool mirrorX,
+      bool mirrorY,
+      bool mirrorZ,
+    })
+  >
   _wingSettings = {};
   bool _lastGuard = false;
+  double _flightV3CombatReturnRemaining = 0;
+  String? flightV3PreviewId;
   CharacterClass get characterClass =>
       selectedClass ?? classesFor(appearance?.archetype.id ?? 'humf').first;
   List<CharacterClass> get availableClasses =>
       classesFor(appearance?.archetype.id ?? 'humf');
+  String get wingMotionStatus => _wingMotionPhase == null
+      ? 'Sin sincronización automática'
+      : wingMotionLabel(_wingMotionPhase!);
+
+  String _wingBindingKey(CreatureRecord record, {Archetype? archetype}) {
+    final a = archetype ?? appearance?.archetype;
+    final identity = a == null ? 'sin-personaje' : '${a.race}/${a.id}';
+    return '$identity|${characterClass.id}|${record.source}#${record.id}';
+  }
+
+  ({int family, int job, int sex})? _wingIdentity() {
+    final a = appearance?.archetype;
+    if (a == null) return null;
+    final family = switch (a.race.toLowerCase()) {
+      'human' => 0,
+      'elf' => 1,
+      'vile' => 2,
+      'deatheater' => 3,
+      _ => -1,
+    };
+    final job = switch (characterClass.id) {
+      'fighter' || 'warrior' => 0,
+      'defender' || 'guardian' => 1,
+      'ranger' || 'assassin' => 2,
+      'archer' || 'hunter' => 3,
+      'mage' || 'pagan' => 4,
+      'priest' || 'oracle' => 5,
+      _ => -1,
+    };
+    if (family < 0 || job < 0) return null;
+    return (family: family, job: job, sex: a.female ? 1 : 0);
+  }
+
+  WingPositionProfile? _resolveWingPosition({bool verifiedOnly = false}) {
+    final identity = _wingIdentity();
+    if (identity == null) return null;
+    if (!verifiedOnly) {
+      final fromData = catalog?.wingPositions?.resolve(
+        identity.family,
+        identity.job,
+        identity.sex,
+      );
+      if (fromData != null) return fromData;
+    }
+    return WingPositionDocument.verifiedResolve(
+      identity.family,
+      identity.job,
+      identity.sex,
+    );
+  }
+
+  WingPositionProfile? get activeWingPositionProfile => _resolveWingPosition();
+
+  bool get wingPositionFileAvailable => catalog?.wingPositions != null;
+
+  bool get wingPositionUsesMountedData {
+    final identity = _wingIdentity();
+    if (identity == null) return false;
+    return catalog?.wingPositions?.resolve(
+          identity.family,
+          identity.job,
+          identity.sex,
+        ) !=
+        null;
+  }
+
+  String get wingPositionProfileLabel {
+    final identity = _wingIdentity();
+    final profile = activeWingPositionProfile;
+    if (identity == null || profile == null) return 'Sin perfil WingPosition';
+    final source = wingPositionUsesMountedData
+        ? (catalog!.wingPositions!.matchesVerifiedSource
+              ? 'DATA verificada'
+              : 'DATA montada')
+        : 'baseline verificado';
+    return '${profile.identityLabel} · '
+        'F${identity.family}/J${identity.job}/S${identity.sex} · '
+        'hueso ${profile.boneIndex} · $source';
+  }
+
+  int get wingBoneIndex =>
+      character?.wingBone ?? activeWingPositionProfile?.boneIndex ?? 4;
+
+  int get wingBoneCount => character?.world.length ?? 0;
+
+  bool get wingBoneWritable =>
+      wingPositionUsesMountedData &&
+      (activeWingPositionProfile?.boneWritable ?? false);
+
+  void setWingBoneIndex(int value) {
+    final char = character;
+    if (char == null) {
+      throw const FormatException(
+        'Carga un personaje antes de cambiar el hueso.',
+      );
+    }
+    if (!wingBoneWritable) {
+      throw const FormatException(
+        'Este WingPosition.xml no expone un campo de hueso editable.',
+      );
+    }
+    if (value < 0 || value >= char.world.length) {
+      throw FormatException(
+        'Hueso de ala fuera de rango: $value · rig 0..${char.world.length - 1}.',
+      );
+    }
+    char.wingBone = value;
+    char.wingReference = v.Matrix4.inverted(char.world[value]);
+    changed();
+  }
+
+  Map<String, Object> get wingTransformSnapshot => {
+    'schema': 1,
+    'kind': 'shaiya-studio-wing-transform',
+    'position': {'x': wingOffsetX, 'y': wingOffsetY, 'z': wingOffsetZ},
+    'rotationDegrees': {'x': wingRotX, 'y': wingRotY, 'z': wingRotZ},
+    'scale': {'x': wingScaleX, 'y': wingScaleY, 'z': wingScaleZ},
+    'mirror': {'x': wingMirrorX, 'y': wingMirrorY, 'z': wingMirrorZ},
+    'boneIndex': wingBoneIndex,
+    'nativeWritable': {
+      'positionRotation': wingPositionFileAvailable,
+      'bone': wingBoneWritable,
+      'scaleMirror': false,
+    },
+  };
+
+  void applyWingTransformSnapshot(Map<String, dynamic> raw) {
+    double number(Map<dynamic, dynamic>? map, String key, double fallback) {
+      final value = map?[key];
+      if (value is num && value.toDouble().isFinite) return value.toDouble();
+      return fallback;
+    }
+
+    bool flag(Map<dynamic, dynamic>? map, String key, bool fallback) {
+      final value = map?[key];
+      return value is bool ? value : fallback;
+    }
+
+    final position = raw['position'] is Map ? raw['position'] as Map : null;
+    final rotation = raw['rotationDegrees'] is Map
+        ? raw['rotationDegrees'] as Map
+        : null;
+    final scale = raw['scale'] is Map ? raw['scale'] as Map : null;
+    final mirror = raw['mirror'] is Map ? raw['mirror'] as Map : null;
+    wingOffsetX = number(position, 'x', wingOffsetX).clamp(-100.0, 100.0);
+    wingOffsetY = number(position, 'y', wingOffsetY).clamp(-100.0, 100.0);
+    wingOffsetZ = number(position, 'z', wingOffsetZ).clamp(-100.0, 100.0);
+    wingRotX = number(rotation, 'x', wingRotX).clamp(-3600.0, 3600.0);
+    wingRotY = number(rotation, 'y', wingRotY).clamp(-3600.0, 3600.0);
+    wingRotZ = number(rotation, 'z', wingRotZ).clamp(-3600.0, 3600.0);
+    wingScaleX = number(scale, 'x', wingScaleX).clamp(.01, 100.0);
+    wingScaleY = number(scale, 'y', wingScaleY).clamp(.01, 100.0);
+    wingScaleZ = number(scale, 'z', wingScaleZ).clamp(.01, 100.0);
+    wingMirrorX = flag(mirror, 'x', wingMirrorX);
+    wingMirrorY = flag(mirror, 'y', wingMirrorY);
+    wingMirrorZ = flag(mirror, 'z', wingMirrorZ);
+    final bone = raw['boneIndex'];
+    if (bone is num && wingBoneWritable) {
+      setWingBoneIndex(bone.toInt());
+    }
+    changed();
+  }
+
+  void resetWingPreviewOnlyTransform() {
+    wingScaleX = wingScaleY = wingScaleZ = 1;
+    wingMirrorX = wingMirrorY = wingMirrorZ = false;
+    changed();
+  }
+
+  void _applyWingProfile(WingPositionProfile profile) {
+    wingOffsetX = profile.leftRight;
+    wingOffsetY = profile.upDown;
+    wingOffsetZ = profile.frontBack;
+    wingRotX = profile.rotX;
+    wingRotY = profile.rotY;
+    wingRotZ = profile.rotZ;
+    final char = character;
+    if (char != null &&
+        profile.boneIndex >= 0 &&
+        profile.boneIndex < char.world.length) {
+      char.wingBone = profile.boneIndex;
+      char.wingReference = v.Matrix4.inverted(char.world[profile.boneIndex]);
+    }
+  }
+
+  void _rememberWingSettings() {
+    final record = wingRecord;
+    if (record == null) return;
+    _wingSettings[_wingBindingKey(record)] = (
+      x: wingOffsetX,
+      y: wingOffsetY,
+      z: wingOffsetZ,
+      rotX: wingRotX,
+      rotY: wingRotY,
+      rotZ: wingRotZ,
+      scaleX: wingScaleX,
+      scaleY: wingScaleY,
+      scaleZ: wingScaleZ,
+      mirrorX: wingMirrorX,
+      mirrorY: wingMirrorY,
+      mirrorZ: wingMirrorZ,
+    );
+  }
+
+  void _restoreWingSettings() {
+    final record = wingRecord, char = character;
+    if (record == null || char == null) return;
+    final cfg = _wingSettings[_wingBindingKey(record)];
+    final profile = _resolveWingPosition();
+    if (cfg != null) {
+      wingOffsetX = cfg.x;
+      wingOffsetY = cfg.y;
+      wingOffsetZ = cfg.z;
+      wingRotX = cfg.rotX;
+      wingRotY = cfg.rotY;
+      wingRotZ = cfg.rotZ;
+      wingScaleX = cfg.scaleX;
+      wingScaleY = cfg.scaleY;
+      wingScaleZ = cfg.scaleZ;
+      wingMirrorX = cfg.mirrorX;
+      wingMirrorY = cfg.mirrorY;
+      wingMirrorZ = cfg.mirrorZ;
+      if (profile != null &&
+          profile.boneIndex >= 0 &&
+          profile.boneIndex < char.world.length) {
+        char.wingBone = profile.boneIndex;
+        char.wingReference = v.Matrix4.inverted(char.world[profile.boneIndex]);
+      }
+      return;
+    }
+    if (profile != null) {
+      _applyWingProfile(profile);
+      wingScaleX = 1;
+      wingScaleY = 1;
+      wingScaleZ = 1;
+      wingMirrorX = false;
+      wingMirrorY = false;
+      wingMirrorZ = false;
+      return;
+    }
+
+    final bone = char.wingBone;
+    final reference = char.normal?.pose(0);
+    final p = bone != null && reference != null && bone < reference.length
+        ? reference[bone].getTranslation()
+        : v.Vector3(0, 1.3, 0);
+    wingOffsetX = 0;
+    wingOffsetY = p.y;
+    wingOffsetZ = p.z + .08;
+    wingRotX = 0;
+    wingRotY = 0;
+    wingRotZ = 0;
+    wingScaleX = 1;
+    wingScaleY = 1;
+    wingScaleZ = 1;
+    wingMirrorX = false;
+    wingMirrorY = false;
+    wingMirrorZ = false;
+  }
+
+  List<String> get wingMonAnimationSlots => monAnimationSlots;
+
+  List<String> get wingMonAnimationCandidates {
+    final record = wingRecord;
+    final c = catalog;
+    if (record == null || c == null) return const [];
+    return c.wingAnimationCandidates(record);
+  }
+
+  String? wingMonAnimation(String slot) => wingRecord?.animations[slot];
+  bool wingMonAnimationUsesLoad(String slot) =>
+      isMonLoadSentinel(wingMonAnimation(slot));
+
+  String? wingMonAnimationCandidate(String slot) {
+    final raw = wingMonAnimation(slot);
+    if (raw == null || raw.isEmpty || isMonLoadSentinel(raw)) return null;
+    final name = baseName(raw).toLowerCase();
+    return wingMonAnimationCandidates
+        .where((p) => baseName(p).toLowerCase() == name)
+        .firstOrNull;
+  }
+
+  Future<void> saveWingMonAnimation(String slot, String animationPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingAnimation(record, slot, animationPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · $slot = '
+      '${baseName(animationPath)} · MON guardado y revalidado.',
+    );
+  }
+
+  List<String> get wingMonSoundSlots => monSoundSlots;
+  List<String> get wingMonEffectSlots => monEffectSlots;
+
+  List<String> get wingMonSoundCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out =
+        c.library.files.keys
+            .where((path) => path.endsWith('.wav') || path.endsWith('.ogg'))
+            .toList()
+          ..sort();
+    return out;
+  }
+
+  List<String> get wingMonEffectCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out =
+        c.library.files.keys
+            .where((path) => path.endsWith('.eft') || path.endsWith('.3de'))
+            .toList()
+          ..sort();
+    return out;
+  }
+
+  List<String> get wingMonMeshCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out =
+        c.library.files.keys
+            .where(
+              (path) =>
+                  path.startsWith('character/wing/') &&
+                  (path.endsWith('.3dc') || path.endsWith('.3do')),
+            )
+            .toList()
+          ..sort();
+    return out;
+  }
+
+  List<String> get wingMonTextureCandidates {
+    final c = catalog;
+    if (c == null) return const [];
+    final out =
+        c.library.files.keys
+            .where(
+              (path) =>
+                  path.startsWith('character/wing/') &&
+                  (path.endsWith('.dds') ||
+                      path.endsWith('.tga') ||
+                      path.endsWith('.png') ||
+                      path.endsWith('.bmp')),
+            )
+            .toList()
+          ..sort();
+    return out;
+  }
+
+  String? wingMonSound(String slot) => wingRecord?.sounds[slot];
+  String? wingMonEffect(String slot) => wingRecord?.effects[slot];
+  String? get wingMonAttachedEffect => wingRecord?.effects['Adjunto'];
+  bool wingMonSoundUsesLoad(String slot) =>
+      isMonLoadSentinel(wingMonSound(slot));
+  bool wingMonEffectUsesLoad(String slot) =>
+      isMonLoadSentinel(wingMonEffect(slot));
+  bool get wingMonAttachedEffectUsesLoad =>
+      isMonLoadSentinel(wingMonAttachedEffect);
+
+  String? wingMonSoundCandidate(String slot) =>
+      _candidateByBase(wingMonSound(slot), wingMonSoundCandidates);
+
+  String? wingMonEffectCandidate(String slot) =>
+      _candidateByBase(wingMonEffect(slot), wingMonEffectCandidates);
+
+  String? get wingMonAttachedEffectCandidate =>
+      _candidateByBase(wingMonAttachedEffect, wingMonEffectCandidates);
+
+  List<MaterialRecord> get wingMonParts =>
+      wingRecord?.parts ?? const <MaterialRecord>[];
+
+  String? wingMonMeshCandidate(int partId) {
+    final parts = wingMonParts;
+    if (partId < 0 || partId >= parts.length) return null;
+    return _candidateByBase(parts[partId].mesh, wingMonMeshCandidates);
+  }
+
+  String? wingMonTextureCandidate(int partId) {
+    final parts = wingMonParts;
+    if (partId < 0 || partId >= parts.length) return null;
+    return _candidateByBase(parts[partId].texture, wingMonTextureCandidates);
+  }
+
+  String? _candidateByBase(String? raw, List<String> candidates) {
+    if (raw == null || raw.isEmpty || isMonLoadSentinel(raw)) return null;
+    final name = baseName(raw).toLowerCase();
+    return candidates
+        .where((path) => baseName(path).toLowerCase() == name)
+        .firstOrNull;
+  }
+
+  Future<void> saveWingMonSound(String slot, String soundPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingSound(record, slot, soundPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · sonido $slot = '
+      '${soundPath.isEmpty
+          ? 'vacío'
+          : isMonLoadSentinel(soundPath)
+          ? 'LOAD (nativo)'
+          : baseName(soundPath)} · MON revalidado.',
+    );
+  }
+
+  Future<void> saveWingMonEffect(String slot, String effectPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingEffect(record, slot, effectPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · efecto $slot = '
+      '${effectPath.isEmpty
+          ? 'vacío'
+          : isMonLoadSentinel(effectPath)
+          ? 'LOAD (nativo)'
+          : baseName(effectPath)} · MON revalidado.',
+    );
+  }
+
+  Future<void> saveWingMonAttachedEffect(String effectPath) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingAttachedEffect(record, effectPath);
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · efecto adjunto = '
+      '${effectPath.isEmpty
+          ? 'vacío'
+          : isMonLoadSentinel(effectPath)
+          ? 'LOAD (nativo)'
+          : baseName(effectPath)} · MON revalidado.',
+    );
+  }
+
+  Future<void> saveWingMonPart(
+    int partId, {
+    String? meshPath,
+    String? texturePath,
+  }) async {
+    final c = catalog;
+    final record = wingRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay un ala MON seleccionada.');
+    }
+    final updated = await c.saveWingPart(
+      record,
+      partId,
+      meshPath: meshPath,
+      texturePath: texturePath,
+    );
+    await selectCreature(updated, 'wing');
+    report(
+      '${updated.source} #${updated.id} · parte $partId actualizada y '
+      'revalidada.',
+    );
+  }
+
+  List<String> get mountMonAnimationSlots => monAnimationSlots;
+
+  List<String> get mountMonAnimationCandidates {
+    final record = mountRecord;
+    final c = catalog;
+    if (record == null || c == null) return const [];
+    final root = directoryName(record.source);
+    final prefix = '$root/ani/';
+    final out =
+        c.library.files.keys
+            .where((path) => path.startsWith(prefix) && path.endsWith('.ani'))
+            .toList()
+          ..sort();
+    return out;
+  }
+
+  String? mountMonAnimation(String slot) => mountRecord?.animations[slot];
+  bool mountMonAnimationUsesLoad(String slot) =>
+      isMonLoadSentinel(mountMonAnimation(slot));
+
+  String? mountMonAnimationCandidate(String slot) {
+    final raw = mountMonAnimation(slot);
+    if (raw == null || raw.isEmpty || isMonLoadSentinel(raw)) return null;
+    final name = baseName(raw).toLowerCase();
+    return mountMonAnimationCandidates
+        .where((path) => baseName(path).toLowerCase() == name)
+        .firstOrNull;
+  }
+
+  Future<void> saveMountMonAnimation(String slot, String animationPath) async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura MON seleccionada.');
+    }
+    final updated = await c.saveMountAnimation(record, slot, animationPath);
+    await selectCreature(updated, 'mount');
+    report(
+      '${updated.source} #${updated.id} · $slot = '
+      '${baseName(animationPath)} · Vehicle MON guardado y revalidado.',
+    );
+  }
+
+  List<String> get mountMonSoundSlots => monSoundSlots;
+  List<String> get mountMonEffectSlots => monEffectSlots;
+
+  List<String> get mountMonSoundCandidates => wingMonSoundCandidates;
+  List<String> get mountMonEffectCandidates => wingMonEffectCandidates;
+
+  String? mountMonSound(String slot) => mountRecord?.sounds[slot];
+  String? mountMonEffect(String slot) => mountRecord?.effects[slot];
+  bool mountMonSoundUsesLoad(String slot) =>
+      isMonLoadSentinel(mountMonSound(slot));
+  bool mountMonEffectUsesLoad(String slot) =>
+      isMonLoadSentinel(mountMonEffect(slot));
+
+  String? mountMonSoundCandidate(String slot) =>
+      _candidateByBase(mountMonSound(slot), mountMonSoundCandidates);
+
+  String? mountMonEffectCandidate(String slot) =>
+      _candidateByBase(mountMonEffect(slot), mountMonEffectCandidates);
+
+  Future<void> saveMountMonSound(String slot, String soundPath) async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura MON seleccionada.');
+    }
+    final updated = await c.saveMountSound(record, slot, soundPath);
+    await selectCreature(updated, 'mount');
+    report(
+      '${updated.source} #${updated.id} · sonido $slot actualizado y '
+      'Vehicle MON revalidado.',
+    );
+  }
+
+  Future<void> saveMountMonEffect(String slot, String effectPath) async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura MON seleccionada.');
+    }
+    final updated = await c.saveMountEffect(record, slot, effectPath);
+    await selectCreature(updated, 'mount');
+    report(
+      '${updated.source} #${updated.id} · efecto $slot actualizado y '
+      'Vehicle MON revalidado.',
+    );
+  }
+
+  Future<void> saveActiveWingPositionToData() async {
+    final identity = _wingIdentity();
+    final document = catalog?.wingPositions;
+    if (identity == null || document == null || catalog == null) {
+      throw const FormatException(
+        'WingPosition.xml real no está disponible para escritura.',
+      );
+    }
+    final original = document.resolve(
+      identity.family,
+      identity.job,
+      identity.sex,
+    );
+    if (original == null) {
+      throw const FormatException(
+        'La DATA montada no contiene el perfil WingPosition activo.',
+      );
+    }
+    final char = character;
+    final bone =
+        original.boneWritable && char?.wingBone != null && char!.wingBone! >= 0
+        ? char.wingBone!
+        : original.boneIndex;
+    await catalog!.saveWingPosition(
+      original.copyWith(
+        boneIndex: bone,
+        rotX: wingRotX,
+        rotY: wingRotY,
+        rotZ: wingRotZ,
+        upDown: wingOffsetY,
+        frontBack: wingOffsetZ,
+        leftRight: wingOffsetX,
+        provenance: catalog!.wingPositionPath,
+      ),
+    );
+    _wingSettings.remove(_wingBindingKey(wingRecord!));
+    _restoreWingSettings();
+    report(
+      'WingPosition.xml guardado · familia ${identity.family} · '
+      'job ${identity.job} · sexo ${identity.sex}. '
+      'Escala y espejo son solo de previsualización y no se escribieron.',
+    );
+    changed();
+  }
+
+  void resetWingPositionFromData() {
+    final identity = _wingIdentity();
+    final document = catalog?.wingPositions;
+    final record = wingRecord;
+    if (identity == null || document == null || record == null) {
+      throw const FormatException(
+        'No hay WingPosition.xml montado para restaurar.',
+      );
+    }
+    final profile = document.resolve(
+      identity.family,
+      identity.job,
+      identity.sex,
+    );
+    if (profile == null) {
+      throw const FormatException(
+        'El perfil activo no existe en WingPosition.xml.',
+      );
+    }
+    _wingSettings.remove(_wingBindingKey(record));
+    _applyWingProfile(profile);
+    wingScaleX = wingScaleY = wingScaleZ = 1;
+    wingMirrorX = wingMirrorY = wingMirrorZ = false;
+    changed();
+  }
+
+  void resetWingPositionVerifiedBaseline() {
+    final profile = _resolveWingPosition(verifiedOnly: true);
+    final record = wingRecord;
+    if (profile == null || record == null) {
+      throw const FormatException(
+        'No existe baseline WingPosition para este personaje.',
+      );
+    }
+    _wingSettings.remove(_wingBindingKey(record));
+    _applyWingProfile(profile);
+    wingScaleX = wingScaleY = wingScaleZ = 1;
+    wingMirrorX = wingMirrorY = wingMirrorZ = false;
+    changed();
+  }
+
+  Future<void> setWingAutoMotion(bool enabled) async {
+    wingAutoMotion = enabled;
+    _wingMotionPhase = null;
+    if (enabled) {
+      final moving =
+          walkX.abs() + walkZ.abs() > 1e-8 || game.destination != null;
+      _syncWingMotion(moving);
+    }
+    changed();
+  }
+
+  void _syncWingMotion(bool moving) {
+    final actor = wing;
+    if (!wingAutoMotion || actor == null || actor.clips.isEmpty) return;
+    if (!actor.loop &&
+        actor.playing &&
+        actor.clip != null &&
+        actor.time < actor.clip!.duration) {
+      // Attack, damage and death are native one-shot MON slots. Do not let
+      // hover/cruise synchronization overwrite them on the following frame.
+      return;
+    }
+    final phase = wingMotionPhase(
+      flightEnabled: flightEnabled,
+      grounded: flightState.grounded,
+      landing: flightState.landing || flightState.combatDescent,
+      moving: moving,
+      running: running || touchRun,
+    );
+    final clip = selectWingMotion(actor.clips, phase);
+    _wingMotionPhase = phase;
+    if (clip != null && (actor.clip != clip || !actor.playing || !actor.loop)) {
+      actor.play(clip);
+    }
+  }
+
   EquipmentCompatibility compatibilityFor(
     WeaponRecord item, {
     Archetype? archetype,
@@ -231,9 +1004,15 @@ class StudioScene extends ChangeNotifier {
             isShield(w) && (inspectAnyEquipment || compatibilityFor(w).allowed),
       )
       .toList();
+  bool get flightV3CombatLock =>
+      flightV3Compatible && _flightV3CombatReturnRemaining > 0;
+
+  bool get flightCombatLock =>
+      flightV3Compatible ? flightV3CombatLock : combat.inGuard;
+
   bool get flying =>
       flightAvailable &&
-      !combat.inGuard &&
+      !flightCombatLock &&
       flightState.pendingTarget == null &&
       !flightState.combatDescent;
   bool get flightAvailable =>
@@ -261,7 +1040,25 @@ class StudioScene extends ChangeNotifier {
       game.loaded?.parts ?? const <RenderPart>[];
   WorldData? world;
   String? worldPath, effectPath, skyPath;
-  final Map<String, ({double height, double forward})> _seats = {};
+  final Map<
+    String,
+    ({
+      double lateral,
+      double height,
+      double forward,
+      double rotX,
+      double rotY,
+      double rotZ,
+      double scaleX,
+      double scaleY,
+      double scaleZ,
+      bool mirrorX,
+      bool mirrorY,
+      bool mirrorZ,
+      int riderProfile,
+    })
+  >
+  _seats = {};
   String lastImpact = '';
   t.Sprite? hitSprite;
   t.Texture? effectTexture;
@@ -403,11 +1200,17 @@ class StudioScene extends ChangeNotifier {
       targetY = 1.05,
       panX = 0,
       panZ = 0;
-  double riderHeight = 1.0,
+  double riderLateral = 0,
+      riderHeight = 0,
       riderForward = 0,
-      wingHeight = 1.3,
-      wingDepth = .25,
-      wingSize = 1;
+      riderRotX = 0,
+      riderRotY = 0,
+      riderRotZ = 0,
+      riderScaleX = 1,
+      riderScaleY = 1,
+      riderScaleZ = 1;
+  bool riderMirrorX = false, riderMirrorY = false, riderMirrorZ = false;
+  int riderProfile = 0;
   double originX = 0,
       originZ = 0,
       groundY = 0,
@@ -607,6 +1410,7 @@ class StudioScene extends ChangeNotifier {
 
     character?.dispose();
     character = null;
+    _flightBodyTransition = null;
     appearance = null;
 
     weapon?.dispose();
@@ -629,11 +1433,13 @@ class StudioScene extends ChangeNotifier {
     game.jumpClip = null;
     combat.reset();
     _lastGuard = false;
+    _flightV3CombatReturnRemaining = 0;
     clearMovement();
     if (!disposed) notifyListeners();
   }
 
   Future<void> setAppearance(Appearance next) async {
+    _rememberWingSettings();
     final revision = ++_appearanceRevision;
     busy = true;
     notifyListeners();
@@ -699,14 +1505,16 @@ class StudioScene extends ChangeNotifier {
         staged,
         groundMotionCandidates(next.archetype.animations, GroundMotion.run),
       );
-      staged.riderIdle = await firstCompatible(
-        staged,
-        next.archetype.animations.where((p) => motionIndex(p) == 21).toList(),
-      );
-      staged.riderMoving = await firstCompatible(
-        staged,
-        next.archetype.animations.where((p) => motionIndex(p) == 20).toList(),
-      );
+      for (final motionId in const [20, 21, 22, 30, 31, 97, 98]) {
+        final riderClip = await firstCompatible(
+          staged,
+          next.archetype.animations
+              .where((p) => motionIndex(p) == motionId)
+              .toList(),
+        );
+        if (riderClip != null) staged.riderMotions[motionId] = riderClip;
+      }
+      _configureRiderProfile(staged);
       staged.idle = c;
       staged.normal = c;
       final profile = extraMotions?.profiles[next.archetype.id];
@@ -718,6 +1526,7 @@ class StudioScene extends ChangeNotifier {
         staged.flight = profile.flight;
         staged.mountedAttacks.addAll(profile.mounted);
       }
+      _applyFlightV3ToActor(staged, next);
       if (face != null) {
         final scores = <int, double>{};
         for (var i = 0; i < face.weights.length; i++) {
@@ -754,8 +1563,9 @@ class StudioScene extends ChangeNotifier {
       staged.guard = motions.idle;
       staged.weaponRun = motions.run;
       staged.idle = staged.normal;
-      if (mount != null && staged.riderIdle != null) {
-        staged.play(staged.riderIdle!);
+      if (mount != null) {
+        _configureRiderProfile(staged);
+        if (staged.riderIdle != null) staged.play(staged.riderIdle!);
       } else if (staged.idle != null) {
         staged.play(staged.idle!);
       }
@@ -808,10 +1618,13 @@ class StudioScene extends ChangeNotifier {
       game.jump.reset();
       game.jumpClip = nextJumpClip;
       appearance = next;
+      _restoreWingSettings();
+      _wingMotionPhase = null;
       view!.scene.add(staged.root);
       committed = true;
       combat.reset();
       _lastGuard = false;
+      _flightV3CombatReturnRemaining = 0;
       refreshIdle();
       applyLocomotion(GroundMotion.idle);
       if (attackClips.isNotEmpty) {
@@ -897,6 +1710,160 @@ class StudioScene extends ChangeNotifier {
     }
   }
 
+  List<int> get riderProfileOptions =>
+      riderAnimationProfiles.keys.toList()..sort();
+
+  String riderProfileLabel(int id) =>
+      riderAnimationProfiles[id]?.label ?? 'Perfil $id';
+
+  String get activeVehiclePositionSection {
+    final record = mountRecord;
+    if (record == null) return 'Sin montura';
+    final family = vehicleFamilyFromSource(record.source);
+    if (family == null) return 'MON sin familia Hu/El/Vi/De';
+    return vehiclePositionSection(family, record.id);
+  }
+
+  VehiclePositionProfile? get activeVehiclePositionProfile {
+    final record = mountRecord;
+    final c = catalog;
+    if (record == null || c == null) return null;
+    final family = vehicleFamilyFromSource(record.source);
+    if (family == null) return null;
+    return c.vehiclePositions.resolve(family, record.id);
+  }
+
+  void _configureRiderProfile(Actor actor) {
+    final mapping =
+        riderAnimationProfiles[riderProfile] ?? riderAnimationProfiles[0]!;
+    actor.riderIdle =
+        actor.riderMotions[mapping.idle] ??
+        actor.riderMotions[21] ??
+        actor.normal;
+    actor.riderMoving =
+        actor.riderMotions[mapping.moving] ??
+        actor.riderMotions[20] ??
+        actor.riderIdle;
+  }
+
+  void setRiderProfile(int value) {
+    if (!riderAnimationProfiles.containsKey(value)) {
+      throw FormatException('Perfil ANI de jinete no soportado: $value');
+    }
+    riderProfile = value;
+    final actor = character;
+    if (actor != null) _configureRiderProfile(actor);
+    if (mount != null) {
+      final mode = walkX == 0 && walkZ == 0
+          ? GroundMotion.idle
+          : (running || touchRun ? GroundMotion.run : GroundMotion.walk);
+      applyLocomotion(mode);
+    }
+    changed();
+  }
+
+  void _applyVehiclePositionProfile(VehiclePositionProfile profile) {
+    riderLateral = profile.posX;
+    riderHeight = profile.posY;
+    riderForward = profile.posZ;
+    riderRotX = profile.rotX;
+    riderRotY = profile.rotY;
+    riderRotZ = profile.rotZ;
+    riderScaleX = profile.scaleX.abs();
+    riderScaleY = profile.scaleY.abs();
+    riderScaleZ = profile.scaleZ.abs();
+    riderMirrorX = profile.scaleX < 0;
+    riderMirrorY = profile.scaleY < 0;
+    riderMirrorZ = profile.scaleZ < 0;
+    riderProfile = profile.riderProfile;
+    final actor = character;
+    if (actor != null) _configureRiderProfile(actor);
+  }
+
+  Future<void> saveActiveVehiclePositionToData() async {
+    final c = catalog;
+    final record = mountRecord;
+    if (c == null || record == null) {
+      throw const FormatException('No hay una montura seleccionada.');
+    }
+    final family = vehicleFamilyFromSource(record.source);
+    if (family == null) {
+      throw FormatException(
+        'No se pudo resolver la familia desde ${record.source}.',
+      );
+    }
+    final profile = VehiclePositionProfile(
+      family: family,
+      vehicleId: record.id,
+      enabled: true,
+      posX: riderLateral,
+      posY: riderHeight,
+      posZ: riderForward,
+      rotX: riderRotX,
+      rotY: riderRotY,
+      rotZ: riderRotZ,
+      scaleX: riderScaleX * (riderMirrorX ? -1 : 1),
+      scaleY: riderScaleY * (riderMirrorY ? -1 : 1),
+      scaleZ: riderScaleZ * (riderMirrorZ ? -1 : 1),
+      riderProfile: riderProfile,
+    );
+    await c.saveVehiclePosition(profile);
+    _seats['${record.source}#${record.id}'] = (
+      lateral: riderLateral,
+      height: riderHeight,
+      forward: riderForward,
+      rotX: riderRotX,
+      rotY: riderRotY,
+      rotZ: riderRotZ,
+      scaleX: riderScaleX,
+      scaleY: riderScaleY,
+      scaleZ: riderScaleZ,
+      mirrorX: riderMirrorX,
+      mirrorY: riderMirrorY,
+      mirrorZ: riderMirrorZ,
+      riderProfile: riderProfile,
+    );
+    report(
+      'VehiclePosition.ini guardado · ${profile.section} · '
+      'delta 6DoF + escala/espejo + perfil ANI ${profile.riderProfile}.',
+    );
+    changed();
+  }
+
+  void resetActiveVehiclePositionFromData() {
+    final profile = activeVehiclePositionProfile;
+    if (profile == null || !profile.enabled) {
+      throw const FormatException(
+        'La montura activa no tiene un perfil habilitado en VehiclePosition.ini.',
+      );
+    }
+    _applyVehiclePositionProfile(profile);
+    changed();
+  }
+
+  void resetMountSeatCalibration() {
+    final record = mountRecord;
+    if (record != null) {
+      _seats.remove('${record.source}#${record.id}');
+    }
+    riderLateral = 0;
+    riderHeight = 0;
+    riderForward = 0;
+    riderRotX = 0;
+    riderRotY = 0;
+    riderRotZ = 0;
+    riderScaleX = 1;
+    riderScaleY = 1;
+    riderScaleZ = 1;
+    riderMirrorX = false;
+    riderMirrorY = false;
+    riderMirrorZ = false;
+    riderProfile = 0;
+    final actor = character;
+    if (actor != null) _configureRiderProfile(actor);
+    changed();
+  }
+
   Future<void> selectCreature(CreatureRecord? c, String kind) async {
     if (kind == 'enemy') {
       await replaceOpponent(c);
@@ -907,18 +1874,24 @@ class StudioScene extends ChangeNotifier {
         : kind == 'mount'
         ? ++_mountRevision
         : ++_wingRevision;
-    if (kind == 'wing' && wingRecord != null) {
-      _wingSettings['${wingRecord!.source}#${wingRecord!.id}'] = (
-        height: wingHeight,
-        depth: wingDepth,
-        size: wingSize,
-        yaw: wingYaw,
-      );
+    if (kind == 'wing') {
+      _rememberWingSettings();
     }
     if (kind == 'mount' && mountRecord != null) {
       _seats['${mountRecord!.source}#${mountRecord!.id}'] = (
+        lateral: riderLateral,
         height: riderHeight,
         forward: riderForward,
+        rotX: riderRotX,
+        rotY: riderRotY,
+        rotZ: riderRotZ,
+        scaleX: riderScaleX,
+        scaleY: riderScaleY,
+        scaleZ: riderScaleZ,
+        mirrorX: riderMirrorX,
+        mirrorY: riderMirrorY,
+        mirrorZ: riderMirrorZ,
+        riderProfile: riderProfile,
       );
     }
     final staged = c == null ? null : await loadCreature(c);
@@ -959,8 +1932,29 @@ class StudioScene extends ChangeNotifier {
             'Montura sin superficie central reconocida. Usa los ajustes del asiento; no se ha certificado el encaje automático.',
           );
         }
-        riderHeight = seat?.height ?? .04;
-        riderForward = seat?.forward ?? 0;
+        final family = vehicleFamilyFromSource(c.source);
+        final persisted = family == null
+            ? null
+            : catalog?.vehiclePositions.resolve(family, c.id);
+        if (persisted?.enabled == true) {
+          _applyVehiclePositionProfile(persisted!);
+        } else {
+          riderLateral = seat?.lateral ?? 0;
+          riderHeight = seat?.height ?? 0;
+          riderForward = seat?.forward ?? 0;
+          riderRotX = seat?.rotX ?? 0;
+          riderRotY = seat?.rotY ?? 0;
+          riderRotZ = seat?.rotZ ?? 0;
+          riderScaleX = seat?.scaleX ?? 1;
+          riderScaleY = seat?.scaleY ?? 1;
+          riderScaleZ = seat?.scaleZ ?? 1;
+          riderMirrorX = seat?.mirrorX ?? false;
+          riderMirrorY = seat?.mirrorY ?? false;
+          riderMirrorZ = seat?.mirrorZ ?? false;
+          riderProfile = seat?.riderProfile ?? 0;
+          final actor = character;
+          if (actor != null) _configureRiderProfile(actor);
+        }
         await riderPose();
       } else if (character?.idle != null) {
         character!.play(character!.idle!);
@@ -969,18 +1963,15 @@ class StudioScene extends ChangeNotifier {
       wing?.dispose();
       wing = staged;
       wingRecord = c;
-      if (c == null) flightEnabled = false;
-      final cfg = _wingSettings['${c?.source}#${c?.id}'];
-      final char = character;
-      final b = char?.wingBone;
-      final reference = char?.normal?.pose(0);
-      final p = b != null && reference != null
-          ? reference[b].getTranslation()
-          : v.Vector3(0, 1.3, 0);
-      wingHeight = cfg?.height ?? p.y;
-      wingDepth = cfg?.depth ?? (p.z + .08);
-      wingSize = cfg?.size ?? 1;
-      wingYaw = cfg?.yaw ?? 0;
+      if (c == null) {
+        flightEnabled = false;
+        _wingMotionPhase = null;
+      } else {
+        wingAutoMotion = true;
+        _restoreWingSettings();
+        _wingMotionPhase = null;
+        _syncWingMotion(false);
+      }
     }
     if (staged != null) view!.scene.add(staged.root);
     if (kind == 'wing' && staged != null) staged.root.matrixAutoUpdate = false;
@@ -1163,6 +2154,9 @@ class StudioScene extends ChangeNotifier {
     attackCounter = 0;
     a.guard = prepared.idle;
     a.weaponRun = prepared.run;
+    if (appearance != null) {
+      _applyFlightV3ToActor(a, appearance!);
+    }
     refreshIdle();
     if (mount == null && walkX == 0 && walkZ == 0 && a.loop && a.idle != null) {
       a.play(a.idle!);
@@ -1177,7 +2171,9 @@ class StudioScene extends ChangeNotifier {
     if (!availableClasses.contains(cls)) {
       throw const FormatException('Clase ajena al arquetipo');
     }
+    _rememberWingSettings();
     selectedClass = cls;
+    _restoreWingSettings();
     if (weaponRecord != null && !compatibilityFor(weaponRecord!).allowed) {
       await equip(null);
     }
@@ -1199,6 +2195,11 @@ class StudioScene extends ChangeNotifier {
       shield = null;
       shieldRecord = null;
       shieldAttachment = null;
+      if (appearance != null) {
+        _applyFlightV3ToActor(actor, appearance!);
+      }
+      refreshIdle();
+      movementTransitions.invalidate();
       changed();
       return;
     }
@@ -1242,6 +2243,7 @@ class StudioScene extends ChangeNotifier {
     shield = staged;
     shieldRecord = item;
     shieldAttachment = socket;
+    if (appearance != null) _applyFlightV3ToActor(actor, appearance!);
     actor.visual.add(staged.mesh);
     staged.mesh.matrixAutoUpdate = false;
     updateAttachments();
@@ -1258,6 +2260,227 @@ class StudioScene extends ChangeNotifier {
         : combat.inGuard
         ? (a.guard ?? a.normal)
         : a.normal;
+  }
+
+  String? _flightV3CombatCode() => switch (weaponFamily(weaponRecord)) {
+    1 || 3 || 7 => 'on',
+    2 || 4 || 8 => 'th',
+    5 => 'du',
+    6 => 'sp',
+    _ => null,
+  };
+
+  bool get flightV3Compatible {
+    final bundle = flightV3;
+    final a = character;
+    final look = appearance;
+    return bundle != null &&
+        a != null &&
+        look != null &&
+        a.normal != null &&
+        bundle.compatibleWith(look.archetype.id, a.normal!);
+  }
+
+  int get flightV3MappedArchetypes {
+    final characters = flightV3?.characterMap['characters'];
+    return characters is Map ? characters.length : 0;
+  }
+
+  List<FlightV3Transition> get flightV3TransitionOptions {
+    final values =
+        flightV3?.transitions.values.toList() ?? const <FlightV3Transition>[];
+    final out = List<FlightV3Transition>.from(values);
+    out.sort((a, b) {
+      final kind = a.kind.compareTo(b.kind);
+      return kind != 0 ? kind : a.id.compareTo(b.id);
+    });
+    return out;
+  }
+
+  String flightV3TransitionLabel(FlightV3Transition transition) {
+    final profile = transition.profile == null
+        ? ''
+        : ' · ${transition.profile!.toUpperCase()}';
+    final shield = transition.shield ? ' · escudo' : '';
+    return '${transition.kind}$profile$shield · '
+        '${transition.duration.toStringAsFixed(2)} s';
+  }
+
+  String get flightV3Status {
+    final bundle = flightV3;
+    if (bundle == null) return 'Flight V3 no instalado';
+    final canonical = bundle.evidence['canonicalPackage'] == true;
+    final runtime = bundle.evidence['runtimeSubset'] == true
+        ? (canonical
+              ? 'runtime compacto auditado por SHA-256'
+              : 'runtime compacto verificado estructuralmente')
+        : (canonical
+              ? 'paquete completo auditado por SHA-256'
+              : 'paquete completo verificado estructuralmente');
+    if (!flightV3Compatible) {
+      return 'Flight V3 · $runtime · mapa de '
+          '$flightV3MappedArchetypes arquetipos; runtime corporal actual '
+          'solo humf de 36 huesos.';
+    }
+    return 'Flight V3 activo · $runtime · ${bundle.transitions.length} '
+        'transiciones · ${bundle.combat.length} perfiles · mapa de '
+        '$flightV3MappedArchetypes arquetipos.';
+  }
+
+  Future<void> previewFlightV3Transition(String id) async {
+    final bundle = flightV3;
+    final actor = character;
+    if (bundle == null || actor == null || !flightV3Compatible) {
+      throw const FormatException(
+        'Flight V3 requiere el personaje humf compatible cargado.',
+      );
+    }
+    if (mount != null) {
+      throw const FormatException(
+        'Desmonta antes de previsualizar transiciones corporales Flight V3.',
+      );
+    }
+    final transition = bundle.transitions[id];
+    if (transition == null) {
+      throw FormatException('Transición Flight V3 desconocida: $id');
+    }
+    combat.cancelActions();
+    flightV3PreviewId = id;
+    _playFlightV3Transition(transition);
+    report(
+      'Flight V3 preview · $id · '
+      '${flightV3TransitionLabel(transition)}',
+    );
+    changed();
+  }
+
+  void _applyFlightV3ToActor(Actor actor, Appearance look) {
+    final bundle = flightV3;
+    final normal = actor.normal;
+    if (bundle == null ||
+        normal == null ||
+        !bundle.compatibleWith(look.archetype.id, normal)) {
+      return;
+    }
+    final wasHover = actor.hover != null && identical(actor.clip, actor.hover);
+    final wasFlight =
+        actor.flight != null && identical(actor.clip, actor.flight);
+    final shielded = shieldRecord != null;
+    actor.hover = shielded ? bundle.hoverShield : bundle.hover;
+    actor.flight = shielded ? bundle.flightShield : bundle.flight;
+    actor.clips['V3 · Flotar'] = bundle.hover;
+    actor.clips['V3 · Volar'] = bundle.flight;
+    actor.clips['V3 · Flotar con escudo'] = bundle.hoverShield;
+    actor.clips['V3 · Volar con escudo'] = bundle.flightShield;
+    for (final transition in bundle.transitions.values) {
+      actor.clips['V3 · ${transition.id}'] = transition.clip;
+    }
+    final code = _flightV3CombatCode();
+    final combatProfile = code == null ? null : bundle.combatFor(code);
+    if (combatProfile != null) {
+      actor.guard = combatProfile.guard;
+      actor.weaponRun = combatProfile.run;
+      attackClips
+        ..clear()
+        ..addAll(combatProfile.attacks);
+      if (attackClips.isNotEmpty) {
+        combat.attackDuration = attackClips.first.duration;
+      }
+    }
+    if (!flightBodyTransitionActive) {
+      if (wasHover && actor.hover != null) {
+        actor.play(actor.hover!);
+      } else if (wasFlight && actor.flight != null) {
+        actor.play(actor.flight!);
+      }
+    }
+  }
+
+  ClipData? _flightV3Destination(FlightV3Transition transition) {
+    final bundle = flightV3;
+    final actor = character;
+    if (bundle == null || actor == null) return null;
+    final target = transition.targetClip?.toLowerCase() ?? '';
+    if (target.contains('player_stop_fly_shield')) return bundle.hoverShield;
+    if (target.contains('player_fly_shield')) return bundle.flightShield;
+    if (target.contains('player_stop_fly')) return bundle.hover;
+    if (target.contains('player_fly')) return bundle.flight;
+    if (target.contains('_000_normal')) return actor.normal;
+    if (target.contains('ready')) {
+      final code = transition.profile ?? _flightV3CombatCode();
+      return code == null ? actor.guard : bundle.combatFor(code)?.guard;
+    }
+    return null;
+  }
+
+  void _playFlightV3Transition(FlightV3Transition transition) {
+    final actor = character;
+    if (actor == null) return;
+    final destination = _flightV3Destination(transition) ?? actor.idle;
+    _flightBodyTransition = transition.clip;
+    if (destination != null) {
+      actor.playTransition(
+        transition.clip,
+        destination,
+        destinationPhase: transition.destinationPhase,
+      );
+    } else {
+      actor.play(transition.clip, repeat: false);
+    }
+  }
+
+  FlightV3Transition? _flightV3CombatLandingTransition() {
+    if (!flightV3Compatible) return null;
+    final code = _flightV3CombatCode();
+    if (code == null) return null;
+    final actor = character;
+    final fromFlight = actor != null && identical(actor.clip, actor.flight);
+    final shieldSuffix = shieldRecord != null && code == 'on' ? '_SHIELD' : '';
+    final id =
+        'V3_${fromFlight ? 'FLIGHT_LAND' : 'LAND'}_COMBAT_'
+        '${code.toUpperCase()}$shieldSuffix';
+    return flightV3?.transitions[id];
+  }
+
+  FlightV3Transition? _flightV3CombatTakeoffTransition() {
+    if (!flightV3Compatible) return null;
+    final code = _flightV3CombatCode();
+    if (code == null) return null;
+    final shieldSuffix = shieldRecord != null && code == 'on' ? '_SHIELD' : '';
+    return flightV3
+        ?.transitions['V3_TAKEOFF_COMBAT_${code.toUpperCase()}$shieldSuffix'];
+  }
+
+  void startFlightV3CombatLanding() {
+    final actor = character;
+    final transition = _flightV3CombatLandingTransition();
+    if (actor == null || transition == null) return;
+    _playFlightV3Transition(transition);
+  }
+
+  void startFlightV3CombatTakeoff() {
+    final transition = _flightV3CombatTakeoffTransition();
+    if (character == null || transition == null) return;
+    _playFlightV3Transition(transition);
+  }
+
+  Future<void> installFlightV3(FlightV3Bundle bundle) async {
+    flightV3 = bundle;
+    flightV3PreviewId = null;
+    final a = character;
+    final look = appearance;
+    if (a != null && look != null) {
+      _applyFlightV3ToActor(a, look);
+      refreshIdle();
+      movementTransitions.invalidate();
+    }
+    report(
+      'Flight V3 verificado: ${bundle.evidence['binaryPassed']} checks binarios, '
+      '${bundle.evidence['numericPassed']} numericos, '
+      '${bundle.transitions.length} transiciones y '
+      '${bundle.combat.length} perfiles humf.',
+    );
+    changed();
   }
 
   Future<void> installExtras(ExtraMotionLibrary extras) async {
@@ -1316,7 +2539,24 @@ class StudioScene extends ChangeNotifier {
         );
       }
     }
+    final v3Transition = flightV3Compatible
+        ? flightV3?.transitions[enabled
+              ? (shieldRecord != null
+                    ? 'V3_TAKEOFF_NORMAL_SHIELD'
+                    : 'V3_TAKEOFF_NORMAL_NEUTRAL')
+              : (shieldRecord != null
+                    ? 'V3_LAND_NORMAL_SHIELD'
+                    : 'V3_LAND_NORMAL_NEUTRAL')]
+        : null;
     setFlightEnabled(enabled);
+    if (v3Transition != null && character != null) {
+      _playFlightV3Transition(v3Transition);
+    } else {
+      _flightBodyTransition = null;
+    }
+    _syncWingMotion(
+      walkX.abs() + walkZ.abs() > 1e-8 || game.destination != null,
+    );
     say(
       enabled
           ? (combat.inGuard
@@ -1352,9 +2592,21 @@ class StudioScene extends ChangeNotifier {
     game.destinationRing?.visible = false;
   }
 
+  bool get flightBodyTransitionActive {
+    final a = character;
+    final transition = _flightBodyTransition;
+    return a != null &&
+        transition != null &&
+        identical(a.clip, transition) &&
+        !a.loop &&
+        a.playing &&
+        a.time < transition.duration;
+  }
+
   bool get sceneCombatLocked {
     final a = character;
     return busy ||
+        flightBodyTransitionActive ||
         combat.playerHealth <= 0 ||
         (combat.active &&
             a != null &&
@@ -1406,6 +2658,28 @@ class StudioScene extends ChangeNotifier {
       }
       return false;
     }
+    if (flying && flightV3Compatible && !flightBodyTransitionActive) {
+      final shielded = shieldRecord != null;
+      final fromHover = identical(a.clip, a.hover);
+      final fromFlight = identical(a.clip, a.flight);
+      final toFlight = identical(desired, a.flight);
+      final toHover = identical(desired, a.hover);
+      final id = fromHover && toFlight
+          ? (shielded
+                ? 'V3_HOVER_TO_FLIGHT_SHIELD'
+                : 'V3_HOVER_TO_FLIGHT_NEUTRAL')
+          : fromFlight && toHover
+          ? (shielded
+                ? 'V3_FLIGHT_TO_HOVER_SHIELD'
+                : 'V3_FLIGHT_TO_HOVER_NEUTRAL')
+          : null;
+      final airTransition = id == null ? null : flightV3?.transitions[id];
+      if (airTransition != null) {
+        _playFlightV3Transition(airTransition);
+        return true;
+      }
+    }
+    _flightBodyTransition = null;
     a.play(desired);
     if (vehicle != null) {
       final key = mode == GroundMotion.idle
@@ -1449,8 +2723,15 @@ class StudioScene extends ChangeNotifier {
           saddle,
           q,
           pelvis,
+          lateral: riderLateral,
           height: riderHeight,
           forward: riderForward,
+          rotX: riderRotX,
+          rotY: riderRotY,
+          rotZ: riderRotZ,
+          scaleX: riderScaleX * (riderMirrorX ? -1 : 1),
+          scaleY: riderScaleY * (riderMirrorY ? -1 : 1),
+          scaleZ: riderScaleZ * (riderMirrorZ ? -1 : 1),
         ).storage,
       );
       a.root.position.y = groundY;
@@ -1488,23 +2769,29 @@ class StudioScene extends ChangeNotifier {
     }
     if (wing != null) {
       final bone = a.wingBone;
-      final valid =
-          bone != null && bone < a.world.length && a.wingReference != null;
+      final profile = activeWingPositionProfile;
+      final boneValid = bone != null && bone >= 0 && bone < a.world.length;
       final root = v.Matrix4.compose(
         v.Vector3(x, a.root.position.y, z),
         v.Quaternion.axisAngle(v.Vector3(0, 1, 0), rotation),
         v.Vector3(1, 1, -1),
       );
-      final delta = valid
+      final anchor = profile != null && boneValid
+          ? a.world[bone]
+          : boneValid && a.wingReference != null
           ? a.world[bone] * a.wingReference!
           : v.Matrix4.identity();
-      final local = v.Matrix4.compose(
-        v.Vector3(0, wingHeight, wingDepth),
-        v.Quaternion.axisAngle(v.Vector3(0, 1, 0), wingYaw),
-        v.Vector3.all(wingSize),
-      );
+      final sx = wingScaleX * (wingMirrorX ? -1 : 1);
+      final sy = wingScaleY * (wingMirrorY ? -1 : 1);
+      final sz = wingScaleZ * (wingMirrorZ ? -1 : 1);
+      final local =
+          v.Matrix4.translationValues(wingOffsetX, wingOffsetY, wingOffsetZ) *
+          v.Matrix4.rotationX(wingRotX * math.pi / 180) *
+          v.Matrix4.rotationY(wingRotY * math.pi / 180) *
+          v.Matrix4.rotationZ(wingRotZ * math.pi / 180) *
+          v.Matrix4.diagonal3Values(sx, sy, sz);
       final matrix =
-          root * v.Matrix4.fromList(a.visual.matrix.storage) * delta * local;
+          root * v.Matrix4.fromList(a.visual.matrix.storage) * anchor * local;
       wing!.root.matrix.copyFromArray(matrix.storage);
       wing!.root.matrixWorldNeedsUpdate = true;
     }
@@ -1517,6 +2804,10 @@ class StudioScene extends ChangeNotifier {
         ? mount
         : wing;
     final c = a?.clips[name];
+    if (target == 'wing') {
+      wingAutoMotion = false;
+      _wingMotionPhase = null;
+    }
     if (a != null && c != null) a.play(c);
     notifyListeners();
   }
@@ -1559,9 +2850,58 @@ class StudioScene extends ChangeNotifier {
     );
   }
 
+  Future<void> _playWingCombatEvent(String event) async {
+    final actor = wing;
+    final record = wingRecord;
+    final lib = catalog?.library;
+    if (!wingAutoMotion || actor == null || record == null || lib == null) {
+      return;
+    }
+
+    final slot = switch (event) {
+      'attack' => 'Ataque ${((attackCounter - 1).clamp(0, 999) % 3) + 1}',
+      'death' => 'Caída',
+      'hit' || 'damage' => 'Daño',
+      _ => null,
+    };
+    if (slot == null) return;
+
+    final clip = actor.clips[slot];
+    if (clip != null) {
+      actor.play(clip, repeat: false);
+    }
+
+    final rawSound = record.sounds[slot] ?? '';
+    if (rawSound.isNotEmpty) {
+      final root = directoryName(record.source);
+      final resolved = lib.resolve(rawSound, [
+        '$root/sound',
+        '$root/snd',
+        'sound/wing',
+        'sound',
+        root,
+      ], uniqueFallback: true);
+      if (resolved != null) {
+        unawaited(pooledSound(resolved));
+      }
+    }
+  }
+
+  void _armFlightV3CombatReturn({double tail = 0}) {
+    if (!flightV3Compatible) return;
+    final safeTail = tail.isFinite ? math.max(0.0, tail) : 0.0;
+    _flightV3CombatReturnRemaining = math.max(
+      _flightV3CombatReturnRemaining,
+      5.0 + safeTail,
+    );
+  }
+
   Future<void> _combatEvent(String who, String event) async {
     try {
       final a = who == 'enemy' ? enemy : character;
+      if (event == 'attack' || event == 'hit' || event == 'death') {
+        _armFlightV3CombatReturn();
+      }
       if (a == null) return;
       if (who == 'enemy') {
         final key = event == 'attack'
@@ -1598,7 +2938,11 @@ class StudioScene extends ChangeNotifier {
               ? null
               : await firstCompatible(a, candidates);
         }
-        if (c != null && a == character) a.play(c, repeat: false);
+        if (c != null && a == character) {
+          a.play(c, repeat: false);
+          _armFlightV3CombatReturn(tail: c.duration);
+        }
+        await _playWingCombatEvent(event);
       }
       if (event == 'death') a.idle = null;
       if (event == 'hit') {
@@ -1653,11 +2997,16 @@ class StudioScene extends ChangeNotifier {
       return;
     }
     if (!flightState.grounded && mount == null) {
+      startFlightV3CombatLanding();
       flightState.queue(combat.target);
       // Preserve held movement and click-to-move routes while touching down.
       refreshIdle();
       movementTransitions.invalidate();
-      say('Descenso rápido de combate…');
+      say(
+        flightV3Compatible
+            ? 'Descenso de combate V3…'
+            : 'Descenso rápido de combate…',
+      );
       return;
     }
     combat.attack(

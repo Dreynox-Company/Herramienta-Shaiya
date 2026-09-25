@@ -127,6 +127,18 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     final c = scene.catalog!;
     expect(c.weapons, isNotEmpty);
+    expect(c.wings, isNotEmpty);
+    final wingNames = c.names.itemByModel['121:0'];
+    expect(wingNames, isNotNull);
+    expect(wingNames!.first.name, 'Alas de Prueba');
+    expect(
+      c.names.wingTitle(c.wings.first, c.creatureLabel(c.wings.first)),
+      'Alas de Prueba',
+    );
+    expect(c.names.wingDetail(c.wings.first), contains('slot de equipo 16'));
+    passed.add(
+      'DBItemData type 121 Image maps wing item to MON row and equipment slot 16',
+    );
     await scene.equip(c.weapons.first);
     expect(scene.weapon, isNotNull);
     expect(scene.weapon!.mesh.parent, scene.character!.visual);
@@ -299,37 +311,33 @@ void main() {
     await scene.selectCreature(c.wings.first, 'wing');
     expect(scene.flightEnabled, false);
     expect(scene.flying, false);
+    expect(scene.wingAutoMotion, true);
+    expect(scene.wing!.clip, scene.wing!.clips['Reposo']);
     (state.focus as FocusNode).requestFocus();
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.sendKeyDownEvent(
-      LogicalKeyboardKey.backslash,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-    );
-    await tester.sendKeyRepeatEvent(
-      LogicalKeyboardKey.backslash,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.space);
     await waitFor(
       () => scene.flightEnabled,
-      'ISO < flight key reached editor controller',
+      'Shift+Space flight shortcut reached editor controller',
     );
     expect(scene.walkZ, -1);
     expect(scene.running, true);
     passed.add(
-      'Physical ISO key toggles flight once without cancelling held sprint',
+      'Shift+Space toggles flight once without cancelling held sprint',
     );
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.backslash,
-      physicalKey: PhysicalKeyboardKey.intlBackslash,
-    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     scene.clearMovement();
     await waitFor(
-      () => scene.flying && scene.character!.clip == scene.character!.hover,
-      'Manual flight with equipped wings; equipping alone remains grounded',
+      () =>
+          scene.flying &&
+          scene.character!.clip == scene.character!.hover &&
+          scene.wing!.clip == scene.wing!.clips['Respirar'],
+      'Manual flight enters character hover and original wing air loop',
     );
     scene.wingYaw = .65;
     scene.updateAttachments();
@@ -340,10 +348,16 @@ void main() {
     scene.wingYaw = .65;
     scene.setMovement(0, -1);
     await waitFor(
-      () => scene.character!.clip == scene.character!.flight,
-      'Supplemental flight only during wing movement',
+      () =>
+          scene.character!.clip == scene.character!.flight &&
+          scene.wing!.clip == scene.wing!.clips['Correr'],
+      'Moving flight uses supplemental body motion and original wing run slot',
     );
     scene.clearMovement();
+    await waitFor(
+      () => scene.wing!.clip == scene.wing!.clips['Respirar'],
+      'Stopping in air returns the wing to its original breathing slot',
+    );
     await scene.selectCreature(null, 'wing');
     await scene.selectCreature(c.wings.first, 'wing');
     expect(scene.wingYaw, closeTo(.65, .0001));

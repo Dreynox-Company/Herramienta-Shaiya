@@ -1,11 +1,35 @@
-# SPK real reader / writer — estado auditado 0.6.17
+# SPK real reader / writer — estado auditado 0.6.20
 
 Fecha de corte: 2026-09-22.
 
 Esta nota es el punto de reanudación del trabajo SPK. No volver a empezar desde
-cero. La rama `feat/studio-0612-spk-workspace` contiene lector v3, AutoPerfil,
+cero. La rama `feat/studio-0620-spk-wings` continúa el lector v3, AutoPerfil,
 auditoría integral, montaje transparente en Studio, edición por overlay y el
 primer escritor/repacker DATA.SPK con autoverificación.
+
+## Actualización 0.6.20 — V13 y recursos del motor
+
+Se reutilizó evidencia obtenida durante el trabajo del cliente Flutter sin
+mezclar ambos productos. Studio incorpora ahora conocimiento confirmado del
+cliente sobre:
+
+- alas: equipo slot 16, `DBItemData.ItemType = 121` y `Image` como ID del
+  registro `Character/Wing/*.MON`;
+- formatos del motor que antes quedaban frecuentemente como BIN:
+  `WTR`, `MAni`, `VAni`, `SMOD`, `DG` y `SVMAP`;
+- inspección estructurada de esos formatos directamente desde el explorador SPK;
+- familias modernas de objetos y su slot de equipo, usando el contrato
+  ps0032/metadata ya ejercitado por el cliente Flutter.
+
+ResourceProbe sube a **V13**. Mantiene el mismo oráculo fail-closed AES-GCM y
+amplía observación de candidatos a BoringSSL, mbedTLS y wolfSSL además de
+CNG/OpenSSL. La presencia de una candidata no desbloquea ningún payload:
+Studio debe autenticarla offline contra ciphertexts y tags exactos del SPK.
+
+La evidencia real del DATA.SPK del usuario **no cambia por estos commits**:
+hasta ejecutar este build con el par exacto `game.exe + data.spk`, no se afirma
+que los 50.135 payloads estén descifrados ni que el writer sea aceptado por el
+cliente oficial.
 
 ## DATA.SPK real de referencia
 
@@ -99,9 +123,14 @@ Existe evidencia local de la clave AES-GCM del índice, ligada al SHA-256 exacto
 anterior. Esa clave no se declara automáticamente como clave de recursos:
 Studio la prueba contra tags GCM reales y la descarta si no autentica.
 
+Mientras ese gate sigue cerrado, 0.6.20 puede montar una DATA externa solo como
+**preview de referencia**: permite inspeccionar rutas candidatas, mallas y
+texturas sin presentar esos bytes como payloads descifrados del SPK ni habilitar
+escritura del contenedor.
+
 Por tanto, el código está preparado para lectura/escritura completa, pero no se
 debe afirmar todavía que los 50.135 payloads del archivo real del usuario han
-sido descifrados. Falta ejecutar 0.6.17 contra el par real
+sido descifrados. Falta ejecutar 0.6.20 / ResourceProbe V13 contra el par real
 `game.exe + data.spk` y obtener la auditoría.
 
 ## Avances consolidados del lector
@@ -126,9 +155,9 @@ sido descifrados. Falta ejecutar 0.6.17 contra el par real
 10. Evidencia de auditoría solo se restaura si coinciden índice, hash de la clave
     de recursos, regla de chunks y cobertura total de Entry IDs.
 
-## AutoPerfil / ResourceProbe V11
+## AutoPerfil / ResourceProbe V13
 
-Antes de instrumentar `game.exe`, V11 ejecuta un barrido estático acotado y fail-closed: prueba derivaciones de la clave del índice y constantes próximas a evidencia AES/GCM dentro del cliente y DLLs. Ninguna candidata se acepta por semejanza: debe autenticar tres ciphertexts simples reales con sus tags GCM. Si ninguna coincide, continúa automáticamente con instrumentación dinámica x86/x64.
+Antes de instrumentar `game.exe`, V13 ejecuta un barrido estático acotado y fail-closed: prueba derivaciones de la clave del índice, constantes próximas a evidencia AES/GCM y, como segunda etapa, material literal de 16/32 bytes en secciones PE de datos inicializadas y no ejecutables. La etapa profunda usa primero un recurso simple pequeño como prefiltro para contener el coste; una candidata solo se acepta si después autentica tres recursos simples distribuidos del SPK con sus tags GCM reales. Si ninguna coincide, continúa automáticamente con instrumentación dinámica x86/x64.
 
 
 AutoPerfil sigue este orden:
@@ -136,7 +165,7 @@ AutoPerfil sigue este orden:
 1. intenta offline si la clave autenticada del índice también autentica
    payloads;
 2. si falla, no reutiliza esa clave;
-3. en Windows ejecuta ResourceProbe V11 contra el `game.exe` de la misma
+3. en Windows ejecuta ResourceProbe V13 contra el `game.exe` de la misma
    instalación y sin red;
 4. ResourceProbe observa únicamente operaciones cuyo ciphertext coincide con un
    recurso/chunk real del índice;
@@ -288,7 +317,7 @@ con el cliente real.
 
 ## Próxima ejecución requerida
 
-Usar el build Windows 0.6.17 sobre la instalación real, preferiblemente offline:
+Usar el build Windows 0.6.20/V13 sobre la instalación real, preferiblemente offline:
 
 1. abrir el `data.spk`;
 2. pulsar **AutoPerfil SPK**;

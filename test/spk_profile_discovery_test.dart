@@ -45,10 +45,7 @@ void main() {
       separatorOverride: r'\',
     );
     expect(paths, contains(packaged));
-    expect(
-      paths,
-      contains(r'C:\Games\Shaiya\derived-resource-profile.json'),
-    );
+    expect(paths, contains(r'C:\Games\Shaiya\derived-resource-profile.json'));
     expect(paths, contains(r'C:\Games\Shaiya\data.spk.resources.json'));
   });
 

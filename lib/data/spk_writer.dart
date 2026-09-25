@@ -169,10 +169,7 @@ class SpkWriter {
     return packed;
   }
 
-  static List<Uint8List> _splitPacked(
-    Uint8List packed,
-    int blockBytes,
-  ) {
+  static List<Uint8List> _splitPacked(Uint8List packed, int blockBytes) {
     if (packed.isEmpty) {
       throw const SpkFailure(
         'SPK_WRITER_FRAGMENT_EMPTY',
@@ -188,11 +185,7 @@ class SpkWriter {
     return out;
   }
 
-  static Uint8List _simpleMetadata(
-    Uint8List nonce,
-    Uint8List tag,
-    int flags,
-  ) {
+  static Uint8List _simpleMetadata(Uint8List nonce, Uint8List tag, int flags) {
     final out = Uint8List(32)
       ..setRange(0, 12, nonce)
       ..setRange(12, 28, tag);
@@ -394,13 +387,9 @@ class SpkWriter {
       var auxiliaryCount = 0;
       for (final row in source.index.records.where((row) => row.fragmented)) {
         fragmentStarts[row.ordinal] = auxiliaryCount;
-        auxiliaryCount +=
-            fragmentPlans[row.ordinal]?.length ?? row.chunkCount;
+        auxiliaryCount += fragmentPlans[row.ordinal]?.length ?? row.chunkCount;
       }
-      final auxiliary = List<SpkAuxRecord?>.filled(
-        auxiliaryCount,
-        null,
-      );
+      final auxiliary = List<SpkAuxRecord?>.filled(auxiliaryCount, null);
 
       for (var i = 0; i < resources.length; i++) {
         control.check();
@@ -408,12 +397,7 @@ class SpkWriter {
         final replacement = replacements[row.entryId];
 
         if (row.simple && replacement == null) {
-          await _copyCipher(
-            input,
-            output,
-            row.dataOffset,
-            row.storedBytes,
-          );
+          await _copyCipher(input, output, row.dataOffset, row.storedBytes);
           rewritten[row.ordinal] = SpkRecord(
             ordinal: row.ordinal,
             entryId: row.entryId,
@@ -428,10 +412,7 @@ class SpkWriter {
           dataOffset += row.storedBytes;
         } else if (row.simple) {
           final originalPacked = await _simplePacked(source, row);
-          final packed = await _packReplacement(
-            replacement!,
-            originalPacked,
-          );
+          final packed = await _packReplacement(replacement!, originalPacked);
           final nonce = _nonce();
           final box = await _encrypt(
             packed,
@@ -461,10 +442,10 @@ class SpkWriter {
           dataOffset += cipher.length;
         } else if (row.fragmented) {
           final planned = fragmentPlans[row.ordinal];
-          final clearParts =
-              planned ?? await _fragmentPackedParts(source, row);
-          final decodedBytes =
-              replacement == null ? row.decodedBytes : replacement.length;
+          final clearParts = planned ?? await _fragmentPackedParts(source, row);
+          final decodedBytes = replacement == null
+              ? row.decodedBytes
+              : replacement.length;
           final auxiliaryStart = fragmentStarts[row.ordinal];
           if (auxiliaryStart == null) {
             throw const SpkFailure(
@@ -567,7 +548,11 @@ class SpkWriter {
         indexNonce: Uint8List(12),
         indexTag: Uint8List(16),
       );
-      SpkIndex.validateRelationships(records, finalAuxiliary, provisionalHeader);
+      SpkIndex.validateRelationships(
+        records,
+        finalAuxiliary,
+        provisionalHeader,
+      );
 
       final decodedIndex = _serializeRecords(records);
       final packedIndex = await Zstandard().compress(decodedIndex, 3);
@@ -635,11 +620,8 @@ class SpkWriter {
       }
       final validation = await candidate.validateAllResources(
         control: control,
-        progress: (message, done, total) => progress(
-          'Validando SPK reconstruido · $done/$total',
-          done,
-          total,
-        ),
+        progress: (message, done, total) =>
+            progress('Validando SPK reconstruido · $done/$total', done, total),
       );
       if (!candidate.fullyValidatedResources) {
         throw const SpkFailure(

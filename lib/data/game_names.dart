@@ -179,6 +179,36 @@ class GameNames {
     return spanishItemName(titles.firstOrNull ?? '', fallback);
   }
 
+  /// Shaiya's live client equips wings in equipment slot 16. DBItemData
+  /// ItemType 121 stores the visual MON row in Image; the game client maps
+  /// that Image directly to Character/Wing/*.MON record IDs.
+  String wingTitle(CreatureRecord record, String fallback) {
+    final titles = itemByModel['121:${record.id}'] ?? const <ItemName>[];
+    final original =
+        titles
+            .where((t) => t.name.isNotEmpty && !t.name.contains('???'))
+            .firstOrNull
+            ?.name ??
+        '';
+    return spanishItemName(original, fallback);
+  }
+
+  String wingDetail(CreatureRecord record) {
+    final names = itemByModel['121:${record.id}'] ?? const <ItemName>[];
+    final itemNames = names
+        .map((n) => n.name)
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    final model = record.parts.isEmpty
+        ? 'MON #${record.id}'
+        : '${record.parts.first.mesh} · ${record.parts.first.texture}';
+    return [
+      if (itemNames.isNotEmpty) itemNames.take(6).join(' · '),
+      'ItemType 121 · Image ${record.id} · slot de equipo 16',
+      model,
+    ].join('\n');
+  }
+
   String mapTitle(String path) {
     final w = maps[path],
         id = baseName(path).replaceFirst('.wld', ''),

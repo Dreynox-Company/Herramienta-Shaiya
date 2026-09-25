@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:file_selector/file_selector.dart';
 import 'core/extra_motion.dart';
+import 'core/flight_v3_bundle.dart';
 import 'core/equipment_rules.dart';
+import 'core/vehicle_position.dart';
 import 'core/textures.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -26,13 +28,16 @@ import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
 import 'ui/studio_workspace.dart';
 import 'ui/data_editor.dart';
+import 'ui/excelxml_lab.dart';
+import 'ui/wing_position_lab.dart';
+import 'ui/wing_systems_lab.dart';
 import 'ui/spk_archive_browser.dart';
 import 'core/game_text_codec.dart';
 import 'core/legacy_text.dart';
 import 'offline_game/scene_profile.dart';
 import 'data/file_save.dart';
 
-const studioVersion = '0.6.19';
+const studioVersion = '0.6.22';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -168,6 +173,51 @@ class _StudioState extends State<StudioPage> {
     }
   }
 
+  Future<void> _refreshAfterDataMutation(
+    Library library,
+    int beforeRevision,
+  ) async {
+    if (!mounted || library.revision == beforeRevision) return;
+    await act(() async {
+      final look = scene.appearance;
+      final refreshed = Catalog(library);
+      await refreshed.load((s) {
+        if (mounted) setState(() => progress = s);
+      });
+      if (!mounted) return;
+      final archetype = refreshed.archetypes
+          .where(
+            (a) => a.id == look?.archetype.id && a.race == look?.archetype.race,
+          )
+          .firstOrNull;
+      scene.catalog = refreshed;
+      catalog = refreshed;
+      _memories.clear();
+      if (archetype != null && look != null) {
+        final slots = <Slot, PartRecord?>{};
+        for (final slot in Slot.values) {
+          final prior = look.selected[slot];
+          slots[slot] = prior == null
+              ? null
+              : (archetype.parts[slot] ?? [])
+                    .where(
+                      (part) =>
+                          part.raw.id == prior.raw.id &&
+                          part.tablePath == prior.tablePath,
+                    )
+                    .firstOrNull;
+        }
+        await scene.setAppearance(
+          Appearance(archetype, slots, preset: look.preset),
+        );
+      }
+      scene.say(
+        'DATA guardada y catálogo recargado. XML, referencias y texturas '
+        'actualizadas ya están disponibles en Studio.',
+      );
+    });
+  }
+
   Future<void> openDataEditor() async {
     final library = catalog?.library;
     if (library == null || working) return;
@@ -185,45 +235,49 @@ class _StudioState extends State<StudioPage> {
         ),
       ),
     );
-    if (!mounted) return;
-    if (library.revision != beforeRevision) {
-      await act(() async {
-        final look = scene.appearance;
-        final refreshed = Catalog(library);
-        await refreshed.load((s) {
-          if (mounted) setState(() => progress = s);
-        });
-        if (!mounted) return;
-        final a = refreshed.archetypes
-            .where(
-              (a) =>
-                  a.id == look?.archetype.id && a.race == look?.archetype.race,
-            )
-            .firstOrNull;
-        scene.catalog = refreshed;
-        catalog = refreshed;
-        _memories.clear();
-        if (a != null && look != null) {
-          final slots = <Slot, PartRecord?>{};
-          for (final slot in Slot.values) {
-            final prior = look.selected[slot];
-            slots[slot] = prior == null
-                ? null
-                : (a.parts[slot] ?? [])
-                      .where(
-                        (p) =>
-                            p.raw.id == prior.raw.id &&
-                            p.tablePath == prior.tablePath,
-                      )
-                      .firstOrNull;
-          }
-          await scene.setAppearance(Appearance(a, slots, preset: look.preset));
-        }
-        scene.say(
-          'Datos guardados y catálogo recargado. Las referencias y texturas nuevas están disponibles en el laboratorio.',
-        );
-      });
-    }
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openExcelXmlLab({String? initialPath}) async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            ExcelXmlLabPage(library: library, initialPath: initialPath),
+      ),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openWingPositionLab() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => WingPositionLabPage(library: library)),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
+    if (mounted) focus.requestFocus();
+  }
+
+  Future<void> openWingSystemsLab() async {
+    final library = catalog?.library;
+    if (library == null || working) return;
+    final beforeRevision = library.revision;
+    scene.clearMovement();
+    focus.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => WingSystemsLabPage(library: library)),
+    );
+    await _refreshAfterDataMutation(library, beforeRevision);
     if (mounted) focus.requestFocus();
   }
 
@@ -463,6 +517,85 @@ class _StudioState extends State<StudioPage> {
     }
   }
 
+  Future<void> loadBundledFlightV3() async {
+    if (scene.flightV3 != null) return;
+    final docs = await getApplicationDocumentsDirectory();
+    final choices = [
+      File(
+        '${docs.path}/HerramientaShaiya/'
+        'Shaiya_Studio_FlightV3_Runtime.zip',
+      ),
+      File(
+        '${docs.path}/HerramientaShaiya/'
+        'Shaiya_Vuelo_Combate_V3_Completo.zip',
+      ),
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/FlightV3/'
+        'Shaiya_Studio_FlightV3_Runtime.zip',
+      ),
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/'
+        'Shaiya_Studio_FlightV3_Runtime.zip',
+      ),
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}/Extras/'
+        'Shaiya_Vuelo_Combate_V3_Completo.zip',
+      ),
+    ];
+    for (final file in choices) {
+      if (!await file.exists()) continue;
+      try {
+        if (await file.length() > FlightV3Bundle.maxZipBytes) {
+          throw const FormatException('Paquete Flight V3 fuera de limite.');
+        }
+        final bundle = await compute(
+          FlightV3Bundle.decode,
+          await file.readAsBytes(),
+        );
+        await scene.installFlightV3(bundle);
+        return;
+      } catch (e) {
+        log('Flight V3: $e');
+      }
+    }
+  }
+
+  Future<void> importFlightV3() async {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        const XTypeGroup(
+          label: 'Shaiya Vuelo y Combate V3',
+          extensions: ['zip'],
+        ),
+      ],
+      confirmButtonText: 'Importar Flight V3',
+    );
+    if (file == null) return;
+    if (await file.length() > FlightV3Bundle.maxZipBytes) {
+      throw const FormatException('Paquete Flight V3 fuera de limite.');
+    }
+    final bytes = await file.readAsBytes();
+    final bundle = await compute(FlightV3Bundle.decode, bytes);
+    final docs = await getApplicationDocumentsDirectory();
+    final folder = Directory('${docs.path}/HerramientaShaiya');
+    await folder.create(recursive: true);
+    final runtimeSubset = bundle.evidence['runtimeSubset'] == true;
+    final installedName = runtimeSubset
+        ? 'Shaiya_Studio_FlightV3_Runtime.zip'
+        : 'Shaiya_Vuelo_Combate_V3_Completo.zip';
+    await File(
+      '${folder.path}/$installedName',
+    ).writeAsBytes(bytes, flush: true);
+    await scene.installFlightV3(bundle);
+    scene.say(
+      'Flight V3 instalado: ${bundle.transitions.length} transiciones, '
+      '${bundle.combat.length} perfiles de combate y variantes de vuelo '
+      'neutral/escudo verificadas. '
+      '${runtimeSubset ? 'Runtime compacto autenticado.' : 'Paquete completo autenticado.'}',
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> importExtras() async {
     final file = await openFile(
       acceptedTypeGroups: [
@@ -527,6 +660,7 @@ class _StudioState extends State<StudioPage> {
       if (lib == null) return;
       candidate = lib;
       await loadBundledExtras();
+      await loadBundledFlightV3();
       final next = Catalog(lib);
       await next.load(report);
       if (!mounted) return;
@@ -646,6 +780,97 @@ class _StudioState extends State<StudioPage> {
           ],
         ),
       );
+  String? excelXmlPath(String fileName) {
+    final c = catalog;
+    if (c == null) return null;
+    final wanted = fileName.toLowerCase();
+    return c.library.files.keys
+        .where(
+          (path) =>
+              path.startsWith('excelxml/') &&
+              baseName(path).toLowerCase() == wanted,
+        )
+        .firstOrNull;
+  }
+
+  Widget excelXmlShortcut(
+    String fileName,
+    String label, {
+    IconData icon = Icons.table_view_outlined,
+  }) {
+    final path = excelXmlPath(fileName);
+    return OutlinedButton.icon(
+      onPressed: disabled || path == null
+          ? null
+          : () => openExcelXmlLab(initialPath: path),
+      icon: Icon(icon, size: 15),
+      label: Text(label, style: const TextStyle(fontSize: 9)),
+    );
+  }
+
+  Widget excelXmlShortcutGroup(
+    String title,
+    List<(String, String)> files, {
+    String? subtitle,
+  }) {
+    final available = files
+        .where((entry) => excelXmlPath(entry.$1) != null)
+        .toList(growable: false);
+    if (available.isEmpty) return const SizedBox.shrink();
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: const TextStyle(fontSize: 9)),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final entry in available)
+                excelXmlShortcut(entry.$1, entry.$2),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget monOptionalActions({
+    required bool usesLoad,
+    required bool hasValue,
+    required Future<void> Function() clear,
+    required Future<void> Function() useLoad,
+  }) => Align(
+    alignment: Alignment.centerRight,
+    child: Wrap(
+      spacing: 4,
+      children: [
+        if (hasValue)
+          TextButton(
+            onPressed: disabled ? null : () => act(clear),
+            child: const Text('Vaciar', style: TextStyle(fontSize: 9)),
+          ),
+        if (!usesLoad)
+          TextButton(
+            onPressed: disabled ? null : () => act(useLoad),
+            child: const Text(
+              'Usar LOAD nativo',
+              style: TextStyle(fontSize: 9),
+            ),
+          ),
+      ],
+    ),
+  );
+
   Widget note(String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Text(
@@ -688,6 +913,87 @@ class _StudioState extends State<StudioPage> {
       ),
     ],
   );
+  Widget preciseSlider(
+    String title,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> change, {
+    double step = .01,
+    int decimals = 3,
+  }) {
+    final safe = value.clamp(min, max).toDouble();
+    void commit(String raw) {
+      final parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
+      if (parsed == null || !parsed.isFinite) return;
+      change(parsed.clamp(min, max).toDouble());
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 10, color: Color(0xffaebbd0)),
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '-$step',
+              onPressed: disabled
+                  ? null
+                  : () => change((safe - step).clamp(min, max).toDouble()),
+              icon: const Icon(Icons.remove, size: 14),
+            ),
+            SizedBox(
+              width: 78,
+              height: 30,
+              child: TextFormField(
+                key: ValueKey('$title:${safe.toStringAsFixed(decimals)}'),
+                initialValue: safe.toStringAsFixed(decimals),
+                enabled: !disabled,
+                textAlign: TextAlign.right,
+                keyboardType: const TextInputType.numberWithOptions(
+                  signed: true,
+                  decimal: true,
+                ),
+                style: const TextStyle(fontSize: 10),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 7,
+                  ),
+                ),
+                onFieldSubmitted: commit,
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '+$step',
+              onPressed: disabled
+                  ? null
+                  : () => change((safe + step).clamp(min, max).toDouble()),
+              icon: const Icon(Icons.add, size: 14),
+            ),
+          ],
+        ),
+        SizedBox(
+          height: 26,
+          child: Slider(
+            value: safe,
+            min: min,
+            max: max,
+            onChanged: disabled ? null : change,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget toggle(String text, bool value, ValueChanged<bool>? change) =>
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
@@ -763,9 +1069,13 @@ class _StudioState extends State<StudioPage> {
       items,
       current,
       creatureId,
-      c.creatureLabel,
+      (v) => kind == 'wing'
+          ? c.names.wingTitle(v, c.creatureLabel(v))
+          : c.creatureLabel(v),
       (v) => scene.selectCreature(v, kind),
-      detail: (v) => v.parts.map((p) => p.mesh).join(' · '),
+      detail: (v) => kind == 'wing'
+          ? c.names.wingDetail(v)
+          : v.parts.map((p) => p.mesh).join(' · '),
       empty: kind == 'mount' ? 'A pie' : 'Ninguno',
     );
   }
@@ -1038,36 +1348,451 @@ class _StudioState extends State<StudioPage> {
             section('Alas', [
               creatureField('wing'),
               if (scene.wing != null) ...[
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: const Text(
+                    'Animación automática desde MON',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  subtitle: Text(
+                    scene.wingMotionStatus,
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  value: scene.wingAutoMotion,
+                  onChanged: disabled
+                      ? null
+                      : (value) => act(
+                          () => scene.setWingAutoMotion(value),
+                          preserveMovement: true,
+                          restoreFocus: true,
+                        ),
+                ),
                 actorAnimation(scene.wing!, 'wing'),
-                slider(
-                  'Rotación horizontal',
-                  scene.wingYaw * 180 / 3.141592653589793,
-                  -180,
-                  180,
-                  (v) => setState(
-                    () => scene.wingYaw = v * 3.141592653589793 / 180,
+                note(
+                  'La selección automática usa únicamente los slots ANI declarados por el MON original del ala. Elegir una animación manual desactiva temporalmente la sincronización automática.',
+                ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Wing.MON · slots ANI',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Caminar, correr, ataques, caída, respirar, daño y reposo',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    note(
+                      'Cada cambio modifica únicamente la cadena ANI del registro '
+                      'MON seleccionado, reserializa MO2/MO4 y vuelve a parsearlo '
+                      'antes de guardar. Los campos y colas opacas no editados se '
+                      'conservan byte por byte.',
+                    ),
+                    for (final slot in scene.wingMonAnimationSlots) ...[
+                      field<String>(
+                        'wing-mon/${scene.wingRecord!.source}/'
+                        '${scene.wingRecord!.id}/$slot',
+                        slot,
+                        scene.wingMonAnimationCandidates,
+                        scene.wingMonAnimationCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonAnimation(slot, p),
+                        detail: (p) => p,
+                        empty: scene.wingMonAnimationUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonAnimation(slot)?.isNotEmpty == true
+                            ? scene.wingMonAnimation(slot)!
+                            : 'Sin ANI asignado',
+                      ),
+                      if (!scene.wingMonAnimationUsesLoad(slot))
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveWingMonAnimation(
+                                      slot,
+                                      'LOAD',
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Usar LOAD nativo',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Wing.MON · sonido / efectos / partes',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'WAV/OGG · EFT/3DE · mallas 3DC/3DO · texturas',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    note(
+                      'Edición lossless del mismo registro MO2/MO4. Cada guardado '
+                      'reparsea el MON completo y conserva bandera, altura y cola '
+                      'opaca. Los recursos se seleccionan únicamente desde DATA.',
+                    ),
+                    for (final slot in scene.wingMonSoundSlots) ...[
+                      field<String>(
+                        'wing-mon-sound/${scene.wingRecord!.source}/'
+                            '${scene.wingRecord!.id}/$slot',
+                        'Sonido · $slot',
+                        scene.wingMonSoundCandidates,
+                        scene.wingMonSoundCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonSound(slot, p),
+                        detail: (p) => p,
+                        empty: scene.wingMonSoundUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonSound(slot)?.isNotEmpty == true
+                            ? scene.wingMonSound(slot)!
+                            : 'Sin sonido',
+                      ),
+                      monOptionalActions(
+                        usesLoad: scene.wingMonSoundUsesLoad(slot),
+                        hasValue: scene.wingMonSound(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveWingMonSound(slot, ''),
+                        useLoad: () => scene.saveWingMonSound(slot, 'LOAD'),
+                      ),
+                    ],
+                    for (final slot in scene.wingMonEffectSlots) ...[
+                      field<String>(
+                        'wing-mon-effect/${scene.wingRecord!.source}/'
+                            '${scene.wingRecord!.id}/$slot',
+                        'Efecto · $slot',
+                        scene.wingMonEffectCandidates,
+                        scene.wingMonEffectCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonEffect(slot, p),
+                        detail: (p) => p,
+                        empty: scene.wingMonEffectUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonEffect(slot)?.isNotEmpty == true
+                            ? scene.wingMonEffect(slot)!
+                            : 'Sin efecto',
+                      ),
+                      monOptionalActions(
+                        usesLoad: scene.wingMonEffectUsesLoad(slot),
+                        hasValue: scene.wingMonEffect(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveWingMonEffect(slot, ''),
+                        useLoad: () => scene.saveWingMonEffect(slot, 'LOAD'),
+                      ),
+                    ],
+                    if (scene.wingMonAttachedEffect != null) ...[
+                      field<String>(
+                        'wing-mon-attached/${scene.wingRecord!.source}/'
+                            '${scene.wingRecord!.id}',
+                        'Efecto adjunto MO4',
+                        scene.wingMonEffectCandidates,
+                        scene.wingMonAttachedEffectCandidate,
+                        (p) => p,
+                        baseName,
+                        scene.saveWingMonAttachedEffect,
+                        detail: (p) => p,
+                        empty: scene.wingMonAttachedEffectUsesLoad
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.wingMonAttachedEffect?.isNotEmpty == true
+                            ? scene.wingMonAttachedEffect!
+                            : 'Sin efecto adjunto',
+                      ),
+                      monOptionalActions(
+                        usesLoad: scene.wingMonAttachedEffectUsesLoad,
+                        hasValue:
+                            scene.wingMonAttachedEffect?.isNotEmpty == true,
+                        clear: () => scene.saveWingMonAttachedEffect(''),
+                        useLoad: () => scene.saveWingMonAttachedEffect('LOAD'),
+                      ),
+                    ],
+                    const Divider(height: 18),
+                    for (final part in scene.wingMonParts) ...[
+                      Text(
+                        'Parte ${part.id}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      field<String>(
+                        'wing-mon-mesh/${scene.wingRecord!.source}/'
+                            '${scene.wingRecord!.id}/${part.id}',
+                        'Malla · parte ${part.id}',
+                        scene.wingMonMeshCandidates,
+                        scene.wingMonMeshCandidate(part.id),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonPart(part.id, meshPath: p),
+                        detail: (p) => p,
+                        empty: part.mesh,
+                      ),
+                      field<String>(
+                        'wing-mon-texture/${scene.wingRecord!.source}/'
+                            '${scene.wingRecord!.id}/${part.id}',
+                        'Textura · parte ${part.id}',
+                        scene.wingMonTextureCandidates,
+                        scene.wingMonTextureCandidate(part.id),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveWingMonPart(part.id, texturePath: p),
+                        detail: (p) => p,
+                        empty: part.texture,
+                      ),
+                    ],
+                  ],
+                ),
+                OutlinedButton.icon(
+                  onPressed: disabled || !scene.wingPositionFileAvailable
+                      ? null
+                      : openWingPositionLab,
+                  icon: const Icon(Icons.grid_on_outlined, size: 16),
+                  label: const Text(
+                    'Abrir matriz WingPosition 48 perfiles',
+                    style: TextStyle(fontSize: 10),
                   ),
                 ),
-                slider(
-                  'Altura del anclaje',
-                  scene.wingHeight,
-                  -2,
-                  4,
-                  (v) => setState(() => scene.wingHeight = v),
+                note(
+                  'ExcelXml/WingPosition.xml · ${scene.wingPositionProfileLabel}. '
+                  'La fuente real es SpreadsheetML y expone BONE_IDX + posición '
+                  'XYZ + rotación XYZ. Guardar modifica ese perfil nativo por '
+                  'familia/job/sexo, por lo que afecta a todas las alas que lo '
+                  'usen, no solo al modelo visible.',
                 ),
-                slider(
-                  'Separación de espalda',
-                  scene.wingDepth,
-                  -2,
-                  2,
-                  (v) => setState(() => scene.wingDepth = v),
-                ),
-                slider(
-                  'Escala',
-                  scene.wingSize,
-                  .1,
+                preciseSlider(
+                  'Posición X · izquierda / derecha',
+                  scene.wingOffsetX,
+                  -3,
                   3,
-                  (v) => setState(() => scene.wingSize = v),
+                  (v) => setState(() => scene.wingOffsetX = v),
+                ),
+                preciseSlider(
+                  'Posición Y · arriba / abajo',
+                  scene.wingOffsetY,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.wingOffsetY = v),
+                ),
+                preciseSlider(
+                  'Posición Z · frente / espalda',
+                  scene.wingOffsetZ,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.wingOffsetZ = v),
+                ),
+                preciseSlider(
+                  'Rotación X',
+                  scene.wingRotX,
+                  -360,
+                  360,
+                  (v) => setState(() => scene.wingRotX = v),
+                ),
+                preciseSlider(
+                  'Rotación Y',
+                  scene.wingRotY,
+                  -360,
+                  360,
+                  (v) => setState(() => scene.wingRotY = v),
+                ),
+                preciseSlider(
+                  'Rotación Z',
+                  scene.wingRotZ,
+                  -360,
+                  360,
+                  (v) => setState(() => scene.wingRotZ = v),
+                ),
+                if (scene.wingPositionFileAvailable) ...[
+                  if (scene.wingBoneWritable)
+                    preciseSlider(
+                      'Hueso de anclaje WingPosition',
+                      scene.wingBoneIndex.toDouble(),
+                      0,
+                      (scene.wingBoneCount > 0 ? scene.wingBoneCount - 1 : 0)
+                          .toDouble(),
+                      (v) => setState(() => scene.setWingBoneIndex(v.round())),
+                      step: 1,
+                      decimals: 0,
+                    )
+                  else
+                    note(
+                      'Hueso de anclaje: ${scene.wingBoneIndex}. Este XML no '
+                      'expone un campo de hueso editable; Studio lo conserva '
+                      'sin inventar una escritura que el cliente no lea.',
+                    ),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: disabled || !scene.wingPositionFileAvailable
+                            ? null
+                            : () => act(scene.saveActiveWingPositionToData),
+                        icon: const Icon(Icons.save_outlined, size: 16),
+                        label: Text(
+                          catalog!.library.isSpkWorkspace
+                              ? 'Guardar en overlay SPK'
+                              : 'Guardar en DATA',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: disabled || !scene.wingPositionFileAvailable
+                            ? null
+                            : () => act(() async {
+                                scene.resetWingPositionFromData();
+                              }),
+                        child: const Text(
+                          'Recargar XML',
+                          style: TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                OutlinedButton(
+                  onPressed: disabled
+                      ? null
+                      : () => act(() async {
+                          scene.resetWingPositionVerifiedBaseline();
+                        }),
+                  child: const Text(
+                    'Restaurar baseline verificado ps0032',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: disabled
+                            ? null
+                            : () => act(() async {
+                                await Clipboard.setData(
+                                  ClipboardData(
+                                    text: const JsonEncoder.withIndent(
+                                      '  ',
+                                    ).convert(scene.wingTransformSnapshot),
+                                  ),
+                                );
+                              }),
+                        icon: const Icon(Icons.copy_all_outlined, size: 15),
+                        label: const Text(
+                          'Copiar transformación',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: disabled
+                            ? null
+                            : () => act(() async {
+                                final data = await Clipboard.getData(
+                                  Clipboard.kTextPlain,
+                                );
+                                final text = data?.text;
+                                if (text == null || text.trim().isEmpty) {
+                                  throw const FormatException(
+                                    'El portapapeles no contiene una transformación.',
+                                  );
+                                }
+                                final raw = jsonDecode(text);
+                                if (raw is! Map) {
+                                  throw const FormatException(
+                                    'La transformación copiada no es un JSON válido.',
+                                  );
+                                }
+                                scene.applyWingTransformSnapshot(
+                                  Map<String, dynamic>.from(raw),
+                                );
+                                setState(() {});
+                              }),
+                        icon: const Icon(Icons.content_paste_go, size: 15),
+                        label: const Text(
+                          'Pegar transformación',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+                note(
+                  'Transformación de previsualización de Studio: escala y espejo '
+                  'no existen entre los seis campos WingPosition confirmados, por '
+                  'eso nunca se escriben al juego hasta identificar un campo nativo '
+                  'equivalente.',
+                ),
+                preciseSlider(
+                  'Escala X',
+                  scene.wingScaleX,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.wingScaleX = v),
+                ),
+                preciseSlider(
+                  'Escala Y',
+                  scene.wingScaleY,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.wingScaleY = v),
+                ),
+                preciseSlider(
+                  'Escala Z',
+                  scene.wingScaleZ,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.wingScaleZ = v),
+                ),
+                toggle(
+                  'Espejo X',
+                  scene.wingMirrorX,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.wingMirrorX = v),
+                ),
+                toggle(
+                  'Espejo Y',
+                  scene.wingMirrorY,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.wingMirrorY = v),
+                ),
+                toggle(
+                  'Espejo Z',
+                  scene.wingMirrorZ,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.wingMirrorZ = v),
+                ),
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => setState(scene.resetWingPreviewOnlyTransform),
+                  icon: const Icon(Icons.restart_alt, size: 15),
+                  label: const Text(
+                    'Restablecer escala / espejo',
+                    style: TextStyle(fontSize: 10),
+                  ),
                 ),
                 TextButton(
                   onPressed: disabled
@@ -1080,8 +1805,72 @@ class _StudioState extends State<StudioPage> {
                 ),
               ],
               note(
-                'Anclaje en la cadena del torso, independiente de los brazos. Sigue el asiento al montar.',
+                'Equipamiento original: slot 16. DBItemData ItemType 121 usa Image como ID visual del registro Character/Wing/*.MON. Studio muestra esa relación cuando la metadata real está disponible.',
               ),
+              note(
+                'El anclaje usa el hueso indicado por WingPosition cuando el perfil '
+                'real está disponible (baseline canónico: hueso 4). Solo si no hay '
+                'perfil compatible se recurre al anclaje anatómico inferido del torso.',
+              ),
+              if (catalog!.library.files.containsKey(
+                    'excelxml/wingdecompose.xml',
+                  ) ||
+                  catalog!.library.files.containsKey(
+                    'excelxml/wingexpitem.xml',
+                  ) ||
+                  catalog!.library.files.containsKey('excelxml/wingswap.xml'))
+                OutlinedButton.icon(
+                  onPressed: disabled ? null : openWingSystemsLab,
+                  icon: const Icon(Icons.account_tree_outlined, size: 16),
+                  label: const Text(
+                    'Abrir Wing Systems Lab',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+              if (catalog!.library.files.containsKey(
+                    'excelxml/wingdecompose.xml',
+                  ) ||
+                  catalog!.library.files.containsKey(
+                    'excelxml/wingexpitem.xml',
+                  ) ||
+                  catalog!.library.files.containsKey('excelxml/wingswap.xml'))
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Sistemas XML de alas',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Descomposición · experiencia · intercambio',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    for (final entry in const [
+                      ('excelxml/wingdecompose.xml', 'WingDecompose'),
+                      ('excelxml/wingexpitem.xml', 'WingExpItem'),
+                      ('excelxml/wingswap.xml', 'WingSwap'),
+                    ])
+                      if (catalog!.library.files.containsKey(entry.$1))
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: disabled
+                                ? null
+                                : () => openExcelXmlLab(initialPath: entry.$1),
+                            icon: const Icon(
+                              Icons.table_view_outlined,
+                              size: 15,
+                            ),
+                            label: Text(
+                              entry.$2,
+                              style: const TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
             ]),
             section('Vuelo suplementario', [
               SwitchListTile(
@@ -1104,6 +1893,58 @@ class _StudioState extends State<StudioPage> {
                   icon: const Icon(Icons.upload_file, size: 16),
                   label: const Text('Importar flight.json.gz'),
                 ),
+              OutlinedButton.icon(
+                onPressed: disabled ? null : () => act(importFlightV3),
+                icon: const Icon(Icons.flight_takeoff_outlined, size: 16),
+                label: const Text('Importar Vuelo + Combate V3 (.zip)'),
+              ),
+              note(scene.flightV3Status),
+              if (scene.flightV3 != null)
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Todas las transiciones Flight V3',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${scene.flightV3TransitionOptions.length} ANI · '
+                    'takeoff, landing, air blend y secuencias',
+                    style: const TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    field<FlightV3Transition>(
+                      'flight-v3-transition',
+                      'Transición / secuencia corporal',
+                      scene.flightV3TransitionOptions,
+                      scene.flightV3TransitionOptions
+                          .where((t) => t.id == scene.flightV3PreviewId)
+                          .firstOrNull,
+                      (t) => t.id,
+                      (t) => t.id.replaceFirst('V3_', ''),
+                      (t) => scene.previewFlightV3Transition(t.id),
+                      detail: (t) =>
+                          '${scene.flightV3TransitionLabel(t)}\n'
+                          'Destino: ${t.targetClip ?? 'secuencia compuesta'} · '
+                          'fase ${t.destinationPhase.toStringAsFixed(3)} s',
+                      empty: 'Selecciona una transición V3',
+                    ),
+                    note(
+                      'Este visor permite revisar las 26 transiciones reales '
+                      'del paquete, incluidas las tres BODY_SEQUENCE. La '
+                      'reproducción termina en el clip/fase de destino declarado '
+                      'por transiciones.json cuando existe.',
+                    ),
+                  ],
+                ),
+              if (scene.flightV3 != null)
+                note(
+                  'El paquete V3 se valida por SHA-256, vuelve a parsear todos '
+                  'los ANI y solo se activa sobre humf de 36 huesos. Incluye '
+                  'vuelo neutral/escudo, 26 transiciones y perfiles ON/DU/TH/SP. '
+                  'Los scripts HTML/JS/BAT del ZIP nunca se ejecutan.',
+                ),
               note(
                 scene.extraMotions == null
                     ? 'Paquete suplementario no instalado. La marcha original permanece activa.'
@@ -1114,19 +1955,275 @@ class _StudioState extends State<StudioPage> {
               creatureField('mount'),
               if (scene.mount != null) ...[
                 actorAnimation(scene.mount!, 'mount'),
-                slider(
-                  'Ajuste vertical del asiento',
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Vehicle.MON · slots ANI',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Persistencia nativa de animaciones de la montura',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    note(
+                      'Edita los slots ANI declarados por el MON original de la '
+                      'montura, reserializa MO2/MO4 y revalida antes de escribir. '
+                      'Esto sí modifica el recurso DATA que consume el cliente.',
+                    ),
+                    for (final slot in scene.mountMonAnimationSlots) ...[
+                      field<String>(
+                        'mount-mon/${scene.mountRecord!.source}/'
+                        '${scene.mountRecord!.id}/$slot',
+                        slot,
+                        scene.mountMonAnimationCandidates,
+                        scene.mountMonAnimationCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveMountMonAnimation(slot, p),
+                        detail: (p) => p,
+                        empty: scene.mountMonAnimationUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.mountMonAnimation(slot)?.isNotEmpty == true
+                            ? scene.mountMonAnimation(slot)!
+                            : 'Sin ANI asignado',
+                      ),
+                      if (!scene.mountMonAnimationUsesLoad(slot))
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: disabled
+                                ? null
+                                : () => act(
+                                    () => scene.saveMountMonAnimation(
+                                      slot,
+                                      'LOAD',
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Usar LOAD nativo',
+                              style: TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Editor Vehicle.MON · sonido / efectos',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'WAV/OGG y EFT/3DE nativos de la montura',
+                    style: TextStyle(fontSize: 9),
+                  ),
+                  children: [
+                    for (final slot in scene.mountMonSoundSlots) ...[
+                      field<String>(
+                        'mount-mon-sound/${scene.mountRecord!.source}/'
+                            '${scene.mountRecord!.id}/$slot',
+                        'Sonido · $slot',
+                        scene.mountMonSoundCandidates,
+                        scene.mountMonSoundCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveMountMonSound(slot, p),
+                        detail: (p) => p,
+                        empty: scene.mountMonSoundUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.mountMonSound(slot)?.isNotEmpty == true
+                            ? scene.mountMonSound(slot)!
+                            : 'Sin sonido',
+                      ),
+                      monOptionalActions(
+                        usesLoad: scene.mountMonSoundUsesLoad(slot),
+                        hasValue: scene.mountMonSound(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveMountMonSound(slot, ''),
+                        useLoad: () => scene.saveMountMonSound(slot, 'LOAD'),
+                      ),
+                    ],
+                    for (final slot in scene.mountMonEffectSlots) ...[
+                      field<String>(
+                        'mount-mon-effect/${scene.mountRecord!.source}/'
+                            '${scene.mountRecord!.id}/$slot',
+                        'Efecto · $slot',
+                        scene.mountMonEffectCandidates,
+                        scene.mountMonEffectCandidate(slot),
+                        (p) => p,
+                        baseName,
+                        (p) => scene.saveMountMonEffect(slot, p),
+                        detail: (p) => p,
+                        empty: scene.mountMonEffectUsesLoad(slot)
+                            ? 'LOAD · resolución nativa del cliente'
+                            : scene.mountMonEffect(slot)?.isNotEmpty == true
+                            ? scene.mountMonEffect(slot)!
+                            : 'Sin efecto',
+                      ),
+                      monOptionalActions(
+                        usesLoad: scene.mountMonEffectUsesLoad(slot),
+                        hasValue:
+                            scene.mountMonEffect(slot)?.isNotEmpty == true,
+                        clear: () => scene.saveMountMonEffect(slot, ''),
+                        useLoad: () => scene.saveMountMonEffect(slot, 'LOAD'),
+                      ),
+                    ],
+                  ],
+                ),
+                note(
+                  'Studio Bridge ps0032 · ${scene.activeVehiclePositionSection}. '
+                  'El game.exe conserva primero su cálculo nativo de hueso/asiento '
+                  'y después aplica este delta local. Si el INI falta o el perfil '
+                  'está deshabilitado, el comportamiento original no cambia.',
+                ),
+                field<int>(
+                  'mount-rider-profile/${scene.mountRecord!.source}/'
+                      '${scene.mountRecord!.id}',
+                  'Perfil ANI del jinete',
+                  scene.riderProfileOptions,
+                  scene.riderProfile,
+                  (v) => v.toString(),
+                  scene.riderProfileLabel,
+                  (v) async => scene.setRiderProfile(v),
+                  detail: (v) {
+                    final p = riderAnimationProfiles[v]!;
+                    return 'Reposo ANI ${p.idle} · movimiento ANI ${p.moving}';
+                  },
+                ),
+                preciseSlider(
+                  'Asiento X · izquierda / derecha',
+                  scene.riderLateral,
+                  -3,
+                  3,
+                  (v) => setState(() => scene.riderLateral = v),
+                ),
+                preciseSlider(
+                  'Asiento Y · arriba / abajo',
                   scene.riderHeight,
-                  -1,
-                  2,
+                  -3,
+                  3,
                   (v) => setState(() => scene.riderHeight = v),
                 ),
-                slider(
-                  'Avance del asiento',
+                preciseSlider(
+                  'Asiento Z · avance / retroceso',
                   scene.riderForward,
                   -3,
                   3,
                   (v) => setState(() => scene.riderForward = v),
+                ),
+                preciseSlider(
+                  'Rotación jinete X',
+                  scene.riderRotX,
+                  -180,
+                  180,
+                  (v) => setState(() => scene.riderRotX = v),
+                ),
+                preciseSlider(
+                  'Rotación jinete Y',
+                  scene.riderRotY,
+                  -180,
+                  180,
+                  (v) => setState(() => scene.riderRotY = v),
+                ),
+                preciseSlider(
+                  'Rotación jinete Z',
+                  scene.riderRotZ,
+                  -180,
+                  180,
+                  (v) => setState(() => scene.riderRotZ = v),
+                ),
+                const Divider(height: 20),
+                preciseSlider(
+                  'Escala X',
+                  scene.riderScaleX,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.riderScaleX = v),
+                ),
+                preciseSlider(
+                  'Escala Y',
+                  scene.riderScaleY,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.riderScaleY = v),
+                ),
+                preciseSlider(
+                  'Escala Z',
+                  scene.riderScaleZ,
+                  .05,
+                  5,
+                  (v) => setState(() => scene.riderScaleZ = v),
+                ),
+                toggle(
+                  'Espejo X',
+                  scene.riderMirrorX,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.riderMirrorX = v),
+                ),
+                toggle(
+                  'Espejo Y',
+                  scene.riderMirrorY,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.riderMirrorY = v),
+                ),
+                toggle(
+                  'Espejo Z',
+                  scene.riderMirrorZ,
+                  disabled
+                      ? null
+                      : (v) => setState(() => scene.riderMirrorZ = v),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: disabled
+                            ? null
+                            : () => act(scene.saveActiveVehiclePositionToData),
+                        icon: const Icon(Icons.save_outlined, size: 15),
+                        label: const Text(
+                          'Guardar para game.exe',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            disabled ||
+                                scene.activeVehiclePositionProfile == null
+                            ? null
+                            : () => act(() async {
+                                scene.resetActiveVehiclePositionFromData();
+                                setState(() {});
+                              }),
+                        child: const Text(
+                          'Recargar INI',
+                          style: TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                OutlinedButton(
+                  onPressed: disabled
+                      ? null
+                      : () => act(() async {
+                          scene.resetMountSeatCalibration();
+                          setState(() {});
+                        }),
+                  child: const Text(
+                    'Restablecer delta neutral',
+                    style: TextStyle(fontSize: 10),
+                  ),
                 ),
                 TextButton(
                   onPressed: disabled
@@ -1138,7 +2235,11 @@ class _StudioState extends State<StudioPage> {
                   ),
                 ),
                 note(
-                  'El asiento sigue una superficie animada de la montura; la pelvis se alinea con ella. Ajuste manual por montura. W: marcha · Shift: carrera.',
+                  'Vehicle.MON mantiene sus nueve ANI por registro. El perfil ANI '
+                  'del jinete es otro contrato: ps0032 usa modos distintos '
+                  '(21/20, 97/22, 98/98 y variantes del corpus). '
+                  'VehiclePosition.ini guarda el modo elegido junto al delta 6DoF, '
+                  'escala y espejo por familia + ID de montura. W: marcha · Shift: carrera.',
                 ),
               ],
             ]),
@@ -1359,6 +2460,21 @@ class _StudioState extends State<StudioPage> {
               note(
                 'Escenario completo · ${scene.game.loaded?.objectCount ?? 0} objetos · ${scene.game.loaded?.triangleCount ?? 0} triángulos. Recursos pendientes: ${scene.game.loaded?.missingObjects ?? 0}. La densidad del terreno depende del nivel de detalle.',
               ),
+              if (catalog!.library.files.containsKey(
+                'excelxml/ymwatershaderparams.xml',
+              ))
+                OutlinedButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => openExcelXmlLab(
+                          initialPath: 'excelxml/ymwatershaderparams.xml',
+                        ),
+                  icon: const Icon(Icons.water_outlined, size: 16),
+                  label: const Text(
+                    'Shader / agua por MapID',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
             ]),
             worldOptions(),
             section('Visualización', [
@@ -1401,6 +2517,65 @@ class _StudioState extends State<StudioPage> {
               ),
               note(
                 'Las listas contienen recursos encontrados, no combinaciones exhaustivamente homologadas.',
+              ),
+            ]),
+            section('ExcelXml · sistemas de DATA', [
+              Text(
+                '${c.library.files.keys.where((path) => path.startsWith('excelxml/') && path.endsWith('.xml')).length} '
+                'tablas XML montadas · editor estructurado/validado',
+                style: const TextStyle(fontSize: 10),
+              ),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: disabled ? null : () => openExcelXmlLab(),
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: const Text(
+                  'Abrir ExcelXml Lab completo',
+                  style: TextStyle(fontSize: 10),
+                ),
+              ),
+              excelXmlShortcutGroup('Alas', const [
+                ('wingposition.xml', 'Posición / hueso'),
+                ('wingdecompose.xml', 'Descomposición'),
+                ('wingexpitem.xml', 'Experiencia'),
+                ('wingswap.xml', 'Intercambio'),
+              ], subtitle: 'Pose 6DoF + progresión y sistemas'),
+              excelXmlShortcutGroup('Mundo y viaje', const [
+                ('ymwatershaderparams.xml', 'Shader / agua'),
+                ('startmapchange.xml', 'Mapas / nombres'),
+                ('mapcountry.xml', 'Facción por mapa'),
+                ('maplimitlv.xml', 'Límites de nivel'),
+                ('generalmovetowns_server.xml', 'Teletransporte'),
+              ], subtitle: 'Render, mapas, acceso y movimiento'),
+              excelXmlShortcutGroup('Monstruos, drops y NPC', const [
+                ('mondeathitemworlddrop.xml', 'Drop global'),
+                ('mondeathitemmapdrop.xml', 'Drop por mapa'),
+                ('monsterdroprate.xml', 'Tasas de drop'),
+                ('monsterrespawnchangesystem.xml', 'Respawn dinámico'),
+                ('foolsevent_changemoninfo.xml', 'Stats por evento'),
+                ('npcdisablesystem.xml', 'Disponibilidad NPC'),
+              ], subtitle: 'Tablas complementarias a DBMonsterData'),
+              excelXmlShortcutGroup('Objetos y economía', const [
+                ('itemcreate.xml', 'Creación / recetas'),
+                ('itemaddoptiondata.xml', 'Opciones adicionales'),
+                ('itemaddoptionextradata.xml', 'Bonus enchant'),
+                ('randomoptionedit.xml', 'Opciones aleatorias'),
+                ('renownshop.xml', 'Tienda de renombre'),
+                ('guildgemitem.xml', 'Gemas de gremio'),
+                ('limitationonitemuseinmap.xml', 'Restricciones por mapa'),
+              ], subtitle: 'Complemento de DBItemData'),
+              excelXmlShortcutGroup('UI, eventos y operación', const [
+                ('fontstyleset.xml', 'Fuentes / estilos'),
+                ('gmnoticeinfo.xml', 'Avisos GM'),
+                ('timenoticesystem.xml', 'Avisos horarios'),
+                ('ymeventinfo.xml', 'Eventos / enlaces'),
+                ('events.xml', 'Eventos'),
+                ('mainquest.xml', 'Quest principal'),
+              ], subtitle: 'Presentación, avisos, eventos y quests'),
+              note(
+                'ExcelXml Lab conserva estilos/comentarios, respeta ss:Type, '
+                'revalida el XML antes de guardar y nunca inventa celdas sparse. '
+                'Las tablas cliente/servidor mantienen su procedencia.',
               ),
             ]),
             section('Recursos y archivos', [
@@ -2508,15 +3683,49 @@ class _StudioState extends State<StudioPage> {
   }
 
   Future<void> exportDiagnostics() async {
+    final c = catalog;
+    final vehicle = scene.activeVehiclePositionProfile;
+    final excelXml =
+        c?.library.files.keys
+            .where(
+              (path) => path.startsWith('excelxml/') && path.endsWith('.xml'),
+            )
+            .toList() ??
+        const <String>[];
     await saveFile(
       'diagnostico.json',
       const JsonEncoder.withIndent('  ').convert({
         'version': studioVersion,
         'time': DateTime.now().toIso8601String(),
         'platform': Platform.operatingSystem,
-        'resources': catalog?.library.files.length,
-        'source': catalog?.library.sourceDiagnostics,
+        'resources': c?.library.files.length,
+        'source': c?.library.sourceDiagnostics,
         'archiveAttempt': Library.lastArchiveReport,
+        'excelXml': {
+          'count': excelXml.length,
+          'wingPositionPath': c?.wingPositionPath,
+          'wingPositionProfile': scene.wingPositionProfileLabel,
+          'wingBone': scene.wingBoneIndex,
+        },
+        'flightV3': scene.flightV3 == null
+            ? null
+            : {
+                'status': scene.flightV3Status,
+                'compatible': scene.flightV3Compatible,
+                'mappedArchetypes': scene.flightV3MappedArchetypes,
+                'preview': scene.flightV3PreviewId,
+                'evidence': scene.flightV3!.evidence,
+              },
+        'vehicleBridge': vehicle == null
+            ? null
+            : {
+                'section': vehicle.section,
+                'enabled': vehicle.enabled,
+                'position': [vehicle.posX, vehicle.posY, vehicle.posZ],
+                'rotation': [vehicle.rotX, vehicle.rotY, vehicle.rotZ],
+                'scale': [vehicle.scaleX, vehicle.scaleY, vehicle.scaleZ],
+                'riderProfile': vehicle.riderProfile,
+              },
         'streaming': scene.game.loaded?.streamingStats,
         'messages': diagnostics,
       }),
@@ -2550,6 +3759,7 @@ class _StudioState extends State<StudioPage> {
     actions: actionBar(),
     hasLibrary: scene.character != null,
     onOpenEditor: catalog == null || working ? null : openDataEditor,
+    onOpenExcelXml: catalog == null || working ? null : () => openExcelXmlLab(),
     onExportScene: scene.character == null || working ? null : exportGameScene,
     onOpenData: disabled ? null : sourceMenu,
     onOpenSpk: disabled ? null : openSpkArchive,

@@ -37,7 +37,6 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
     LogicalKeyboardKey.digit3,
     LogicalKeyboardKey.digit4,
     LogicalKeyboardKey.keyR,
-    LogicalKeyboardKey.space,
     LogicalKeyboardKey.escape,
     LogicalKeyboardKey.tab,
   };
@@ -60,20 +59,25 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     // A viewport can contain focused controls: never intercept their typing.
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
-    // The ISO key beside Z (< / > on a Spanish layout), not Shift+comma.
-    // Use its location so it also works while Shift is held for sprinting.
-    if (event.physicalKey == PhysicalKeyboardKey.intlBackslash) {
+    // Flight follows the requested Shaiya Studio contract:
+    // Space alone = terrestrial jump; Shift+Space = land/fly toggle.
+    // A held/repeated Space must never alternate flight repeatedly.
+    if (event.logicalKey == LogicalKeyboardKey.space) {
       final keyboard = HardwareKeyboard.instance;
       if (!_active ||
           event.synthesized ||
           keyboard.isControlPressed ||
           keyboard.isAltPressed ||
-          keyboard.isMetaPressed ||
-          widget.onFlightToggle == null) {
+          keyboard.isMetaPressed) {
         return KeyEventResult.ignored;
       }
-      // One toggle per press; holding the key must not alternate repeatedly.
-      if (event is KeyDownEvent) widget.onFlightToggle!.call();
+      if (event is KeyDownEvent) {
+        if (keyboard.isShiftPressed) {
+          widget.onFlightToggle?.call();
+        } else {
+          widget.onAction?.call(LogicalKeyboardKey.space);
+        }
+      }
       return KeyEventResult.handled;
     }
     if (!_movementKeys.contains(event.logicalKey)) {

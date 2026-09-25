@@ -60,6 +60,91 @@ function align(value, boundary) {
   return Math.ceil(value / boundary) * boundary;
 }
 
+function candidateEntropyOk(secretHex) {
+  if (!secretHex || (secretHex.length !== 32 && secretHex.length !== 64)) return false;
+  const unique = new Set();
+  for (let i = 0; i < secretHex.length; i += 2) unique.add(secretHex.substring(i, i + 2));
+  return unique.size >= 6;
+}
+
+function scanRuntimeIndexNeighborhood() {
+  if (!active) return;
+  const indexKeyHex = String(CONFIG.indexKeyHex || '').toLowerCase();
+  if (indexKeyHex.length !== 32 && indexKeyHex.length !== 64) {
+    event('RUNTIME_INDEX_KEY_SCAN_SKIPPED', {reason: 'missing-index-key'});
+    return;
+  }
+  const pattern = indexKeyHex.match(/../g).join(' ');
+  const ranges = [];
+  const seenRanges = new Set();
+  function addRange(base, size, source) {
+    if (!base || !size || size <= 0) return;
+    const key = base.toString() + ':' + size;
+    if (seenRanges.has(key)) return;
+    seenRanges.add(key);
+    ranges.push({base, size, source});
+  }
+  try {
+    for (const module of Process.enumerateModules()) {
+      addRange(module.base, module.size, 'module:' + module.name);
+    }
+  } catch (_) {}
+  for (const protection of ['rw-', 'r--']) {
+    try {
+      for (const range of Process.enumerateRanges({protection, coalesce: true})) {
+        addRange(range.base, range.size, 'range:' + protection);
+      }
+    } catch (_) {
+      try {
+        for (const range of Process.enumerateRanges(protection)) {
+          addRange(range.base, range.size, 'range:' + protection);
+        }
+      } catch (_) {}
+    }
+  }
+  let scannedBytes = 0;
+  let hits = 0;
+  let emitted = 0;
+  const maxScanBytes = 512 * 1024 * 1024;
+  for (const range of ranges) {
+    if (!active || hits >= 12 || emitted >= 1536) break;
+    if (range.size > 160 * 1024 * 1024) continue;
+    if (scannedBytes + range.size > maxScanBytes) continue;
+    scannedBytes += range.size;
+    let matches = [];
+    try {
+      matches = Memory.scanSync(range.base, range.size, pattern);
+    } catch (_) {
+      continue;
+    }
+    for (const match of matches) {
+      if (!active || hits >= 12 || emitted >= 1536) break;
+      hits++;
+      for (let delta = -128; delta <= 128 && emitted < 1536; delta += 4) {
+        const pointer = match.address.add(delta);
+        for (const width of [16, 32]) {
+          if (emitted >= 1536) break;
+          const secretHex = safe(pointer, width, 64);
+          if (!candidateEntropyOk(secretHex)) continue;
+          emitCandidate(secretHex, width, 'runtime-near-index-key', {
+            delta,
+            range: range.source,
+            indexKeyLocation: location(match.address),
+            candidateLocation: location(pointer),
+          });
+          emitted++;
+        }
+      }
+    }
+  }
+  event('RUNTIME_INDEX_KEY_SCAN', {
+    ranges: ranges.length,
+    scannedBytes,
+    hits,
+    candidates: emitted,
+  });
+}
+
 function authenticatedInfo(pointer) {
   try {
     if (pointer.isNull()) return null;
@@ -129,7 +214,11 @@ function attachCandidateModule(module) {
   if (
     lower !== 'bcrypt.dll' &&
     !lower.includes('crypto') &&
-    !lower.includes('libeay')
+    !lower.includes('libeay') &&
+    !lower.includes('mbedtls') &&
+    !lower.includes('mbedcrypto') &&
+    !lower.includes('wolfssl') &&
+    !lower.includes('boringssl')
   ) {
     return;
   }
@@ -263,6 +352,82 @@ function attachCandidateModule(module) {
             candidateBytes: bytes,
           });
         }
+      },
+    });
+  }
+
+  // BoringSSL exposes the AEAD key directly during context initialization.
+  // It is still only a candidate: Python must reproduce AES-GCM on the exact
+  // DATA.SPK ciphertext/tag samples before Studio accepts it.
+  hook('EVP_AEAD_CTX_init', {
+    onEnter(args) {
+      try {
+        const keyPointer = args[2];
+        const bytes = args[3].toUInt32();
+        if (!keyPointer || keyPointer.isNull() || ![16, 32].includes(bytes)) {
+          return;
+        }
+        emitCandidate(safe(keyPointer, bytes, 64), bytes, 'EVP_AEAD_CTX_init', {
+          module: module.name,
+          source: 'boringssl-aead-key',
+        });
+      } catch (_) {}
+    },
+  });
+
+  // mbedTLS is common in game launchers/clients that do not route symmetric
+  // crypto through Windows CNG. These hooks observe only the documented key
+  // argument; the offline SPK oracle remains authoritative.
+  hook('mbedtls_gcm_setkey', {
+    onEnter(args) {
+      try {
+        const keyPointer = args[2];
+        const bits = args[3].toUInt32();
+        if (!keyPointer || keyPointer.isNull() || ![128, 256].includes(bits)) {
+          return;
+        }
+        const bytes = bits / 8;
+        emitCandidate(safe(keyPointer, bytes, 64), bytes, 'mbedtls_gcm_setkey', {
+          module: module.name,
+          source: 'mbedtls-gcm-key',
+        });
+      } catch (_) {}
+    },
+  });
+  for (const symbol of ['mbedtls_aes_setkey_enc', 'mbedtls_aes_setkey_dec']) {
+    hook(symbol, {
+      onEnter(args) {
+        try {
+          const keyPointer = args[1];
+          const bits = args[2].toUInt32();
+          if (!keyPointer || keyPointer.isNull() || ![128, 256].includes(bits)) {
+            return;
+          }
+          const bytes = bits / 8;
+          emitCandidate(safe(keyPointer, bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'mbedtls-aes-key',
+          });
+        } catch (_) {}
+      },
+    });
+  }
+
+  // wolfSSL exposes byte lengths instead of bit lengths.
+  for (const symbol of ['wc_AesGcmSetKey', 'wc_AesSetKey']) {
+    hook(symbol, {
+      onEnter(args) {
+        try {
+          const keyPointer = args[1];
+          const bytes = args[2].toUInt32();
+          if (!keyPointer || keyPointer.isNull() || ![16, 32].includes(bytes)) {
+            return;
+          }
+          emitCandidate(safe(keyPointer, bytes, 64), bytes, symbol, {
+            module: module.name,
+            source: 'wolfssl-aes-key',
+          });
+        } catch (_) {}
       },
     });
   }
@@ -726,6 +891,9 @@ observer = Process.attachModuleObserver({
     }
   },
 });
+
+setTimeout(scanRuntimeIndexNeighborhood, 1500);
+setTimeout(scanRuntimeIndexNeighborhood, 5000);
 
 rpc.exports = {
   stop() {
