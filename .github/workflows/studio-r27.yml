@@ -29,8 +29,18 @@ jobs:
           cache: true
       - name: Verify and recover the interrupted source changes
         run: python ci/apply_r27.py
+      - name: Apply reviewed contract and preview corrections
+        run: python ci/refine_r27_review.py
       - name: Generate exact provided icon assets
         run: python tool/prepare_branding.py
+      - name: Register every regression in the local runner
+        shell: python
+        run: |
+          from pathlib import Path
+          tests = sorted(Path('test').glob('*_test.dart'))
+          imports = [f"import '../test/{p.name}' as suite{i};" for i, p in enumerate(tests)]
+          calls = [f'  suite{i}.main();' for i in range(len(tests))]
+          Path('tool/run_all_local.dart').write_text('// Complete local regression runner. Keep synchronized with test/*_test.dart.\n' + '\n'.join(imports) + '\n\nvoid main() {\n' + '\n'.join(calls) + '\n}\n')
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
       - name: Format readable sources
@@ -46,11 +56,11 @@ jobs:
           set -euo pipefail
           test "$(git branch --show-current)" = 'fix/studio-0627-spk-navigation-orbit-brand'
           git diff --check
-          git add lib test integration_test tool docs platform assets pubspec.yaml ci .studio-r27-applied
+          git add lib test integration_test tool docs platform assets pubspec.yaml ci .studio-r27-applied .studio-r27-review-applied
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'fix(studio): resource workspace independent of rigs, camera input and original branding [skip ci]'
+            git commit -m 'fix(studio): reviewed resource selection, textures and overlay version validation [skip ci]'
             git push origin HEAD:refs/heads/fix/studio-0627-spk-navigation-orbit-brand
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
