@@ -21,7 +21,11 @@ void main() {
       addTearDown(() => root.delete(recursive: true));
       final file = File('${root.path}/readme.txt');
       await file.writeAsString('Resource workspace; no playable character.');
-      final lib = await Library.fromDirectory(root.path, (_) {});
+      final lib = await Library.fromDirectory(
+        root.path,
+        (_) {},
+        requireCharacter: false,
+      );
       addTearDown(lib.dispose);
       await expectLater(Catalog(lib).load((_) {}), throwsFormatException);
       final catalog = Catalog(lib);

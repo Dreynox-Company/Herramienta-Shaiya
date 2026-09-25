@@ -146,7 +146,10 @@ class Library {
       }
     }
   }
-  static Future<Library?> choose(void Function(String) progress) async {
+  static Future<Library?> choose(
+    void Function(String) progress, {
+    bool requireCharacter = true,
+  }) async {
     if (Platform.isAndroid) {
       final uri = await channel.invokeMethod<String>('chooseTree');
       if (uri == null) return null;
@@ -159,14 +162,18 @@ class Library {
         uri,
         true,
         rows.map((k, v) => MapEntry(k.toString(), v.toString())),
+        requireCharacter: requireCharacter,
       );
     }
     final dir = await getDirectoryPath(confirmButtonText: 'Usar carpeta DATA');
     if (dir == null) return null;
-    return fromDirectory(dir, progress);
+    return fromDirectory(dir, progress, requireCharacter: requireCharacter);
   }
 
-  static Future<Library?> chooseArchive(void Function(String) progress) async {
+  static Future<Library?> chooseArchive(
+    void Function(String) progress, {
+    bool requireCharacter = true,
+  }) async {
     lastArchiveReport = null;
     try {
       ArchiveSource source;
@@ -264,9 +271,13 @@ class Library {
       }
       lastArchiveReport = source.diagnostics();
       try {
-        final lib = _normalise('SAH+SAF', false, {
-          for (final path in source.index.entries.keys) path: path,
-        }, archive: source);
+        final lib = _normalise(
+          'SAH+SAF',
+          false,
+          {for (final path in source.index.entries.keys) path: path},
+          archive: source,
+          requireCharacter: requireCharacter,
+        );
         progress(
           'Archivo indexado: ${lib.files.length} recursos compatibles · solo lectura',
         );
@@ -290,12 +301,20 @@ class Library {
     }
   }
 
-  static Future<Library> fromArchive(String sah, String saf) async {
+  static Future<Library> fromArchive(
+    String sah,
+    String saf, {
+    bool requireCharacter = true,
+  }) async {
     final source = await ArchiveSource.fromFiles(sah, saf);
     try {
-      return _normalise('SAH+SAF', false, {
-        for (final p in source.index.entries.keys) p: p,
-      }, archive: source);
+      return _normalise(
+        'SAH+SAF',
+        false,
+        {for (final p in source.index.entries.keys) p: p},
+        archive: source,
+        requireCharacter: requireCharacter,
+      );
     } catch (_) {
       source.close();
       rethrow;
@@ -515,8 +534,9 @@ class Library {
 
   static Future<Library> fromDirectory(
     String dir,
-    void Function(String) progress,
-  ) async {
+    void Function(String) progress, {
+    bool requireCharacter = true,
+  }) async {
     var root = Directory(dir);
     if (!await root.exists()) {
       throw const FormatException('La carpeta DATA no existe.');
@@ -548,7 +568,12 @@ class Library {
         );
       }
     }
-    return _normalise(root.path, false, map);
+    return _normalise(
+      root.path,
+      false,
+      map,
+      requireCharacter: requireCharacter,
+    );
   }
 
   static Library _normalise(
@@ -566,7 +591,8 @@ class Library {
       if (supportedPath(entry.key)) map[canon(entry.key)] = entry.value;
     }
     final hasCharacter = map.keys.any((p) => p.startsWith('character/'));
-    if (!hasCharacter && requireCharacter) {
+    if (!hasCharacter &&
+        (requireCharacter || map.keys.any((p) => p.contains('/character/')))) {
       final nested = map.keys.where((p) => p.contains('/character/')).toList();
       if (nested.isEmpty) {
         throw const FormatException(

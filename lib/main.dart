@@ -746,9 +746,9 @@ class _StudioState extends State<StudioPage> {
 
       final lib = path == null
           ? (archive
-                ? await Library.chooseArchive(report)
-                : await Library.choose(report))
-          : await Library.fromDirectory(path, report);
+                ? await Library.chooseArchive(report, requireCharacter: false)
+                : await Library.choose(report, requireCharacter: false))
+          : await Library.fromDirectory(path, report, requireCharacter: false);
       if (lib == null) return;
       candidate = lib;
       await loadBundledExtras();
