@@ -1,0 +1,34 @@
+name: SPK real-file analysis dependencies
+on:
+  push:
+    branches: [work/studio-0629-spk-real]
+    paths: [.github/workflows/spk-research-lab.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download Debian analysis runtime into an artifact only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p lab/debian lab/python
+          docker pull debian:trixie-slim
+          docker image inspect debian:trixie-slim --format '{{json .RepoDigests}}' > lab/debian-image.json
+          docker run --rm -v "$PWD/lab/debian:/out" debian:trixie-slim sh -ec '
+            apt-get update -qq
+            apt-get --download-only --no-install-recommends -y install wine64
+            cp /var/cache/apt/archives/*.deb /out/
+            apt-cache policy wine64 libwine > /out/versions.txt
+          '
+          python -m pip download --dest lab/python --only-binary=:all: --python-version=311 --implementation cp --abi cp311 --platform manylinux2014_x86_64 zstandard pefile capstone unicorn
+          find lab -type f -print0 | sort -z | xargs -0 sha256sum > lab/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Analysis-Runtime-Debian13
+          path: lab/
+          retention-days: 7
+          compression-level: 0
