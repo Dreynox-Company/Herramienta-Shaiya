@@ -41,6 +41,7 @@ import 'ui/studio_sections.dart';
 import 'ui/resource_model_preview.dart';
 import 'ui/data_editor.dart';
 import 'ui/items_page.dart';
+import 'ui/items_source_recovery.dart';
 import 'ui/excelxml_lab.dart';
 import 'ui/wing_position_lab.dart';
 import 'ui/wing_systems_lab.dart';
@@ -296,9 +297,28 @@ class _StudioState extends State<StudioPage> {
     if (library == null || working) return;
     scene.clearMovement();
     focus.unfocus();
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => ItemsPage(library: library)),
+    final recovery = await Navigator.of(context).push<ItemsRecoveryAction>(
+      MaterialPageRoute(
+        builder: (routeContext) => ItemsPage(
+          library: library,
+          onRecovery: (action) => Navigator.pop(routeContext, action),
+        ),
+      ),
     );
+    if (!mounted) return;
+    switch (recovery) {
+      case ItemsRecoveryAction.resources:
+        setState(() => tab = 6);
+        break;
+      case ItemsRecoveryAction.spk:
+        await browseMountedSpk();
+        break;
+      case ItemsRecoveryAction.reference:
+        await resolveResourceNames();
+        break;
+      case null:
+        break;
+    }
     if (mounted) focus.requestFocus();
   }
 
