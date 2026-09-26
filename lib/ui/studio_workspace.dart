@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'studio_brand.dart';
 
 /// Docks reserve space; animation and action bars never cover the 3D viewport.
 class StudioWorkspace extends StatefulWidget {
@@ -14,6 +15,7 @@ class StudioWorkspace extends StatefulWidget {
       onOpenExcelXml,
       onExportScene;
   final bool hasLibrary;
+  final bool leftOwnsScroll;
   const StudioWorkspace({
     super.key,
     required this.viewport,
@@ -33,6 +35,7 @@ class StudioWorkspace extends StatefulWidget {
     this.onOpenExcelXml,
     this.onExportScene,
     this.hasLibrary = false,
+    this.leftOwnsScroll = false,
   });
   @override
   State<StudioWorkspace> createState() => _StudioWorkspaceState();
@@ -73,6 +76,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     Widget child,
     VoidCallback close, {
     double? width,
+    bool scroll = true,
   }) => SizedBox(
     width: width,
     // ListTile, SwitchListTile and CheckboxListTile paint their feedback on
@@ -84,7 +88,11 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
       child: Column(
         children: [
           _title(title, close),
-          Expanded(child: _scroll(child)),
+          Expanded(
+            child: scroll
+                ? _scroll(child)
+                : Padding(padding: const EdgeInsets.all(8), child: child),
+          ),
         ],
       ),
     ),
@@ -213,12 +221,9 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
           ),
         ),
         if (width >= 1050) ...[
-          const Icon(Icons.view_in_ar_outlined, size: 21),
+          const StudioBrand(size: 28),
           const SizedBox(width: 9),
-          const Text(
-            'SHAIYA STUDIO',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+          const Text('SHSTUDIO', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(width: 18),
         ],
         // A bounded horizontal toolbar replaces the old centered overlay.
@@ -372,7 +377,14 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                   child: Column(
                     children: [
                       _mobileTabs(),
-                      Expanded(child: _scroll(widget.left)),
+                      Expanded(
+                        child: widget.leftOwnsScroll
+                            ? Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: widget.left,
+                              )
+                            : _scroll(widget.left),
+                      ),
                     ],
                   ),
                 ),
@@ -402,6 +414,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                         widget.left,
                         () => setState(() => leftOpen = false),
                         width: leftWidth,
+                        scroll: !widget.leftOwnsScroll,
                       ),
                       _splitter(true),
                     ],

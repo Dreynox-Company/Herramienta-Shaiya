@@ -78,7 +78,20 @@ class CatalogDocument extends EditDocument {
       throw const FormatException('Catálogo mayor de 64 MiB.');
     }
     // Runtime format validators verify all names, bounds and attachment layouts.
-    final p = path.toLowerCase(), codec = GameTextCodec(encoding);
+    var p = path.toLowerCase();
+    final codec = GameTextCodec(encoding);
+    if (p.endsWith('.bin')) {
+      final magic = ascii.decode(input.take(8).toList(), allowInvalid: true);
+      if (magic.startsWith('MLT')) {
+        p = '$p.mlt';
+      } else if (magic.startsWith('ITM') ||
+          magic.startsWith('IT2') ||
+          magic.startsWith('pandaIT2')) {
+        p = '$p.itm';
+      } else if (magic.startsWith('MO2') || magic.startsWith('MO4')) {
+        p = '$p.mon';
+      }
+    }
     if (p.endsWith('.mlt')) {
       readMlt(input, path);
     } else if (p.endsWith('.itm')) {

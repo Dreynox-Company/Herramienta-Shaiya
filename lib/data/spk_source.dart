@@ -429,6 +429,11 @@ class SpkArchiveSource {
     if (!await reference.exists()) {
       throw const FormatException('La carpeta DATA de referencia no existe.');
     }
+    if (await File(p.join(reference.path, '_SPK_MANIFEST.json')).exists()) {
+      throw const FormatException(
+        'Usa una DATA original de referencia. Una extracción de este SPK con nombres inferidos no demuestra esas mismas rutas.',
+      );
+    }
     final bySize = <int, List<File>>{};
     var scanned = 0;
     await for (final entity in reference.list(

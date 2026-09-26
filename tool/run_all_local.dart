@@ -1,4 +1,4 @@
-// Complete regression runner: all top-level test suites.
+// Complete local regression runner. Keep synchronized with test/*_test.dart.
 import '../test/appearance_snapshot_test.dart' as suite0;
 import '../test/archive_export_test.dart' as suite1;
 import '../test/archive_test.dart' as suite2;
@@ -37,26 +37,31 @@ import '../test/offline_saves_test.dart' as suite34;
 import '../test/palette_test.dart' as suite35;
 import '../test/r26_models_layout_test.dart' as suite36;
 import '../test/r26_spk_selective_test.dart' as suite37;
-import '../test/recovery_test.dart' as suite38;
-import '../test/revision04_test.dart' as suite39;
-import '../test/rig_transition_test.dart' as suite40;
-import '../test/spk_archive_test.dart' as suite41;
-import '../test/spk_extended_formats_test.dart' as suite42;
-import '../test/spk_fragment_payload_test.dart' as suite43;
-import '../test/spk_payload_validation_test.dart' as suite44;
-import '../test/spk_profile_discovery_test.dart' as suite45;
-import '../test/spk_table_discovery_test.dart' as suite46;
-import '../test/spk_writer_test.dart' as suite47;
-import '../test/streaming_test.dart' as suite48;
-import '../test/vehicle_position_test.dart' as suite49;
-import '../test/wing_item_mapping_test.dart' as suite50;
-import '../test/wing_motion_test.dart' as suite51;
-import '../test/wing_native_transform_test.dart' as suite52;
-import '../test/wing_position_test.dart' as suite53;
-import '../test/wing_systems_test.dart' as suite54;
-import '../test/workspace_interaction_test.dart' as suite55;
-import '../test/workspace_material_test.dart' as suite56;
-import '../test/xml_tree_document_test.dart' as suite57;
+import '../test/r27_catalog_mount_test.dart' as suite38;
+import '../test/r27_library_policy_test.dart' as suite39;
+import '../test/r27_orbit_input_test.dart' as suite40;
+import '../test/r27_preview_generation_test.dart' as suite41;
+import '../test/r27_resource_workspace_test.dart' as suite42;
+import '../test/recovery_test.dart' as suite43;
+import '../test/revision04_test.dart' as suite44;
+import '../test/rig_transition_test.dart' as suite45;
+import '../test/spk_archive_test.dart' as suite46;
+import '../test/spk_extended_formats_test.dart' as suite47;
+import '../test/spk_fragment_payload_test.dart' as suite48;
+import '../test/spk_payload_validation_test.dart' as suite49;
+import '../test/spk_profile_discovery_test.dart' as suite50;
+import '../test/spk_table_discovery_test.dart' as suite51;
+import '../test/spk_writer_test.dart' as suite52;
+import '../test/streaming_test.dart' as suite53;
+import '../test/vehicle_position_test.dart' as suite54;
+import '../test/wing_item_mapping_test.dart' as suite55;
+import '../test/wing_motion_test.dart' as suite56;
+import '../test/wing_native_transform_test.dart' as suite57;
+import '../test/wing_position_test.dart' as suite58;
+import '../test/wing_systems_test.dart' as suite59;
+import '../test/workspace_interaction_test.dart' as suite60;
+import '../test/workspace_material_test.dart' as suite61;
+import '../test/xml_tree_document_test.dart' as suite62;
 
 void main() {
   suite0.main();
@@ -117,4 +122,9 @@ void main() {
   suite55.main();
   suite56.main();
   suite57.main();
+  suite58.main();
+  suite59.main();
+  suite60.main();
+  suite61.main();
+  suite62.main();
 }

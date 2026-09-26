@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../data/spk_source.dart';
 
 import '../core/game_text_codec.dart';
 import '../core/seed_data.dart';
@@ -18,10 +19,15 @@ class EditorReader {
     if (input.length > 128 * 1024 * 1024) {
       throw const FormatException('El editor limita cada tabla a 128 MiB.');
     }
-    if (RegExp(r'\.(mlt|itm|mon)$', caseSensitive: false).hasMatch(path)) {
+    final technicalFormat = path.toLowerCase().endsWith('.bin')
+        ? SpkArchiveSource.detectFormat(input)
+        : '';
+    if (const {'MLT', 'ITM', 'MON'}.contains(technicalFormat) ||
+        RegExp(r'\.(mlt|itm|mon)$', caseSensitive: false).hasMatch(path)) {
       return CatalogDocument.open(input, path, encoding);
     }
-    if (RegExp(r'\.(ini|cfg|txt|xml)$', caseSensitive: false).hasMatch(path)) {
+    if (const {'TXT', 'XML', 'INI', 'JSON'}.contains(technicalFormat) ||
+        RegExp(r'\.(ini|cfg|txt|xml)$', caseSensitive: false).hasMatch(path)) {
       return TextDocument.open(input, path, encoding);
     }
     final payload = SeedData.decode(input), warnings = <String>[];
@@ -71,7 +77,7 @@ class EditorReader {
             .contains('binarysdata/') ||
         (name.startsWith('db') && name.endsWith('.sdata'))) {
       candidates.add('binary');
-    } else if (name.endsWith('.sdata')) {
+    } else if (name.endsWith('.sdata') || name.endsWith('.bin')) {
       // Fully audited SPK resources without a resolved filename still retain
       // their detected SDATA extension. The binary-table contract has a
       // distinctive 128-byte header + UTF-16 column directory, so it is safe

@@ -1,3 +1,8 @@
+import 'package:flutter/gestures.dart';
+import '../test/fixtures/resource_spk_fixture.dart';
+import 'package:herramienta_shaiya/data/resource_index.dart';
+import 'package:herramienta_shaiya/data/file_save.dart';
+import 'package:herramienta_shaiya/ui/resource_workspace.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -582,6 +587,52 @@ void main() {
     );
     expect(r26Preview.error, isNull);
     await captureBoundary('r26-model-picker-capture', 'r26_model_picker');
+    final surface = find.descendant(
+      of: find.byType(NativeModelPreview),
+      matching: find.byKey(const ValueKey('model-orbit-input')),
+    );
+    final cameraBefore = [
+      r26Preview.view.camera.position.x,
+      r26Preview.view.camera.position.y,
+      r26Preview.view.camera.position.z,
+    ];
+    final pointer = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      buttons: kPrimaryMouseButton,
+    );
+    await pointer.down(tester.getCenter(surface));
+    await pointer.moveBy(const Offset(90, 40));
+    await pointer.up();
+    await tester.pump(const Duration(milliseconds: 250));
+    final cameraAfter = [
+      r26Preview.view.camera.position.x,
+      r26Preview.view.camera.position.y,
+      r26Preview.view.camera.position.z,
+    ];
+    expect(cameraAfter, isNot(cameraBefore));
+    expect(identical(scene.appearance, beforeAppearance), isTrue);
+    final pan = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await pan.down(tester.getCenter(surface));
+    await pan.moveBy(const Offset(25, 20));
+    await pan.up();
+    expect(r26Preview.orbit.targetX, isNot(0));
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(surface),
+        kind: PointerDeviceKind.mouse,
+        scrollDelta: const Offset(0, -100),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(r26Preview.orbit.zoom, lessThan(1));
+    await captureBoundary('r26-model-picker-capture', 'r27_mouse_orbit');
+    passed.add(
+      'R27 actual mouse drag, secondary pan and wheel change the native preview camera, not the actor',
+    );
+
     await tester.tap(find.byKey(const ValueKey('confirm-model-picker')));
     await tester.pump(const Duration(milliseconds: 250));
     expect((await selectedFuture)?.key, modelChoice.key);
@@ -689,6 +740,98 @@ void main() {
       );
     } finally {
       await exportDir.delete(recursive: true);
+    }
+    final spkRoot = await Directory.systemTemp.createTemp(
+      'r27-native-resources-',
+    );
+    try {
+      // Read the known synthetic DATA resources BEFORE replacing the main source.
+      final map = <String, Uint8List>{
+        part.tablePath: await scene.catalog!.library.read(part.tablePath),
+        part.meshPath: await scene.catalog!.library.read(part.meshPath),
+        part.texturePath: await scene.catalog!.library.read(part.texturePath),
+      };
+      final spk = await resourceSpkFixture(spkRoot, map, nativeIndex: true);
+      expect(spk.index.resources.length, 4);
+      await spk.validateSimpleResourceProfile();
+      final unchangedSpk = await spk.file.readAsBytes();
+      await state.mountSpkWorkspace(spk);
+      await waitFor(
+        () => find.byType(ResourceSidebar).evaluate().isNotEmpty,
+        'R27 opening a SPK with no Character paths activates the left resource sidebar',
+      );
+      expect(state.tab, 6);
+      final index = state.resourceIndex as ResourceIndex;
+      expect(index.entries.length, 4);
+      expect(index.blockedCount, 1);
+      final meshEntry = index.entries.firstWhere(
+        (e) => e.displayPath == part.meshPath,
+      );
+      // Use the real sidebar button, not just the backend method.
+      final row = find.byKey(ValueKey('resource-${meshEntry.key}'));
+      await tester.ensureVisible(row);
+      await tester.tap(row);
+      await waitFor(
+        () => find.byType(NativeModelPreview).evaluate().isNotEmpty,
+        'R27 selecting a raw SPK mesh opens the native viewport directly',
+      );
+      final dynamic rawPreview = tester.state(find.byType(NativeModelPreview));
+      await waitFor(
+        () =>
+            rawPreview.ready == true &&
+            rawPreview.actor?.parts.isNotEmpty == true,
+        'R27 unnamed authenticated SPK mesh renders without a fabricated texture association',
+      );
+      expect(rawPreview.error, isNull);
+      await captureBoundary(
+        'studio-shell-capture',
+        'r27_spk_resource_workspace',
+      );
+      final tableEntry = index.entries.firstWhere(
+        (e) => e.displayPath == part.tablePath,
+      );
+      final sourceTable = await index.read(tableEntry);
+      final doc = EditorReader.open(sourceTable.bytes, tableEntry.path!);
+      expect(doc.complete, isTrue);
+      // Two actual commits to the authenticated Entry ID, then reopen and reparse.
+      final materialRow = List.generate(
+        doc.rows.length,
+        (i) => i,
+      ).firstWhere((row) => doc.fields(row).any((f) => f.spec.name == 'Alpha'));
+      final numeric = doc
+          .fields(materialRow)
+          .firstWhere((f) => f.spec.name == 'Alpha');
+      final initial = doc.read(numeric);
+      doc.edit(materialRow, numeric, initial == '0' ? '1' : '0');
+      await index.replace(sourceTable, doc.exportBytes());
+      final reread = await index.read(tableEntry);
+      final doc2 = EditorReader.open(reread.bytes, tableEntry.path!);
+      doc2.edit(
+        materialRow,
+        doc2
+            .fields(materialRow)
+            .firstWhere((f) => f.spec.name == numeric.spec.name),
+        initial,
+      );
+      await index.replace(reread, doc2.exportBytes());
+      final reopened = await Library.fromSpkEditable(spk);
+      final reopenedPath = reopened.files.entries
+          .firstWhere((e) => e.value == tableEntry.key)
+          .key;
+      expect(
+        FileSave.hash(await reopened.read(reopenedPath)),
+        sourceTable.hash,
+      );
+      expect(await spk.file.readAsBytes(), unchangedSpk);
+      expect(spk.canReadFragmentedResources, isFalse);
+      expect(spk.fullResourceValidation, isNull);
+      passed.add(
+        'R27 production SPK index open, sidebar selection, native rendering and two editable catalog commits preserve the original archive',
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 500));
+      await spkRoot.delete(recursive: true);
     }
     expect(tester.takeException(), isNull);
     await File('${output.path}/result.json').writeAsString(
