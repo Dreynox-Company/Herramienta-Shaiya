@@ -31,7 +31,8 @@ jobs:
         run: |
           python ci/refine_r28.py
           python ci/refine_r28_docks.py
-          if test -f ci/refine_r28_acceptance.py; then python ci/refine_r28_acceptance.py; fi
+          python ci/refine_r28_acceptance.py
+          python ci/refine_r28_recovery.py
       - name: Restore original supplied branding
         run: python tool/prepare_branding.py
       - name: Register all regression suites
