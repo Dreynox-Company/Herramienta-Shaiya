@@ -33,6 +33,7 @@ jobs:
           python ci/refine_r28_docks.py
           python ci/refine_r28_acceptance.py
           python ci/refine_r28_recovery.py
+          python ci/refine_r28_ready_input.py
       - name: Restore original supplied branding
         run: python tool/prepare_branding.py
       - name: Register all regression suites
