@@ -23,16 +23,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output/wheels output/debs
-          docker run --rm -v "$PWD/output:/output" debian:trixie-slim bash -lc '
+          docker run --rm -v "$PWD/output:/output" debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a bash -lc '
             set -euo pipefail
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip ca-certificates
-            python3 -m pip download --only-binary=:all: --dest /output/wheels pefile capstone unicorn zstandard frida
+            python3 -m pip download --only-binary=:all: --dest /output/wheels pefile==2024.8.26 capstone==5.0.9 unicorn==2.1.4 zstandard==0.25.0 frida==17.19.0
             cd /output/debs
-            apt-get download wine wine64 libwine fonts-wine gdb strace libgdbm-compat4t64 libbabeltrace1 libdebuginfod1t64 libipt2 libsource-highlight4t64 libsource-highlight-common libboost-regex1.83.0 libpython3.13t64 libpython3.13-stdlib libncursesw6 libtinfo6 libpcap0.8t64 libosmesa6
+            apt-get download wine wine64 libwine gdb strace libgdbm-compat4t64 libbabeltrace1 libdebuginfod1t64 libipt2 libsource-highlight4t64 libsource-highlight-common libboost-regex1.83.0 libpython3.13 libpython3.13-stdlib libncursesw6 libtinfo6 libpcap0.8t64 libosmesa6
             dpkg-query -W > /output/downloader-packages.txt
           '
-          python3 - <<'PY'
+      - name: Record hashes of downloaded packages
+        if: always()
+        shell: python
+        run: |
           from pathlib import Path
           import hashlib, json
           root = Path('output')
@@ -42,8 +45,8 @@ jobs:
                   rows.append({'file': p.relative_to(root).as_posix(), 'bytes': p.stat().st_size,
                                'sha256': hashlib.sha256(p.read_bytes()).hexdigest()})
           (root / 'MANIFEST.json').write_text(json.dumps(rows, indent=2))
-          PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: SPK-Offline-Analysis-Dependencies
           path: output/
