@@ -1,0 +1,27 @@
+name: SPK offline Wine support
+on:
+  push:
+    branches: [work/spk-real-recovery-20260926]
+    paths: [.github/workflows/spk-wine-support.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Obtain Debian Win64 zlib support only
+        run: |
+          mkdir -p support
+          docker run --rm -v "$PWD/support:/output" debian:13-slim sh -ec '
+            apt-get update -qq
+            cd /output
+            apt-get download libz-mingw-w64
+            sha256sum *.deb > SHA256SUMS.txt
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Wine-Zlib-Support
+          path: support/
+          retention-days: 7
