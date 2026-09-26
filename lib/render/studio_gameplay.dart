@@ -305,7 +305,8 @@ extension StudioGameplay on StudioScene {
     if (game.jump.start()) {
       character!.play(game.jumpClip!, repeat: false);
       movementTransitions.invalidate();
-      unawaited(weaponSound('jump'));
+      // Jump has no generic ps0032 weapon sound. Do not substitute a hit.
+      // Tyros-specific jump WAVs are not valid for an arbitrary character.
     }
   }
 
@@ -785,12 +786,13 @@ extension StudioGameplay on StudioScene {
   }
 
   Future<void> combatEventFor(String id, String who, String event) async {
+    if (!const {'attack', 'hit', 'death'}.contains(event)) return;
     refreshIdle();
     final entry = game.opponents[id];
     if (who == 'player') {
       await _combatEvent(who, event);
       if (event == 'attack') unawaited(weaponSound('attack'));
-      if (event == 'hit') unawaited(weaponSound('hit'));
+      if (event == 'hit' || event == 'death') unawaited(characterVoice(event));
     } else if (entry != null) {
       final a = entry.actor,
           key = event == 'attack'
@@ -807,7 +809,10 @@ extension StudioGameplay on StudioScene {
           character!.root.position.z - a.root.position.z,
         );
       }
-      final original = entry.record.sounds[key] ?? '';
+      final soundSlot = nativeMonSoundSlot(event);
+      final original = soundSlot == null
+          ? ''
+          : entry.record.sounds[soundSlot] ?? '';
       final path = catalog!.library.resolve(original, [
         'sound/monster',
         'sound',
@@ -832,35 +837,17 @@ extension StudioGameplay on StudioScene {
   }
 
   Future<void> weaponSound(String action) async {
-    if (!sound || catalog == null) return;
-    final family = weaponFamily(weaponRecord);
-    final stem =
-        <int, String>{
-          1: 'swordone',
-          2: 'swordtwo',
-          3: 'axeone',
-          4: 'axetwo',
-          5: 'twin',
-          6: 'javelin',
-          7: 'weaponone',
-          8: 'weapontwo',
-          9: 'daggerbk',
-          10: 'dagger',
-          11: 'javelin',
-          12: 'staff',
-          13: 'bow',
-          14: 'crobow',
-          15: 'knuckle',
-        }[family] ??
-        'weaponone';
-    final prefix = action == 'attack' ? 'ch_att_' : 'ch_hit_';
-    final available = catalog!.sounds
-        .where((p) => baseName(p).startsWith('$prefix$stem'))
+    final c = catalog;
+    if (!sound || c == null) return;
+    final prefix = nativeWeaponSoundPrefix(weaponFamily(weaponRecord), action);
+    if (prefix == null) return;
+    final available = c.sounds
+        .where((p) => baseName(p).toLowerCase().startsWith(prefix))
         .toList();
     if (available.isNotEmpty) {
       await playSound(available[attackCounter % available.length]);
     } else {
-      final fallback = catalog!.library.resolve(
+      final fallback = c.library.resolve(
         action == 'attack' ? 'ch_att_weaponone001.wav' : 'mob_hit001.wav',
         ['sound'],
       );
@@ -868,16 +855,27 @@ extension StudioGameplay on StudioScene {
     }
   }
 
+  Future<void> characterVoice(String event) async {
+    final c = catalog, actor = character;
+    final id = appearance?.archetype.id;
+    if (!sound || c == null || actor == null || id == null) return;
+    final name = nativeCharacterVoice(id, event);
+    if (name == null) return;
+    final path = c.library.resolve(name, ['sound']);
+    if (path != null && identical(catalog, c) && identical(character, actor)) {
+      await playSound(path);
+    }
+  }
+
   Future<void> pooledSound(String path) async {
     if (!sound || catalog == null || disposed) return;
     try {
-      final cacheKey = '${catalog!.library.location}/$path';
+      final source = catalog!.library;
+      final sourceRevision = source.revision;
+      final cacheKey = '${identityHashCode(source)}|$sourceRevision|$path';
       var file = game.audioFiles[cacheKey];
       if (file == null) {
-        final bytes = await catalog!.library.read(
-              path,
-              limit: 32 * 1024 * 1024,
-            ),
+        final bytes = await source.read(path, limit: 32 * 1024 * 1024),
             dir = await getTemporaryDirectory();
         final safe = baseName(path).replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
         final f = File(
@@ -887,7 +885,12 @@ extension StudioGameplay on StudioScene {
         file = f.path;
         game.audioFiles[cacheKey] = file;
       }
-      if (disposed) return;
+      if (disposed ||
+          !sound ||
+          !identical(catalog?.library, source) ||
+          source.revision != sourceRevision) {
+        return;
+      }
       if (game.players.length < 6) game.players.add(AudioPlayer());
       final player = game.players[game.audioCursor++ % game.players.length];
       await player.setVolume(game.volume);

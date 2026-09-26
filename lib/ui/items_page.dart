@@ -16,11 +16,18 @@ import 'item_asset_import.dart';
 import 'editor_model_preview.dart';
 import 'item_icon_picker.dart';
 import 'item_record_editor.dart';
+import 'items_source_recovery.dart';
 
 class ItemsPage extends StatefulWidget {
   final Library library;
   final String? initialItemKey;
-  const ItemsPage({super.key, required this.library, this.initialItemKey});
+  final ValueChanged<ItemsRecoveryAction>? onRecovery;
+  const ItemsPage({
+    super.key,
+    required this.library,
+    this.initialItemKey,
+    this.onRecovery,
+  });
   @override
   State<ItemsPage> createState() => _ItemsPageState();
 }
@@ -41,7 +48,11 @@ class _ItemsPageState extends State<ItemsPage> {
     load();
   }
 
+  bool loading = false;
   Future<void> load() async {
+    if (loading || !mounted) return;
+    loading = true;
+    setState(() => error = null);
     try {
       final session = await ItemWorkspace.forLibrary(widget.library);
       if (!mounted) return;
@@ -55,6 +66,8 @@ class _ItemsPageState extends State<ItemsPage> {
       filter();
     } catch (e) {
       if (mounted) setState(() => error = '$e');
+    } finally {
+      loading = false;
     }
   }
 
@@ -669,7 +682,12 @@ class _ItemsPageState extends State<ItemsPage> {
           ? Center(
               child: error == null
                   ? const CircularProgressIndicator()
-                  : SelectableText(error!),
+                  : ItemsSourceRecovery(
+                      library: widget.library,
+                      error: error!,
+                      onRetry: load,
+                      onRecovery: widget.onRecovery,
+                    ),
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

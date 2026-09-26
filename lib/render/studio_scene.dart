@@ -26,6 +26,8 @@ import '../core/mounted_motion.dart';
 import '../core/equipment_rules.dart';
 import '../core/extra_motion.dart';
 import '../data/library.dart';
+import '../data/resource_choices_cache.dart';
+import '../core/native_sound_events.dart';
 import '../data/catalog.dart';
 import '../core/navigation.dart';
 import '../core/identity_mask.dart';
@@ -332,7 +334,7 @@ class StudioScene extends ChangeNotifier {
   String _wingBindingKey(CreatureRecord record, {Archetype? archetype}) {
     final a = archetype ?? appearance?.archetype;
     final identity = a == null ? 'sin-personaje' : '${a.race}/${a.id}';
-    return '$identity|${characterClass.id}|${record.source}#${record.id}';
+    return '${identityHashCode(catalog?.library)}|$identity|${characterClass.id}|${record.source}#${record.id}';
   }
 
   ({int family, int job, int sex})? _wingIdentity() {
@@ -591,7 +593,12 @@ class StudioScene extends ChangeNotifier {
     final record = wingRecord;
     final c = catalog;
     if (record == null || c == null) return const [];
-    return c.wingAnimationCandidates(record);
+    final prefix = '${directoryName(record.source)}/ani/';
+    return _inspectorResources.select(
+      c.library,
+      'ani:$prefix',
+      (p) => p.startsWith(prefix) && p.endsWith('.ani'),
+    );
   }
 
   String? wingMonAnimation(String slot) => wingRecord?.animations[slot];
@@ -621,63 +628,49 @@ class StudioScene extends ChangeNotifier {
     );
   }
 
+  final _inspectorResources = ResourceChoicesCache();
+
   List<String> get wingMonSoundSlots => monSoundSlots;
   List<String> get wingMonEffectSlots => monEffectSlots;
 
-  List<String> get wingMonSoundCandidates {
-    final c = catalog;
-    if (c == null) return const [];
-    final out =
-        c.library.files.keys
-            .where((path) => path.endsWith('.wav') || path.endsWith('.ogg'))
-            .toList()
-          ..sort();
-    return out;
-  }
+  List<String> get wingMonSoundCandidates => catalog == null
+      ? const []
+      : _inspectorResources.select(
+          catalog!.library,
+          'sound',
+          (p) => p.endsWith('.wav') || p.endsWith('.ogg'),
+        );
 
-  List<String> get wingMonEffectCandidates {
-    final c = catalog;
-    if (c == null) return const [];
-    final out =
-        c.library.files.keys
-            .where((path) => path.endsWith('.eft') || path.endsWith('.3de'))
-            .toList()
-          ..sort();
-    return out;
-  }
+  List<String> get wingMonEffectCandidates => catalog == null
+      ? const []
+      : _inspectorResources.select(
+          catalog!.library,
+          'effect',
+          (p) => p.endsWith('.eft') || p.endsWith('.3de'),
+        );
 
-  List<String> get wingMonMeshCandidates {
-    final c = catalog;
-    if (c == null) return const [];
-    final out =
-        c.library.files.keys
-            .where(
-              (path) =>
-                  path.startsWith('character/wing/') &&
-                  (path.endsWith('.3dc') || path.endsWith('.3do')),
-            )
-            .toList()
-          ..sort();
-    return out;
-  }
+  List<String> get wingMonMeshCandidates => catalog == null
+      ? const []
+      : _inspectorResources.select(
+          catalog!.library,
+          'wing-mesh',
+          (p) =>
+              p.startsWith('character/wing/') &&
+              (p.endsWith('.3dc') || p.endsWith('.3do')),
+        );
 
-  List<String> get wingMonTextureCandidates {
-    final c = catalog;
-    if (c == null) return const [];
-    final out =
-        c.library.files.keys
-            .where(
-              (path) =>
-                  path.startsWith('character/wing/') &&
-                  (path.endsWith('.dds') ||
-                      path.endsWith('.tga') ||
-                      path.endsWith('.png') ||
-                      path.endsWith('.bmp')),
-            )
-            .toList()
-          ..sort();
-    return out;
-  }
+  List<String> get wingMonTextureCandidates => catalog == null
+      ? const []
+      : _inspectorResources.select(
+          catalog!.library,
+          'wing-texture',
+          (p) =>
+              p.startsWith('character/wing/') &&
+              (p.endsWith('.dds') ||
+                  p.endsWith('.tga') ||
+                  p.endsWith('.png') ||
+                  p.endsWith('.bmp')),
+        );
 
   String? wingMonSound(String slot) => wingRecord?.sounds[slot];
   String? wingMonEffect(String slot) => wingRecord?.effects[slot];
@@ -806,12 +799,11 @@ class StudioScene extends ChangeNotifier {
     if (record == null || c == null) return const [];
     final root = directoryName(record.source);
     final prefix = '$root/ani/';
-    final out =
-        c.library.files.keys
-            .where((path) => path.startsWith(prefix) && path.endsWith('.ani'))
-            .toList()
-          ..sort();
-    return out;
+    return _inspectorResources.select(
+      c.library,
+      'ani:$prefix',
+      (p) => p.startsWith(prefix) && p.endsWith('.ani'),
+    );
   }
 
   String? mountMonAnimation(String slot) => mountRecord?.animations[slot];
@@ -1516,6 +1508,16 @@ class StudioScene extends ChangeNotifier {
   }
 
   void clearAppearance() {
+    ++_mountRevision;
+    ++_wingRevision;
+    mount?.dispose();
+    wing?.dispose();
+    mount = null;
+    wing = null;
+    mountRecord = null;
+    wingRecord = null;
+    flightEnabled = false;
+    _inspectorResources.clear();
     ++_appearanceRevision;
     ++_weaponRevision;
     ++_shieldRevision;
@@ -1794,7 +1796,8 @@ class StudioScene extends ChangeNotifier {
             'Falta una pieza de ${c.name}: ${m == null ? p.mesh : p.texture}',
           );
         }
-        final part = await skinned(m, tex);
+        final mesh = MeshData.skinned(await lib.read(m), m);
+        final part = await makePartFromLibrary(lib, mesh, tex);
         a.parts.add(part);
         a.visual.add(part.mesh);
       }
@@ -1802,7 +1805,7 @@ class StudioScene extends ChangeNotifier {
         final p = lib.resolve(entry.value, ['$root/ani', root]);
         if (p == null) continue;
         try {
-          final animation = await clip(p);
+          final animation = ClipData.parse(await lib.read(p), p);
           if (compatible(a, animation)) a.clips[entry.key] = animation;
         } catch (e) {
           report(e.toString());
@@ -1979,7 +1982,75 @@ class StudioScene extends ChangeNotifier {
     changed();
   }
 
+  Future<void> _selectWingAtomic(CreatureRecord? record) async {
+    final revision = ++_wingRevision, source = catalog;
+    final bodyRevision = _appearanceRevision;
+    final staged = record == null ? null : await loadCreature(record);
+    if (disposed ||
+        revision != _wingRevision ||
+        bodyRevision != _appearanceRevision ||
+        !identical(source, catalog)) {
+      staged?.dispose();
+      return;
+    }
+    // Capture the most recent edits, including changes made while I/O ran.
+    _rememberWingSettings();
+    final old = wing, oldRecord = wingRecord;
+    final oldEnabled = flightEnabled, oldAuto = wingAutoMotion;
+    final oldPhase = _wingMotionPhase;
+    try {
+      wing = staged;
+      wingRecord = record;
+      _wingMotionPhase = null;
+      if (record == null) {
+        flightEnabled = false;
+      } else {
+        wingAutoMotion = true;
+        _restoreWingSettings();
+        _syncWingMotion(false);
+      }
+      if (staged != null) {
+        staged.root.matrixAutoUpdate = false;
+        view!.scene.add(staged.root);
+      }
+      refreshIdle();
+      movementTransitions.invalidate();
+      game.jump.reset();
+      applyLocomotion(
+        walkX == 0 && walkZ == 0
+            ? GroundMotion.idle
+            : (running || touchRun ? GroundMotion.run : GroundMotion.walk),
+      );
+      updateAttachments();
+    } catch (_) {
+      wing = old;
+      wingRecord = oldRecord;
+      flightEnabled = oldEnabled;
+      wingAutoMotion = oldAuto;
+      _wingMotionPhase = oldPhase;
+      staged?.dispose();
+      if (oldRecord != null) _restoreWingSettings();
+      rethrow;
+    } finally {
+      if (!disposed) changed();
+    }
+    // Cleanup/reporting cannot roll back to an already disposed old actor.
+    old?.dispose();
+    say(
+      record == null
+          ? 'Alas retiradas.'
+          : '${source!.creatureLabel(record)} cargado.',
+    );
+  }
+
   Future<void> selectCreature(CreatureRecord? c, String kind) async {
+    if (kind == 'wing') {
+      await _selectWingAtomic(c);
+      return;
+    }
+    if (kind != 'enemy' && kind != 'mount') {
+      throw ArgumentError.value(kind, 'kind');
+    }
     if (kind == 'enemy') {
       await replaceOpponent(c);
       return;
@@ -2009,13 +2080,14 @@ class StudioScene extends ChangeNotifier {
         riderProfile: riderProfile,
       );
     }
+    final source = catalog;
     final staged = c == null ? null : await loadCreature(c);
     final current = kind == 'enemy'
         ? _creatureRevision
         : kind == 'mount'
         ? _mountRevision
         : _wingRevision;
-    if (disposed || revision != current) {
+    if (disposed || revision != current || !identical(source, catalog)) {
       staged?.dispose();
       return;
     }

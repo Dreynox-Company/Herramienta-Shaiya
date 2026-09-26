@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'studio_brand.dart';
+import 'studio_floating_panel.dart';
 
 /// Docks reserve space; animation and action bars never cover the 3D viewport.
 class StudioWorkspace extends StatefulWidget {
@@ -45,8 +46,51 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool leftOpen = true, rightOpen = true, timelineOpen = true;
   double leftWidth = 236, rightWidth = 292;
+  bool leftFloating = false, rightFloating = false;
+  final leftContent = GlobalKey(), rightContent = GlobalKey();
+  double availableWidth = 1440;
+  bool leftDockVisible = true, rightDockVisible = true;
 
-  Widget _title(String text, VoidCallback close) => Container(
+  Widget _content(bool left) => KeyedSubtree(
+    key: left ? leftContent : rightContent,
+    child: left ? widget.left : widget.right,
+  );
+
+  void _float(bool left) => setState(() {
+    if (left) {
+      leftFloating = true;
+      leftOpen = true;
+    } else {
+      rightFloating = true;
+      rightOpen = true;
+    }
+  });
+
+  Widget _floating(bool left, Size bounds) => StudioFloatingPanel(
+    key: ValueKey('floating-surface-${left ? 'left' : 'right'}'),
+    side: left ? 'left' : 'right',
+    bounds: bounds,
+    title: left ? widget.tabs[widget.selectedTab] : 'Inspector',
+    onDock: () => setState(() {
+      if (left) {
+        leftFloating = false;
+      } else {
+        rightFloating = false;
+      }
+    }),
+    onClose: () => setState(() {
+      if (left) {
+        leftOpen = false;
+      } else {
+        rightOpen = false;
+      }
+    }),
+    child: left && widget.leftOwnsScroll
+        ? _content(left)
+        : _scroll(_content(left)),
+  );
+
+  Widget _title(String text, VoidCallback close, bool? side) => Container(
     height: 32,
     padding: const EdgeInsets.only(left: 14, right: 4),
     decoration: const BoxDecoration(
@@ -60,6 +104,13 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ),
+        if (side != null)
+          IconButton(
+            key: ValueKey('float-${side ? 'left' : 'right'}'),
+            tooltip: 'Extraer panel',
+            onPressed: () => _float(side),
+            icon: const Icon(Icons.open_in_new, size: 15),
+          ),
         IconButton(
           tooltip: 'Plegar panel',
           onPressed: close,
@@ -77,6 +128,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     VoidCallback close, {
     double? width,
     bool scroll = true,
+    bool? side,
   }) => SizedBox(
     width: width,
     // ListTile, SwitchListTile and CheckboxListTile paint their feedback on
@@ -87,7 +139,7 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
       color: const Color(0xff171e29),
       child: Column(
         children: [
-          _title(title, close),
+          _title(title, close, side),
           Expanded(
             child: scroll
                 ? _scroll(child)
@@ -98,14 +150,28 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
     ),
   );
   Widget _splitter(bool left) => MouseRegion(
+    key: ValueKey('resize-${left ? 'left' : 'right'}-dock'),
     cursor: SystemMouseCursors.resizeColumn,
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onHorizontalDragUpdate: (event) => setState(() {
         if (left) {
-          leftWidth = (leftWidth + event.delta.dx).clamp(210, 350);
+          final budget =
+              availableWidth -
+              56 -
+              380 -
+              (rightDockVisible ? rightWidth + 5 : 0);
+          leftWidth = (leftWidth + event.delta.dx).clamp(
+            210,
+            budget.clamp(210, 350),
+          );
         } else {
-          rightWidth = (rightWidth - event.delta.dx).clamp(240, 440);
+          final budget =
+              availableWidth - 56 - 380 - (leftDockVisible ? leftWidth + 5 : 0);
+          rightWidth = (rightWidth - event.delta.dx).clamp(
+            240,
+            budget.clamp(240, 440),
+          );
         }
       }),
       child: Container(
@@ -205,7 +271,9 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
           key: const ValueKey('toggle-left'),
           tooltip: 'Biblioteca · mostrar / plegar',
           onPressed: () {
-            if (mobile) {
+            if (!mobile && leftFloating) {
+              setState(() => leftOpen = !leftOpen);
+            } else if (mobile) {
               scaffoldKey.currentState?.openDrawer();
             } else {
               setState(() {
@@ -282,7 +350,9 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
           key: const ValueKey('toggle-right'),
           tooltip: 'Inspector · mostrar / plegar',
           onPressed: () {
-            if (mobile ||
+            if (!mobile && rightFloating) {
+              setState(() => rightOpen = !rightOpen);
+            } else if (mobile ||
                 (!showRight &&
                     width - (leftOpen ? leftWidth + 51 : 46) - rightWidth <=
                         380)) {
@@ -364,8 +434,15 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
       final showRight =
           !mobile &&
           rightOpen &&
-          box.maxWidth - (leftOpen ? leftWidth + 51 : 46) - rightWidth > 380;
-      final showLeft = !mobile && leftOpen;
+          !rightFloating &&
+          box.maxWidth -
+                  (leftOpen && !leftFloating ? leftWidth + 51 : 46) -
+                  rightWidth >
+              380;
+      final showLeft = !mobile && leftOpen && !leftFloating;
+      availableWidth = box.maxWidth;
+      leftDockVisible = showLeft;
+      rightDockVisible = showRight;
       final drawerWidth = (box.maxWidth - 28).clamp(240, 330).toDouble();
       return Scaffold(
         key: scaffoldKey,
@@ -381,54 +458,70 @@ class _StudioWorkspaceState extends State<StudioWorkspace> {
                         child: widget.leftOwnsScroll
                             ? Padding(
                                 padding: const EdgeInsets.all(8),
-                                child: widget.left,
+                                child: _content(true),
                               )
-                            : _scroll(widget.left),
+                            : _scroll(_content(true)),
                       ),
                     ],
                   ),
                 ),
               )
             : null,
-        endDrawer: Drawer(
-          width: drawerWidth,
-          child: SafeArea(
-            child: _panel(
-              'Inspector',
-              widget.right,
-              () => scaffoldKey.currentState?.closeEndDrawer(),
-            ),
-          ),
-        ),
+        endDrawer: !showRight && (mobile || !rightFloating)
+            ? Drawer(
+                width: drawerWidth,
+                child: SafeArea(
+                  child: _panel(
+                    'Inspector',
+                    _content(false),
+                    () => scaffoldKey.currentState?.closeEndDrawer(),
+                  ),
+                ),
+              )
+            : null,
         body: SafeArea(
           child: Column(
             children: [
               _header(box.maxWidth, mobile, showLeft, showRight),
               Expanded(
-                child: Row(
-                  children: [
-                    if (!mobile) _rail(),
-                    if (showLeft) ...[
-                      _panel(
-                        widget.tabs[widget.selectedTab],
-                        widget.left,
-                        () => setState(() => leftOpen = false),
-                        width: leftWidth,
-                        scroll: !widget.leftOwnsScroll,
+                child: LayoutBuilder(
+                  builder: (context, area) => Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Row(
+                          children: [
+                            if (!mobile) _rail(),
+                            if (showLeft) ...[
+                              _panel(
+                                widget.tabs[widget.selectedTab],
+                                _content(true),
+                                () => setState(() => leftOpen = false),
+                                side: true,
+                                width: leftWidth,
+                                scroll: !widget.leftOwnsScroll,
+                              ),
+                              _splitter(true),
+                            ],
+                            Expanded(child: _center()),
+                            if (showRight) ...[
+                              _splitter(false),
+                              _panel(
+                                'Inspector',
+                                _content(false),
+                                () => setState(() => rightOpen = false),
+                                side: false,
+                                width: rightWidth,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                      _splitter(true),
+                      if (!mobile && leftFloating && leftOpen)
+                        _floating(true, Size(area.maxWidth, area.maxHeight)),
+                      if (!mobile && rightFloating && rightOpen)
+                        _floating(false, Size(area.maxWidth, area.maxHeight)),
                     ],
-                    Expanded(child: _center()),
-                    if (showRight) ...[
-                      _splitter(false),
-                      _panel(
-                        'Inspector',
-                        widget.right,
-                        () => setState(() => rightOpen = false),
-                        width: rightWidth,
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
               Container(
