@@ -1,0 +1,30 @@
+name: SPK offline runtime extras
+on:
+  push:
+    branches: [work/studio-spk-real-20260926]
+    paths: [.github/workflows/spk-analysis-runtime-extras.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve missing Debian runtime packages only
+        run: |
+          set -euo pipefail
+          mkdir output
+          docker run --rm -v "$PWD/output:/output" debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a bash -lc '
+            set -euo pipefail
+            apt-get update
+            cd /output
+            apt-get download libz-mingw-w64 libcapi20-3t64 libgphoto2-6t64 libgphoto2-port12t64 libxkbregistry0
+            sha256sum *.deb > SHA256SUMS.txt
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Offline-Runtime-Extras
+          path: output/
+          compression-level: 0
+          retention-days: 2
