@@ -34,6 +34,7 @@ void main() {
         .opacity
         .value;
     expect(opacity(), 0);
+    await tester.pump(); // Establish the ticker timestamp before advancing it.
     await tester.pump(const Duration(milliseconds: 144));
     expect(opacity(), greaterThan(0));
     expect(opacity(), lessThan(1));

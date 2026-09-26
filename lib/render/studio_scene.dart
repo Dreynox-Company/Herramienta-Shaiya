@@ -334,7 +334,7 @@ class StudioScene extends ChangeNotifier {
   String _wingBindingKey(CreatureRecord record, {Archetype? archetype}) {
     final a = archetype ?? appearance?.archetype;
     final identity = a == null ? 'sin-personaje' : '${a.race}/${a.id}';
-    return '$identity|${characterClass.id}|${record.source}#${record.id}';
+    return '${identityHashCode(catalog?.library)}|$identity|${characterClass.id}|${record.source}#${record.id}';
   }
 
   ({int family, int job, int sex})? _wingIdentity() {
@@ -1982,7 +1982,75 @@ class StudioScene extends ChangeNotifier {
     changed();
   }
 
+  Future<void> _selectWingAtomic(CreatureRecord? record) async {
+    final revision = ++_wingRevision, source = catalog;
+    final bodyRevision = _appearanceRevision;
+    final staged = record == null ? null : await loadCreature(record);
+    if (disposed ||
+        revision != _wingRevision ||
+        bodyRevision != _appearanceRevision ||
+        !identical(source, catalog)) {
+      staged?.dispose();
+      return;
+    }
+    // Capture the most recent edits, including changes made while I/O ran.
+    _rememberWingSettings();
+    final old = wing, oldRecord = wingRecord;
+    final oldEnabled = flightEnabled, oldAuto = wingAutoMotion;
+    final oldPhase = _wingMotionPhase;
+    try {
+      wing = staged;
+      wingRecord = record;
+      _wingMotionPhase = null;
+      if (record == null) {
+        flightEnabled = false;
+      } else {
+        wingAutoMotion = true;
+        _restoreWingSettings();
+        _syncWingMotion(false);
+      }
+      if (staged != null) {
+        staged.root.matrixAutoUpdate = false;
+        view!.scene.add(staged.root);
+      }
+      refreshIdle();
+      movementTransitions.invalidate();
+      game.jump.reset();
+      applyLocomotion(
+        walkX == 0 && walkZ == 0
+            ? GroundMotion.idle
+            : (running || touchRun ? GroundMotion.run : GroundMotion.walk),
+      );
+      updateAttachments();
+    } catch (_) {
+      wing = old;
+      wingRecord = oldRecord;
+      flightEnabled = oldEnabled;
+      wingAutoMotion = oldAuto;
+      _wingMotionPhase = oldPhase;
+      staged?.dispose();
+      if (oldRecord != null) _restoreWingSettings();
+      rethrow;
+    } finally {
+      if (!disposed) changed();
+    }
+    // Cleanup/reporting cannot roll back to an already disposed old actor.
+    old?.dispose();
+    say(
+      record == null
+          ? 'Alas retiradas.'
+          : '${source!.creatureLabel(record)} cargado.',
+    );
+  }
+
   Future<void> selectCreature(CreatureRecord? c, String kind) async {
+    if (kind == 'wing') {
+      await _selectWingAtomic(c);
+      return;
+    }
+    if (kind != 'enemy' && kind != 'mount') {
+      throw ArgumentError.value(kind, 'kind');
+    }
     if (kind == 'enemy') {
       await replaceOpponent(c);
       return;

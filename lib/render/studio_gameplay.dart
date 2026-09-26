@@ -786,6 +786,7 @@ extension StudioGameplay on StudioScene {
   }
 
   Future<void> combatEventFor(String id, String who, String event) async {
+    if (!const {'attack', 'hit', 'death'}.contains(event)) return;
     refreshIdle();
     final entry = game.opponents[id];
     if (who == 'player') {
@@ -808,7 +809,10 @@ extension StudioGameplay on StudioScene {
           character!.root.position.z - a.root.position.z,
         );
       }
-      final original = entry.record.sounds[key] ?? '';
+      final soundSlot = nativeMonSoundSlot(event);
+      final original = soundSlot == null
+          ? ''
+          : entry.record.sounds[soundSlot] ?? '';
       final path = catalog!.library.resolve(original, [
         'sound/monster',
         'sound',
@@ -866,13 +870,12 @@ extension StudioGameplay on StudioScene {
   Future<void> pooledSound(String path) async {
     if (!sound || catalog == null || disposed) return;
     try {
-      final cacheKey = '${catalog!.library.location}/$path';
+      final source = catalog!.library;
+      final sourceRevision = source.revision;
+      final cacheKey = '${identityHashCode(source)}|$sourceRevision|$path';
       var file = game.audioFiles[cacheKey];
       if (file == null) {
-        final bytes = await catalog!.library.read(
-              path,
-              limit: 32 * 1024 * 1024,
-            ),
+        final bytes = await source.read(path, limit: 32 * 1024 * 1024),
             dir = await getTemporaryDirectory();
         final safe = baseName(path).replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
         final f = File(
@@ -882,7 +885,12 @@ extension StudioGameplay on StudioScene {
         file = f.path;
         game.audioFiles[cacheKey] = file;
       }
-      if (disposed) return;
+      if (disposed ||
+          !sound ||
+          !identical(catalog?.library, source) ||
+          source.revision != sourceRevision) {
+        return;
+      }
       if (game.players.length < 6) game.players.add(AudioPlayer());
       final player = game.players[game.audioCursor++ % game.players.length];
       await player.setVolume(game.volume);

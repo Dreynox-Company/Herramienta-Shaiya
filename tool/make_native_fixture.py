@@ -43,7 +43,7 @@ for name,bob in [('000_normal',0),('001_walk',.02),('002_run',.08),('006_swnorma
 def creature_record(name):
  anim=[name+'_walk.ani',name+'_run.ani',name+'_attack.ani','','',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani',name+'_idle.ani']
  return s(name)+bytes(1)+b''.join(s(a) for a in anim)+b''.join(s('') for _ in range(8))+u(1)+s(name+'.3dc')+s(name+'.dds')+f(2)+u(0)
-for folder,names in [('Vehicle',['test_mount_a','test_mount_b']),('Monster',['test_enemy']),('Character/Wing',['test_wing'])]:
+for folder,names in [('Vehicle',['test_mount_a','test_mount_b']),('Monster',['test_enemy']),('Character/Wing',['test_wing','test_wing_b'])]:
  for j,name in enumerate(names):
   a,b=geometry(1.6 if folder=='Vehicle' else 1,.55+j*.3 if folder=='Vehicle' else .6,2 if folder=='Vehicle' else .3)
   write(folder+'/3dc/'+name+'.3dc',mesh(a,b));write(folder+'/dds/'+name+'.dds',texture((210,125,85) if folder=='Vehicle' else (175,135,235)))

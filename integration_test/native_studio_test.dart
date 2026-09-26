@@ -32,6 +32,7 @@ import 'package:herramienta_shaiya/editor/schema_reader.dart';
 import 'package:herramienta_shaiya/core/extra_motion.dart';
 
 import 'package:herramienta_shaiya/render/studio_scene.dart';
+import 'package:herramienta_shaiya/render/native_view.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -137,9 +138,70 @@ void main() {
       'Focus loss cancels held movement and restores idle',
     );
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
+    final native = state.renderer as NativeView;
+    Future<void> expectViewport() async {
+      await waitFor(
+        () {
+          final bounds = tester.getSize(
+            find.byKey(const ValueKey('viewport-region')),
+          );
+          final expected = NativeView.validViewport(bounds);
+          return native.surfaceSize.value == expected &&
+              (native.camera.aspect - expected!.width / expected.height).abs() <
+                  1e-8;
+        },
+        'R28 camera projection and native surface match the actual central viewport',
+      );
+      expect(native.frameFailures, 0);
+    }
+
+    await expectViewport();
+    for (final side in ['right', 'left']) {
+      final splitter = find.byKey(ValueKey('resize-$side-dock'));
+      await tester.drag(splitter, Offset(side == 'right' ? -65 : 65, 0));
+      await tester.pump();
+      await expectViewport();
+      await tester.tap(find.byKey(ValueKey('float-$side')));
+      await tester.pump();
+      await expectViewport();
+      final viewportSize = native.surfaceSize.value;
+      await tester.drag(
+        find.byKey(ValueKey('floating-resize-$side')),
+        const Offset(85, 60),
+      );
+      await tester.pump();
+      await expectViewport();
+      expect(native.surfaceSize.value, viewportSize);
+      await tester.tap(find.byKey(ValueKey('dock-$side')));
+      await tester.pump();
+      await expectViewport();
+    }
+    await screenshot('r28_resized_viewport');
     final c = scene.catalog!;
     expect(c.weapons, isNotEmpty);
-    expect(c.wings, isNotEmpty);
+    expect(c.wings.length, greaterThanOrEqualTo(2));
+    for (var i = 0; i < 3; i++) {
+      await scene.selectCreature(c.wings[0], 'wing');
+      scene.wingScaleX = 1.37;
+      scene.wingScaleY = .82;
+      scene.wingScaleZ = 1.16;
+      scene.changed();
+      await tester.pump();
+      await scene.selectCreature(c.wings[1], 'wing');
+      expect(scene.wingScaleX, 1);
+      await scene.selectCreature(c.wings[0], 'wing');
+      expect(scene.wingScaleX, 1.37);
+      expect(scene.wingScaleY, .82);
+      expect(scene.wingScaleZ, 1.16);
+      final frames = native.renderedFrames;
+      await waitFor(
+        () => native.renderedFrames > frames + 2,
+        'R28 native rendering remains responsive after scale edits and wing switches',
+      );
+      expect(native.frameFailures, 0);
+    }
+    scene.resetWingPreviewOnlyTransform();
+    await scene.selectCreature(null, 'wing');
     final wingNames = c.names.itemByModel['121:0'];
     expect(wingNames, isNotNull);
     expect(wingNames!.first.name, 'Alas de Prueba');

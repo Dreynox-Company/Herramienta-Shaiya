@@ -182,15 +182,17 @@ void main() {
         );
         focus.requestFocus();
         await tester.pump();
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW, platform: 'web');
         await tester.sendKeyDownEvent(
           symbol,
           physicalKey: PhysicalKeyboardKey.intlBackslash,
+          platform: 'web',
         );
         for (var i = 0; i < 4; i++) {
           await tester.sendKeyRepeatEvent(
             symbol,
             physicalKey: PhysicalKeyboardKey.intlBackslash,
+            platform: 'web',
           );
         }
         expect(toggles, 1);
@@ -199,32 +201,43 @@ void main() {
         await tester.sendKeyUpEvent(
           symbol,
           physicalKey: PhysicalKeyboardKey.intlBackslash,
+          platform: 'web',
         );
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW, platform: 'web');
         await tester.tap(find.byKey(const ValueKey('editor')));
         await tester.pump();
         await tester.sendKeyDownEvent(
           symbol,
           physicalKey: PhysicalKeyboardKey.intlBackslash,
+          platform: 'web',
         );
         await tester.sendKeyUpEvent(
           symbol,
           physicalKey: PhysicalKeyboardKey.intlBackslash,
+          platform: 'web',
         );
         expect(toggles, 1);
         expect(jumps, 0);
         focus.requestFocus();
         await tester.pump();
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyDownEvent(
+          LogicalKeyboardKey.controlLeft,
+          platform: 'web',
+        );
         await tester.sendKeyDownEvent(
           symbol,
           physicalKey: PhysicalKeyboardKey.intlBackslash,
+          platform: 'web',
         );
         await tester.sendKeyUpEvent(
           symbol,
           physicalKey: PhysicalKeyboardKey.intlBackslash,
+          platform: 'web',
         );
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.controlLeft,
+          platform: 'web',
+        );
         expect(toggles, 1);
         await tester.pumpWidget(const SizedBox());
         expect(tester.takeException(), isNull);
