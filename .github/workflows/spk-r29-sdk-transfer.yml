@@ -1,0 +1,45 @@
+name: SPK R29 public SDK split transfer
+on:
+  push:
+    branches: [research/spk-real-20260926]
+    paths: [.github/workflows/spk-r29-sdk-transfer.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SPK-R29-Offline-Flutter-SDK
+          run-id: 36227633536
+          github-token: ${{ github.token }}
+          path: transfer/
+      - name: Divide existing public toolchain; no game data
+        run: |
+          set -euo pipefail
+          tar -C transfer -cf sdk-transfer.tar .
+          split -b 250M -d sdk-transfer.tar sdk-transfer.
+          sha256sum sdk-transfer.tar sdk-transfer.[0-9][0-9] > SDK-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-R29-SDK-Part0
+          path: |
+            sdk-transfer.00
+            SDK-SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-R29-SDK-Part1
+          path: sdk-transfer.01
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-R29-SDK-Part2
+          path: sdk-transfer.02
+          compression-level: 0
+          retention-days: 3
