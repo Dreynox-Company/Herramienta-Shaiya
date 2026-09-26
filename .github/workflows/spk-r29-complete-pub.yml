@@ -1,0 +1,46 @@
+name: SPK R29 complete resolved public packages
+on:
+  push:
+    branches: [research/spk-real-20260926]
+    paths: [.github/workflows/spk-r29-complete-pub.yml]
+permissions:
+  contents: read
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Collect resolved public dependencies by actual package roots
+        shell: python
+        run: |
+          import json, pathlib, shutil, subprocess, tarfile, urllib.parse
+          sdk = pathlib.Path(shutil.which('flutter')).resolve().parent.parent
+          configs = [pathlib.Path('.dart_tool/package_config.json').resolve(), sdk/'packages/flutter_tools/.dart_tool/package_config.json']
+          found = {}
+          for config in configs:
+              for p in json.loads(config.read_text())['packages']:
+                  uri = urllib.parse.urljoin(config.as_uri(), p['rootUri'])
+                  root = pathlib.Path(urllib.parse.unquote(urllib.parse.urlparse(uri).path))
+                  if '/hosted/' in str(root):
+                      if not (root/'pubspec.yaml').is_file(): raise RuntimeError(str(root))
+                      found[root.name] = root
+          pathlib.Path('transfer').mkdir(exist_ok=True)
+          with tarfile.open('transfer/resolved-public-packages.tar.gz', 'w:gz') as out:
+              for name, root in sorted(found.items()): out.add(root, arcname='hosted/pub.dev/'+name)
+          pathlib.Path('transfer/package-roots.json').write_text(json.dumps({k:str(v) for k,v in found.items()},indent=2))
+          subprocess.run('sha256sum transfer/*.gz > transfer/SHA256SUMS.txt', shell=True,check=True)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-R29-Complete-Public-Packages
+          path: transfer/
+          compression-level: 0
+          retention-days: 3
