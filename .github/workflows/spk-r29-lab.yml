@@ -1,0 +1,42 @@
+name: SPK R29 offline analysis dependencies
+on:
+  push:
+    branches: [research/spk-real-20260926]
+    paths: [.github/workflows/spk-r29-lab.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download distro packages for the offline Debian 13 analysis environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/debs bundle/wheels
+          docker run --rm -v "$PWD/bundle:/out" debian:trixie-slim sh -ec '
+            apt-get update
+            apt-get -y --download-only --no-install-recommends install wine64 libwine gdb
+            cp /var/cache/apt/archives/*.deb /out/debs/
+            apt-cache policy wine64 libwine gdb > /out/debian-versions.txt
+          '
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download public analysis wheels only
+        run: |
+          python -m pip download --dest bundle/wheels --only-binary=:all: pefile==2024.8.26 capstone==5.0.6 unicorn==2.1.4 pycryptodome==3.23.0 zstandard==0.24.0 xxhash==3.5.0 frida==17.2.17
+      - name: Preserve dependency provenance
+        run: |
+          printf '%s\n' 'Tool dependencies only. No game data, ciphertext samples, keys, credentials or process dumps are accepted by this workflow.' > bundle/README.txt
+          cd bundle
+          find . -type f -print0 | sort -z | xargs -0 sha256sum > ../SHA256SUMS.txt
+          mv ../SHA256SUMS.txt .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-R29-Linux-Research-Dependencies
+          path: bundle/
+          retention-days: 3
+          compression-level: 0
