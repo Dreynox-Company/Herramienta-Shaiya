@@ -1,0 +1,59 @@
+name: SPK real evidence transport - not a decryptor
+on:
+  push:
+    branches: [work/spk-real-evidence-20260926]
+    paths: [tool/spk_evidence/**, .github/workflows/spk-real-evidence.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: spk-real-evidence-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  evidence-tool:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile standalone Framework utility
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $refs = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8"
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /codepage:65001 /target:exe /platform:x64 /optimize+ /warnaserror+ /out:dist\ShStudio-SPK-Evidencia.exe "/reference:$refs\System.Windows.Forms.dll" "/reference:$refs\System.Web.Extensions.dll" "/reference:$refs\System.IO.Compression.dll" "/reference:$refs\System.IO.Compression.FileSystem.dll" tool\spk_evidence\SpkEvidence.cs
+          if ($LASTEXITCODE -ne 0) { throw 'C# compilation failed.' }
+      - name: Exercise actual EXE on bounded synthetic inputs
+        shell: pwsh
+        run: |
+          $env:SPK_EVIDENCE_EXE = (Resolve-Path dist/ShStudio-SPK-Evidencia.exe).Path
+          cmd /c "python tool\spk_evidence\test_capture.py > dist\tests-windows.txt 2>&1"
+          $result = $LASTEXITCODE
+          Get-Content dist/tests-windows.txt
+          if ($result -ne 0) { throw "Evidence transport regression failed: $result" }
+      - name: Record exact tested binary and keep scope explicit
+        shell: pwsh
+        run: |
+          Copy-Item tool/spk_evidence/SpkEvidence.cs dist/
+          Copy-Item tool/spk_evidence/test_capture.py dist/
+          $binary = Get-Item dist/ShStudio-SPK-Evidencia.exe
+          @{ schema=1; commit=$env:GITHUB_SHA; run=$env:GITHUB_RUN_ID; binary=$binary.Name; bytes=$binary.Length; sha256=(Get-FileHash $binary.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); scope='Synthetic transport tests, not SPK decryption'; fullDecryptionVerified=$false } | ConvertTo-Json | Set-Content -Encoding utf8 dist/build-provenance.json
+          'This is a bounded SPK evidence collector, NOT a new Studio release or a verified decryptor. A separate capture-plan.json is required. It does not run the game, change DATA, or use the network. A resulting capture may contain a private SPK resource profile and the selected game.exe; never upload that capture to this public repository.' | Set-Content -Encoding utf8 dist/READ-ME.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ShStudio-SPK-Evidence-Tool
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: SPK-evidence-failure
+          path: dist/tests-windows.txt
+          if-no-files-found: ignore
