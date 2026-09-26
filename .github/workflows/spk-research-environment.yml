@@ -1,0 +1,51 @@
+name: SPK isolated analysis dependencies
+on:
+  push:
+    branches: [work/spk-real-recovery-20260926]
+    paths: [.github/workflows/spk-research-environment.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download pinned public analysis wheels
+        run: |
+          mkdir -p tools
+          python -m pip download --only-binary=:all: --no-deps --dest tools unicorn==2.1.4 capstone==5.0.6 pefile==2024.8.26 zstandard==0.25.0
+          (cd tools && sha256sum *.whl > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Offline-Python-Tools
+          path: tools/
+          retention-days: 7
+  wine-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch Debian 13 runtime packages without executing a game
+        run: |
+          mkdir -p runtime
+          docker run --rm -v "$PWD/runtime:/output" debian:13-slim sh -ec '
+            apt-get update -qq
+            cd /output
+            apt-get download wine64 libwine wine
+            for package in *.deb; do
+              if dpkg-deb --contents "$package" | grep -Eiq "\.(ttf|otf|woff2?)( |$)"; then
+                echo "Unexpected font files in runtime package" >&2
+                exit 1
+              fi
+            done
+            sha256sum *.deb > SHA256SUMS.txt
+            apt-cache show wine64 libwine wine > PACKAGE-METADATA.txt
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Offline-Wine-Runtime
+          path: runtime/
+          retention-days: 7
