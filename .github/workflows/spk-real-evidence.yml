@@ -27,7 +27,8 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           $refs = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8"
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          & $csc /nologo /codepage:65001 /target:exe /platform:x64 /optimize+ /warnaserror+ /out:dist\ShStudio-SPK-Evidencia.exe "/reference:$refs\System.Windows.Forms.dll" "/reference:$refs\System.Web.Extensions.dll" "/reference:$refs\System.IO.Compression.dll" "/reference:$refs\System.IO.Compression.FileSystem.dll" tool\spk_evidence\SpkEvidence.cs
+          $references = @('mscorlib.dll', 'System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Web.Extensions.dll', 'System.IO.Compression.dll', 'System.IO.Compression.FileSystem.dll') | ForEach-Object { "/reference:$refs\$_" }
+          & $csc /noconfig /nostdlib+ /nologo /codepage:65001 /target:exe /platform:x64 /optimize+ /warnaserror+ /out:dist\ShStudio-SPK-Evidencia.exe @references tool\spk_evidence\SpkEvidence.cs
           if ($LASTEXITCODE -ne 0) { throw 'C# compilation failed.' }
       - name: Exercise actual EXE on bounded synthetic inputs
         shell: pwsh
