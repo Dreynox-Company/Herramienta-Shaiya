@@ -3274,6 +3274,7 @@ class _StudioState extends State<StudioPage> {
         Positioned.fill(
           child: ViewportMovementInput(
             focusNode: focus,
+            enabled: !importing,
             onChanged: (x, z, run) => scene.setMovement(x, z, run: run),
             onFlightToggle: () =>
                 act(scene.toggleFlight, preserveMovement: true),

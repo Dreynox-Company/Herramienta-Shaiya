@@ -9,6 +9,7 @@ class ViewportMovementInput extends StatefulWidget {
   final Widget child;
   final void Function(LogicalKeyboardKey)? onAction;
   final VoidCallback? onFlightToggle;
+  final bool enabled;
   const ViewportMovementInput({
     super.key,
     required this.focusNode,
@@ -16,6 +17,7 @@ class ViewportMovementInput extends StatefulWidget {
     required this.child,
     this.onAction,
     this.onFlightToggle,
+    this.enabled = true,
   });
   @override
   State<ViewportMovementInput> createState() => _ViewportMovementInputState();
@@ -58,7 +60,7 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     // A viewport can contain focused controls: never intercept their typing.
-    if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
+    if (!widget.enabled || !node.hasPrimaryFocus) return KeyEventResult.ignored;
     // ISO Spanish < > shares one physical key. Logical symbols also work on
     // other layouts, but an unshifted comma/period is not a flight shortcut.
     final angleKey =
@@ -117,7 +119,7 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
   }
 
   void _samplePressed() {
-    if (!_active) return;
+    if (!_active || !widget.enabled) return;
     final keyboard = HardwareKeyboard.instance;
     final pressed = keyboard.logicalKeysPressed;
     final x =
@@ -127,6 +129,23 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
         (pressed.contains(LogicalKeyboardKey.keyS) ? 1.0 : 0.0) -
         (pressed.contains(LogicalKeyboardKey.keyW) ? 1.0 : 0.0);
     widget.onChanged(x, z, keyboard.isShiftPressed);
+  }
+
+  @override
+  void didUpdateWidget(covariant ViewportMovementInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.enabled != widget.enabled) {
+      // Mounting clears movement while resources are awaited. Resume held
+      // movement only AFTER the completed mount has been published.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!widget.enabled) {
+          _clear();
+        } else if (widget.focusNode.hasPrimaryFocus) {
+          _samplePressed();
+        }
+      });
+    }
   }
 
   @override

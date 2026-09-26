@@ -22,6 +22,23 @@ class NativeView extends three.ThreeJS {
   double? _surfaceDpr;
   bool _released = false, _frameActive = false;
   int renderedFrames = 0, frameFailures = 0, surfaceResizes = 0;
+  String framePhase = 'idle';
+  Map<String, Object?> get frameDiagnostics => {
+    'frames': renderedFrames,
+    'failures': frameFailures,
+    'resizes': surfaceResizes,
+    'phase': framePhase,
+    'active': _frameActive,
+    'mounted': mounted,
+    'visible': visible,
+    'onScreen': isVisibleOnScreen,
+    'pause': pause,
+    'requestedWidth': _requestedSize?.width,
+    'requestedHeight': _requestedSize?.height,
+    'surfaceWidth': surfaceSize.value?.width,
+    'surfaceHeight': surfaceSize.value?.height,
+    'dpr': dpr,
+  };
 
   @override
   bool get updating => _frameActive;
@@ -84,6 +101,7 @@ class NativeView extends three.ThreeJS {
     setResolution(ratio);
     camera.aspect = size.width / size.height;
     camera.updateProjectionMatrix();
+    if (_surfaceDpr != ratio) renderer!.setPixelRatio(ratio);
     renderer!.setSize(size.width, size.height);
     windowResizeUpdate?.call(size);
     _surfaceDpr = ratio;
@@ -102,13 +120,16 @@ class NativeView extends three.ThreeJS {
     }
     _frameActive = true;
     try {
+      framePhase = 'resize';
       await _resizeIfNeeded();
       if (_released || texture == null) return;
       final dt = clock.getDelta();
       if (settings.animate) {
+        framePhase = 'render';
         await (customRenderer?.call(scene, camera, texture!, dt) ??
             render(scene, camera, texture!, dt));
         if (_released) return;
+        framePhase = 'events';
         if (!pause) {
           for (final callback in List<Function(double)>.of(events)) {
             if (_released) break;
@@ -133,6 +154,7 @@ class NativeView extends three.ThreeJS {
       }
     } finally {
       _frameActive = false;
+      framePhase = 'idle';
     }
   }
 

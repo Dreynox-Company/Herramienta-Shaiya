@@ -59,6 +59,42 @@ void main() {
         await tester.pump(const Duration(milliseconds: 40));
         await Future<void>.delayed(const Duration(milliseconds: 40));
       }
+      if (!condition()) {
+        final debug = <String, Object?>{
+          'check': name,
+          'status': scene.status,
+          'importing': state.importing,
+          'working': state.working,
+          'focus': (state.focus as FocusNode).hasPrimaryFocus,
+          'walkX': scene.walkX,
+          'walkZ': scene.walkZ,
+          'clip': scene.character?.clip?.source,
+          'expectedWalk': scene.character?.walk?.source,
+          'renderer': (state.renderer as NativeView).frameDiagnostics,
+          'passed': passed,
+        };
+        await File(
+          '${output.path}/failure-state.json',
+        ).writeAsString(jsonEncode(debug));
+        try {
+          final boundary =
+              (state.captureKey as GlobalKey).currentContext!.findRenderObject()
+                  as RenderRepaintBoundary;
+          final image = await boundary.toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          image.dispose();
+          if (bytes != null) {
+            await File(
+              '${output.path}/failure-viewport.png',
+            ).writeAsBytes(bytes.buffer.asUint8List());
+          }
+        } catch (captureError) {
+          await File(
+            '${output.path}/failure-capture.txt',
+          ).writeAsString('$captureError');
+        }
+        debugPrint(jsonEncode(debug));
+      }
       expect(condition(), isTrue, reason: '$name; ${scene.status}');
       passed.add(name);
     }
@@ -78,8 +114,13 @@ void main() {
     }
 
     await waitFor(
-      () => scene.character != null && !scene.busy && state.catalog != null,
-      'Loaded native mesh, texture, catalog and skeletal clips',
+      () =>
+          scene.character != null &&
+          !scene.busy &&
+          state.catalog != null &&
+          !state.importing &&
+          !state.working,
+      'Loaded native mesh, texture, catalog and skeletal clips; mount fully published',
     );
     expect(
       scene.character!.clip!.source.toLowerCase(),
