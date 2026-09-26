@@ -1,0 +1,40 @@
+name: SPK offline research dependencies
+on:
+  push:
+    branches: [research/spk-real-client-20260926]
+    paths: [.github/workflows/spk-research-environment.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: spk-offline-research-dependencies
+  cancel-in-progress: true
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download public Python analysis wheels
+        run: |
+          mkdir -p environment/wheels environment/debian
+          python -m pip download --only-binary=:all: --dest environment/wheels pefile capstone unicorn zstandard xxhash frida pycryptodome
+      - name: Download Debian runtime packages for a network-isolated local sandbox
+        run: |
+          docker run --rm -v "$PWD/environment/debian:/out" debian:trixie-slim sh -ec '
+            apt-get update -qq
+            apt-get -y --download-only --no-install-recommends install wine64 gdb strace
+            cp /var/cache/apt/archives/*.deb /out/
+          '
+      - name: Record artifact hashes and scope
+        run: |
+          printf '%s\n' 'Public dependencies for local offline inspection of user-supplied archives.' 'No DATA.SPK, game executable, payload keys, credentials or user assets are uploaded or executed by this workflow.' > environment/README.txt
+          find environment -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > environment/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Offline-Analysis-Dependencies
+          path: environment/
+          retention-days: 3
+          compression-level: 0
