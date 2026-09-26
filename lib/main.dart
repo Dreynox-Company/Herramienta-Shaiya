@@ -30,7 +30,8 @@ import 'data/library.dart';
 import 'data/spk_source.dart';
 import 'data/resource_index.dart';
 import 'ui/resource_workspace.dart';
-import 'ui/studio_brand.dart';
+import 'ui/startup_presentation.dart';
+import 'ui/inspector_number_control.dart';
 import 'render/studio_scene.dart';
 import 'input/viewport_movement_input.dart';
 import 'ui/asset_selector.dart';
@@ -52,7 +53,7 @@ import 'data/appearance_snapshot.dart';
 import 'data/equipment_registry.dart';
 import 'ui/equipment_registry_panel.dart';
 
-const studioVersion = '0.6.27';
+const studioVersion = '0.6.28';
 
 void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1017,78 +1018,24 @@ class _StudioState extends State<StudioPage> {
     ValueChanged<double> change, {
     double step = .01,
     int decimals = 3,
-  }) {
-    final safe = value.clamp(min, max).toDouble();
-    void commit(String raw) {
-      final parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
-      if (parsed == null || !parsed.isFinite) return;
-      change(parsed.clamp(min, max).toDouble());
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(fontSize: 10, color: Color(0xffaebbd0)),
-              ),
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: '-$step',
-              onPressed: disabled
-                  ? null
-                  : () => change((safe - step).clamp(min, max).toDouble()),
-              icon: const Icon(Icons.remove, size: 14),
-            ),
-            SizedBox(
-              width: 78,
-              height: 30,
-              child: TextFormField(
-                key: ValueKey('$title:${safe.toStringAsFixed(decimals)}'),
-                initialValue: safe.toStringAsFixed(decimals),
-                enabled: !disabled,
-                textAlign: TextAlign.right,
-                keyboardType: const TextInputType.numberWithOptions(
-                  signed: true,
-                  decimal: true,
-                ),
-                style: const TextStyle(fontSize: 10),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 7,
-                  ),
-                ),
-                onFieldSubmitted: commit,
-              ),
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: '+$step',
-              onPressed: disabled
-                  ? null
-                  : () => change((safe + step).clamp(min, max).toDouble()),
-              icon: const Icon(Icons.add, size: 14),
-            ),
-          ],
-        ),
-        SizedBox(
-          height: 26,
-          child: Slider(
-            value: safe,
-            min: min,
-            max: max,
-            onChanged: disabled ? null : change,
-          ),
-        ),
-      ],
-    );
-  }
+  }) => InspectorNumberControl(
+    key: ValueKey((
+      title,
+      scene.appearance?.archetype.id,
+      scene.wingRecord?.source,
+      scene.wingRecord?.id,
+      scene.mountRecord?.source,
+      scene.mountRecord?.id,
+    )),
+    title: title,
+    value: value,
+    min: min,
+    max: max,
+    step: step,
+    decimals: decimals,
+    enabled: !disabled,
+    onChanged: change,
+  );
 
   Widget toggle(String text, bool value, ValueChanged<bool>? change) =>
       SwitchListTile.adaptive(
@@ -3989,26 +3936,23 @@ class _StudioState extends State<StudioPage> {
     return RepaintBoundary(
       key: const ValueKey('studio-shell-capture'),
       child: StudioWorkspace(
-        viewport: IndexedStack(
-          index: resourceMode ? 1 : 0,
-          children: [
-            Stack(
-              children: [
-                Positioned.fill(child: viewport()),
-                if (catalog == null && !importing)
-                  const Center(child: StudioBrand(full: true, size: 430)),
-              ],
-            ),
-            resourceMode
-                ? ResourcePreview(
-                    index: resources,
-                    entry: resources.selected,
-                    onEdited: () {
-                      if (mounted) setState(() {});
-                    },
-                  )
-                : const SizedBox.expand(),
-          ],
+        viewport: StudioStartupPresentation(
+          enabled: catalog == null && !importing,
+          child: IndexedStack(
+            index: resourceMode ? 1 : 0,
+            children: [
+              viewport(),
+              resourceMode
+                  ? ResourcePreview(
+                      index: resources,
+                      entry: resources.selected,
+                      onEdited: () {
+                        if (mounted) setState(() {});
+                      },
+                    )
+                  : const SizedBox.expand(),
+            ],
+          ),
         ),
         leftOwnsScroll: resourceMode,
         left: resourceMode ? panel() : docks.navigation,

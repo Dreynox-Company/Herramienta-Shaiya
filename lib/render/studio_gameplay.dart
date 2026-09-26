@@ -305,7 +305,8 @@ extension StudioGameplay on StudioScene {
     if (game.jump.start()) {
       character!.play(game.jumpClip!, repeat: false);
       movementTransitions.invalidate();
-      unawaited(weaponSound('jump'));
+      // Jump has no generic ps0032 weapon sound. Do not substitute a hit.
+      // Tyros-specific jump WAVs are not valid for an arbitrary character.
     }
   }
 
@@ -790,7 +791,7 @@ extension StudioGameplay on StudioScene {
     if (who == 'player') {
       await _combatEvent(who, event);
       if (event == 'attack') unawaited(weaponSound('attack'));
-      if (event == 'hit') unawaited(weaponSound('hit'));
+      if (event == 'hit' || event == 'death') unawaited(characterVoice(event));
     } else if (entry != null) {
       final a = entry.actor,
           key = event == 'attack'
@@ -832,39 +833,33 @@ extension StudioGameplay on StudioScene {
   }
 
   Future<void> weaponSound(String action) async {
-    if (!sound || catalog == null) return;
-    final family = weaponFamily(weaponRecord);
-    final stem =
-        <int, String>{
-          1: 'swordone',
-          2: 'swordtwo',
-          3: 'axeone',
-          4: 'axetwo',
-          5: 'twin',
-          6: 'javelin',
-          7: 'weaponone',
-          8: 'weapontwo',
-          9: 'daggerbk',
-          10: 'dagger',
-          11: 'javelin',
-          12: 'staff',
-          13: 'bow',
-          14: 'crobow',
-          15: 'knuckle',
-        }[family] ??
-        'weaponone';
-    final prefix = action == 'attack' ? 'ch_att_' : 'ch_hit_';
-    final available = catalog!.sounds
-        .where((p) => baseName(p).startsWith('$prefix$stem'))
+    final c = catalog;
+    if (!sound || c == null) return;
+    final prefix = nativeWeaponSoundPrefix(weaponFamily(weaponRecord), action);
+    if (prefix == null) return;
+    final available = c.sounds
+        .where((p) => baseName(p).toLowerCase().startsWith(prefix))
         .toList();
     if (available.isNotEmpty) {
       await playSound(available[attackCounter % available.length]);
     } else {
-      final fallback = catalog!.library.resolve(
+      final fallback = c.library.resolve(
         action == 'attack' ? 'ch_att_weaponone001.wav' : 'mob_hit001.wav',
         ['sound'],
       );
       if (fallback != null) await playSound(fallback);
+    }
+  }
+
+  Future<void> characterVoice(String event) async {
+    final c = catalog, actor = character;
+    final id = appearance?.archetype.id;
+    if (!sound || c == null || actor == null || id == null) return;
+    final name = nativeCharacterVoice(id, event);
+    if (name == null) return;
+    final path = c.library.resolve(name, ['sound']);
+    if (path != null && identical(catalog, c) && identical(character, actor)) {
+      await playSound(path);
     }
   }
 

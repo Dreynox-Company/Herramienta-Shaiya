@@ -80,24 +80,41 @@ class _AssetSelectorState<T> extends State<AssetSelector<T>> {
   Future<void> _drain() async {
     if (_loading || !mounted || _desired == null) return;
     setState(() => _loading = true);
-    while (mounted && _desired != null) {
-      final next = _desired as T, version = _generation;
-      try {
-        await widget.onChanged(next);
-        if (mounted) widget.memory.cursor = widget.id(next);
-      } catch (e) {
-        if (mounted) {
-          setState(() => _error = e.toString());
-          widget.onError?.call(e);
+    try {
+      while (mounted && _desired != null) {
+        final next = _desired as T, version = _generation;
+        try {
+          await widget.onChanged(next);
+          if (mounted && version == _generation) {
+            widget.memory.cursor = widget.id(next);
+          }
+        } catch (error, stack) {
+          if (mounted) {
+            if (version == _generation) {
+              setState(() => _error = error.toString());
+            }
+            try {
+              widget.onError?.call(error);
+            } catch (reportError) {
+              FlutterError.reportError(
+                FlutterErrorDetails(
+                  exception: reportError,
+                  stack: stack,
+                  library: 'ShStudio asset selection',
+                ),
+              );
+            }
+          }
+        }
+        if (!mounted) return;
+        if (version == _generation) {
+          setState(() => _desired = null);
+          break;
         }
       }
-      if (!mounted) return;
-      if (version == _generation) {
-        setState(() => _desired = null);
-        break;
-      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _open() async {

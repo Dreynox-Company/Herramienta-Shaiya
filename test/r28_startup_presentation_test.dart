@@ -2,23 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herramienta_shaiya/ui/startup_presentation.dart';
 
-Widget presentation({bool enabled = true, bool reduced = false, VoidCallback? onTap}) =>
-    MaterialApp(home: MediaQuery(
-      data: MediaQueryData(disableAnimations: reduced),
-      child: Scaffold(body: StudioStartupPresentation(
+Widget presentation({
+  bool enabled = true,
+  bool reduced = false,
+  VoidCallback? onTap,
+}) => MaterialApp(
+  home: MediaQuery(
+    data: MediaQueryData(disableAnimations: reduced),
+    child: Scaffold(
+      body: StudioStartupPresentation(
         enabled: enabled,
         artwork: const SizedBox(key: ValueKey('test-artwork')),
-        child: Center(child: TextButton(
-          onPressed: onTap ?? () {}, child: const Text('Conectar DATA'),
-        )),
-      )),
-    ));
+        child: Center(
+          child: TextButton(
+            onPressed: onTap ?? () {},
+            child: const Text('Conectar DATA'),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
 
 void main() {
-  testWidgets('logo fades in, holds, fades out and is removed without DATA', (tester) async {
+  testWidgets('logo fades in, holds, fades out and is removed without DATA', (
+    tester,
+  ) async {
     await tester.pumpWidget(presentation());
-    double opacity() => tester.widget<FadeTransition>(
-      find.byKey(const ValueKey('startup-logo-fade'))).opacity.value;
+    double opacity() => tester
+        .widget<FadeTransition>(find.byKey(const ValueKey('startup-logo-fade')))
+        .opacity
+        .value;
     expect(opacity(), 0);
     await tester.pump(const Duration(milliseconds: 144));
     expect(opacity(), greaterThan(0));
@@ -37,7 +51,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('clicks are never blocked and dismiss the decorative cover', (tester) async {
+  testWidgets('clicks are never blocked and dismiss the decorative cover', (
+    tester,
+  ) async {
     var clicked = 0;
     await tester.pumpWidget(presentation(onTap: () => clicked++));
     await tester.tap(find.text('Conectar DATA'));
@@ -46,21 +62,27 @@ void main() {
     expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
   });
 
-  testWidgets('starting an import dismisses the logo and cancellation never replays it', (tester) async {
-    await tester.pumpWidget(presentation());
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pumpWidget(presentation(enabled: false));
-    expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
-    await tester.pumpWidget(presentation(enabled: true));
-    expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
-  });
+  testWidgets(
+    'starting an import dismisses the logo and cancellation never replays it',
+    (tester) async {
+      await tester.pumpWidget(presentation());
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpWidget(presentation(enabled: false));
+      expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
+      await tester.pumpWidget(presentation(enabled: true));
+      expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
+    },
+  );
 
-  testWidgets('reduced motion shows the workspace without an animated overlay', (tester) async {
-    await tester.pumpWidget(presentation(reduced: true));
-    expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'reduced motion shows the workspace without an animated overlay',
+    (tester) async {
+      await tester.pumpWidget(presentation(reduced: true));
+      expect(find.byKey(const ValueKey('startup-presentation')), findsNothing);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('a muted ticker cannot leave the logo stuck', (tester) async {
     await tester.pumpWidget(TickerMode(enabled: false, child: presentation()));
@@ -71,8 +93,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final size in [const Size(390, 250), const Size(960, 600), const Size(1440, 900)]) {
-    testWidgets('presentation remains inside $size without overflowing', (tester) async {
+  for (final size in [
+    const Size(390, 250),
+    const Size(960, 600),
+    const Size(1440, 900),
+  ]) {
+    testWidgets('presentation remains inside $size without overflowing', (
+      tester,
+    ) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);

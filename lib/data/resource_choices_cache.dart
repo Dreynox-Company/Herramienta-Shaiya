@@ -9,7 +9,11 @@ class ResourceChoicesCache {
   final Map<String, List<String>> _groups = {};
   int scans = 0;
 
-  List<String> select(Library library, String group, bool Function(String) accepts) {
+  List<String> select(
+    Library library,
+    String group,
+    bool Function(String) accepts,
+  ) {
     if (!identical(_source, library) || _revision != library.revision) {
       _source = library;
       _revision = library.revision;
@@ -17,8 +21,10 @@ class ResourceChoicesCache {
       _groups.clear();
       scans++;
     }
-    return _groups.putIfAbsent(group,
-      () => List<String>.unmodifiable(_paths.where(accepts)));
+    return _groups.putIfAbsent(
+      group,
+      () => List<String>.unmodifiable(_paths.where(accepts)),
+    );
   }
 
   void clear() {

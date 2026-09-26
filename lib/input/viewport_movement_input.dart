@@ -59,6 +59,24 @@ class _ViewportMovementInputState extends State<ViewportMovementInput>
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     // A viewport can contain focused controls: never intercept their typing.
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
+    // ISO Spanish < > shares one physical key. Logical symbols also work on
+    // other layouts, but an unshifted comma/period is not a flight shortcut.
+    final angleKey =
+        event.physicalKey == PhysicalKeyboardKey.intlBackslash ||
+        event.logicalKey == LogicalKeyboardKey.less ||
+        event.logicalKey == LogicalKeyboardKey.greater;
+    if (angleKey) {
+      final keyboard = HardwareKeyboard.instance;
+      if (!_active ||
+          event.synthesized ||
+          keyboard.isControlPressed ||
+          keyboard.isAltPressed ||
+          keyboard.isMetaPressed) {
+        return KeyEventResult.ignored;
+      }
+      if (event is KeyDownEvent) widget.onFlightToggle?.call();
+      return KeyEventResult.handled;
+    }
     // Flight follows the requested Shaiya Studio contract:
     // Space alone = terrestrial jump; Shift+Space = land/fly toggle.
     // A held/repeated Space must never alternate flight repeatedly.

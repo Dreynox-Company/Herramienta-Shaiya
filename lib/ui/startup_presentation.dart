@@ -35,29 +35,36 @@ class _StartupPresentationState extends State<StudioStartupPresentation>
   @override
   void initState() {
     super.initState();
-    controller = AnimationController(
-      vsync: this,
-      duration: StudioStartupPresentation.duration,
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) finish();
-      });
+    controller =
+        AnimationController(
+          vsync: this,
+          duration: StudioStartupPresentation.duration,
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) finish();
+        });
     logoOpacity = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
         weight: 20,
       ),
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 45),
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
         weight: 35,
       ),
     ]).animate(controller);
-    coverOpacity = Tween(begin: 1.0, end: 0.0).animate(CurvedAnimation(
-      parent: controller,
-      curve: const Interval(.65, 1, curve: Curves.easeInOutCubic),
-    ));
+    coverOpacity = Tween(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: controller,
+        curve: const Interval(.65, 1, curve: Curves.easeInOutCubic),
+      ),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || finished) return;
       if (!widget.enabled || MediaQuery.disableAnimationsOf(context)) {
@@ -95,48 +102,61 @@ class _StartupPresentationState extends State<StudioStartupPresentation>
 
   @override
   Widget build(BuildContext context) {
-    final show = !finished && widget.enabled &&
-        !MediaQuery.disableAnimationsOf(context);
+    final show =
+        !finished && widget.enabled && !MediaQuery.disableAnimationsOf(context);
     return Listener(
       onPointerDown: show ? (_) => finish() : null,
-      child: Stack(fit: StackFit.expand, children: [
-        widget.child,
-        if (show)
-          Positioned.fill(
-            child: IgnorePointer(
-              key: const ValueKey('startup-presentation'),
-              child: ExcludeSemantics(
-                child: ClipRect(
-                  child: RepaintBoundary(
-                    child: Stack(fit: StackFit.expand, children: [
-                      FadeTransition(
-                        opacity: coverOpacity,
-                        child: const ColoredBox(color: Color(0xff10151d)),
-                      ),
-                      Center(
-                        child: LayoutBuilder(builder: (context, constraints) {
-                          final width = (constraints.maxWidth - 48)
-                              .clamp(0.0, 390.0);
-                          return SizedBox(
-                            width: width,
-                            height: (width * 2 / 3)
-                                .clamp(0.0, constraints.maxHeight),
-                            child: FadeTransition(
-                              key: const ValueKey('startup-logo-fade'),
-                              opacity: logoOpacity,
-                              child: widget.artwork ??
-                                  StudioBrand(full: true, size: width),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.child,
+          if (show)
+            Positioned.fill(
+              child: IgnorePointer(
+                key: const ValueKey('startup-presentation'),
+                child: ExcludeSemantics(
+                  child: ClipRect(
+                    child: RepaintBoundary(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          FadeTransition(
+                            opacity: coverOpacity,
+                            child: const ColoredBox(color: Color(0xff10151d)),
+                          ),
+                          Center(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final width = (constraints.maxWidth - 48).clamp(
+                                  0.0,
+                                  390.0,
+                                );
+                                return SizedBox(
+                                  width: width,
+                                  height: (width * 2 / 3).clamp(
+                                    0.0,
+                                    constraints.maxHeight,
+                                  ),
+                                  child: FadeTransition(
+                                    key: const ValueKey('startup-logo-fade'),
+                                    opacity: logoOpacity,
+                                    child:
+                                        widget.artwork ??
+                                        StudioBrand(full: true, size: width),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        }),
+                          ),
+                        ],
                       ),
-                    ]),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-      ]),
+        ],
+      ),
     );
   }
 }
