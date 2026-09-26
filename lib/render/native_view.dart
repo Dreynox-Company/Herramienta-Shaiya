@@ -44,23 +44,21 @@ class NativeView extends three.ThreeJS {
   bool get updating => _frameActive;
 
   static Size? validViewport(Size size) {
-    if (!size.width.isFinite ||
-        !size.height.isFinite ||
-        size.width < 1 ||
-        size.height < 1) {
-      return null;
-    }
+    if (!size.width.isFinite || !size.height.isFinite ||
+        size.width < 1 || size.height < 1) return null;
     return Size(size.width.floorToDouble(), size.height.floorToDouble());
   }
 
+  /// The Windows plugin compares integer physical dimensions. Its unchanged-
+  /// size branch returns without answering the method channel. Never send that
+  /// request, including the first frame whose texture was already created.
+  static bool sameBackingPixels(AngleOptions a, AngleOptions b) =>
+      (a.width * a.dpr).toInt() == (b.width * b.dpr).toInt() &&
+      (a.height * a.dpr).toInt() == (b.height * b.dpr).toInt();
+
   void requestViewport(Size size, double pixelRatio) {
     final checked = validViewport(size);
-    if (_released ||
-        checked == null ||
-        !pixelRatio.isFinite ||
-        pixelRatio <= 0) {
-      return;
-    }
+    if (_released || checked == null || !pixelRatio.isFinite || pixelRatio <= 0) return;
     _requestedSize = checked;
     _requestedDpr = settings.screenResolution ?? pixelRatio;
   }
@@ -72,31 +70,23 @@ class NativeView extends three.ThreeJS {
 
   Future<void> _resizeIfNeeded() async {
     final size = _requestedSize, ratio = _requestedDpr;
-    if (_released ||
-        size == null ||
-        ratio == null ||
-        texture == null ||
-        renderer == null) {
-      return;
-    }
+    if (_released || size == null || ratio == null || texture == null || renderer == null) return;
     if (surfaceSize.value == size && _surfaceDpr == ratio) return;
-    // Every Studio view uses the native surface directly (no separate target).
-    // Refuse an unsupported target instead of resizing only half of its buffers.
     if (sourceTexture != null) {
-      throw StateError(
-        'NativeView requiere una superficie sin useSourceTexture.',
-      );
+      throw StateError('NativeView requiere una superficie sin useSourceTexture.');
     }
-    angle?.activateTexture(texture!);
-    await angle?.resize(
-      texture!,
-      AngleOptions(
-        width: size.width.toInt(),
-        height: size.height.toInt(),
-        dpr: ratio,
-      ),
+    final options = AngleOptions(
+      width: size.width.toInt(), height: size.height.toInt(), dpr: ratio,
+      useSurfaceProducer: settings.useSurfaceProducer, customRenderer: true,
     );
-    if (_released) return;
+    if (!sameBackingPixels(texture!.options, options)) {
+      angle?.activateTexture(texture!);
+      await angle?.resize(texture!, options);
+      if (_released) return;
+      surfaceResizes++;
+    }
+    // Projection/DPI can change even when physical pixels are unchanged.
+    texture!.options = options;
     screenSize = size;
     setResolution(ratio);
     camera.aspect = size.width / size.height;
@@ -105,19 +95,12 @@ class NativeView extends three.ThreeJS {
     renderer!.setSize(size.width, size.height);
     windowResizeUpdate?.call(size);
     _surfaceDpr = ratio;
-    surfaceResizes++;
     surfaceSize.value = size;
   }
 
   @override
   Future<void> animate(Duration duration) async {
-    if (_released ||
-        !mounted ||
-        _frameActive ||
-        !isVisibleOnScreen ||
-        !visible) {
-      return;
-    }
+    if (_released || !mounted || _frameActive || !isVisibleOnScreen || !visible) return;
     _frameActive = true;
     try {
       framePhase = 'resize';
@@ -140,17 +123,11 @@ class NativeView extends three.ThreeJS {
       }
     } catch (error, stack) {
       frameFailures++;
-      // Report the first failing frame instead of silently freezing forever or
-      // flooding logs at refresh rate. The counter remains available to QA.
       if (frameFailures == 1) {
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stack,
-            library: 'ShStudio NativeView',
-            context: ErrorDescription('al actualizar el visor 3D'),
-          ),
-        );
+        FlutterError.reportError(FlutterErrorDetails(
+          exception: error, stack: stack, library: 'ShStudio NativeView',
+          context: ErrorDescription('al actualizar el visor 3D'),
+        ));
       }
     } finally {
       _frameActive = false;
@@ -186,36 +163,25 @@ class _NativeViewport extends StatelessWidget {
   const _NativeViewport({super.key, required this.view});
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) {
-      final size = NativeView.validViewport(Size(box.maxWidth, box.maxHeight));
-      if (size == null) return const SizedBox.shrink();
-      final media = MediaQuery.of(context);
-      view.requestViewport(size, media.devicePixelRatio);
-      return ClipRect(
-        child: ColoredBox(
-          color: const Color(0xff10151d),
-          child: ValueListenableBuilder<Size?>(
-            valueListenable: view.surfaceSize,
-            builder: (context, committed, _) {
-              final actual = committed ?? view.screenSize ?? size;
-              return Center(
-                child: FittedBox(
-                  fit: BoxFit.contain,
-                  child: SizedBox(
-                    width: actual.width,
-                    height: actual.height,
-                    child: MediaQuery(
-                      data: media.copyWith(size: actual),
-                      child: view._buildSurface(),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    },
-  );
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+    final size = NativeView.validViewport(Size(box.maxWidth, box.maxHeight));
+    if (size == null) return const SizedBox.shrink();
+    final media = MediaQuery.of(context);
+    view.requestViewport(size, media.devicePixelRatio);
+    return ClipRect(child: ColoredBox(
+      color: const Color(0xff10151d),
+      child: ValueListenableBuilder<Size?>(
+        valueListenable: view.surfaceSize,
+        builder: (context, committed, _) {
+          final actual = committed ?? view.screenSize ?? size;
+          return Center(child: FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(width: actual.width, height: actual.height,
+              child: MediaQuery(data: media.copyWith(size: actual), child: view._buildSurface()),
+            ),
+          ));
+        },
+      ),
+    ));
+  });
 }
